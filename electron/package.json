@@ -1,0 +1,16 @@
+{
+  "name": "ai-note-taker",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "cmd /C \"set ELECTRON_RUN_AS_NODE=&& electron .\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "electron": "^41.0.3",
+    "windows-api": "^0.1.0"
+  }
+}

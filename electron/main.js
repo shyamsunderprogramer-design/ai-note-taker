@@ -10,15 +10,16 @@ app.setPath("sessionData", appDataDir)
 let win
 let backendProcess = null
 
+// ==============================
+// CONSOLE FIX — ignore EPIPE
+// ==============================
 function safeConsoleMethod(methodName) {
   const original = console[methodName]
   console[methodName] = (...args) => {
     try {
       original.apply(console, args)
     } catch (err) {
-      if (!err || err.code !== "EPIPE") {
-        throw err
-      }
+      if (!err || err.code !== "EPIPE") throw err
     }
   }
 }
@@ -31,9 +32,7 @@ safeConsoleMethod("info")
 function ignoreBrokenPipe(stream) {
   if (!stream) return
   stream.on("error", (err) => {
-    if (err && err.code !== "EPIPE") {
-      throw err
-    }
+    if (err && err.code !== "EPIPE") throw err
   })
 }
 
@@ -41,18 +40,19 @@ ignoreBrokenPipe(process.stdout)
 ignoreBrokenPipe(process.stderr)
 
 process.on("uncaughtException", (err) => {
-  if (err && err.code === "EPIPE") {
-    return
-  }
+  if (err && err.code === "EPIPE") return
   throw err
 })
 
+// ==============================
+// WINDOW CREATION
+// ==============================
 function createWindow() {
   win = new BrowserWindow({
-    width: 760,
-    height: 360,
-    minWidth: 560,
-    minHeight: 300,
+    width: 520,
+    height: 440,
+    minWidth: 420,
+    minHeight: 360,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
@@ -66,41 +66,79 @@ function createWindow() {
     }
   })
 
+  // Keep on top at appropriate level
   win.setAlwaysOnTop(true, "screen-saver", 1)
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   win.loadFile(path.join(__dirname, "../renderer/index.html"))
+
+  // Initialize stealth after window loads
+  stealth.init(win)
 }
 
+// ==============================
+// BACKEND PROCESS
+// ==============================
+function startBackend() {
+  const pythonExe = path.join(__dirname, "../AINT_Venv/Scripts/python.exe")
+  const backendDir = path.join(__dirname, "../backend")
+
+  backendProcess = spawn(pythonExe, [
+    "-m", "uvicorn", "main:app",
+    "--host", "127.0.0.1",
+    "--port", "8000",
+    "--log-level", "warning"
+  ], {
+    cwd: backendDir,
+    stdio: "ignore",
+    windowsHide: true
+  })
+
+  backendProcess.on("close", () => {
+    console.log("[Main] Backend process exited")
+  })
+
+  backendProcess.on("error", (err) => {
+    console.error("[Main] Backend spawn error:", err.message)
+  })
+}
+
+// ==============================
+// IPC HANDLERS
+// ==============================
 ipcMain.handle("window:minimize", () => {
-  const focusedWindow = BrowserWindow.getFocusedWindow() || win
-  if (focusedWindow) {
-    focusedWindow.setSize(420, 84)
-    focusedWindow.setResizable(false)
-    focusedWindow.show()
-    focusedWindow.focus()
+  const w = BrowserWindow.getFocusedWindow() || win
+  if (w) {
+    w.setSize(420, 64)
+    w.setResizable(false)
+    w.show()
+    w.focus()
   }
 })
 
 ipcMain.handle("window:toggle-maximize", () => {
-  const focusedWindow = BrowserWindow.getFocusedWindow() || win
-  if (!focusedWindow) {
-    return { isMaximized: false }
-  }
-  focusedWindow.setResizable(true)
-  if (focusedWindow.isMaximized()) {
-    focusedWindow.unmaximize()
-  } else {
-    focusedWindow.maximize()
-  }
-  return { isMaximized: focusedWindow.isMaximized() }
+  const w = BrowserWindow.getFocusedWindow() || win
+  if (!w) return { isMaximized: false }
+  w.setResizable(true)
+  const maxed = w.isMaximized()
+  if (maxed) w.unmaximize()
+  else w.maximize()
+  return { isMaximized: w.isMaximized() }
 })
 
 ipcMain.handle("window:close", () => {
-  const focusedWindow = BrowserWindow.getFocusedWindow() || win
-  if (focusedWindow) {
-    focusedWindow.close()
-  }
+  const w = BrowserWindow.getFocusedWindow() || win
+  if (w) w.close()
+})
+
+ipcMain.handle("window:restore", () => {
+  const w = BrowserWindow.getFocusedWindow() || win
+  if (!w) return
+  if (w.isMinimized()) w.restore()
+  if (!w.isMaximized()) w.setSize(520, 440)
+  w.setResizable(true)
+  w.show()
+  w.focus()
 })
 
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
@@ -117,78 +155,53 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   return { undetectable: stealth.isUndetectable() }
 })
 
-ipcMain.handle("window:restore", () => {
-  const focusedWindow = BrowserWindow.getFocusedWindow() || win
-  if (!focusedWindow) return
-  if (focusedWindow.isMinimized()) {
-    focusedWindow.restore()
-  }
-  if (!focusedWindow.isMaximized()) {
-    focusedWindow.setSize(760, 360)
-  }
-  focusedWindow.setResizable(true)
-  focusedWindow.show()
-  focusedWindow.focus()
-})
-
-function restoreWindow() {
-  const focusedWindow = BrowserWindow.getFocusedWindow() || win
-  if (!focusedWindow) return
-  if (focusedWindow.isMinimized()) {
-    focusedWindow.restore()
-  }
-  focusedWindow.setResizable(true)
-  focusedWindow.show()
-  focusedWindow.focus()
-}
-
-function startBackend() {
-  const pythonPath = path.join(__dirname, "../AINT_Venv/Scripts/python.exe")
-  const backendDir = path.join(__dirname, "../backend")
-
-  backendProcess = spawn(pythonPath, [
-    "-m", "uvicorn", "main:app",
-    "--host", "127.0.0.1", "--port", "8000"
-  ], {
-    cwd: backendDir,
-    stdio: "ignore",
-    windowsHide: true
-  })
-
-  backendProcess.on("close", () => {})
-}
-
+// ==============================
+// APP LIFECYCLE
+// ==============================
 app.whenReady().then(() => {
+  // Request microphone permission
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(permission === "media")
   })
 
   startBackend()
   createWindow()
-  stealth.init(win)
 
-  // Toggle stealth mode with Ctrl+Shift+H
+  // Global shortcuts
+  // Ctrl+Shift+H — toggle stealth (hide/show window)
   globalShortcut.register("CommandOrControl+Shift+H", () => {
     stealth.toggle()
   })
 
-  // Toggle screen capture protection with Ctrl+Shift+U
+  // Ctrl+Shift+U — toggle screen capture protection
   globalShortcut.register("CommandOrControl+Shift+U", () => {
     stealth.toggleUndetectable()
   })
 
+  // Ctrl+Shift+A — restore window
   globalShortcut.register("CommandOrControl+Shift+A", () => {
     if (stealth.isEnabled()) {
       stealth.disable()
     }
-    restoreWindow()
+    const w = BrowserWindow.getFocusedWindow() || win
+    if (w) {
+      if (w.isMinimized()) w.restore()
+      w.setResizable(true)
+      w.setSize(520, 440)
+      w.show()
+      w.focus()
+    }
   })
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     } else {
-      restoreWindow()
+      const w = BrowserWindow.getFocusedWindow() || win
+      if (w) {
+        w.show()
+        w.focus()
+      }
     }
   })
 })

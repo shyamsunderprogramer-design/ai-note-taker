@@ -1,0 +1,44 @@
+# =========================
+# Python
+# =========================
+AINT_Venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# =========================
+# Env files (secrets)
+# =========================
+.env
+backend/.env
+
+# =========================
+# Node / Electron
+# =========================
+node_modules/
+electron/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# Build / binaries
+# =========================
+dist/
+build/
+*.exe
+*.dll
+*.bin
+*.pak
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db

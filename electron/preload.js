@@ -1,87 +1,47 @@
 // ==============================
-// 🔐 ELECTRON PRELOAD BRIDGE
+// ELECTRON PRELOAD BRIDGE
 // ==============================
-
-// Import secure bridge from Electron
 const { contextBridge, ipcRenderer } = require("electron")
 
-
 // ==============================
-// 🌐 API CONFIG
+// API CONFIG
 // ==============================
-
-// 🔥 Base backend URL (FastAPI)
 const BASE_URL = "http://127.0.0.1:8000"
 
-
 // ==============================
-// 🚀 EXPOSE SAFE API TO UI
+// EXPOSE SAFE API TO UI
 // ==============================
-
 contextBridge.exposeInMainWorld("api", {
 
-  // ==============================
-  // 📡 STREAM ENDPOINT
-  // ==============================
+  // Get streaming URL for SSE-style responses
   getStreamUrl: (query) => {
-    /*
-      🎯 Returns streaming endpoint with query param
-
-      Example:
-      http://127.0.0.1:8000/stream?q=hello
-    */
-
-    // 🔥 Encode query to prevent URL breaking
     const encoded = encodeURIComponent(query || "")
-
     return `${BASE_URL}/stream?q=${encoded}`
   },
 
-
-  // ==============================
-  // 🧠 MODE SWITCH (FUTURE READY)
-  // ==============================
+  // Get streaming URL with mode parameter
   getStreamUrlWithMode: (query, mode = "adaptive") => {
-    /*
-      🎯 Supports dynamic AI modes later
-
-      Example:
-      /stream?q=hello&mode=interview
-    */
-
     const encodedQuery = encodeURIComponent(query || "")
     const encodedMode = encodeURIComponent(mode)
-
     return `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}`
   },
 
+  // Health check endpoint
+  getHealthUrl: () => `${BASE_URL}/health`,
 
-  // ==============================
-  // 🩺 HEALTH CHECK (OPTIONAL)
-  // ==============================
-  getHealthUrl: () => {
-    /*
-      🎯 Useful to check backend status
-    */
-    return `${BASE_URL}/health`
-  },
+  // Transcribe endpoint
+  getTranscribeUrl: () => `${BASE_URL}/transcribe`,
 
-  getTranscribeUrl: () => {
-    return `${BASE_URL}/transcribe`
-  },
-
+  // Set AI mode on backend
   setMode: async (mode) => {
     const response = await fetch(`${BASE_URL}/set-mode?mode=${encodeURIComponent(mode)}`, {
       method: "POST"
     })
-
-    if (!response.ok) {
-      throw new Error("Failed to update mode")
-    }
-
+    if (!response.ok) throw new Error("Failed to update mode")
     return response.json()
   },
 
+  // Window controls
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
 
   restoreWindow: () => ipcRenderer.invoke("window:restore"),
@@ -90,8 +50,10 @@ contextBridge.exposeInMainWorld("api", {
 
   closeWindow: () => ipcRenderer.invoke("window:close"),
 
+  // Stealth mode
   setStealthMode: (enabled) => ipcRenderer.invoke("window:set-stealth-mode", enabled),
 
+  // Screen capture protection
   setUndetectable: (enabled) => ipcRenderer.invoke("window:set-undetectable", enabled)
 
 })

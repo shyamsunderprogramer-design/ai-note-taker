@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Note Taker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="shell">
+
+    <!-- ===== ROW 1: HEADER ===== -->
+    <div class="header-strip">
+
+      <!-- Left: Blinking dot + Detectable label (clickable = stealth toggle) -->
+      <button id="stealthBtn" class="stealth-btn" type="button">
+        <span class="stealth-dot" id="stealthDot"></span>
+        <span id="stealthLabel">Detectable</span>
+      </button>
+
+      <!-- Center: Title -->
+      <div class="header-center">
+        <span class="app-title">AI Note Taker</span>
+      </div>
+
+      <!-- Right: Menu + Window controls -->
+      <div class="header-right">
+        <button id="menuBtn" class="win-btn" type="button" title="Menu">&#9776;</button>
+        <button id="minBtn" class="win-btn" type="button" title="Minimize">─</button>
+        <button id="maxBtn" class="win-btn" type="button" title="Maximize">▢</button>
+        <button id="closeBtn" class="win-btn danger" type="button" title="Close">×</button>
+      </div>
+
+    </div>
+
+    <!-- ===== ROW 2: CONTROLS ===== -->
+    <div class="controls-strip">
+      <div class="ctrl-group">
+        <label>Mode</label>
+        <select id="modeSelect">
+          <option value="auto" selected>Auto</option>
+          <option value="fast">Fast</option>
+          <option value="adaptive">Adaptive</option>
+          <option value="interview">Interview</option>
+          <option value="reasoning">Reasoning</option>
+          <option value="cloud">Cloud</option>
+          <option value="code">Code</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Font</label>
+        <select id="fontSizeSelect">
+          <option value="12">Small</option>
+          <option value="14" selected>Medium</option>
+          <option value="16">Large</option>
+          <option value="18">XL</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Model</label>
+        <select id="modelSelect">
+          <option value="auto" selected>Auto</option>
+          <option value="phi3:latest">Phi3</option>
+          <option value="tinyllama:latest">TinyLlama</option>
+          <option value="llama3:latest">Llama3</option>
+          <option value="mistral:latest">Mistral</option>
+        </select>
+      </div>
+
+      <button id="listenBtn" class="action-btn" type="button">
+        <span class="mic-icon">&#127908;</span>
+        <span id="listenLabel">Start</span>
+      </button>
+    </div>
+
+    <!-- ===== ROW 3: AI RESPONSE ===== -->
+    <div class="response-area">
+      <div class="chat-area" id="chatArea">
+        <div class="chat-welcome" id="chatWelcome">
+          <div class="welcome-icon">&#10022;</div>
+          <div class="welcome-text">Ready to assist</div>
+          <div class="welcome-sub">Press <kbd>Enter</kbd> to start</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

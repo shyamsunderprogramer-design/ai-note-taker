@@ -1,154 +1,159 @@
 /**
- * stealth.js - Screen capture hiding module
+ * stealth.js - Standalone stealth/screen-capture-protection module
  *
- * Completely separate from UI and other features.
- * Handles hiding/showing the app window and screen capture protection.
+ * Completely isolated. Update without disturbing other code.
+ *
+ * Features:
+ * - Stealth mode: hide window, show tray
+ * - Screen capture protection: hide from Zoom/Teams/WebEx via SetWindowDisplayAffinity
  *
  * Usage:
- *   const stealth = require('./stealth')
- *   stealth.init(window)             - Initialize with Electron BrowserWindow
- *   stealth.enable()                 - Hide window, show tray icon
- *   stealth.disable()                - Show window, hide tray icon
- *   stealth.toggle()                 - Toggle between enable/disable
- *   stealth.isEnabled()              - Check if stealth is active
- *   stealth.setUndetectable(true)   - Hide from screen capture (Zoom/Teams/WebEx)
- *   stealth.isUndetectable()         - Check if screen capture protection is active
+ *   stealth.init(window)           - Initialize with Electron BrowserWindow
+ *   stealth.enable()              - Hide window + show tray
+ *   stealth.disable()             - Show window + hide tray
+ *   stealth.toggle()              - Toggle stealth
+ *   stealth.isEnabled()           - Check stealth state
+ *   stealth.setUndetectable(bool) - Toggle screen capture protection
+ *   stealth.isUndetectable()      - Check capture protection state
+ *   stealth.toggleUndetectable()  - Toggle capture protection
  */
 
-const { app, Tray, Menu, nativeImage } = require('electron')
+const { app, Tray, Menu, nativeImage, screen } = require("electron")
 
 let _window = null
 let _tray = null
 let _enabled = false
 let _undetectable = false
 
+// WDA_EXCLUDEFROMCAPTURE - excludes window from screen capture on Windows
+const WDA_EXCLUDEFROMCAPTURE = 0x00000001
+
 /**
  * Initialize with Electron BrowserWindow
- * @param {BrowserWindow} window - The window to hide/show
+ * @param {BrowserWindow} window
  */
 function init(window) {
-  if (!window || typeof window.hide !== 'function') {
-    throw new Error('[Stealth] Invalid BrowserWindow')
+  if (!window || typeof window.hide !== "function") {
+    throw new Error("[Stealth] Invalid BrowserWindow")
   }
   _window = window
-  console.log('[Stealth] Module initialized')
+  console.log("[Stealth] Module initialized (standalone)")
 }
 
 /**
- * Create system tray icon
+ * Create a minimal transparent 16x16 tray icon from raw pixel data
+ */
+function createTrayIcon() {
+  // 16x16 solid transparent pixel RGBA buffer
+  const size = 16
+  const stride = size * 4  // RGBA
+  const buffer = Buffer.alloc(size * stride)
+
+  // Make a subtle semi-transparent dot
+  for (let y = 6; y <= 9; y++) {
+    for (let x = 6; x <= 9; x++) {
+      const idx = y * stride + x * 4
+      buffer[idx] = 59       // B
+      buffer[idx + 1] = 130  // G
+      buffer[idx + 2] = 246  // R (#3b82f6 blue)
+      buffer[idx + 3] = 180  // A
+    }
+  }
+
+  return nativeImage.createFromBuffer(buffer, {
+    width: size,
+    height: size,
+    scaleFactor: 1.0
+  })
+}
+
+/**
+ * Create system tray
  */
 function createTray() {
   if (_tray) return
 
-  // 16x16 transparent PNG icon
-  const icon = nativeImage.createFromBuffer(
-    Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABYSURBVDiNY2AYBaNg2AAGA0NDBkZGxn/4DIyMDEi0MzKi7wuMjGh1MjIy/qdgFCwHou0LDIj0MjKi1cnIyPifwlEwCobfAwCR9R0LqF1eHwAAAABJRU5ErkJggg==',
-      'base64'
-    )
-  )
-
+  const icon = createTrayIcon()
   _tray = new Tray(icon)
-  _tray.setToolTip('AI Note Taker - Click to restore')
+  _tray.setToolTip("AI Note Taker — Click to restore")
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Restore Window',
-      click: () => {
-        disable()
-      }
+      label: "Restore Window",
+      click: () => disable()
     },
-    { type: 'separator' },
+    { type: "separator" },
     {
-      label: 'Exit',
-      click: () => {
-        app.quit()
-      }
+      label: "Exit",
+      click: () => app.quit()
     }
   ])
 
   _tray.setContextMenu(contextMenu)
+  _tray.on("click", () => disable())
 
-  // Single click restores
-  _tray.on('click', () => {
-    disable()
-  })
-
-  console.log('[Stealth] Tray created')
+  console.log("[Stealth] Tray created")
 }
 
 /**
- * Destroy tray icon
+ * Destroy system tray
  */
 function destroyTray() {
   if (_tray) {
     _tray.destroy()
     _tray = null
-    console.log('[Stealth] Tray destroyed')
+    console.log("[Stealth] Tray destroyed")
   }
 }
 
 /**
- * Enable stealth mode - hide window, show tray
+ * Enable stealth mode — apply screen capture protection, show tray.
+ * Window stays visible (minimal UI controlled by CSS class).
  */
 function enable() {
   if (!_window) {
-    console.warn('[Stealth] No window to hide')
+    console.warn("[Stealth] No window")
     return false
   }
 
-  if (_enabled) {
-    console.log('[Stealth] Already enabled')
-    return true
-  }
+  if (_enabled) return true
 
-  console.log('[Stealth] Enabling...')
+  console.log("[Stealth] Enabling stealth...")
 
   try {
-    // Hide from taskbar and screen
-    _window.hide()
-    _window.setSkipTaskbar(true)
-
+    // Apply screen capture protection (hides from Zoom/Teams/WebEx)
+    setUndetectable(true)
     createTray()
-
     _enabled = true
-    console.log('[Stealth] Enabled')
+    console.log("[Stealth] Stealth enabled (screen capture protection active)")
     return true
   } catch (e) {
-    console.error('[Stealth] Enable error:', e.message)
+    console.error("[Stealth] Enable error:", e.message)
     return false
   }
 }
 
 /**
- * Disable stealth mode - show window, hide tray
+ * Disable stealth mode — remove screen capture protection, hide tray
  */
 function disable() {
   if (!_window) {
-    console.warn('[Stealth] No window')
+    console.warn("[Stealth] No window")
     return false
   }
 
-  if (!_enabled) {
-    console.log('[Stealth] Already disabled')
-    return true
-  }
+  if (!_enabled) return true
 
-  console.log('[Stealth] Disabling...')
+  console.log("[Stealth] Disabling stealth...")
 
   try {
     destroyTray()
-
-    // Restore taskbar visibility
-    _window.setSkipTaskbar(false)
-    _window.show()
-    _window.focus()
-
+    setUndetectable(false)
     _enabled = false
-    console.log('[Stealth] Disabled')
+    console.log("[Stealth] Stealth disabled (screen capture allowed)")
     return true
   } catch (e) {
-    console.error('[Stealth] Disable error:', e.message)
+    console.error("[Stealth] Disable error:", e.message)
     return false
   }
 }
@@ -157,45 +162,46 @@ function disable() {
  * Toggle stealth mode
  */
 function toggle() {
-  if (_enabled) {
-    disable()
-  } else {
-    enable()
-  }
-  return _enabled
+  return _enabled ? disable() : enable()
 }
 
 /**
- * Check if stealth is currently enabled
+ * Check if stealth is enabled
  */
 function isEnabled() {
   return _enabled
 }
 
 /**
- * Enable screen capture protection (hide from Zoom/Teams/WebEx)
- * Uses Electron's setContentProtection which maps to Windows SetWindowDisplayAffinity
+ * Enable/disable screen capture protection.
+ *
+ * On Windows: Uses SetWindowDisplayAffinity with WDA_EXCLUDEFROMCAPTURE.
+ * This hides the window content from screen capture in:
+ * - Zoom, Teams, WebEx, Discord, OBS, Snipping Tool, etc.
+ *
+ * Note: This does NOT use any game-specific anti-cheat APIs.
+ * It's the standard Windows DPI API for content protection.
  */
 function setUndetectable(enable) {
   if (!_window) {
-    console.warn('[Stealth] No window')
+    console.warn("[Stealth] No window")
     return false
   }
 
   try {
     if (enable) {
-      // WDA_EXCLUDEFROMCAPTURE = 0x00000001 - excludes window from screen capture
+      // Hide from screen capture
       _window.setContentProtection(true)
       _undetectable = true
-      console.log('[Stealth] Undetectable mode enabled (screen capture blocked)')
+      console.log("[Stealth] Screen capture protection ENABLED")
     } else {
       _window.setContentProtection(false)
       _undetectable = false
-      console.log('[Stealth] Undetectable mode disabled (screen capture allowed)')
+      console.log("[Stealth] Screen capture protection DISABLED")
     }
     return true
   } catch (e) {
-    console.error('[Stealth] Undetectable error:', e.message)
+    console.error("[Stealth] Undetectable error:", e.message)
     return false
   }
 }
