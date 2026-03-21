@@ -49,3 +49,5 @@ Thumbs.db
 temp_audio/
 temp_audio_test/
 electron-data/
+*.wav
+.claude/
