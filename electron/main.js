@@ -74,6 +74,15 @@ function createWindow() {
 
   // Initialize stealth after window loads
   stealth.init(win)
+
+  // Prevent background from going opaque on resize/maximize
+  win.on("maximize", () => {
+    win.setBackgroundColor("#00000000")
+  })
+
+  win.on("unmaximize", () => {
+    win.setBackgroundColor("#00000000")
+  })
 }
 
 // ==============================
@@ -109,10 +118,7 @@ function startBackend() {
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (w) {
-    w.setSize(420, 64)
-    w.setResizable(false)
-    w.show()
-    w.focus()
+    w.minimize()
   }
 })
 

@@ -32,12 +32,29 @@ contextBridge.exposeInMainWorld("api", {
   // Transcribe endpoint
   getTranscribeUrl: () => `${BASE_URL}/transcribe`,
 
+  // Cloud transcribe endpoint
+  getCloudTranscribeUrl: () => `${BASE_URL}/transcribe-cloud`,
+
   // Set AI mode on backend
   setMode: async (mode) => {
     const response = await fetch(`${BASE_URL}/set-mode?mode=${encodeURIComponent(mode)}`, {
       method: "POST"
     })
     if (!response.ok) throw new Error("Failed to update mode")
+    return response.json()
+  },
+
+  // Get configured providers
+  getProviders: async () => {
+    const response = await fetch(`${BASE_URL}/providers`)
+    return response.json()
+  },
+
+  // Configure provider API key
+  configureProvider: async (provider, apiKey) => {
+    const response = await fetch(`${BASE_URL}/configure?provider=${encodeURIComponent(provider)}&api_key=${encodeURIComponent(apiKey)}`, {
+      method: "POST"
+    })
     return response.json()
   },
 
