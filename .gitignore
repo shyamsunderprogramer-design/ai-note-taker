@@ -42,3 +42,10 @@ build/
 # =========================
 .DS_Store
 Thumbs.db
+
+# =========================
+# Temp files
+# =========================
+temp_audio/
+temp_audio_test/
+electron-data/
