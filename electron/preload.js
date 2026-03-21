@@ -13,6 +13,10 @@ const BASE_URL = "http://127.0.0.1:8000"
 // ==============================
 contextBridge.exposeInMainWorld("api", {
 
+  // Persistent store
+  storeGet: (key) => ipcRenderer.invoke("store:get", key),
+  storeSet: (key, value) => ipcRenderer.invoke("store:set", key, value),
+
   // Get streaming URL for SSE-style responses
   getStreamUrl: (query) => {
     const encoded = encodeURIComponent(query || "")
@@ -20,10 +24,11 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   // Get streaming URL with mode parameter
-  getStreamUrlWithMode: (query, mode = "adaptive") => {
+  getStreamUrlWithMode: (query, mode = "adaptive", responseStyle = "concise") => {
     const encodedQuery = encodeURIComponent(query || "")
     const encodedMode = encodeURIComponent(mode)
-    return `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}`
+    const encodedStyle = encodeURIComponent(responseStyle)
+    return `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}`
   },
 
   // Health check endpoint
@@ -52,20 +57,20 @@ contextBridge.exposeInMainWorld("api", {
 
   // Configure provider API key
   configureProvider: async (provider, apiKey) => {
-    const response = await fetch(`${BASE_URL}/configure?provider=${encodeURIComponent(provider)}&api_key=${encodeURIComponent(apiKey)}`, {
-      method: "POST"
+    const response = await fetch(`${BASE_URL}/configure?provider=${encodeURIComponent(provider)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: apiKey })
     })
     return response.json()
   },
 
   // Window controls
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
-
   restoreWindow: () => ipcRenderer.invoke("window:restore"),
-
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggle-maximize"),
-
   closeWindow: () => ipcRenderer.invoke("window:close"),
+  resizeWindow: (width, height) => ipcRenderer.invoke("window:resize", width, height),
 
   // Stealth mode
   setStealthMode: (enabled) => ipcRenderer.invoke("window:set-stealth-mode", enabled),

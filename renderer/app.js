@@ -23,17 +23,39 @@ const closeBtn = document.getElementById("closeBtn")
 const modeSelect = document.getElementById("modeSelect")
 const modelSelect = document.getElementById("modelSelect")
 const fontSizeSelect = document.getElementById("fontSizeSelect")
+const responseStyleSelect = document.getElementById("responseStyleSelect")
 const chatArea = document.getElementById("chatArea")
 const chatWelcome = document.getElementById("chatWelcome")
 const menuBtn = document.getElementById("menuBtn")
+const textInput = document.getElementById("textInput")
 
 // ==============================
-// GLOBAL ENTER KEY LISTENER
+// GLOBAL ENTER KEY + F KEY LISTENERS
 // ==============================
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+  // F key — toggle maximize
+  if (e.key === "f" || e.key === "F") {
     const tag = document.activeElement.tagName.toLowerCase()
     if (tag === "input" || tag === "textarea" || tag === "select") return
+    e.preventDefault()
+    maxBtn.click()
+    return
+  }
+
+  if (e.key === "Enter") {
+    const tag = document.activeElement.tagName.toLowerCase()
+    if (tag === "input" || tag === "textarea") {
+      // Enter in text input = submit text
+      e.preventDefault()
+      const text = textInput.value.trim()
+      if (text) {
+        submitText(text)
+        textInput.value = ""
+      }
+      return
+    }
+    if (tag === "select") return
+    // Enter elsewhere = toggle listening
     e.preventDefault()
     if (isListening) {
       stopListening()
@@ -87,7 +109,9 @@ function removeWelcome() {
 }
 
 function scrollChat() {
-  chatArea.scrollTop = chatArea.scrollHeight
+  requestAnimationFrame(() => {
+    chatArea.scrollTop = chatArea.scrollHeight
+  })
 }
 
 function addMessage(role, text) {
@@ -99,7 +123,7 @@ function addMessage(role, text) {
   const label = role === "user" ? "You" : "AI"
   const bubble = document.createElement("div")
   bubble.className = "msg-bubble"
-  bubble.textContent = text
+  setBubbleText(bubble, text)
 
   msg.innerHTML = `<span class="msg-label">${label}</span>`
   msg.appendChild(bubble)
@@ -127,11 +151,30 @@ function addErrorMessage(text) {
   return msg
 }
 
+// Helper to set text with newline support
+function setBubbleText(bubble, text) {
+  // Escape HTML and convert newlines to <br>
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .replace(/\n/g, "<br>")
+  bubble.innerHTML = escaped
+}
+
 function streamMessage(role, text) {
   removeWelcome()
 
   if (latestBotMessage && latestBotMessage.role === "assistant") {
-    latestBotMessage.bubble.textContent += text
+    latestBotMessage.bubble.innerHTML += text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;")
+      .replace(/\n/g, "<br>")
     scrollChat()
     return latestBotMessage.element
   }
@@ -142,7 +185,7 @@ function streamMessage(role, text) {
   const label = role === "user" ? "You" : "AI"
   const bubble = document.createElement("div")
   bubble.className = "msg-bubble"
-  bubble.textContent = text
+  setBubbleText(bubble, text)
 
   msg.innerHTML = `<span class="msg-label">${label}</span>`
   msg.appendChild(bubble)
@@ -179,6 +222,18 @@ async function waitForBackend() {
 }
 
 // ==============================
+// SUBMIT TEXT (from text input)
+// ==============================
+async function submitText(text) {
+  setProcessingUI(true)
+
+  await window.api.setMode(getSelectedMode())
+
+  streamMessage("user", text)
+  await streamAIResponse(text)
+}
+
+// ==============================
 // SUBMIT AUDIO
 // ==============================
 async function submitAudio(blob) {
@@ -197,11 +252,13 @@ async function submitAudio(blob) {
     })
   } catch (e) {
     addErrorMessage("Backend unavailable")
+    setProcessingUI(false)
     return
   }
 
   if (!response.ok) {
     addErrorMessage("Transcription failed")
+    setProcessingUI(false)
     return
   }
 
@@ -214,13 +271,68 @@ async function submitAudio(blob) {
     return
   }
 
-  if (data.response) {
-    const modelInfo = data.model ? ` [${data.mode} · ${data.model}]` : ` [${data.mode}]`
-    streamMessage("assistant", data.response + modelInfo)
-  }
+  // Use streaming endpoint for AI response
+  await streamAIResponse(data.text)
+}
 
-  setProcessingUI(false)
-  finishStream()
+// ==============================
+// STREAM AI RESPONSE
+// ==============================
+async function streamAIResponse(query) {
+  const mode = getSelectedMode()
+  const responseStyle = responseStyleSelect ? responseStyleSelect.value : "concise"
+  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle)
+
+  try {
+    const response = await fetch(streamUrl)
+    if (!response.ok) {
+      addErrorMessage("AI stream failed")
+      setProcessingUI(false)
+      return
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    // Create assistant message element for streaming
+    streamMessage("assistant", "")
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      if (latestBotMessage && latestBotMessage.bubble) {
+        let processed = buffer
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;")
+
+        // Ensure bullet points are on separate lines
+        processed = processed.replace(/\* /g, "<br>* ")
+
+        latestBotMessage.bubble.innerHTML += processed
+      }
+      buffer = ""
+      scrollChat()
+    }
+
+    // Add mode info
+    const modelInfo = ` <span class="mode-tag">[${mode}]</span>`
+    if (latestBotMessage && latestBotMessage.bubble) {
+      latestBotMessage.bubble.innerHTML += modelInfo
+    }
+    scrollChat()
+    finishStream()
+    setProcessingUI(false)
+  } catch (e) {
+    console.error("Stream error:", e)
+    addErrorMessage("AI response failed")
+    setProcessingUI(false)
+  }
 }
 
 // ==============================
@@ -228,6 +340,14 @@ async function submitAudio(blob) {
 // ==============================
 listenBtn.addEventListener("click", async () => {
   if (isStarting) return
+
+  // If text input has content, submit text instead of voice
+  const typedText = textInput.value.trim()
+  if (typedText) {
+    textInput.value = ""
+    await submitText(typedText)
+    return
+  }
 
   if (isListening) {
     stopListening()
@@ -309,8 +429,13 @@ function stopTracks() {
 // ==============================
 // BUTTON EVENTS
 // ==============================
-fontSizeSelect.addEventListener("change", () => {
+fontSizeSelect.addEventListener("change", async () => {
   document.documentElement.style.setProperty("--font-size", fontSizeSelect.value + "px")
+  await window.api.storeSet("fontSize", fontSizeSelect.value)
+})
+
+modeSelect.addEventListener("change", async () => {
+  await window.api.storeSet("mode", modeSelect.value)
 })
 
 minBtn.addEventListener("click", () => {
@@ -345,11 +470,56 @@ stealthBtn.addEventListener("click", async () => {
 })
 
 // ==============================
+// RESIZE HANDLE
+// ==============================
+const resizeHandle = document.querySelector(".resize-handle")
+if (resizeHandle) {
+  let isResizing = false
+  let startY = 0
+  let startHeight = 0
+
+  resizeHandle.addEventListener("mousedown", (e) => {
+    isResizing = true
+    startY = e.screenY
+    const shell = document.querySelector(".shell")
+    startHeight = shell.offsetHeight
+    document.body.style.cursor = "s-resize"
+    e.preventDefault()
+  })
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isResizing) return
+    const delta = e.screenY - startY
+    const newHeight = Math.max(300, startHeight + delta)
+    window.api.resizeWindow(null, newHeight)
+  })
+
+  document.addEventListener("mouseup", () => {
+    if (isResizing) {
+      isResizing = false
+      document.body.style.cursor = ""
+    }
+  })
+}
+
+// ==============================
 // INIT
 // ==============================
 async function init() {
   try {
     await waitForBackend()
+
+    // Restore user preferences
+    const savedFontSize = await window.api.storeGet("fontSize")
+    if (savedFontSize) {
+      fontSizeSelect.value = savedFontSize
+      document.documentElement.style.setProperty("--font-size", savedFontSize + "px")
+    }
+
+    const savedMode = await window.api.storeGet("mode")
+    if (savedMode) {
+      modeSelect.value = savedMode
+    }
   } catch (e) {
     console.error(e)
   }

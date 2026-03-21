@@ -19,6 +19,8 @@
  */
 
 const { app, Tray, Menu, nativeImage, screen } = require("electron")
+const log = require("electron-log/main")
+const logger = log
 
 let _window = null
 let _tray = null
@@ -37,7 +39,7 @@ function init(window) {
     throw new Error("[Stealth] Invalid BrowserWindow")
   }
   _window = window
-  console.log("[Stealth] Module initialized (standalone)")
+  logger.info("[Stealth] Module initialized")
 }
 
 /**
@@ -92,7 +94,7 @@ function createTray() {
   _tray.setContextMenu(contextMenu)
   _tray.on("click", () => disable())
 
-  console.log("[Stealth] Tray created")
+  logger.info("[Stealth] Tray created")
 }
 
 /**
@@ -102,7 +104,7 @@ function destroyTray() {
   if (_tray) {
     _tray.destroy()
     _tray = null
-    console.log("[Stealth] Tray destroyed")
+    logger.info("[Stealth] Tray destroyed")
   }
 }
 
@@ -112,23 +114,23 @@ function destroyTray() {
  */
 function enable() {
   if (!_window) {
-    console.warn("[Stealth] No window")
+    logger.warn("[Stealth] No window")
     return false
   }
 
   if (_enabled) return true
 
-  console.log("[Stealth] Enabling stealth...")
+  logger.info("[Stealth] Enabling stealth...")
 
   try {
     // Apply screen capture protection (hides from Zoom/Teams/WebEx)
     setUndetectable(true)
     createTray()
     _enabled = true
-    console.log("[Stealth] Stealth enabled (screen capture protection active)")
+    logger.info("[Stealth] Stealth enabled (screen capture protection active)")
     return true
   } catch (e) {
-    console.error("[Stealth] Enable error:", e.message)
+    logger.error("[Stealth] Enable error:", e.message)
     return false
   }
 }
@@ -138,22 +140,22 @@ function enable() {
  */
 function disable() {
   if (!_window) {
-    console.warn("[Stealth] No window")
+    logger.warn("[Stealth] No window")
     return false
   }
 
   if (!_enabled) return true
 
-  console.log("[Stealth] Disabling stealth...")
+  logger.info("[Stealth] Disabling stealth...")
 
   try {
     destroyTray()
     setUndetectable(false)
     _enabled = false
-    console.log("[Stealth] Stealth disabled (screen capture allowed)")
+    logger.info("[Stealth] Stealth disabled (screen capture allowed)")
     return true
   } catch (e) {
-    console.error("[Stealth] Disable error:", e.message)
+    logger.error("[Stealth] Disable error:", e.message)
     return false
   }
 }
@@ -184,7 +186,7 @@ function isEnabled() {
  */
 function setUndetectable(enable) {
   if (!_window) {
-    console.warn("[Stealth] No window")
+    logger.warn("[Stealth] No window")
     return false
   }
 
@@ -193,15 +195,15 @@ function setUndetectable(enable) {
       // Hide from screen capture
       _window.setContentProtection(true)
       _undetectable = true
-      console.log("[Stealth] Screen capture protection ENABLED")
+      logger.info("[Stealth] Screen capture protection ENABLED")
     } else {
       _window.setContentProtection(false)
       _undetectable = false
-      console.log("[Stealth] Screen capture protection DISABLED")
+      logger.info("[Stealth] Screen capture protection DISABLED")
     }
     return true
   } catch (e) {
-    console.error("[Stealth] Undetectable error:", e.message)
+    logger.error("[Stealth] Undetectable error:", e.message)
     return false
   }
 }

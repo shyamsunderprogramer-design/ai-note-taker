@@ -32,7 +32,7 @@
 
     </div>
 
-    <!-- ===== ROW 2: CONTROLS ===== -->
+    <!-- ===== ROW 2: CONTROLS + TEXT INPUT + ACTION ===== -->
     <div class="controls-strip">
       <div class="ctrl-group">
         <label>Mode</label>
@@ -48,6 +48,17 @@
       </div>
 
       <div class="ctrl-group">
+        <label>Model</label>
+        <select id="modelSelect">
+          <option value="auto" selected>Auto</option>
+          <option value="phi3:latest">Phi3</option>
+          <option value="tinyllama:latest">TinyLlama</option>
+          <option value="llama3:latest">Llama3</option>
+          <option value="mistral:latest">Mistral</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group">
         <label>Font</label>
         <select id="fontSizeSelect">
           <option value="12">Small</option>
@@ -58,14 +69,16 @@
       </div>
 
       <div class="ctrl-group">
-        <label>Model</label>
-        <select id="modelSelect">
-          <option value="auto" selected>Auto</option>
-          <option value="phi3:latest">Phi3</option>
-          <option value="tinyllama:latest">TinyLlama</option>
-          <option value="llama3:latest">Llama3</option>
-          <option value="mistral:latest">Mistral</option>
+        <label>Response</label>
+        <select id="responseStyleSelect">
+          <option value="concise" selected>Concise</option>
+          <option value="detailed">Detailed</option>
+          <option value="bulletpoint">Bullet</option>
         </select>
+      </div>
+
+      <div class="text-input-wrap">
+        <input type="text" id="textInput" placeholder="Type here..." />
       </div>
 
       <button id="listenBtn" class="action-btn" type="button">
@@ -86,6 +99,9 @@
     </div>
 
   </div>
+
+  <!-- Resize handle at bottom (outside shell) -->
+  <div class="resize-handle"></div>
 
   <script src="app.js"></script>
 </body>

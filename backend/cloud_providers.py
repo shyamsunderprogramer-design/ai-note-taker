@@ -1,7 +1,8 @@
 import os
-import re
 import requests
 from dotenv import load_dotenv
+
+from utils import clean_ai_output
 
 load_dotenv()
 
@@ -163,18 +164,3 @@ def ask_grok(prompt, model="grok-2-mini", stream=False):
         raise Exception(f"xAI error: {response.status_code} - {response.text}")
 
     return response
-
-
-# ==============================
-# 🧹 CLEAN OUTPUT
-# ==============================
-
-def clean_ai_output(text):
-    if not text:
-        return ""
-
-    cleaned = text
-    cleaned = re.sub(r"(?i)\b(user question|question|rules|rule|preface|example|examples|constraints|behavior|answer)\s*:\s*", " ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
-    return cleaned.strip()

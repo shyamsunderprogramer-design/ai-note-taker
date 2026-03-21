@@ -2,6 +2,16 @@ const { app, BrowserWindow, globalShortcut, ipcMain, session } = require("electr
 const path = require("path")
 const { spawn } = require("child_process")
 const stealth = require("./stealth")
+const log = require("electron-log/main")
+const Store = require("electron-store")
+
+log.initialize()
+log.transports.file.level = "info"
+log.transports.console.level = "debug"
+log.transports.file.maxSize = 5 * 1024 * 1024
+
+const logger = log
+const store = new Store()
 
 const appDataDir = path.join(__dirname, "../electron-data")
 app.setPath("userData", appDataDir)
@@ -10,54 +20,42 @@ app.setPath("sessionData", appDataDir)
 let win
 let backendProcess = null
 
+// Global exception handler
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught exception: %s", err.stack || err.message)
+})
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled rejection: %s", String(reason))
+})
+
 // ==============================
-// CONSOLE FIX — ignore EPIPE
+// WINDOW STATE
 // ==============================
-function safeConsoleMethod(methodName) {
-  const original = console[methodName]
-  console[methodName] = (...args) => {
-    try {
-      original.apply(console, args)
-    } catch (err) {
-      if (!err || err.code !== "EPIPE") throw err
-    }
+function saveBounds() {
+  if (win && !win.isMaximized() && !win.isMinimized()) {
+    store.set("windowBounds", win.getBounds())
   }
 }
-
-safeConsoleMethod("log")
-safeConsoleMethod("error")
-safeConsoleMethod("warn")
-safeConsoleMethod("info")
-
-function ignoreBrokenPipe(stream) {
-  if (!stream) return
-  stream.on("error", (err) => {
-    if (err && err.code !== "EPIPE") throw err
-  })
-}
-
-ignoreBrokenPipe(process.stdout)
-ignoreBrokenPipe(process.stderr)
-
-process.on("uncaughtException", (err) => {
-  if (err && err.code === "EPIPE") return
-  throw err
-})
 
 // ==============================
 // WINDOW CREATION
 // ==============================
 function createWindow() {
+  const savedBounds = store.get("windowBounds", { width: 520, height: 440 })
+
   win = new BrowserWindow({
-    width: 520,
-    height: 440,
+    width: savedBounds.width,
+    height: savedBounds.height,
+    x: savedBounds.x,
+    y: savedBounds.y,
     minWidth: 420,
     minHeight: 360,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
     alwaysOnTop: true,
-    skipTaskbar: false,
+    skipTaskbar: true,
     resizable: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -71,6 +69,10 @@ function createWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   win.loadFile(path.join(__dirname, "../renderer/index.html"))
+
+  // Save window bounds on move/resize
+  win.on("resize", saveBounds)
+  win.on("move", saveBounds)
 
   // Initialize stealth after window loads
   stealth.init(win)
@@ -92,33 +94,50 @@ function startBackend() {
   const pythonExe = path.join(__dirname, "../AINT_Venv/Scripts/python.exe")
   const backendDir = path.join(__dirname, "../backend")
 
+  const env = {
+    ...process.env,
+    PYTHONPATH: backendDir
+  }
+
   backendProcess = spawn(pythonExe, [
     "-m", "uvicorn", "main:app",
     "--host", "127.0.0.1",
     "--port", "8000",
-    "--log-level", "warning"
+    "--log-level", "info"
   ], {
     cwd: backendDir,
-    stdio: "ignore",
+    env: env,
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
   })
 
-  backendProcess.on("close", () => {
-    console.log("[Main] Backend process exited")
+  backendProcess.stdout.on("data", (data) => {
+    logger.info("[Backend] %s", data.toString().trim())
+  })
+
+  backendProcess.stderr.on("data", (data) => {
+    logger.error("[Backend] %s", data.toString().trim())
+  })
+
+  backendProcess.on("close", (code) => {
+    logger.info("Backend process exited with code %s", code)
   })
 
   backendProcess.on("error", (err) => {
-    console.error("[Main] Backend spawn error:", err.message)
+    logger.error("Backend spawn error: %s", err.message)
   })
 }
 
 // ==============================
 // IPC HANDLERS
 // ==============================
+ipcMain.handle("store:get", (_event, key) => store.get(key))
+ipcMain.handle("store:set", (_event, key, value) => { store.set(key, value) })
+
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (w) {
-    w.minimize()
+    w.hide()
   }
 })
 
@@ -135,6 +154,14 @@ ipcMain.handle("window:toggle-maximize", () => {
 ipcMain.handle("window:close", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (w) w.close()
+})
+
+ipcMain.handle("window:resize", (_event, width, height) => {
+  const w = BrowserWindow.getFocusedWindow() || win
+  if (w) {
+    const [currentWidth, currentHeight] = w.getSize()
+    w.setSize(width || currentWidth, height || currentHeight)
+  }
 })
 
 ipcMain.handle("window:restore", () => {
@@ -184,18 +211,25 @@ app.whenReady().then(() => {
     stealth.toggleUndetectable()
   })
 
-  // Ctrl+Shift+A — restore window
-  globalShortcut.register("CommandOrControl+Shift+A", () => {
-    if (stealth.isEnabled()) {
-      stealth.disable()
+  // Ctrl+Shift+Enter — toggle hide/restore window
+  globalShortcut.register("CommandOrControl+Shift+Return", () => {
+    if (win) {
+      if (win.isVisible()) {
+        win.hide()
+      } else {
+        if (win.isMinimized()) win.restore()
+        win.setResizable(true)
+        win.setSize(520, 440)
+        win.show()
+        win.focus()
+      }
     }
-    const w = BrowserWindow.getFocusedWindow() || win
-    if (w) {
-      if (w.isMinimized()) w.restore()
-      w.setResizable(true)
-      w.setSize(520, 440)
-      w.show()
-      w.focus()
+  })
+
+  // Ctrl+Shift+Space — hide window (alternative)
+  globalShortcut.register("CommandOrControl+Shift+Space", () => {
+    if (win && win.isVisible()) {
+      win.hide()
     }
   })
 

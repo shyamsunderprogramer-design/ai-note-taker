@@ -2,13 +2,17 @@
 # IMPORTS
 # ==============================
 
+import logging
 import re
+import threading
 
 import numpy as np
 import psutil
 import sounddevice as sd
 import soundfile as sf
 from faster_whisper import WhisperModel
+
+logger = logging.getLogger("whisper")
 
 
 
@@ -50,19 +54,33 @@ def select_model(mode="adaptive"):
 # ==============================
 
 models = {}
+_model_lock = threading.Lock()
 
 
 def get_model(mode="adaptive"):
     """
     Return already-loaded model instance based on selected mode.
+    Thread-safe lazy loading.
     """
-
     selected = select_model(mode)
 
     if selected not in models:
-        models[selected] = WhisperModel(selected, device=DEVICE)
+        with _model_lock:
+            if selected not in models:
+                logger.info("Loading Whisper model: %s", selected)
+                models[selected] = WhisperModel(selected, device=DEVICE)
 
     return models[selected]
+
+
+def unload_all_models():
+    """Unload all cached Whisper models to free memory."""
+    global models
+    with _model_lock:
+        for name, model in models.items():
+            logger.info("Unloading Whisper model: %s", name)
+            del model
+        models.clear()
 
 
 # ==============================
@@ -74,7 +92,7 @@ def record_audio(duration=RECORD_SECONDS, samplerate=SAMPLE_RATE):
     Capture audio from microphone.
     """
 
-    print("Listening...", flush=True)
+    logger.debug("Listening...")
 
     audio = sd.rec(
         int(duration * samplerate),
@@ -115,7 +133,7 @@ def transcribe(audio, mode="adaptive"):
         return text.strip()
 
     except Exception as e:
-        print("Transcription error:", e, flush=True)
+        logger.error("Transcription error: %s", e)
         return ""
 
 
@@ -273,5 +291,5 @@ def transcribe_audio(file_path, mode="adaptive"):
         return transcribe(audio, mode)
 
     except Exception as e:
-        print("File transcription error:", e, flush=True)
+        logger.error("File transcription error: %s", e)
         return ""

@@ -7,9 +7,11 @@ A smart voice note-taking app with screen capture protection and AI-powered resp
 ## Features
 
 - **Voice Recording** - Press Start or Enter to record your voice
+- **Text Input** - Type your question directly and press Enter to submit
 - **AI Transcription** - Converts your voice to text using Whisper AI
 - **Smart Responses** - Gets AI answers based on your questions
-- **Multiple Modes** - Auto, Fast, Adaptive, Interview, Reasoning, Cloud, Code
+- **Response Styles** - Choose how AI responds: Concise, Detailed, or Bullet points
+- **Multiple Modes** - Auto, Fast, Adaptive, Interview, Reasoning, Cloud, Code, Universal
 - **Multiple Models** - Auto, Phi3, TinyLlama, Llama3, Mistral
 - **Screen Capture Protection** - Stealth mode hides the app from screen capture
 - **Always On Top** - Stays visible while you work
@@ -23,10 +25,8 @@ A smart voice note-taking app with screen capture protection and AI-powered resp
 
 | Shortcut | Action |
 |----------|--------|
-| `Enter` | Start/Stop recording |
-| `Ctrl+Shift+H` | Toggle stealth mode (hide/show) |
-| `Ctrl+Shift+U` | Toggle screen capture protection |
-| `Ctrl+Shift+A` | Restore window |
+| `Enter` | Toggle recording (when no text) / Submit text (when typing) / Start/Stop recording |
+| `F` | Toggle maximize window |
 
 ---
 
@@ -105,20 +105,28 @@ The app window will appear!
 
 ## How to Use
 
-1. **Start Recording**: Click the **Start** button or press **Enter**
-2. **Speak**: Say your question or thought
-3. **Stop**: Click **Stop** or press **Enter** again
-4. **Get Answer**: The AI will respond with an answer
+### Voice Input
+1. Click the **Start** button or press **Enter**
+2. Speak your question or thought
+3. Click **Stop** or press **Enter** again
+4. The AI will respond with an answer
+
+### Text Input
+1. Type your question in the text input field
+2. Press **Enter** to submit
+3. The AI will respond with an answer
 
 ### Changing Settings
 
 - **Mode**: Click "Mode" dropdown to change AI behavior
-  - `Auto` - Automatic (recommended)
-  - `Fast` - Quick responses
+  - `Auto` - Automatic selection based on input
+  - `Fast` - Quick responses for simple questions
+  - `Adaptive` - Balanced responses
   - `Interview` - For technical interviews
-  - `Reasoning` - For complex reasoning
-  - `Cloud` - Uses cloud AI
-  - `Code` - Optimized for coding
+  - `Reasoning` - For complex reasoning questions
+  - `Cloud` - Uses cloud AI providers
+  - `Code` - Optimized for coding questions
+  - `Universal` - General purpose
 
 - **Model**: Click "Model" dropdown to choose AI model
   - `Auto` - Automatic selection
@@ -126,6 +134,11 @@ The app window will appear!
   - `TinyLlama` - Tiny, fast model
   - `Llama3` - Powerful model
   - `Mistral` - Balanced model
+
+- **Response**: Click "Response" dropdown to choose output format
+  - `Concise` - Short, brief answers
+  - `Detailed` - Long, detailed explanations
+  - `Bullet` - Bullet point format with asterisks
 
 - **Font**: Click "Font" dropdown to change text size
 
@@ -181,6 +194,7 @@ ai-note-taker/
 │   ├── main.py        # FastAPI server
 │   ├── whisper_handler.py  # Speech to text
 │   ├── ai_router.py   # AI routing
+│   ├── cloud_providers.py  # Cloud AI integration
 │   └── config.py      # Settings
 ├── renderer/          # App UI (HTML/CSS/JS)
 │   ├── index.html    # App layout
@@ -206,8 +220,8 @@ ai-note-taker/
 - **Electron** - Desktop app framework
 - **FastAPI** - Python web server
 - **Whisper** - Speech recognition
+- **Ollama** - Local AI model inference
 - **CTranslate2** - Fast AI inference
-- **Hugging Face** - AI model hosting
 
 ---
 

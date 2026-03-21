@@ -1,9 +1,13 @@
 import json
+import logging
 import re
 
 import requests
 
 from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model
+from utils import clean_ai_output
+
+logger = logging.getLogger("ai_router")
 
 AI_MODE = "adaptive"
 
@@ -73,11 +77,31 @@ def get_model_candidates(user_input, requested_mode="auto"):
     return resolved_mode, candidates
 
 
-def build_prompt(user_input, mode="adaptive"):
+def build_prompt(user_input, mode="adaptive", style="concise"):
+    # Style-specific instructions
+    if style == "concise":
+        style_instruction = "Give a very short answer in 1-2 sentences only."
+    elif style == "detailed":
+        style_instruction = "Give a detailed explanation in paragraph form."
+    elif style == "bulletpoint":
+        style_instruction = "Respond using ONLY bullet points with asterisk (*) prefix, ONE bullet per line, NO numbered lists.\nFormat:\n* point one here\n* point two here\n* point three here\nEach line MUST start with exactly one asterisk (*) followed by a space, then the text. No numbers, no dashes, no other symbols."
+    else:
+        style_instruction = "Give a concise answer."
+
+    base = f"""
+Answer the user's question directly.
+{style_instruction}
+Do not repeat the question.
+Do not mention rules, prompt text, or examples.
+If unclear, reply with: Please clarify your question
+
+User question: {user_input}
+"""
+
     if mode == "code":
         return f"""
 Answer the user's coding question directly.
-Keep the answer concise and practical.
+{style_instruction}
 Prefer the shortest correct explanation or fix.
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
@@ -89,7 +113,7 @@ User question: {user_input}
     if mode == "reasoning":
         return f"""
 Answer the user's question directly.
-Keep the answer concise but complete.
+{style_instruction}
 Prefer the clearest correct explanation.
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
@@ -101,7 +125,7 @@ User question: {user_input}
     if mode == "fast":
         return f"""
 Answer the user's question directly.
-Keep the answer to 1-2 short lines.
+{style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
@@ -112,7 +136,7 @@ User question: {user_input}
     if mode == "cloud":
         return f"""
 Answer the user's question directly.
-Keep the answer concise and useful.
+{style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
@@ -123,7 +147,8 @@ User question: {user_input}
     if mode == "interview":
         return f"""
 Answer only the user's question.
-Keep the answer technical and to 2-3 lines.
+{style_instruction}
+Keep it technical.
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
@@ -134,7 +159,7 @@ User question: {user_input}
     if mode == "universal":
         return f"""
 Answer the user's question clearly and naturally.
-Keep the answer concise.
+{style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
@@ -142,20 +167,12 @@ If unclear, reply with: Please clarify your question
 User question: {user_input}
 """
 
-    return f"""
-Answer the user's question directly.
-Keep the answer concise and useful.
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
-
-User question: {user_input}
-"""
+    return base
 
 
-def ask_ollama(prompt, mode=AI_MODE, model_name=None):
+def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
     try:
-        final_prompt = build_prompt(prompt, mode)
+        final_prompt = build_prompt(prompt, mode, style)
 
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
@@ -177,16 +194,18 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None):
         return data.get("response", "").strip()
 
     except Exception as e:
-        print("AI Error:", e)
+        logger.error("ask_ollama error: %s", e)
         return "AI error"
 
 
-def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None):
+def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise"):
     try:
-        print(f"Streaming ({mode} mode):", prompt)
+        logger.info("Streaming (%s mode, %s style): %s", mode, style, prompt)
 
-        final_prompt = build_prompt(prompt, mode)
+        final_prompt = build_prompt(prompt, mode, style)
 
+        # Use num_predict to limit response length for faster streaming
+        num_predict = 80 if style == "concise" else (300 if style == "detailed" else 200)
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
             json={
@@ -194,7 +213,8 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None):
                 "prompt": final_prompt,
                 "stream": True,
                 "options": {
-                    "temperature": AI_TEMPERATURE
+                    "temperature": AI_TEMPERATURE,
+                    "num_predict": num_predict
                 }
             },
             stream=True,
@@ -214,32 +234,32 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None):
 
                 if "response" in data:
                     chunk = data["response"]
-                    print(chunk, end="", flush=True)
+                    logger.debug("stream chunk: %s", chunk)
                     yield chunk
 
                 if data.get("done", False):
                     break
 
             except Exception as e:
-                print("Stream parse error:", e)
+                logger.warning("Stream parse error: %s", e)
 
-        print("\nStream complete")
+        logger.debug("Stream complete")
 
     except requests.exceptions.Timeout:
         yield "AI response timeout. Try again."
 
     except Exception as e:
-        print("Streaming Error:", e)
+        logger.error("Streaming error: %s", e)
         yield "AI error occurred."
 
 
-def route_ai(prompt, mode="adaptive"):
+def route_ai(prompt, mode="adaptive", style="concise"):
     resolved_mode, candidates = get_model_candidates(prompt, mode)
     last_error = None
 
     for candidate_mode, model_name in candidates:
         try:
-            response = ask_ollama(prompt, mode=candidate_mode, model_name=model_name)
+            response = ask_ollama(prompt, mode=candidate_mode, model_name=model_name, style=style)
             cleaned = clean_ai_output(response)
 
             if cleaned and cleaned not in {"AI error", "AI service unavailable."}:
@@ -252,7 +272,7 @@ def route_ai(prompt, mode="adaptive"):
             last_error = response
         except Exception as e:
             last_error = str(e)
-            print("[ERROR route_ai]:", e)
+            logger.error("route_ai error: %s", e)
 
     return {
         "response": clean_ai_output(last_error or "AI error"),
@@ -261,43 +281,18 @@ def route_ai(prompt, mode="adaptive"):
     }
 
 
-def route_ai_stream(prompt, mode="adaptive"):
+def route_ai_stream(prompt, mode="adaptive", style="concise"):
     resolved_mode, candidates = get_model_candidates(prompt, mode)
 
     for candidate_mode, model_name in candidates:
         try:
-            full_text = ""
-
-            for chunk in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name):
-                if not chunk:
-                    continue
-
-                chunk = chunk.encode("utf-8", "ignore").decode("utf-8")
-                delta = chunk
-
-                if full_text and chunk.startswith(full_text):
-                    delta = chunk[len(full_text):]
-
-                full_text += delta
-
-                if delta.strip():
-                    yield delta
-
-            if full_text.strip():
-                return
+            for chunk in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style):
+                if chunk and chunk.strip():
+                    yield chunk
+            return
 
         except Exception as e:
-            print("AI stream error:", e)
+            logger.error("AI stream error: %s", e)
 
     yield "AI error"
 
-
-def clean_ai_output(text):
-    if not text:
-        return ""
-
-    cleaned = text
-    cleaned = re.sub(r"(?i)\b(user question|question|rules|rule|preface|example|examples|constraints|behavior|answer)\s*:\s*", " ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
-    return cleaned.strip()
