@@ -281,7 +281,40 @@ def route_ai(prompt, mode="adaptive", style="concise"):
     }
 
 
-def route_ai_stream(prompt, mode="adaptive", style="concise"):
+def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama"):
+    if provider == "cloud":
+        # Use cloud provider for streaming
+        try:
+            from cloud_providers import ask_gpt_stream, ask_claude_stream, ask_gemini_stream, ask_grok_stream, build_prompt as cloud_build_prompt, clean_ai_output as cloud_clean
+            final_prompt = cloud_build_prompt(prompt, mode or "adaptive", style)
+            model_map = {
+                "openai-gpt-4o-mini": ("openai", "gpt-4o-mini"),
+                "openai-gpt-4o": ("openai", "gpt-4o"),
+                "anthropic-claude-3-5-haiku": ("anthropic", "claude-3-5-haiku-20241022"),
+                "anthropic-claude-3-5-sonnet": ("anthropic", "claude-3-5-sonnet-20241022"),
+                "google-gemini-2-0-flash": ("google", "gemini-2.0-flash"),
+                "xai-grok-2-mini": ("xai", "grok-2-mini"),
+            }
+            resolved = model_map.get(mode, ("openai", "gpt-4o-mini"))
+            provider_name, model_name = resolved
+            if provider_name == "openai":
+                for chunk in ask_gpt_stream(final_prompt, model=model_name):
+                    yield chunk
+            elif provider_name == "anthropic":
+                for chunk in ask_claude_stream(final_prompt, model=model_name):
+                    yield chunk
+            elif provider_name == "google":
+                for chunk in ask_gemini_stream(final_prompt, model=model_name):
+                    yield chunk
+            elif provider_name == "xai":
+                for chunk in ask_grok_stream(final_prompt, model=model_name):
+                    yield chunk
+            return
+        except Exception as e:
+            logger.error("Cloud stream error: %s", e)
+            yield "Cloud AI error."
+            return
+
     resolved_mode, candidates = get_model_candidates(prompt, mode)
 
     for candidate_mode, model_name in candidates:

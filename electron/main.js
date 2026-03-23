@@ -4,6 +4,8 @@ const { spawn } = require("child_process")
 const stealth = require("./stealth")
 const log = require("electron-log/main")
 const Store = require("electron-store")
+const fs = require("fs")
+const crypto = require("crypto")
 
 log.initialize()
 log.transports.file.level = "info"
@@ -16,6 +18,15 @@ const store = new Store()
 const appDataDir = path.join(__dirname, "../electron-data")
 app.setPath("userData", appDataDir)
 app.setPath("sessionData", appDataDir)
+
+const conversationsDir = path.join(appDataDir, "conversations")
+
+// Ensure conversations directory exists
+function ensureConversationsDir() {
+  if (!fs.existsSync(conversationsDir)) {
+    fs.mkdirSync(conversationsDir, { recursive: true })
+  }
+}
 
 let win
 let backendProcess = null
@@ -90,7 +101,24 @@ function createWindow() {
 // ==============================
 // BACKEND PROCESS
 // ==============================
-function startBackend() {
+async function isBackendRunning() {
+  try {
+    const http = require("http")
+    return await new Promise((resolve) => {
+      const req = http.get("http://127.0.0.1:8000/health", (res) => resolve(res.statusCode === 200))
+      req.on("error", () => resolve(false))
+      req.setTimeout(1000, () => { req.destroy(); resolve(false) })
+    })
+  } catch { return false }
+}
+
+async function startBackend() {
+  // Skip if backend already running
+  if (await isBackendRunning()) {
+    logger.info("[Backend] Already running on port 8000, skipping spawn")
+    return
+  }
+
   const pythonExe = path.join(__dirname, "../AINT_Venv/Scripts/python.exe")
   const backendDir = path.join(__dirname, "../backend")
 
@@ -133,6 +161,55 @@ function startBackend() {
 // ==============================
 ipcMain.handle("store:get", (_event, key) => store.get(key))
 ipcMain.handle("store:set", (_event, key, value) => { store.set(key, value) })
+
+// Conversation history handlers
+ipcMain.handle("conversation:save", (_event, conversation) => {
+  ensureConversationsDir()
+  const id = conversation.id || crypto.randomUUID()
+  const now = Date.now()
+  const record = {
+    ...conversation,
+    id,
+    createdAt: conversation.createdAt || now,
+    updatedAt: now
+  }
+  const filePath = path.join(conversationsDir, `${id}.json`)
+  fs.writeFileSync(filePath, JSON.stringify(record, null, 2), "utf-8")
+  return record
+})
+
+ipcMain.handle("conversation:load", (_event, id) => {
+  const filePath = path.join(conversationsDir, `${id}.json`)
+  if (!fs.existsSync(filePath)) return null
+  const data = fs.readFileSync(filePath, "utf-8")
+  return JSON.parse(data)
+})
+
+ipcMain.handle("conversation:list", () => {
+  ensureConversationsDir()
+  const files = fs.readdirSync(conversationsDir).filter(f => f.endsWith(".json"))
+  return files.map(f => {
+    const filePath = path.join(conversationsDir, f)
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"))
+    return {
+      id: data.id,
+      title: data.title,
+      pinned: data.pinned || false,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+      messageCount: data.messages ? data.messages.length : 0
+    }
+  })
+})
+
+ipcMain.handle("conversation:delete", (_event, id) => {
+  const filePath = path.join(conversationsDir, `${id}.json`)
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath)
+    return true
+  }
+  return false
+})
 
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
@@ -188,31 +265,68 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   return { undetectable: stealth.isUndetectable() }
 })
 
+// Broadcast stealth state changes to renderer (for shortcut-triggered toggles)
+function broadcastStealthState() {
+  if (win && win.webContents) {
+    win.webContents.send("stealth:state-changed", {
+      enabled: stealth.isEnabled(),
+      undetectable: stealth.isUndetectable()
+    })
+  }
+}
+
+// App-level handlers
+ipcMain.handle("app:open-logs", () => {
+  const { shell } = require("electron")
+  shell.openPath(log.transports.file.getFile().path.replace(/[^\/\\]+$/, ""))
+})
+
 // ==============================
 // APP LIFECYCLE
 // ==============================
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Request microphone permission
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(permission === "media")
   })
 
-  startBackend()
+  await startBackend()
   createWindow()
 
-  // Global shortcuts
-  // Ctrl+Shift+H — toggle stealth (hide/show window)
-  globalShortcut.register("CommandOrControl+Shift+H", () => {
-    stealth.toggle()
+  // Enable stealth (capture protection) by default on startup
+  stealth.enable()
+
+  // Global shortcuts (logged for debugging)
+  function registerShortcut(accelerator, name, fn) {
+    const success = globalShortcut.register(accelerator, fn)
+    if (success) {
+      logger.info(`[Shortcut] Registered: ${accelerator} -> ${name}`)
+    } else {
+      logger.warn(`[Shortcut] Failed to register: ${accelerator} (may conflict with another app)`)
+    }
+  }
+
+  // Alt+D — toggle stealth mode (capture protection + tray)
+  registerShortcut("Alt+D", "toggle stealth", () => {
+    logger.info("[Shortcut] Alt+D fired")
+    if (stealth.isEnabled()) {
+      stealth.disable()
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.setResizable(true)
+        win.setSize(520, 440)
+        win.show()
+        win.focus()
+      }
+    } else {
+      stealth.enable()
+    }
+    broadcastStealthState()
   })
 
-  // Ctrl+Shift+U — toggle screen capture protection
-  globalShortcut.register("CommandOrControl+Shift+U", () => {
-    stealth.toggleUndetectable()
-  })
-
-  // Ctrl+Shift+Enter — toggle hide/restore window
-  globalShortcut.register("CommandOrControl+Shift+Return", () => {
+  // Alt+Space — hide/show window (toggle visibility)
+  registerShortcut("Alt+Space", "hide/show window", () => {
+    logger.info("[Shortcut] Alt+Space fired")
     if (win) {
       if (win.isVisible()) {
         win.hide()
@@ -226,10 +340,39 @@ app.whenReady().then(() => {
     }
   })
 
-  // Ctrl+Shift+Space — hide window (alternative)
-  globalShortcut.register("CommandOrControl+Shift+Space", () => {
-    if (win && win.isVisible()) {
-      win.hide()
+  // Ctrl+Left — move window left
+  registerShortcut("CommandOrControl+Left", "move window left", () => {
+    logger.info("[Shortcut] Ctrl+Left fired")
+    if (win) {
+      const [x, y] = win.getPosition()
+      win.setPosition(x - 50, y)
+    }
+  })
+
+  // Ctrl+Right — move window right
+  registerShortcut("CommandOrControl+Right", "move window right", () => {
+    logger.info("[Shortcut] Ctrl+Right fired")
+    if (win) {
+      const [x, y] = win.getPosition()
+      win.setPosition(x + 50, y)
+    }
+  })
+
+  // Ctrl+Up — move window up
+  registerShortcut("CommandOrControl+Up", "move window up", () => {
+    logger.info("[Shortcut] Ctrl+Up fired")
+    if (win) {
+      const [x, y] = win.getPosition()
+      win.setPosition(x, y - 50)
+    }
+  })
+
+  // Ctrl+Down — move window down
+  registerShortcut("CommandOrControl+Down", "move window down", () => {
+    logger.info("[Shortcut] Ctrl+Down fired")
+    if (win) {
+      const [x, y] = win.getPosition()
+      win.setPosition(x, y + 50)
     }
   })
 

@@ -282,14 +282,14 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
 
 @app.get("/stream")
-def stream_ai(q: str, mode: str = "fast", style: str = "concise"):
+def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama"):
     def generator():
         STATE["is_streaming"] = True
 
         try:
             buffer = ""
 
-            for chunk in route_ai_stream(q, mode, style):
+            for chunk in route_ai_stream(q, mode, style, provider):
                 if not chunk:
                     continue
 

@@ -6,18 +6,53 @@ A smart voice note-taking app with screen capture protection and AI-powered resp
 
 ## Features
 
-- **Voice Recording** - Press Start or Enter to record your voice
-- **Text Input** - Type your question directly and press Enter to submit
-- **AI Transcription** - Converts your voice to text using Whisper AI
-- **Smart Responses** - Gets AI answers based on your questions
-- **Response Styles** - Choose how AI responds: Concise, Detailed, or Bullet points
-- **Multiple Modes** - Auto, Fast, Adaptive, Interview, Reasoning, Cloud, Code, Universal
-- **Multiple Models** - Auto, Phi3, TinyLlama, Llama3, Mistral
-- **Screen Capture Protection** - Stealth mode hides the app from screen capture
-- **Always On Top** - Stays visible while you work
-- **Compact Mode** - Minimize to a small bar
-- **Font Size** - Change text size (Small, Medium, Large, XL)
-- **Dark Theme** - Beautiful dark glass UI
+### Voice & Transcription
+- **Microphone recording** - Press Enter or click Start to record
+- **Local Whisper transcription** - Audio converted to text on backend
+- **Smart filtering** - Filters out small talk and non-questions
+
+### AI Responses
+- **Streaming responses** - Real-time AI answer display
+- **Multiple AI providers**:
+  - Ollama (local, default)
+  - OpenAI (GPT-4o, GPT-4o Mini)
+  - Anthropic (Claude 3.5 Haiku, Sonnet)
+  - Google (Gemini 2.0 Flash)
+  - xAI (Grok 2 Mini)
+- **Response styles**: Concise, Detailed, Bullet points
+
+### Modes
+| Mode | Purpose |
+|------|---------|
+| Auto | Automatically selects best model |
+| Fast | Quick local model response |
+| Adaptive | Adapts to content type |
+| Interview | Technical questions focus |
+| Reasoning | Enhanced reasoning |
+| Code | Code-optimized responses |
+| Cloud | Forces cloud provider |
+
+### Conversation Management
+- **Auto-save** - Conversations saved locally
+- **History** - Browse past conversations
+- **Search** - Filter conversations by keyword
+- **Sort** - By Recent, Oldest, A-Z, Message count
+- **Pin** - Keep important conversations on top
+- **Export** - Copy as formatted text
+- **Resume** - Continue any past conversation
+
+### Window & UI
+- **Frameless window** with custom title bar
+- **Always on top** floating overlay
+- **Resizable** via drag handle at bottom
+- **Font size** selection (Small/Medium/Large/XL)
+- **Dark glass UI**
+
+### Privacy & Stealth
+- **Screen capture protection** - Hides from Zoom, Teams, WebEx, Discord, OBS, Snipping Tool
+- **Stealth mode** - ON by default, hides app from screen capture
+- **Hide/show window** - Quick toggle to conceal app
+- **System tray** - Minimizes to tray when stealth enabled
 
 ---
 
@@ -25,8 +60,11 @@ A smart voice note-taking app with screen capture protection and AI-powered resp
 
 | Shortcut | Action |
 |----------|--------|
-| `Enter` | Toggle recording (when no text) / Submit text (when typing) / Start/Stop recording |
+| `Enter` | Toggle voice recording / Submit text |
 | `F` | Toggle maximize window |
+| `Alt+D` | Toggle stealth mode (capture protection + show/hide) |
+| `Alt+Space` | Hide / show window |
+| `Ctrl+←→↑↓` | Move window in any direction |
 
 ---
 
@@ -126,7 +164,6 @@ The app window will appear!
   - `Reasoning` - For complex reasoning questions
   - `Cloud` - Uses cloud AI providers
   - `Code` - Optimized for coding questions
-  - `Universal` - General purpose
 
 - **Model**: Click "Model" dropdown to choose AI model
   - `Auto` - Automatic selection
@@ -138,15 +175,39 @@ The app window will appear!
 - **Response**: Click "Response" dropdown to choose output format
   - `Concise` - Short, brief answers
   - `Detailed` - Long, detailed explanations
-  - `Bullet` - Bullet point format with asterisks
+  - `Bullet` - Bullet point format
 
 - **Font**: Click "Font" dropdown to change text size
 
 ### Stealth Mode
 
-Click the **Detectable/Undetectable** button to toggle screen capture protection:
+**Stealth mode is ON by default** when the app starts.
+
+- **Undetectable** (green dot) - App is hidden from screen capture (Zoom, Teams, WebEx, Discord, OBS, Snipping Tool)
 - **Detectable** (red dot) - App can be seen in screen capture
-- **Undetectable** (green dot) - App is hidden from screen capture
+
+Press **`Alt+D`** to toggle stealth mode, or click the button in the header.
+
+When stealth is enabled, a system tray icon appears. Click it to restore the window.
+
+### Conversation History
+
+Click the **history button** (↻) in the header to:
+- Browse all past conversations
+- Search conversations by keyword
+- Sort by Recent, Oldest, A-Z, or message count
+- Pin important conversations
+- Resume, rename, export, or delete conversations
+
+### Cloud Providers
+
+Configure API keys for cloud AI providers:
+1. Click the **menu button** (☰)
+2. Select **Settings**
+3. Click **Configure** next to your provider
+4. Enter your API key
+
+Available providers: OpenAI, Anthropic, Google, xAI
 
 ---
 
@@ -179,28 +240,34 @@ cd electron
 npm start
 ```
 
+### Keyboard shortcuts not working
+Some shortcuts may conflict with other apps. Try:
+- Closing other apps that might use similar shortcuts
+- Using the on-screen button instead of keyboard shortcuts
+
 ---
 
 ## Project Structure
 
 ```
 ai-note-taker/
-├── electron/           # Desktop app (Electron)
-│   ├── main.js        # Main window & process
-│   ├── preload.js     # Security bridge
-│   ├── stealth.js     # Screen capture protection
-│   └── package.json   # NPM packages
-├── backend/           # AI Backend (Python)
-│   ├── main.py        # FastAPI server
-│   ├── whisper_handler.py  # Speech to text
-│   ├── ai_router.py   # AI routing
+├── electron/              # Desktop app (Electron)
+│   ├── main.js          # Main window & process
+│   ├── preload.js       # Security bridge (IPC)
+│   ├── stealth.js       # Screen capture protection module
+│   └── package.json     # NPM packages
+├── backend/              # AI Backend (Python)
+│   ├── main.py          # FastAPI server
+│   ├── whisper_handler.py  # Speech to text (Whisper)
+│   ├── ai_router.py     # AI routing & prompts
 │   ├── cloud_providers.py  # Cloud AI integration
-│   └── config.py      # Settings
-├── renderer/          # App UI (HTML/CSS/JS)
-│   ├── index.html    # App layout
-│   ├── style.css     # Styling
-│   └── app.js        # App logic
-└── AINT_Venv/        # Python virtual environment
+│   └── config.py        # Settings
+├── renderer/             # App UI (HTML/CSS/JS)
+│   ├── index.html       # App layout
+│   ├── style.css        # Styling
+│   └── app.js           # App logic
+├── electron-data/        # App data (conversations, settings)
+└── AINT_Venv/           # Python virtual environment
 ```
 
 ---
@@ -219,9 +286,9 @@ ai-note-taker/
 
 - **Electron** - Desktop app framework
 - **FastAPI** - Python web server
-- **Whisper** - Speech recognition
+- **Whisper** - Speech recognition (local)
 - **Ollama** - Local AI model inference
-- **CTranslate2** - Fast AI inference
+- **Multiple AI Providers** - OpenAI, Anthropic, Google, xAI
 
 ---
 

@@ -14,17 +14,19 @@
       <!-- Left: Blinking dot + Detectable label (clickable = stealth toggle) -->
       <button id="stealthBtn" class="stealth-btn" type="button">
         <span class="stealth-dot" id="stealthDot"></span>
-        <span id="stealthLabel">Detectable</span>
+        <span id="stealthLabel">Undetectable</span>
       </button>
 
       <!-- Center: Title -->
       <div class="header-center">
+        <span class="app-subtitle">ANT</span>
         <span class="app-title">AI Note Taker</span>
       </div>
 
       <!-- Right: Menu + Window controls -->
       <div class="header-right">
         <button id="menuBtn" class="win-btn" type="button" title="Menu">&#9776;</button>
+        <button id="historyBtn" class="win-btn" type="button" title="History">&#8634;</button>
         <button id="minBtn" class="win-btn" type="button" title="Minimize">─</button>
         <button id="maxBtn" class="win-btn" type="button" title="Maximize">▢</button>
         <button id="closeBtn" class="win-btn danger" type="button" title="Close">×</button>
@@ -102,6 +104,198 @@
 
   <!-- Resize handle at bottom (outside shell) -->
   <div class="resize-handle"></div>
+
+  <!-- History panel -->
+  <div class="history-panel" id="historyPanel">
+    <div class="history-header">
+      <span>Conversations</span>
+      <button id="newChatBtn" class="history-action-btn" type="button">+ New</button>
+    </div>
+    <div class="history-toolbar">
+      <input type="text" id="historySearch" class="history-search" placeholder="Search conversations..." />
+      <select id="historySort" class="history-sort">
+        <option value="updatedAt">Recent</option>
+        <option value="createdAt">Oldest</option>
+        <option value="title">A–Z</option>
+        <option value="messageCount">Messages</option>
+      </select>
+    </div>
+    <div class="history-list" id="historyList"></div>
+    <div class="history-footer">
+      <span class="shortcut-hint">Alt+D stealth</span>
+      <span class="shortcut-hint">Alt+Space hide/show</span>
+      <span class="shortcut-hint">Ctrl+←→↑↓ move</span>
+      <span class="shortcut-hint">Enter talk</span>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <span>Settings</span>
+      <button id="closeSettingsBtn" class="win-btn" type="button" title="Close">×</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-section">
+        <div class="settings-section-title">AI Providers</div>
+        <div class="settings-provider">
+          <div class="provider-status" id="statusOpenAI"></div>
+          <div class="provider-info">
+            <div class="provider-name">OpenAI</div>
+            <div class="provider-key-hint" id="hintOpenAI">Not configured</div>
+          </div>
+          <button class="settings-btn provider-config-btn" data-provider="openai">Configure</button>
+        </div>
+        <div class="settings-provider">
+          <div class="provider-status" id="statusAnthropic"></div>
+          <div class="provider-info">
+            <div class="provider-name">Anthropic</div>
+            <div class="provider-key-hint" id="hintAnthropic">Not configured</div>
+          </div>
+          <button class="settings-btn provider-config-btn" data-provider="anthropic">Configure</button>
+        </div>
+        <div class="settings-provider">
+          <div class="provider-status" id="statusGoogle"></div>
+          <div class="provider-info">
+            <div class="provider-name">Google</div>
+            <div class="provider-key-hint" id="hintGoogle">Not configured</div>
+          </div>
+          <button class="settings-btn provider-config-btn" data-provider="google">Configure</button>
+        </div>
+        <div class="settings-provider">
+          <div class="provider-status" id="statusXAI"></div>
+          <div class="provider-info">
+            <div class="provider-name">xAI</div>
+            <div class="provider-key-hint" id="hintXAI">Not configured</div>
+          </div>
+          <button class="settings-btn provider-config-btn" data-provider="xai">Configure</button>
+        </div>
+        <div class="settings-provider">
+          <div class="provider-status provider-status-ollama"></div>
+          <div class="provider-info">
+            <div class="provider-name">Ollama</div>
+            <div class="provider-key-hint">Always available</div>
+          </div>
+          <span class="provider-active-label">Local</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Cloud Model</div>
+        <div class="settings-cloud-mode">
+          <select id="cloudModelSelect">
+            <option value="auto" selected>Auto (uses best available)</option>
+            <option value="openai-gpt-4o-mini">OpenAI GPT-4o Mini</option>
+            <option value="openai-gpt-4o">OpenAI GPT-4o</option>
+            <option value="anthropic-claude-3-5-haiku">Anthropic Claude 3.5 Haiku</option>
+            <option value="anthropic-claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
+            <option value="google-gemini-2-0-flash">Google Gemini 2.0 Flash</option>
+            <option value="xai-grok-2-mini">xAI Grok 2 Mini</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Key modal -->
+  <div class="modal-overlay" id="apiKeyModal">
+    <div class="modal-box">
+      <div class="modal-title">Configure API Key</div>
+      <div class="modal-provider-name" id="modalProviderName"></div>
+      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." />
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="modalCancel">Cancel</button>
+        <button class="settings-btn modal-save-btn" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App menu (triggered by menuBtn) -->
+  <div class="app-menu" id="appMenu">
+    <div class="app-menu-item" data-action="settings">
+      <span class="app-menu-icon">&#9881;</span>
+      <span>Settings</span>
+    </div>
+    <div class="app-menu-item" data-action="shortcuts">
+      <span class="app-menu-icon">&#9003;</span>
+      <span>Keyboard Shortcuts</span>
+    </div>
+    <div class="app-menu-item" data-action="about">
+      <span class="app-menu-icon">&#9432;</span>
+      <span>About</span>
+    </div>
+    <div class="app-menu-separator"></div>
+    <div class="app-menu-item" data-action="logs">
+      <span class="app-menu-icon">&#128196;</span>
+      <span>Open Logs</span>
+    </div>
+    <div class="app-menu-separator"></div>
+    <div class="app-menu-item danger" data-action="quit">
+      <span class="app-menu-icon">&#10006;</span>
+      <span>Quit</span>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts modal -->
+  <div class="modal-overlay" id="shortcutsModal">
+    <div class="modal-box shortcuts-modal-box">
+      <div class="modal-title">Keyboard Shortcuts</div>
+      <div class="shortcuts-list">
+        <div class="shortcut-row">
+          <span class="shortcut-key">Enter</span>
+          <span class="shortcut-desc">Toggle voice recording / Submit text</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">F</span>
+          <span class="shortcut-desc">Toggle maximize</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Alt+D</span>
+          <span class="shortcut-desc">Toggle stealth mode (capture protection + show/hide)</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Alt+Space</span>
+          <span class="shortcut-desc">Hide / show window</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+←→↑↓</span>
+          <span class="shortcut-desc">Move window in any direction</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-save-btn" id="closeShortcutsModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- About modal -->
+  <div class="modal-overlay" id="aboutModal">
+    <div class="modal-box shortcuts-modal-box">
+      <div class="modal-title">About AI Note Taker</div>
+      <div class="about-content">
+        <div class="about-logo">&#10022;</div>
+        <div class="about-version">Version <span id="aboutVersion">1.0.0</span></div>
+        <div class="about-desc">AI-powered voice note taker with local transcription and intelligent routing.</div>
+        <div class="about-status">
+          <div class="about-status-row">
+            <span class="about-status-label">Backend</span>
+            <span class="about-status-value" id="aboutBackend">Checking...</span>
+          </div>
+          <div class="about-status-row">
+            <span class="about-status-label">Ollama</span>
+            <span class="about-status-value" id="aboutOllama">Checking...</span>
+          </div>
+          <div class="about-status-row">
+            <span class="about-status-label">Whisper Model</span>
+            <span class="about-status-value" id="aboutWhisper">Checking...</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-save-btn" id="closeAboutModal">Close</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
