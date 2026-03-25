@@ -123,11 +123,12 @@ function enable() {
   logger.info("[Stealth] Enabling stealth...")
 
   try {
-    // Apply screen capture protection (hides from Zoom/Teams/WebEx)
-    setUndetectable(true)
     createTray()
+    // Also enable capture protection when stealth mode is activated
+    _window.setContentProtection(true)
     _enabled = true
-    logger.info("[Stealth] Stealth enabled (screen capture protection active)")
+    _undetectable = true
+    logger.info("[Stealth] Stealth enabled (tray active, capture protection ON)")
     return true
   } catch (e) {
     logger.error("[Stealth] Enable error:", e.message)

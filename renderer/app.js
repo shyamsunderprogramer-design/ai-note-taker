@@ -28,8 +28,12 @@ const modeSelect = document.getElementById("modeSelect")
 const modelSelect = document.getElementById("modelSelect")
 const fontSizeSelect = document.getElementById("fontSizeSelect")
 const responseStyleSelect = document.getElementById("responseStyleSelect")
+const contextLengthSelect = document.getElementById("contextLengthSelect")
+const tokenLimitSelect = document.getElementById("tokenLimitSelect")
+const tokenCounter = document.getElementById("tokenCounter")
 const chatArea = document.getElementById("chatArea")
 const chatWelcome = document.getElementById("chatWelcome")
+const summarizeBtn = document.getElementById("summarizeBtn")
 const menuBtn = document.getElementById("menuBtn")
 const textInput = document.getElementById("textInput")
 const historyBtn = document.getElementById("historyBtn")
@@ -48,13 +52,22 @@ const cloudModelSelect = document.getElementById("cloudModelSelect")
 // ==============================
 // GLOBAL ENTER KEY + F KEY LISTENERS
 // ==============================
-// Listen for stealth state changes triggered by Ctrl+D shortcut in main process
+// Listen for stealth state changes triggered by Alt+D shortcut in main process
 window.api.onStealthStateChanged((state) => {
-  isUndetectable = state.enabled
-  stealthBtn.classList.toggle("undetectable", state.enabled)
-  stealthLabel.textContent = state.enabled ? "Undetectable" : "Detectable"
+  isUndetectable = state.undetectable
+  stealthBtn.classList.toggle("undetectable", state.undetectable)
+  stealthLabel.textContent = state.undetectable ? "Undetectable" : "Detectable"
 })
 document.addEventListener("keydown", (e) => {
+  // Escape — close panels
+  if (e.key === "Escape") {
+    const tag = document.activeElement.tagName.toLowerCase()
+    if (tag === "input" || tag === "textarea" || tag === "select") return
+    closeHistoryPanel()
+    settingsPanel.classList.remove("open")
+    return
+  }
+
   // F key — toggle maximize
   if (e.key === "f" || e.key === "F") {
     const tag = document.activeElement.tagName.toLowerCase()
@@ -109,6 +122,51 @@ function setListeningUI(listening) {
   }
 }
 
+function getSelectedContextLength() {
+  return parseInt(contextLengthSelect ? contextLengthSelect.value : 0, 10)
+}
+
+function getSelectedTokenLimit() {
+  return parseInt(tokenLimitSelect ? tokenLimitSelect.value : 128000, 10)
+}
+
+function estimateTokens(text) {
+  if (!text) return 0
+  // Rough estimation: ~1 token per 0.75 words
+  const wordCount = text.trim().split(/\s+/).length
+  return Math.ceil(wordCount / 0.75)
+}
+
+function getContextMessages() {
+  const contextLength = getSelectedContextLength()
+  if (contextLength === 0) return null
+
+  const tokenLimit = getSelectedTokenLimit()
+  const recentMessages = currentMessages.slice(-contextLength * 2)
+
+  // Build context within token limit
+  const contextMsgs = []
+  let totalTokens = 0
+
+  // Iterate in reverse (oldest first) and add until token limit
+  for (let i = 0; i < recentMessages.length; i++) {
+    const msg = recentMessages[i]
+    const msgTokens = estimateTokens(msg.text)
+    if (totalTokens + msgTokens > tokenLimit) break
+    totalTokens += msgTokens
+    contextMsgs.push(msg)
+  }
+
+  // Update token counter
+  if (tokenCounter) {
+    const limitDisplay = tokenLimit >= 1000 ? Math.round(tokenLimit / 1000) + "K" : tokenLimit
+    tokenCounter.textContent = `~${Math.round(totalTokens)} / ${limitDisplay}`
+    tokenCounter.style.display = contextLength > 0 ? "inline" : "none"
+  }
+
+  return contextMsgs.length > 0 ? contextMsgs : null
+}
+
 function setProcessingUI(processing) {
   if (processing) {
     listenBtn.classList.add("listening")
@@ -144,8 +202,17 @@ function formatDate(timestamp) {
   if (!timestamp) return ""
   const d = new Date(timestamp)
   const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  if (isToday) {
+  const diffMs = now - d
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMs / 3600000)
+  const diffDay = Math.floor(diffMs / 86400000)
+
+  if (diffMin < 1) return "Just now"
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHr < 24) return `${diffHr}h ago`
+  if (diffDay === 1) return `Yesterday ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+  if (diffDay < 7) return d.toLocaleDateString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })
+  if (d.toDateString() === now.toDateString()) {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   }
   return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -156,9 +223,19 @@ async function saveCurrentConversation() {
   const firstUserMsg = currentMessages.find(m => m.role === "user")
   const title = firstUserMsg ? generateTitle(firstUserMsg.text) : "Untitled"
 
+  // Load existing conversation to preserve pinned state
+  let pinned = false
+  if (currentConversationId) {
+    try {
+      const existing = await window.api.conversationLoad(currentConversationId)
+      if (existing) pinned = !!existing.pinned
+    } catch {}
+  }
+
   const conversation = {
     id: currentConversationId,
     title,
+    pinned,
     messages: currentMessages
   }
 
@@ -185,6 +262,7 @@ function loadConversationIntoUI(conversation) {
   })
 
   suppressAutoSave = false
+  hideSummarizeButton()
   renderHistoryList()
 }
 
@@ -195,6 +273,9 @@ function startNewConversation() {
   if (chatWelcome) {
     chatArea.appendChild(chatWelcome)
   }
+  // Remove active state from history list
+  document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"))
+  hideSummarizeButton()
   closeHistoryPanel()
 }
 
@@ -226,39 +307,219 @@ function copyConversation(conversation) {
     return `${label} ${msg.text}`
   }).join("\n\n")
   navigator.clipboard.writeText(text).then(() => {
-    // Brief visual feedback
-    const btn = document.querySelector(`[data-id="${conversation.id}"]`)
-    if (btn) {
-      const original = btn.textContent
-      btn.textContent = "✓"
-      setTimeout(() => btn.textContent = original, 1000)
-    }
+    // Show brief toast feedback
+    showToast("Conversation copied!")
   })
 }
 
+function showToast(message) {
+  const existing = document.querySelector(".toast-message")
+  if (existing) existing.remove()
+  const toast = document.createElement("div")
+  toast.className = "toast-message"
+  toast.textContent = message
+  toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;animation:fadeOut 2s forwards"
+  document.body.appendChild(toast)
+  setTimeout(() => toast.remove(), 2000)
+}
+
 function exportConversation(conversation) {
-  const date = new Date(conversation.updatedAt || conversation.createdAt).toLocaleString()
-  const lines = [`# ${conversation.title}\n`, `*Exported: ${date}*\n`]
-  conversation.messages.forEach(msg => {
-    const label = msg.role === "user" ? "**You**" : "**AI**"
-    const mode = msg.mode ? ` [${msg.mode}]` : ""
-    lines.push(`### ${label}${mode}\n${msg.text}\n`)
+  const overlay = document.createElement("div")
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:999999"
+  overlay.innerHTML = `
+    <div style="background:#1a1d2e;border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:24px;width:360px;display:flex;flex-direction:column;gap:14px;box-shadow:0 16px 64px rgba(0,0,0,0.6)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:1.1em;font-weight:700;color:#fff">Export Conversation</div>
+        <button id="exportClose" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:1.2em;cursor:pointer;padding:4px;line-height:1">&times;</button>
+      </div>
+
+      <div style="font-size:0.85em;color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.04);padding:10px 12px;border-radius:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(conversation.title)}</div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:0.8em;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.08em">Format</div>
+        <div style="display:flex;gap:8px">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;transition:all 0.15s;background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.4)">
+            <input type="radio" name="exportFormat" value="txt" checked style="accent-color:#3b82f6">
+            <span style="font-size:0.9em;color:#fff">TXT</span>
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;transition:all 0.15s">
+            <input type="radio" name="exportFormat" value="csv" style="accent-color:#3b82f6">
+            <span style="font-size:0.9em;color:#fff">CSV</span>
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;transition:all 0.15s">
+            <input type="radio" name="exportFormat" value="json" style="accent-color:#3b82f6">
+            <span style="font-size:0.9em;color:#fff">JSON</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:0.8em;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.08em">Encryption</div>
+          <label style="position:relative;display:inline-flex;align-items:center;cursor:pointer">
+            <input type="checkbox" id="exportEncrypt" style="width:0;height:0;opacity:0;position:absolute">
+            <div id="encryptToggle" style="width:36px;height:20px;background:rgba(255,255,255,0.1);border-radius:10px;position:relative;transition:background 0.2s">
+              <div style="width:16px;height:16px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:transform 0.2s"></div>
+            </div>
+          </label>
+        </div>
+        <input type="password" id="exportKey" placeholder="Enter encryption password" disabled style="width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.04);color:#fff;font-size:0.9em;outline:none;box-sizing:border-box;opacity:0.4;transition:opacity 0.2s">
+      </div>
+
+      <button id="exportBtn" style="width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,rgba(59,130,246,0.8),rgba(37,99,235,0.8));color:#fff;font-size:1em;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(59,130,246,0.3);transition:all 0.2s">Export File</button>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  const close = () => overlay.remove()
+  const closeBtn = overlay.querySelector("#exportClose")
+  const encryptToggle = overlay.querySelector("#encryptToggle")
+  const encryptCheckbox = overlay.querySelector("#exportEncrypt")
+  const encryptInput = overlay.querySelector("#exportKey")
+  const formatRadios = overlay.querySelectorAll('input[name="exportFormat"]')
+  const exportBtn = overlay.querySelector("#exportBtn")
+
+  closeBtn.addEventListener("click", close)
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close() })
+
+  // Toggle encryption
+  encryptCheckbox.addEventListener("change", () => {
+    const on = encryptCheckbox.checked
+    encryptToggle.style.background = on ? "rgba(59,130,246,0.6)" : "rgba(255,255,255,0.1)"
+    encryptToggle.querySelector("div").style.transform = on ? "translateX(16px)" : ""
+    encryptInput.disabled = !on
+    encryptInput.style.opacity = on ? "1" : "0.4"
+    if (on) encryptInput.focus()
   })
-  navigator.clipboard.writeText(lines.join("\n")).then(() => {
-    const btn = document.querySelector(`[data-id="${conversation.id}"]`)
-    if (btn) {
-      const original = btn.textContent
-      btn.textContent = "✓"
-      setTimeout(() => btn.textContent = original, 1000)
+
+  // Format radio highlight
+  formatRadios.forEach(radio => {
+    radio.addEventListener("change", () => {
+      formatRadios.forEach(r => {
+        const label = r.closest("label")
+        label.style.background = r.checked ? "rgba(59,130,246,0.1)" : ""
+        label.style.borderColor = r.checked ? "rgba(59,130,246,0.4)" : ""
+      })
+    })
+  })
+
+  // Build content based on format
+  function buildContent(format) {
+    const title = conversation.title
+    const date = new Date(conversation.updatedAt || conversation.createdAt).toLocaleString()
+    const msgs = conversation.messages
+
+    if (format === "txt") {
+      const lines = [`${title}`, `${"=".repeat(title.length)}`, ``, `Exported: ${date}`, ``]
+      msgs.forEach(msg => {
+        const label = msg.role === "user" ? "You" : "AI"
+        const mode = msg.mode ? ` [${msg.mode}]` : ""
+        lines.push(`${label}${mode}:`)
+        lines.push(`${msg.text}`)
+        lines.push("")
+      })
+      return lines.join("\n")
+    }
+
+    if (format === "csv") {
+      const escape = (s) => `"${String(s).replace(/"/g, '""')}"`
+      const rows = [["Timestamp", "Role", "Mode", "Message"]]
+      msgs.forEach(msg => {
+        rows.push([
+          new Date(msg.timestamp).toLocaleString(),
+          msg.role,
+          msg.mode || "",
+          msg.text
+        ])
+      })
+      return rows.map(row => row.map(escape).join(",")).join("\n")
+    }
+
+    if (format === "json") {
+      return JSON.stringify({ title, date, messages: msgs }, null, 2)
+    }
+  }
+
+  exportBtn.addEventListener("click", async () => {
+    const format = document.querySelector('input[name="exportFormat"]:checked').value
+    const encrypt = encryptCheckbox.checked
+    const key = encryptInput.value
+
+    if (encrypt && !key) {
+      encryptInput.style.borderColor = "rgba(239,68,68,0.6)"
+      encryptInput.focus()
+      return
+    }
+
+    const content = buildContent(format)
+    const ext = format === "json" ? "json" : format
+    const filename = `${conversation.title.replace(/[^a-z0-9]/gi, "_")}.${ext}`
+    const filters = format === "txt"
+      ? [{ name: "Text Files", extensions: ["txt"] }]
+      : format === "csv"
+      ? [{ name: "CSV Files", extensions: ["csv"] }]
+      : [{ name: "JSON Files", extensions: ["json"] }]
+
+    exportBtn.textContent = "Exporting..."
+    exportBtn.disabled = true
+
+    const result = await window.api.saveFile({ defaultPath: filename, filters, content, encryptionKey: key || null })
+
+    if (result.success) {
+      close()
+      showToast(`Exported to ${filename}`)
+    } else if (result.error) {
+      exportBtn.textContent = "Export Failed"
+      exportBtn.disabled = false
+      setTimeout(() => { exportBtn.textContent = "Export File" }, 2000)
+    } else {
+      close()
     }
   })
 }
 
 function renameConversation(conversation) {
-  const newTitle = prompt("Rename conversation:", conversation.title)
-  if (!newTitle || newTitle.trim() === conversation.title) return
-  const updated = { ...conversation, title: newTitle.trim(), updatedAt: Date.now() }
-  window.api.conversationSave(updated).then(() => renderHistoryList())
+  // Create custom rename dialog (native prompt doesn't work well with frameless windows)
+  const overlay = document.createElement("div")
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999"
+  overlay.innerHTML = `
+    <div style="background:#1a1d2e;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;width:320px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+      <div style="font-size:1.1em;font-weight:700;color:#fff">Rename conversation</div>
+      <input type="text" id="renameInput" value="${escapeHtml(conversation.title)}" style="width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:10px;background:rgba(255,255,255,0.05);color:#fff;font-size:0.95em;outline:none;box-sizing:border-box" />
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="renameCancel" style="padding:8px 16px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;background:transparent;color:rgba(255,255,255,0.7);cursor:pointer;font-size:0.9em">Cancel</button>
+        <button id="renameOk" style="padding:8px 16px;border:none;border-radius:10px;background:linear-gradient(135deg,rgba(59,130,246,0.7),rgba(37,99,235,0.7));color:#fff;cursor:pointer;font-size:0.9em;font-weight:600">Rename</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  const input = overlay.querySelector("#renameInput")
+  const okBtn = overlay.querySelector("#renameOk")
+  const cancelBtn = overlay.querySelector("#renameCancel")
+
+  input.focus()
+  input.select()
+
+  const closeDialog = () => overlay.remove()
+
+  okBtn.addEventListener("click", () => {
+    const newTitle = input.value.trim()
+    closeDialog()
+    if (!newTitle || newTitle === conversation.title) return
+    const updated = { ...conversation, title: newTitle, updatedAt: Date.now() }
+    window.api.conversationSave(updated).then(() => {
+      renderHistoryList()
+      showToast("Renamed!")
+    })
+  })
+
+  cancelBtn.addEventListener("click", closeDialog)
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeDialog() })
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") okBtn.click()
+    if (e.key === "Escape") closeDialog()
+  })
 }
 
 async function pinConversation(id) {
@@ -284,21 +545,50 @@ function closeHistoryPanel() {
   historyPanel.classList.remove("open")
 }
 
+// ==============================
+// TIME GROUPING HELPERS
+// ==============================
+function getTimeGroup(timestamp) {
+  if (!timestamp) return null
+  const d = new Date(timestamp)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today.getTime() - 86400000)
+  const weekAgo = new Date(today.getTime() - 7 * 86400000)
+  const msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+
+  if (msgDate.getTime() >= today.getTime()) return "Today"
+  if (msgDate.getTime() >= yesterday.getTime()) return "Yesterday"
+  if (msgDate.getTime() >= weekAgo.getTime()) return "This Week"
+  return "Earlier"
+}
+
+function highlightText(text, query) {
+  if (!query) return escapeHtml(text)
+  const escaped = escapeHtml(text)
+  const regex = new RegExp("(" + query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi")
+  return escaped.replace(regex, '<span class="history-highlight">$1</span>')
+}
+
+// ==============================
+// RENDER HISTORY LIST (flagship)
+// ==============================
 async function renderHistoryList() {
   const list = await window.api.conversationList()
   const searchQuery = (document.getElementById("historySearch")?.value || "").toLowerCase().trim()
 
-  // Load full conversations for search
-  let searchMatches = null // { id -> fullConv } map for preview snippets
+  // Load full conversations for search + preview snippets
+  let searchMatches = null
   if (searchQuery) {
     const allConvs = await Promise.all(list.map(c => window.api.conversationLoad(c.id)))
     searchMatches = {}
     allConvs.forEach(conv => {
       if (!conv) return
-      const matches = conv.title.toLowerCase().includes(searchQuery) ||
-        conv.messages.some(m => m.text.toLowerCase().includes(searchQuery))
-      if (matches) {
-        searchMatches[conv.id] = conv
+      const ql = searchQuery.toLowerCase()
+      const titleMatch = conv.title.toLowerCase().includes(ql)
+      const msgMatch = conv.messages.find(m => m.text.toLowerCase().includes(ql))
+      if (titleMatch || msgMatch) {
+        searchMatches[conv.id] = { conv, msgMatch }
       }
     })
   }
@@ -309,10 +599,11 @@ async function renderHistoryList() {
     filtered = list.filter(c => searchMatches[c.id])
   }
 
-  // Sort: pinned first, then by sortBy
+  // Separate pinned and unpinned
   const pinned = filtered.filter(c => c.pinned)
   const unpinned = filtered.filter(c => !c.pinned)
 
+  // Sort
   const sortKey = historySortBy
   const sortFn = (a, b) => {
     if (sortKey === "title") return a.title.localeCompare(b.title)
@@ -320,92 +611,251 @@ async function renderHistoryList() {
     return (b[sortKey] || 0) - (a[sortKey] || 0)
   }
 
-  const sorted = [...pinned.sort(sortFn), ...unpinned.sort(sortFn)]
+  const sortedPinned = pinned.sort(sortFn)
+  const sortedUnpinned = unpinned.sort(sortFn)
+
+  // Group each list
+  const groupConversations = (convs) => {
+    const groups = {}
+    convs.forEach(conv => {
+      const group = getTimeGroup(conv.updatedAt)
+      if (!groups[group]) groups[group] = []
+      groups[group].push(conv)
+    })
+    return groups
+  }
+
+  const pinnedGroups = groupConversations(sortedPinned)
+  const unpinnedGroups = groupConversations(sortedUnpinned)
+
+  // Update count badge
+  const countEl = document.getElementById("historyCount")
+  if (countEl) {
+    countEl.textContent = filtered.length > 0 ? `(${filtered.length})` : ""
+  }
 
   historyList.innerHTML = ""
 
-  if (sorted.length === 0) {
-    historyList.innerHTML = `<div class="history-empty">${searchQuery ? "No matches found" : "No conversations yet"}</div>`
+  if (filtered.length === 0) {
+    const icon = searchQuery ? "&#128270;" : "&#10022;"
+    const msg = searchQuery ? "No matches found" : "No conversations yet"
+    historyList.innerHTML = `
+      <div class="history-empty">
+        <div class="history-empty-icon">${icon}</div>
+        <div>${msg}</div>
+      </div>
+    `
     return
   }
 
-  sorted.forEach(conv => {
-    const isActive = conv.id === currentConversationId
-    const pinState = conv.pinned ? "&#9679;" : "" // filled dot for pinned
+  // Render a group section
+  const renderGroup = (groupName, convs, isPinnedSection) => {
+    if (convs.length === 0) return
 
-    // Build preview text
-    let preview = ""
-    if (searchQuery && searchMatches && searchMatches[conv.id]) {
-      const firstMatch = searchMatches[conv.id].messages.find(m => m.text.toLowerCase().includes(searchQuery))
-      if (firstMatch) {
-        preview = firstMatch.text.substring(0, 60).replace(/\n/g, " ") + (firstMatch.text.length > 60 ? "..." : "")
+    const groupHeader = document.createElement("div")
+    groupHeader.className = "history-group-header"
+    groupHeader.textContent = groupName + (isPinnedSection ? "  ★ Pinned" : "")
+    historyList.appendChild(groupHeader)
+
+    convs.forEach(conv => {
+      const isActive = conv.id === currentConversationId
+      const msgCount = conv.messages?.length || 0
+      const lastMsg = conv.messages?.slice(-1)[0]
+      const mode = lastMsg?.mode || "adaptive"
+      const firstUserMsg = conv.messages?.find(m => m.role === "user")
+
+      // Build preview: prefer user question, then AI answer
+      let preview = ""
+      let previewRole = ""
+      if (searchQuery && searchMatches && searchMatches[conv.id]) {
+        const match = searchMatches[conv.id].msgMatch
+        if (match) {
+          const idx = match.text.toLowerCase().indexOf(searchQuery.toLowerCase())
+          const start = Math.max(0, idx - 30)
+          const end = Math.min(match.text.length, idx + searchQuery.length + 30)
+          preview = (start > 0 ? "…" : "") + match.text.substring(start, end).replace(/\n/g, " ") + (end < match.text.length ? "…" : "")
+          previewRole = match.role || "user"
+        }
+      } else if (firstUserMsg) {
+        // Show first user question as preview (most informative)
+        preview = firstUserMsg.text.substring(0, 80).replace(/\n/g, " ").trim() + (firstUserMsg.text.length > 80 ? "…" : "")
+        previewRole = "user"
+      } else if (conv.messages && conv.messages.length > 0) {
+        const lastAssistant = [...conv.messages].reverse().find(m => m.role === "assistant")
+        if (lastAssistant) {
+          preview = lastAssistant.text.substring(0, 80).replace(/\n/g, " ").trim() + (lastAssistant.text.length > 80 ? "…" : "")
+          previewRole = "assistant"
+        }
       }
+
+      // Emoji icons for modes
+      const modeEmoji = {
+        adaptive: "⚡", auto: "⚡", fast: "🔥", cloud: "☁️",
+        universal: "✨", interview: "💬", reasoning: "🧠", code: "💻"
+      }
+      const icon = modeEmoji[mode] || "💬"
+      const previewIcon = previewRole === "user" ? "👤" : "🤖"
+
+      const item = document.createElement("div")
+      item.className = "history-item" + (isActive ? " active" : "")
+      item.setAttribute("data-id", conv.id)
+
+      item.innerHTML = `
+        <div class="history-item-icon">${icon}</div>
+        <div class="history-item-content">
+          <div class="history-item-top">
+            ${conv.pinned ? '<span class="pin-icon" title="Pinned">📌</span>' : ''}
+            <div class="history-item-title">${highlightText(conv.title, searchQuery)}</div>
+          </div>
+          ${preview ? `<div class="history-item-preview"><span class="preview-role-icon">${previewIcon}</span> ${highlightText(preview, searchQuery)}</div>` : ""}
+          <div class="history-item-meta">
+            <span class="history-item-date">${formatDate(conv.updatedAt)}</span>
+            <span class="history-item-msg-count">${msgCount} msg${msgCount !== 1 ? "s" : ""}</span>
+            <span class="history-item-mode">${mode}</span>
+          </div>
+        </div>
+        <div class="history-item-actions">
+          <button class="history-icon-btn" data-action="resume" data-id="${conv.id}" title="Resume">&#9654;</button>
+          <button class="history-icon-btn" data-action="pin" data-id="${conv.id}" title="${conv.pinned ? 'Unpin' : 'Pin'}">${conv.pinned ? "&#9650;" : "&#9651;"}</button>
+          <button class="history-icon-btn history-menu-btn" data-id="${conv.id}" title="More">&#8226;&#8226;&#8226;</button>
+        </div>
+      `
+      historyList.appendChild(item)
+    })
+  }
+
+  // Render pinned groups first
+  if (sortedPinned.length > 0) {
+    Object.keys(pinnedGroups).forEach(group => renderGroup(group, pinnedGroups[group], true))
+  }
+
+  // Render unpinned groups
+  Object.keys(unpinnedGroups).forEach(group => renderGroup(group, unpinnedGroups[group], false))
+}
+
+// ==============================
+// HISTORY DROPDOWN — EVENT DELEGATION
+// ==============================
+let openDropdown = null
+
+document.addEventListener("click", (e) => {
+  // Menu button clicked — toggle dropdown
+  const menuBtn = e.target.closest(".history-menu-btn")
+  if (menuBtn) {
+    e.stopPropagation()
+    e.preventDefault()
+    const item = menuBtn.closest(".history-item")
+    const convId = item?.getAttribute("data-id")
+    const convData = item ? { convId, item } : null
+
+    // Remove any existing portal dropdowns
+    document.querySelectorAll(".history-dropdown-portal").forEach(d => d.remove())
+
+    if (openDropdown) {
+      openDropdown = null
+      return
     }
 
-    const item = document.createElement("div")
-    item.className = "history-item" + (isActive ? " active" : "")
-    item.setAttribute("data-id", conv.id)
-    item.innerHTML = `
-      <div class="history-item-content">
-        <div class="history-item-title">${pinState ? '<span class="pin-dot">&#9679;</span>' : ''}${escapeHtml(conv.title)}</div>
-        ${preview ? `<div class="history-item-preview">${escapeHtml(preview)}</div>` : ""}
-        <div class="history-item-date">${formatDate(conv.updatedAt)}</div>
-      </div>
-      <button class="history-menu-btn" data-id="${conv.id}">&#8226;&#8226;&#8226;</button>
-      <div class="history-dropdown" id="dropdown-${conv.id}">
-        <button class="history-dropdown-item" data-action="resume" data-id="${conv.id}">Resume</button>
-        <button class="history-dropdown-item" data-action="rename" data-id="${conv.id}">Rename</button>
-        <button class="history-dropdown-item" data-action="export" data-id="${conv.id}">Export</button>
-        <button class="history-dropdown-item" data-action="pin" data-id="${conv.id}">${conv.pinned ? "Unpin" : "Pin"}</button>
-        <button class="history-dropdown-item" data-action="copy" data-id="${conv.id}">Copy</button>
-        <button class="history-dropdown-item danger" data-action="delete" data-id="${conv.id}">Delete</button>
-      </div>
+    // Create dropdown as portal in body (avoids stacking context clipping)
+    const dropdown = document.createElement("div")
+    dropdown.className = "history-dropdown history-dropdown-portal"
+    dropdown.dataset.convId = convId
+    dropdown.innerHTML = `
+      <button class="history-dropdown-item" data-action="resume" data-id="${convId}"><span class="history-dropdown-icon">&#9654;</span>Resume</button>
+      <button class="history-dropdown-item" data-action="rename" data-id="${convId}"><span class="history-dropdown-icon">&#9998;</span>Rename</button>
+      <button class="history-dropdown-item" data-action="export" data-id="${convId}"><span class="history-dropdown-icon">&#9142;</span>Export</button>
+      <button class="history-dropdown-item" data-action="copy" data-id="${convId}"><span class="history-dropdown-icon">&#9094;</span>Copy</button>
+      <div class="app-menu-separator"></div>
+      <button class="history-dropdown-item danger" data-action="delete" data-id="${convId}"><span class="history-dropdown-icon">&#128465;</span>Delete</button>
     `
-    item.addEventListener("click", async (e) => {
-      if (e.target.classList.contains("history-menu-btn")) {
-        e.stopPropagation()
-        document.querySelectorAll(".history-dropdown.open").forEach(d => {
-          if (d.id !== `dropdown-${conv.id}`) d.classList.remove("open")
-        })
-        const dropdown = document.getElementById(`dropdown-${conv.id}`)
-        dropdown.classList.toggle("open")
-        return
-      }
-      if (e.target.classList.contains("history-dropdown-item")) return
-      const full = await window.api.conversationLoad(conv.id)
-      if (full) {
-        loadConversationIntoUI(full)
-        closeHistoryPanel()
-      }
-    })
-    historyList.appendChild(item)
-  })
 
-  // Dropdown item handlers
-  historyList.querySelectorAll(".history-dropdown-item").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation()
-      const action = btn.getAttribute("data-action")
-      const id = btn.getAttribute("data-id")
-      const full = await window.api.conversationLoad(id)
+    // Position dropdown relative to menu button
+    const rect = menuBtn.getBoundingClientRect()
+    dropdown.style.position = "fixed"
+    dropdown.style.top = rect.bottom + 4 + "px"
+    dropdown.style.right = window.innerWidth - rect.right + "px"
+    dropdown.style.zIndex = "99999"
 
-      if (action === "resume" && full) {
-        resumeConversation(full)
-        closeHistoryPanel()
-      } else if (action === "copy" && full) {
-        copyConversation(full)
-      } else if (action === "export" && full) {
-        exportConversation(full)
-      } else if (action === "rename" && full) {
-        renameConversation(full)
-      } else if (action === "pin") {
-        await pinConversation(id)
-      } else if (action === "delete") {
-        deleteConversation(id)
-      }
-    })
-  })
-}
+    document.body.appendChild(dropdown)
+    requestAnimationFrame(() => dropdown.classList.add("open"))
+    openDropdown = dropdown
+    return
+  }
+
+  // Dropdown item clicked — handle action
+  const dropdownItem = e.target.closest(".history-dropdown-item")
+  if (dropdownItem) {
+    e.stopPropagation()
+    const action = dropdownItem.getAttribute("data-action")
+    const id = dropdownItem.getAttribute("data-id")
+
+    if (action === "resume") {
+      document.querySelectorAll(".history-dropdown.open").forEach(d => d.remove())
+      openDropdown = null
+      window.api.conversationLoad(id).then(full => {
+        if (full) { loadConversationIntoUI(full); closeHistoryPanel() }
+      })
+    } else if (action === "pin") {
+      document.querySelectorAll(".history-dropdown.open").forEach(d => d.remove())
+      openDropdown = null
+      pinConversation(id)
+    } else if (action === "rename") {
+      // Don't remove dropdown yet - prompt needs it as parent
+      window.api.conversationLoad(id).then(full => {
+        document.querySelectorAll(".history-dropdown.open").forEach(d => d.remove())
+        openDropdown = null
+        if (full) renameConversation(full)
+      })
+    } else if (action === "export") {
+      document.querySelectorAll(".history-dropdown.open").forEach(d => d.remove())
+      openDropdown = null
+      window.api.conversationLoad(id).then(full => { if (full) exportConversation(full) })
+    } else if (action === "copy") {
+      document.querySelectorAll(".history-dropdown.open").forEach(d => d.remove())
+      openDropdown = null
+      window.api.conversationLoad(id).then(full => { if (full) copyConversation(full) })
+    } else if (action === "delete") {
+      document.querySelectorAll(".history-dropdown.open").forEach(d => d.remove())
+      openDropdown = null
+      deleteConversation(id)
+    }
+    return
+  }
+
+  // Inline resume/pin button clicked
+  const inlineBtn = e.target.closest(".history-item-actions .history-icon-btn:not(.history-menu-btn)")
+  if (inlineBtn) {
+    e.stopPropagation()
+    const action = inlineBtn.getAttribute("data-action")
+    const id = inlineBtn.getAttribute("data-id")
+    if (action === "resume") {
+      window.api.conversationLoad(id).then(full => {
+        if (full) { loadConversationIntoUI(full); closeHistoryPanel() }
+      })
+    } else if (action === "pin") {
+      pinConversation(id)
+    }
+    return
+  }
+
+  // Click on history item body (not a button) — resume conversation
+  const historyItem = e.target.closest(".history-item")
+  if (historyItem && !e.target.closest("button")) {
+    const id = historyItem.getAttribute("data-id")
+    if (id) {
+      window.api.conversationLoad(id).then(full => {
+        if (full) { loadConversationIntoUI(full); closeHistoryPanel() }
+      })
+    }
+    return
+  }
+
+  // Clicked elsewhere — close any open dropdown
+  if (openDropdown) {
+    openDropdown.remove()
+    openDropdown = null
+  }
+})
 function removeWelcome() {
   if (chatWelcome && chatWelcome.parentNode) {
     chatWelcome.parentNode.removeChild(chatWelcome)
@@ -567,13 +1017,16 @@ function streamMessage(role, text) {
 function finishStream() {
   // Save assistant message to currentMessages before clearing
   if (latestBotMessage && latestBotMessage.role === "assistant" && !suppressAutoSave) {
-    const text = latestBotMessage.accumulatedText || latestBotMessage.bubble.innerText
+    // Get plain text, stripping the mode tag if present
+    const rawText = latestBotMessage.bubble.innerText || ""
+    const text = rawText.replace(/\[.*?\]\s*$/, "").trim()
     const modeTag = document.querySelector(".mode-tag")
     const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
     currentMessages.push({ role: "assistant", text, timestamp: Date.now(), mode: currentMode })
     saveCurrentConversation()
   }
   latestBotMessage = null
+  showSummarizeButton()
 }
 
 // ==============================
@@ -658,7 +1111,8 @@ async function streamAIResponse(query) {
   const responseStyle = responseStyleSelect ? responseStyleSelect.value : "concise"
   const cloudModel = cloudModelSelect ? cloudModelSelect.value : "auto"
   const provider = (mode === "cloud" || mode === "fast" && cloudModel !== "auto") ? cloudModel : "ollama"
-  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider)
+  const contextMessages = getContextMessages()
+  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages)
 
   try {
     const response = await fetch(streamUrl)
@@ -692,6 +1146,10 @@ async function streamAIResponse(query) {
         processed = processed.replace(/\* /g, "<br>* ")
 
         latestBotMessage.bubble.innerHTML += processed
+        // Also update plain text accumulator for copy functionality
+        if (latestBotMessage.accumulatedText !== undefined) {
+          latestBotMessage.accumulatedText += buffer
+        }
       }
       buffer = ""
       scrollChat()
@@ -815,6 +1273,14 @@ modeSelect.addEventListener("change", async () => {
   await window.api.storeSet("mode", modeSelect.value)
 })
 
+contextLengthSelect.addEventListener("change", async () => {
+  await window.api.storeSet("contextLength", contextLengthSelect.value)
+})
+
+tokenLimitSelect.addEventListener("change", async () => {
+  await window.api.storeSet("tokenLimit", tokenLimitSelect.value)
+})
+
 minBtn.addEventListener("click", () => {
   window.api.minimizeWindow()
 })
@@ -826,6 +1292,97 @@ maxBtn.addEventListener("click", async () => {
 
 closeBtn.addEventListener("click", () => {
   window.api.closeWindow()
+})
+
+// ==============================
+// SUMMARIZE BUTTON
+// ==============================
+function showSummarizeButton() {
+  if (summarizeBtn && currentMessages.length >= 2) {
+    summarizeBtn.classList.add("visible")
+  }
+}
+
+function hideSummarizeButton() {
+  if (summarizeBtn) summarizeBtn.classList.remove("visible")
+}
+
+summarizeBtn?.addEventListener("click", async () => {
+  if (!currentMessages || currentMessages.length < 2) return
+  summarizeBtn.classList.add("loading")
+  summarizeBtn.querySelector(".summarize-btn-label").textContent = "Summarizing..."
+
+  // Remove existing summary if present
+  const existing = document.querySelector(".summary-block")
+  if (existing) existing.remove()
+
+  try {
+    // Build transcript text
+    const transcript = currentMessages.map(m => {
+      const role = m.role === "user" ? "You" : "AI"
+      return `${role}: ${m.text}`
+    }).join("\n\n")
+
+    // Call the AI summary endpoint
+    const mode = getSelectedMode()
+    const responseStyle = "detailed"
+    const cloudModel = cloudModelSelect ? cloudModelSelect.value : "auto"
+    const provider = (mode === "cloud" || (mode === "fast" && cloudModel !== "auto")) ? cloudModel : "ollama"
+
+    // Build URL manually since we need a different prompt
+    const healthUrl = window.api.getHealthUrl()
+    const base = healthUrl.replace("/health", "")
+    const params = new URLSearchParams({
+      q: transcript,
+      mode: "summary",
+      style: responseStyle,
+      provider
+    })
+    const url = `${base}/stream?${params.toString()}`
+
+    const response = await fetch(url)
+    if (!response.ok) throw new Error("Summary failed")
+
+    // Stream the summary into a summary block
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    const summaryBlock = document.createElement("div")
+    summaryBlock.className = "summary-block"
+    summaryBlock.innerHTML = `<div class="summary-block-title">&#10022; Summary</div><div class="summary-block-content" id="summaryContent"></div>`
+    chatArea.appendChild(summaryBlock)
+    scrollChat()
+
+    const summaryContent = document.getElementById("summaryContent")
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      summaryContent.innerHTML = buffer
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+      scrollChat()
+    }
+
+    scrollChat()
+  } catch (e) {
+    console.error("Summary error:", e)
+    // Fallback: show a simple text summary
+    const summaryBlock = document.createElement("div")
+    summaryBlock.className = "summary-block"
+    const date = new Date().toLocaleDateString()
+    const first = currentMessages.find(m => m.role === "user")
+    const last = currentMessages.slice(-1)[0]
+    summaryBlock.innerHTML = `<div class="summary-block-title">&#10022; Summary</div><div class="summary-block-content"><p><strong>Topic:</strong> ${escapeHtml(first?.text?.substring(0, 80) || "Conversation")}</p><p><strong>Date:</strong> ${date}</p><p><strong>Exchanged:</strong> ${currentMessages.length} messages</p><p><strong>Last response:</strong> ${escapeHtml(last?.text?.substring(0, 120) || "")}...</p></div>`
+    chatArea.appendChild(summaryBlock)
+    scrollChat()
+  } finally {
+    summarizeBtn.classList.remove("loading")
+    summarizeBtn.querySelector(".summarize-btn-label").textContent = "Summarize"
+  }
 })
 
 // ==============================
@@ -873,12 +1430,29 @@ document.addEventListener("click", (e) => {
 // ==============================
 // STEALTH TOGGLE
 // ==============================
-stealthBtn.addEventListener("click", async () => {
-  isUndetectable = !isUndetectable
-  stealthBtn.classList.toggle("undetectable", isUndetectable)
-  stealthLabel.textContent = isUndetectable ? "Undetectable" : "Detectable"
+async function syncStealthState() {
   try {
-    await window.api.setUndetectable(isUndetectable)
+    const result = await window.api.storeGet("stealthState")
+    if (result !== undefined) {
+      isUndetectable = result
+    }
+  } catch {}
+}
+
+function updateStealthUI(enabled, undetectable) {
+  isUndetectable = undetectable
+  stealthBtn.classList.toggle("undetectable", undetectable)
+  stealthLabel.textContent = undetectable ? "Undetectable" : "Detectable"
+}
+
+stealthBtn.addEventListener("click", async () => {
+  const newState = !isUndetectable
+  updateStealthUI(newState, newState)
+  try {
+    // Toggle stealth mode (tray + capture protection together)
+    await window.api.setStealthMode(newState)
+    // Sync state from main process response
+    await window.api.storeSet("stealthState", newState)
   } catch (e) {
     console.error(e)
   }
@@ -944,6 +1518,7 @@ document.addEventListener("click", (e) => {
 appMenu.addEventListener("click", async (e) => {
   const item = e.target.closest(".app-menu-item")
   if (!item) return
+  e.stopPropagation() // Prevent document click from closing menu
   appMenu.classList.remove("open")
 
   const action = item.getAttribute("data-action")
@@ -1042,12 +1617,21 @@ function updateProviderUI(key, configured) {
 // Provider config buttons
 document.querySelectorAll(".provider-config-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    activeProvider = btn.getAttribute("data-provider")
-    const names = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "xAI" }
-    modalProviderName.textContent = names[activeProvider] || activeProvider
-    apiKeyInput.value = ""
-    apiKeyModal.classList.add("open")
-    apiKeyInput.focus()
+    try {
+      activeProvider = btn.getAttribute("data-provider")
+      if (!activeProvider) {
+        console.error("[Settings] No provider data on button:", btn)
+        return
+      }
+      const names = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "xAI" }
+      modalProviderName.textContent = names[activeProvider] || activeProvider
+      apiKeyInput.value = ""
+      apiKeyModal.classList.add("open")
+      apiKeyInput.focus()
+      console.log("[Settings] API key modal opened for:", activeProvider)
+    } catch (e) {
+      console.error("[Settings] Error opening config modal:", e)
+    }
   })
 })
 
@@ -1057,17 +1641,26 @@ modalCancel.addEventListener("click", () => {
 })
 
 modalSave.addEventListener("click", async () => {
-  if (!activeProvider) return
+  if (!activeProvider) {
+    console.error("[Settings] modalSave called but activeProvider is null")
+    return
+  }
   const key = apiKeyInput.value.trim()
-  if (!key) return
+  if (!key) {
+    console.warn("[Settings] No API key entered")
+    return
+  }
   try {
-    await window.api.configureProvider(activeProvider, key)
+    console.log("[Settings] Sending API key for:", activeProvider)
+    const result = await window.api.configureProvider(activeProvider, key)
+    console.log("[Settings] Configure result:", result)
     apiKeyModal.classList.remove("open")
-    // Update UI
-    updateProviderUI(activeProvider.charAt(0).toUpperCase() + activeProvider.slice(1), true)
+    // Update UI - map provider names to HTML ID format
+    const providerMap = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "XAI" }
+    updateProviderUI(providerMap[activeProvider] || activeProvider, true)
     activeProvider = null
   } catch (e) {
-    console.error("Failed to save API key:", e)
+    console.error("[Settings] Failed to save API key:", e)
   }
 })
 
@@ -1085,7 +1678,7 @@ document.addEventListener("click", (e) => {
   if (
     settingsPanel.classList.contains("open") &&
     !settingsPanel.contains(e.target) &&
-    !settingsBtn.contains(e.target)
+    !menuBtn.contains(e.target)
   ) {
     settingsPanel.classList.remove("open")
   }
@@ -1111,6 +1704,29 @@ async function init() {
     if (savedMode) {
       modeSelect.value = savedMode
     }
+
+    const savedContextLength = await window.api.storeGet("contextLength")
+    if (savedContextLength && contextLengthSelect) {
+      contextLengthSelect.value = savedContextLength
+    }
+
+    const savedTokenLimit = await window.api.storeGet("tokenLimit")
+    if (savedTokenLimit && tokenLimitSelect) {
+      tokenLimitSelect.value = savedTokenLimit
+    }
+
+    // Right-click context menu for copying selected text
+    document.addEventListener("contextmenu", (e) => {
+      const selection = window.getSelection().toString().trim()
+      if (selection) {
+        e.preventDefault()
+        navigator.clipboard.writeText(selection)
+      }
+    })
+
+    // Sync stealth state on startup
+    await syncStealthState()
+    updateStealthUI(null, isUndetectable)
   } catch (e) {
     console.error(e)
   }

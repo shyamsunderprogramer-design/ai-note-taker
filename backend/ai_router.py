@@ -62,6 +62,7 @@ def get_model_candidates(user_input, requested_mode="auto"):
         "reasoning": ["universal", "reasoning", "adaptive"],
         "code": ["adaptive", "code", "reasoning"],
         "cloud": ["cloud", "reasoning", "adaptive"],
+        "summary": ["summary", "universal", "adaptive"],
     }
 
     seen = set()
@@ -77,7 +78,7 @@ def get_model_candidates(user_input, requested_mode="auto"):
     return resolved_mode, candidates
 
 
-def build_prompt(user_input, mode="adaptive", style="concise"):
+def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     # Style-specific instructions
     if style == "concise":
         style_instruction = "Give a very short answer in 1-2 sentences only."
@@ -88,83 +89,117 @@ def build_prompt(user_input, mode="adaptive", style="concise"):
     else:
         style_instruction = "Give a concise answer."
 
-    base = f"""
-Answer the user's question directly.
+    # Build conversation history context
+    history_block = ""
+    if messages:
+        history_lines = []
+        for msg in messages:
+            role_label = "You" if msg.get("role") == "user" else "AI"
+            history_lines.append(f"{role_label}: {msg.get('text', '')}")
+        history_block = "Conversation history:\n" + "\n".join(history_lines) + "\n\n"
+
+    base = f"""Answer the user's question directly.
 {style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
 """
 
     if mode == "code":
-        return f"""
-Answer the user's coding question directly.
+        return f"""Answer the user's coding question directly.
 {style_instruction}
 Prefer the shortest correct explanation or fix.
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
 """
 
     if mode == "reasoning":
-        return f"""
-Answer the user's question directly.
+        return f"""Answer the user's question directly.
 {style_instruction}
 Prefer the clearest correct explanation.
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
 """
 
     if mode == "fast":
-        return f"""
-Answer the user's question directly.
+        return f"""Answer the user's question directly.
 {style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
 """
 
     if mode == "cloud":
-        return f"""
-Answer the user's question directly.
+        return f"""Answer the user's question directly.
 {style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
 """
 
     if mode == "interview":
-        return f"""
-Answer only the user's question.
+        return f"""Answer only the user's question.
 {style_instruction}
 Keep it technical.
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
 """
 
     if mode == "universal":
-        return f"""
-Answer the user's question clearly and naturally.
+        return f"""Answer the user's question clearly and naturally.
 {style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
+"""
+
+    if mode == "summary":
+        return f"""You are a meeting notes assistant. Read the conversation transcript below and produce a structured summary.
+
+STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS (use the same markdown formatting):
+
+# [Topic / Title from conversation]
+
+## Overview
+[Brief 1-2 sentence overview of what this conversation was about]
+
+## Key Points
+[3-5 bullet points of the most important things discussed]
+* bullet one
+* bullet two
+* ...
+
+## Next Steps / Action Items
+[Any tasks, follow-ups, or action items mentioned]
+* action item one
+* action item two
+* ...
+
+## Details
+[Additional important details, definitions, or context that came up]
+- detail one
+- detail two
+
+Do not mention that you are an AI or that you received a transcript. Just produce the summary directly.
+Conversation transcript:
+{user_input}
 """
 
     return base
@@ -198,11 +233,11 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
         return "AI error"
 
 
-def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise"):
+def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", messages=None):
     try:
         logger.info("Streaming (%s mode, %s style): %s", mode, style, prompt)
 
-        final_prompt = build_prompt(prompt, mode, style)
+        final_prompt = build_prompt(prompt, mode, style, messages)
 
         # Use num_predict to limit response length for faster streaming
         num_predict = 80 if style == "concise" else (300 if style == "detailed" else 200)
@@ -281,12 +316,12 @@ def route_ai(prompt, mode="adaptive", style="concise"):
     }
 
 
-def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama"):
+def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None):
     if provider == "cloud":
         # Use cloud provider for streaming
         try:
             from cloud_providers import ask_gpt_stream, ask_claude_stream, ask_gemini_stream, ask_grok_stream, build_prompt as cloud_build_prompt, clean_ai_output as cloud_clean
-            final_prompt = cloud_build_prompt(prompt, mode or "adaptive", style)
+            final_prompt = cloud_build_prompt(prompt, mode or "adaptive", style, messages)
             model_map = {
                 "openai-gpt-4o-mini": ("openai", "gpt-4o-mini"),
                 "openai-gpt-4o": ("openai", "gpt-4o"),
@@ -298,16 +333,16 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama")
             resolved = model_map.get(mode, ("openai", "gpt-4o-mini"))
             provider_name, model_name = resolved
             if provider_name == "openai":
-                for chunk in ask_gpt_stream(final_prompt, model=model_name):
+                for chunk in ask_gpt_stream(final_prompt, model=model_name, messages=messages):
                     yield chunk
             elif provider_name == "anthropic":
-                for chunk in ask_claude_stream(final_prompt, model=model_name):
+                for chunk in ask_claude_stream(final_prompt, model=model_name, messages=messages):
                     yield chunk
             elif provider_name == "google":
-                for chunk in ask_gemini_stream(final_prompt, model=model_name):
+                for chunk in ask_gemini_stream(final_prompt, model=model_name, messages=messages):
                     yield chunk
             elif provider_name == "xai":
-                for chunk in ask_grok_stream(final_prompt, model=model_name):
+                for chunk in ask_grok_stream(final_prompt, model=model_name, messages=messages):
                     yield chunk
             return
         except Exception as e:
@@ -319,7 +354,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama")
 
     for candidate_mode, model_name in candidates:
         try:
-            for chunk in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style):
+            for chunk in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages):
                 if chunk and chunk.strip():
                     yield chunk
             return

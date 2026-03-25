@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 
-from fastapi import FastAPI, File, UploadFile, WebSocket
+from fastapi import FastAPI, File, Query, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
@@ -26,6 +26,16 @@ app = FastAPI()
 
 UPLOAD_DIR = "temp_audio"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+def cleanup_temp_audio():
+    """Remove old temp audio files on startup."""
+    if os.path.exists(UPLOAD_DIR):
+        for f in os.listdir(UPLOAD_DIR):
+            if f.endswith((".webm", ".wav")):
+                try:
+                    os.remove(os.path.join(UPLOAD_DIR, f))
+                except OSError:
+                    pass
 
 last_query_time = 0
 CURRENT_MODE = "auto"
@@ -108,6 +118,9 @@ def autonomous_listener():
 def start_listener():
     global listener_thread
 
+    # Clean up stale temp audio files on startup
+    cleanup_temp_audio()
+
     if USE_AUTONOMOUS and listener_thread is None:
         listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
         listener_thread.start()
@@ -139,8 +152,8 @@ def list_providers():
 
 
 @app.post("/configure")
-async def configure_provider(provider: str, api_key: str):
-    """Save API key for a cloud provider"""
+async def configure_provider(provider: str = Query(...), api_key: str = Query(...)):
+    """Save API key for a cloud provider — accepts JSON body or form fields."""
     from dotenv import load_dotenv
     import os
     load_dotenv()
@@ -208,9 +221,20 @@ async def transcribe_api(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     wav_path = file_path.replace(".webm", ".wav")
-    os.system(f'ffmpeg -i "{file_path}" -ar 16000 -ac 1 "{wav_path}" -y')
+    import subprocess
+    result = subprocess.run(
+        ["ffmpeg", "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
     text = transcribe_audio(wav_path, mode=CURRENT_MODE)
+
+    # Clean up temp files immediately after use
+    for path in (file_path, wav_path):
+        try: os.remove(path)
+        except OSError: pass
 
     if not text or not is_meaningful(text) or not is_question(text):
         return {"text": text, "response": ""}
@@ -236,9 +260,20 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         shutil.copyfileobj(file.file, buffer)
 
     wav_path = file_path.replace(".webm", ".wav")
-    os.system(f'ffmpeg -i "{file_path}" -ar 16000 -ac 1 "{wav_path}" -y')
+    import subprocess
+    result = subprocess.run(
+        ["ffmpeg", "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
     text = transcribe_audio(wav_path, mode=CURRENT_MODE)
+
+    # Clean up temp files immediately after transcription
+    for path in (file_path, wav_path):
+        try: os.remove(path)
+        except OSError: pass
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -282,14 +317,23 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
 
 @app.get("/stream")
-def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama"):
+def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama", context: str = None):
     def generator():
         STATE["is_streaming"] = True
+
+        # Parse context messages from JSON
+        messages = None
+        if context:
+            try:
+                import json
+                messages = json.loads(context)
+            except Exception:
+                pass
 
         try:
             buffer = ""
 
-            for chunk in route_ai_stream(q, mode, style, provider):
+            for chunk in route_ai_stream(q, mode, style, provider, messages):
                 if not chunk:
                     continue
 

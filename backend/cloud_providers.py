@@ -7,7 +7,7 @@ from utils import clean_ai_output
 load_dotenv()
 
 
-def build_prompt(user_input, mode="adaptive", style="concise"):
+def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     """Build prompt for cloud providers (same logic as ai_router but for cloud)"""
     if style == "concise":
         style_instruction = "Give a very short answer in 1-2 sentences only."
@@ -18,13 +18,54 @@ def build_prompt(user_input, mode="adaptive", style="concise"):
     else:
         style_instruction = "Give a concise answer."
 
+    # Build conversation history context
+    history_block = ""
+    if messages:
+        history_lines = []
+        for msg in messages:
+            role_label = "You" if msg.get("role") == "user" else "AI"
+            history_lines.append(f"{role_label}: {msg.get('text', '')}")
+        history_block = "Conversation history:\n" + "\n".join(history_lines) + "\n\n"
+
     return f"""Answer the user's question directly.
 {style_instruction}
 Do not repeat the question.
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
-User question: {user_input}
+{history_block}User question: {user_input}
+"""
+
+    if mode == "summary":
+        return f"""You are a meeting notes assistant. Read the conversation transcript below and produce a structured summary.
+
+STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS (use the same markdown formatting):
+
+# [Topic / Title from conversation]
+
+## Overview
+[Brief 1-2 sentence overview of what this conversation was about]
+
+## Key Points
+[3-5 bullet points of the most important things discussed]
+* bullet one
+* bullet two
+* ...
+
+## Next Steps / Action Items
+[Any tasks, follow-ups, or action items mentioned]
+* action item one
+* action item two
+* ...
+
+## Details
+[Additional important details, definitions, or context that came up]
+- detail one
+- detail two
+
+Do not mention that you are an AI or that you received a transcript. Just produce the summary directly.
+Conversation transcript:
+{user_input}
 """
 
 # ==============================
@@ -187,9 +228,10 @@ def ask_grok(prompt, model="grok-2-mini", stream=False):
     return response
 
 
-def ask_gpt_stream(prompt, model="gpt-4o-mini"):
+def ask_gpt_stream(prompt, model="gpt-4o-mini", messages=None):
     """OpenAI streaming"""
-    resp = ask_gpt(prompt, model=model, stream=True)
+    final_prompt = build_prompt(prompt, messages=messages)
+    resp = ask_gpt(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:
             continue
@@ -207,8 +249,9 @@ def ask_gpt_stream(prompt, model="gpt-4o-mini"):
                 pass
 
 
-def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022"):
+def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", messages=None):
     """Anthropic streaming"""
+    final_prompt = build_prompt(prompt, messages=messages)
     api_key = get_anthropic_key()
     headers = {
         "x-api-key": api_key,
@@ -218,7 +261,7 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022"):
     }
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": final_prompt}],
         "temperature": 0.3,
         "max_tokens": 1024,
         "stream": True
@@ -249,12 +292,13 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022"):
                 pass
 
 
-def ask_gemini_stream(prompt, model="gemini-2.0-flash"):
+def ask_gemini_stream(prompt, model="gemini-2.0-flash", messages=None):
     """Google Gemini streaming"""
+    final_prompt = build_prompt(prompt, messages=messages)
     api_key = get_google_key()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
     body = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": [{"text": final_prompt}]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
     }
     resp = requests.post(url, json=body, stream=True, timeout=60)
@@ -274,9 +318,10 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash"):
                 pass
 
 
-def ask_grok_stream(prompt, model="grok-2-mini"):
+def ask_grok_stream(prompt, model="grok-2-mini", messages=None):
     """xAI Grok streaming"""
-    resp = ask_grok(prompt, model=model, stream=True)
+    final_prompt = build_prompt(prompt, messages=messages)
+    resp = ask_grok(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:
             continue

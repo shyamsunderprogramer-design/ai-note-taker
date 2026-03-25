@@ -24,12 +24,17 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   // Get streaming URL with mode parameter
-  getStreamUrlWithMode: (query, mode = "adaptive", responseStyle = "concise", provider = "ollama") => {
+  getStreamUrlWithMode: (query, mode = "adaptive", responseStyle = "concise", provider = "ollama", context = null) => {
     const encodedQuery = encodeURIComponent(query || "")
     const encodedMode = encodeURIComponent(mode)
     const encodedStyle = encodeURIComponent(responseStyle)
     const encodedProvider = encodeURIComponent(provider)
-    return `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}&provider=${encodedProvider}`
+    let url = `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}&provider=${encodedProvider}`
+    if (context && Array.isArray(context) && context.length > 0) {
+      const encodedContext = encodeURIComponent(JSON.stringify(context))
+      url += `&context=${encodedContext}`
+    }
+    return url
   },
 
   // Health check endpoint
@@ -58,10 +63,8 @@ contextBridge.exposeInMainWorld("api", {
 
   // Configure provider API key
   configureProvider: async (provider, apiKey) => {
-    const response = await fetch(`${BASE_URL}/configure?provider=${encodeURIComponent(provider)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: apiKey })
+    const response = await fetch(`${BASE_URL}/configure?provider=${encodeURIComponent(provider)}&api_key=${encodeURIComponent(apiKey)}`, {
+      method: "POST"
     })
     return response.json()
   },
@@ -87,6 +90,9 @@ contextBridge.exposeInMainWorld("api", {
 
   // Open logs folder
   openLogs: () => ipcRenderer.invoke("app:open-logs"),
+
+  // Save file with dialog
+  saveFile: (options) => ipcRenderer.invoke("dialog:save-file", options),
 
   // Listen for stealth state changes (triggered by shortcuts in main process)
   onStealthStateChanged: (callback) => {

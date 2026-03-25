@@ -70,6 +70,9 @@ def get_ai_model(mode="adaptive"):
     if mode == "interview":
         return MODEL_INTERVIEW
 
+    if mode == "summary":
+        return MODEL_UNIVERSAL
+
     elif mode == "universal":
         return MODEL_UNIVERSAL
 

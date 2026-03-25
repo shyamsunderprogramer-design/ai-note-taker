@@ -11,10 +11,10 @@
     <!-- ===== ROW 1: HEADER ===== -->
     <div class="header-strip">
 
-      <!-- Left: Blinking dot + Detectable label (clickable = stealth toggle) -->
+      <!-- Left: Stealth button -->
       <button id="stealthBtn" class="stealth-btn" type="button">
         <span class="stealth-dot" id="stealthDot"></span>
-        <span id="stealthLabel">Undetectable</span>
+        <span id="stealthLabel">Detectable</span>
       </button>
 
       <!-- Center: Title -->
@@ -23,13 +23,15 @@
         <span class="app-title">AI Note Taker</span>
       </div>
 
-      <!-- Right: Menu + Window controls -->
+      <!-- Right: Menu + History + Traffic lights -->
       <div class="header-right">
         <button id="menuBtn" class="win-btn" type="button" title="Menu">&#9776;</button>
         <button id="historyBtn" class="win-btn" type="button" title="History">&#8634;</button>
-        <button id="minBtn" class="win-btn" type="button" title="Minimize">─</button>
-        <button id="maxBtn" class="win-btn" type="button" title="Maximize">▢</button>
-        <button id="closeBtn" class="win-btn danger" type="button" title="Close">×</button>
+        <div class="traffic-lights">
+          <button id="minBtn" class="traffic-btn traffic-min" type="button" title="Minimize"><span class="traffic-icon">&#567;</span></button>
+          <button id="maxBtn" class="traffic-btn traffic-max" type="button" title="Maximize"><span class="traffic-icon">&#9633;</span></button>
+          <button id="closeBtn" class="traffic-btn traffic-close" type="button" title="Close"><span class="traffic-icon">&#215;</span></button>
+        </div>
       </div>
 
     </div>
@@ -42,6 +44,7 @@
           <option value="auto" selected>Auto</option>
           <option value="fast">Fast</option>
           <option value="adaptive">Adaptive</option>
+          <option value="universal">Universal</option>
           <option value="interview">Interview</option>
           <option value="reasoning">Reasoning</option>
           <option value="cloud">Cloud</option>
@@ -63,10 +66,23 @@
       <div class="ctrl-group">
         <label>Font</label>
         <select id="fontSizeSelect">
-          <option value="12">Small</option>
-          <option value="14" selected>Medium</option>
-          <option value="16">Large</option>
-          <option value="18">XL</option>
+          <option value="10">10px</option>
+          <option value="12">12px</option>
+          <option value="14" selected>14px</option>
+          <option value="16">16px</option>
+          <option value="18">18px</option>
+          <option value="20">20px</option>
+          <option value="24">24px</option>
+          <option value="28">28px</option>
+          <option value="32">32px</option>
+          <option value="40">40px</option>
+          <option value="48">48px</option>
+          <option value="64">64px</option>
+          <option value="80">80px</option>
+          <option value="96">96px</option>
+          <option value="128">128px</option>
+          <option value="160">160px</option>
+          <option value="192">192px</option>
         </select>
       </div>
 
@@ -78,6 +94,31 @@
           <option value="bulletpoint">Bullet</option>
         </select>
       </div>
+
+      <div class="ctrl-group">
+        <label>Context</label>
+        <select id="contextLengthSelect">
+          <option value="0">Off</option>
+          <option value="1">1 msg</option>
+          <option value="3" selected>3 msg</option>
+          <option value="5">5 msg</option>
+          <option value="10">10 msg</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Tokens</label>
+        <select id="tokenLimitSelect">
+          <option value="8000">8K</option>
+          <option value="32000">32K</option>
+          <option value="128000">128K</option>
+          <option value="256000">256K</option>
+          <option value="512000">512K</option>
+          <option value="1024000">1024K</option>
+        </select>
+      </div>
+
+      <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
 
       <div class="text-input-wrap">
         <input type="text" id="textInput" placeholder="Type here..." />
@@ -91,6 +132,12 @@
 
     <!-- ===== ROW 3: AI RESPONSE ===== -->
     <div class="response-area">
+      <div class="response-area-header">
+        <button id="summarizeBtn" class="summarize-btn" type="button" title="Generate structured summary">
+          <span class="summarize-btn-icon">&#10022;</span>
+          <span class="summarize-btn-label">Summarize</span>
+        </button>
+      </div>
       <div class="chat-area" id="chatArea">
         <div class="chat-welcome" id="chatWelcome">
           <div class="welcome-icon">&#10022;</div>
@@ -108,7 +155,7 @@
   <!-- History panel -->
   <div class="history-panel" id="historyPanel">
     <div class="history-header">
-      <span>Conversations</span>
+      <span>Conversations <span class="history-conversation-count" id="historyCount"></span></span>
       <button id="newChatBtn" class="history-action-btn" type="button">+ New</button>
     </div>
     <div class="history-toolbar">
@@ -123,8 +170,9 @@
     <div class="history-list" id="historyList"></div>
     <div class="history-footer">
       <span class="shortcut-hint">Alt+D stealth</span>
-      <span class="shortcut-hint">Alt+Space hide/show</span>
-      <span class="shortcut-hint">Ctrl+←→↑↓ move</span>
+      <span class="history-footer-divider">·</span>
+      <span class="shortcut-hint">Esc close</span>
+      <span class="history-footer-divider">·</span>
       <span class="shortcut-hint">Enter talk</span>
     </div>
   </div>

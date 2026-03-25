@@ -53,15 +53,15 @@ function saveBounds() {
 // WINDOW CREATION
 // ==============================
 function createWindow() {
-  const savedBounds = store.get("windowBounds", { width: 520, height: 440 })
+  const savedBounds = store.get("windowBounds", { width: 960, height: 720 })
 
   win = new BrowserWindow({
     width: savedBounds.width,
     height: savedBounds.height,
     x: savedBounds.x,
     y: savedBounds.y,
-    minWidth: 420,
-    minHeight: 360,
+    minWidth: 520,
+    minHeight: 480,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
@@ -119,7 +119,16 @@ async function startBackend() {
     return
   }
 
-  const pythonExe = path.join(__dirname, "../AINT_Venv/Scripts/python.exe")
+  // Try common venv paths, then fall back to 'python' on PATH
+  const venvPaths = [
+    path.join(__dirname, "../AINT_Venv/Scripts/python.exe"),
+    path.join(__dirname, "../../AINT_Venv/Scripts/python.exe"),
+    "python",
+    "python3"
+  ]
+  const pythonExe = venvPaths.find(p => {
+    try { require("fs").accessSync(p, require("fs").constants.X_OK); return true } catch { return false }
+  }) || "python"
   const backendDir = path.join(__dirname, "../backend")
 
   const env = {
@@ -245,7 +254,12 @@ ipcMain.handle("window:restore", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (!w) return
   if (w.isMinimized()) w.restore()
-  if (!w.isMaximized()) w.setSize(520, 440)
+  const savedBounds = store.get("windowBounds")
+  if (savedBounds) {
+    w.setSize(savedBounds.width, savedBounds.height)
+  } else {
+    w.setSize(960, 720)
+  }
   w.setResizable(true)
   w.show()
   w.focus()
@@ -257,7 +271,7 @@ ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
   } else {
     stealth.disable()
   }
-  return { enabled: stealth.isEnabled() }
+  return { enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable() }
 })
 
 ipcMain.handle("window:set-undetectable", (_event, enabled) => {
@@ -281,6 +295,45 @@ ipcMain.handle("app:open-logs", () => {
   shell.openPath(log.transports.file.getFile().path.replace(/[^\/\\]+$/, ""))
 })
 
+// File save dialog
+ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, content, encryptionKey }) => {
+  const { dialog, BrowserWindow } = require("electron")
+  const fs = require("fs")
+  const crypto = require("crypto")
+
+  let dataToSave = content
+  let actualFilters = filters
+
+  // If encryption requested
+  if (encryptionKey) {
+    const key = crypto.scryptSync(encryptionKey, "salt", 32)
+    const iv = crypto.randomBytes(16)
+    const cipher = crypto.createCipheriv("aes-256-cbc", key, iv)
+    let encrypted = cipher.update(content, "utf8", "hex")
+    encrypted += cipher.final("hex")
+    dataToSave = JSON.stringify({ iv: iv.toString("hex"), data: encrypted })
+    // Change extension hint
+    actualFilters = filters.map(f => ({ ...f, name: f.name + " (Encrypted)" }))
+  }
+
+  const win = BrowserWindow.getFocusedWindow()
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath,
+    filters: actualFilters,
+    properties: ["createDirectory", "showOverwriteConfirmation"]
+  })
+
+  if (result.canceled || !result.filePath) return { success: false }
+
+  try {
+    fs.writeFileSync(result.filePath, dataToSave, "utf8")
+    return { success: true, filePath: result.filePath }
+  } catch (err) {
+    logger.error("File save error:", err.message)
+    return { success: false, error: err.message }
+  }
+})
+
 // ==============================
 // APP LIFECYCLE
 // ==============================
@@ -293,8 +346,11 @@ app.whenReady().then(async () => {
   await startBackend()
   createWindow()
 
-  // Enable stealth (capture protection) by default on startup
-  stealth.enable()
+  // Restore stealth state from last session
+  const savedStealthState = store.get("stealthState", false)
+  if (savedStealthState) {
+    stealth.enable()
+  }
 
   // Global shortcuts (logged for debugging)
   function registerShortcut(accelerator, name, fn) {
@@ -311,15 +367,16 @@ app.whenReady().then(async () => {
     logger.info("[Shortcut] Alt+D fired")
     if (stealth.isEnabled()) {
       stealth.disable()
+      store.set("stealthState", false)
       if (win) {
         if (win.isMinimized()) win.restore()
         win.setResizable(true)
-        win.setSize(520, 440)
         win.show()
         win.focus()
       }
     } else {
       stealth.enable()
+      store.set("stealthState", true)
     }
     broadcastStealthState()
   })
@@ -333,7 +390,6 @@ app.whenReady().then(async () => {
       } else {
         if (win.isMinimized()) win.restore()
         win.setResizable(true)
-        win.setSize(520, 440)
         win.show()
         win.focus()
       }
