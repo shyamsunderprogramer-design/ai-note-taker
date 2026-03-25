@@ -111,8 +111,7 @@ document.addEventListener("keydown", (e) => {
 // HELPERS
 // ==============================
 function getSelectedMode() {
-  const activePill = document.querySelector(".mode-pill.active")
-  return activePill ? activePill.getAttribute("data-value") : "auto"
+  return modeSelect ? modeSelect.value : "auto"
 }
 
 function getSelectedModel() {
@@ -2142,14 +2141,15 @@ async function init() {
       if (fontSizeRange) updateSliderFill(fontSizeRange)
     }
 
-    // Mode pills
+    // Mode
     const savedMode = await window.api.storeGet("mode")
-    if (savedMode) {
-      if (modeSelect) modeSelect.value = savedMode
-      document.querySelectorAll(".mode-pill").forEach(p => {
-        p.classList.toggle("active", p.getAttribute("data-value") === savedMode)
-      })
-    }
+    if (savedMode && modeSelect) modeSelect.value = savedMode
+
+    // Mode change handler
+    modeSelect?.addEventListener("change", async () => {
+      const value = modeSelect.value
+      await window.api.storeSet("mode", value)
+    })
 
     // Response style
     const savedResponseStyle = await window.api.storeGet("responseStyle")
