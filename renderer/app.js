@@ -1398,20 +1398,11 @@ tokenStepper?.querySelector(".stepper-plus")?.addEventListener("click", async ()
 // ==============================
 // FONT SIZE SLIDER
 // ==============================
-function updateSliderFill(slider) {
-  const min = parseFloat(slider.min) || 0
-  const max = parseFloat(slider.max) || 100
-  const val = parseFloat(slider.value)
-  const pct = ((val - min) / (max - min)) * 100
-  slider.style.background = `linear-gradient(to right, var(--primary) ${pct}%, var(--line) ${pct}%)`
-}
-
 fontSizeRange?.addEventListener("input", async () => {
   const val = fontSizeRange.value
   if (fontSizeValue) fontSizeValue.textContent = val
   document.documentElement.style.setProperty("--font-size", val + "px")
   if (fontSizeSelect) fontSizeSelect.value = val
-  updateSliderFill(fontSizeRange)
   await window.api.storeSet("fontSize", val)
 })
 
@@ -2137,9 +2128,6 @@ async function init() {
       if (fontSizeValue) fontSizeValue.textContent = savedFontSize
       if (fontSizeSelect) fontSizeSelect.value = savedFontSize
       document.documentElement.style.setProperty("--font-size", savedFontSize + "px")
-      if (fontSizeRange) updateSliderFill(fontSizeRange)
-    } else {
-      if (fontSizeRange) updateSliderFill(fontSizeRange)
     }
 
     // Mode pills

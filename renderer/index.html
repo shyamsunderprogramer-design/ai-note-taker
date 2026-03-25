@@ -43,34 +43,34 @@
       <div class="ctrl-group ctrl-mode">
         <label>Mode</label>
         <div class="mode-pills" id="modePills">
-          <button class="mode-pill active" data-value="auto" title="Auto-detect">&#9729; Auto</button>
-          <button class="mode-pill" data-value="fast" title="Fast, short responses">&#9889; Fast</button>
-          <button class="mode-pill" data-value="adaptive" title="Smart routing">&#8252; Adaptive</button>
-          <button class="mode-pill" data-value="universal" title="Balanced responses">&#9670; Universal</button>
-          <button class="mode-pill" data-value="interview" title="Interview prep">&#9743; Interview</button>
-          <button class="mode-pill" data-value="reasoning" title="Deep reasoning">&#10022; Reasoning</button>
-          <button class="mode-pill" data-value="cloud" title="Cloud AI">&#9729; Cloud</button>
-          <button class="mode-pill" data-value="code" title="Code optimized">&#60;/&#62; Code</button>
+          <button class="mode-pill active" data-value="auto" title="Auto-detect">Auto</button>
+          <button class="mode-pill" data-value="fast" title="Fast, short responses">Fast</button>
+          <button class="mode-pill" data-value="adaptive" title="Smart routing">Adaptive</button>
+          <button class="mode-pill" data-value="universal" title="Balanced responses">Universal</button>
+          <button class="mode-pill" data-value="interview" title="Interview prep">Interview</button>
+          <button class="mode-pill" data-value="reasoning" title="Deep reasoning">Reasoning</button>
+          <button class="mode-pill" data-value="cloud" title="Cloud AI">Cloud</button>
+          <button class="mode-pill" data-value="code" title="Code optimized">Code</button>
         </div>
       </div>
 
       <!-- Model: dropdown -->
       <div class="ctrl-group ctrl-model">
-        <label><span class="label-icon">&#9881;</span>Model</label>
+        <label>Model</label>
         <div class="ctrl-select-wrap">
           <select id="modelSelect">
-            <option value="auto" selected>&#9729; Auto</option>
-            <option value="phi3:latest">&#9679; Phi3</option>
-            <option value="tinyllama:latest">&#9679; TinyLlama</option>
-            <option value="llama3:latest">&#9679; Llama3</option>
-            <option value="mistral:latest">&#9679; Mistral</option>
+            <option value="auto" selected>Auto</option>
+            <option value="phi3:latest">Phi3</option>
+            <option value="tinyllama:latest">TinyLlama</option>
+            <option value="llama3:latest">Llama3</option>
+            <option value="mistral:latest">Mistral</option>
           </select>
         </div>
       </div>
 
       <!-- Font: compact slider + value -->
       <div class="ctrl-group ctrl-font">
-        <label><span class="label-icon">Aa</span>Font</label>
+        <label>Font</label>
         <div class="ctrl-slider-wrap">
           <span class="ctrl-slider-value" id="fontSizeValue">14</span>
           <input type="range" id="fontSizeRange" class="ctrl-slider" min="10" max="32" value="14" step="1" />
@@ -79,7 +79,7 @@
 
       <!-- Response: segmented control -->
       <div class="ctrl-group ctrl-response">
-        <label><span class="label-icon">&#8644;</span>Response</label>
+        <label>Response</label>
         <div class="seg-control" id="responseStyleControl">
           <button class="seg-btn active" data-value="concise">Concise</button>
           <button class="seg-btn" data-value="detailed">Detailed</button>
@@ -89,7 +89,7 @@
 
       <!-- Context: compact stepper -->
       <div class="ctrl-group ctrl-context">
-        <label><span class="label-icon">&#8801;</span>Context</label>
+        <label>Context</label>
         <div class="ctrl-stepper" id="contextStepper">
           <button class="stepper-btn stepper-minus" type="button">&#8722;</button>
           <span class="stepper-value" id="contextValue">3</span>
@@ -99,7 +99,7 @@
 
       <!-- Tokens: compact stepper -->
       <div class="ctrl-group ctrl-tokens">
-        <label><span class="label-icon">&#8862;</span>Tokens</label>
+        <label>Tokens</label>
         <div class="ctrl-stepper" id="tokenStepper">
           <button class="stepper-btn stepper-minus" type="button">&#8722;</button>
           <span class="stepper-value" id="tokenLimitValue">128K</span>
