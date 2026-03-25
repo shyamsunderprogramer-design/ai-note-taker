@@ -317,7 +317,8 @@ def route_ai(prompt, mode="adaptive", style="concise"):
 
 
 def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None):
-    if provider == "cloud":
+    # Check if provider looks like a cloud model string (has a provider prefix with dash)
+    if provider and provider != "ollama" and "-" in provider:
         # Use cloud provider for streaming
         try:
             from cloud_providers import (
@@ -362,7 +363,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 "groq-mixtral-8x7b": ("groq", "mixtral-8x7b-32768"),
                 "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
             }
-            resolved = model_map.get(mode, ("openai", "gpt-4o-mini"))
+            resolved = model_map.get(provider, ("openai", "gpt-4o-mini"))
             provider_name, model_name = resolved
             if provider_name == "openai":
                 for chunk in ask_gpt_stream(final_prompt, model=model_name, messages=messages):

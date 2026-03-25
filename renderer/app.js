@@ -1150,8 +1150,10 @@ async function submitAudio(blob) {
 async function streamAIResponse(query) {
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
-  const cloudModel = cloudModelSelect ? cloudModelSelect.value : "auto"
-  const provider = (mode === "cloud" || mode === "fast" && cloudModel !== "auto") ? cloudModel : "ollama"
+  const selectedModel = modelSelect ? modelSelect.value : "auto"
+  // If a cloud model is selected (has a provider prefix), use it as provider
+  const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
+  const provider = isCloudModel ? selectedModel : "ollama"
   const contextMessages = getContextMessages()
   const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages)
 
@@ -1472,8 +1474,9 @@ summarizeBtn?.addEventListener("click", async () => {
     // Call the AI summary endpoint
     const mode = getSelectedMode()
     const responseStyle = "detailed"
-    const cloudModel = cloudModelSelect ? cloudModelSelect.value : "auto"
-    const provider = (mode === "cloud" || (mode === "fast" && cloudModel !== "auto")) ? cloudModel : "ollama"
+    const selectedModel = modelSelect ? modelSelect.value : "auto"
+    const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
+    const provider = isCloudModel ? selectedModel : "ollama"
 
     // Build URL manually since we need a different prompt
     const healthUrl = window.api.getHealthUrl()
