@@ -604,12 +604,10 @@ select {
   background: transparent;
   color: var(--text-main);
   font-size: 0.857em;
-  padding: 5px 8px;
+  padding: 5px 28px 5px 10px;
   cursor: pointer;
   outline: none;
   transition: all 0.15s ease;
-  -webkit-appearance: none;
-  appearance: none;
 }
 select:hover { border-color: var(--line-bright); }
 select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-glow); background: rgba(0, 0, 0, 0.8); }
