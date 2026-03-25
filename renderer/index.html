@@ -183,66 +183,200 @@
   <!-- Settings panel -->
   <div class="settings-panel" id="settingsPanel">
     <div class="settings-header">
-      <span>Settings</span>
+      <button id="settingsBackBtn" class="win-btn" type="button" title="Back" style="display:none">&#8592;</button>
+      <span id="settingsHeaderTitle">Settings</span>
       <button id="closeSettingsBtn" class="win-btn" type="button" title="Close">×</button>
     </div>
     <div class="settings-body">
-      <div class="settings-section">
-        <div class="settings-section-title">AI Providers</div>
-        <div class="settings-provider">
-          <div class="provider-status" id="statusOpenAI"></div>
-          <div class="provider-info">
-            <div class="provider-name">OpenAI</div>
-            <div class="provider-key-hint" id="hintOpenAI">Not configured</div>
+
+      <!-- Provider config panel (inline) -->
+      <div class="provider-config-panel" id="providerConfigPanel">
+        <div class="config-card">
+          <!-- Header -->
+          <div class="config-card-header">
+            <div class="config-card-icon-wrap">
+              <span class="config-card-icon" id="configProviderIcon">&#9679;</span>
+            </div>
+            <div class="config-card-header-info">
+              <div class="config-card-name" id="configProviderName">Provider</div>
+              <div class="config-card-status" id="configProviderStatus">
+                <span class="config-status-dot"></span>
+                <span id="configStatusText">Not configured</span>
+              </div>
+            </div>
+            <label class="toggle-switch" title="Enable provider">
+              <input type="checkbox" id="configEnabledToggle" />
+              <span class="toggle-slider"></span>
+            </label>
           </div>
-          <button class="settings-btn provider-config-btn" data-provider="openai">Configure</button>
-        </div>
-        <div class="settings-provider">
-          <div class="provider-status" id="statusAnthropic"></div>
-          <div class="provider-info">
-            <div class="provider-name">Anthropic</div>
-            <div class="provider-key-hint" id="hintAnthropic">Not configured</div>
+
+          <!-- Form -->
+          <div class="config-card-body">
+            <div class="config-field">
+              <label class="config-field-label">
+                <span class="config-field-icon">&#128273;</span>
+                API Key
+              </label>
+              <div class="config-input-wrap">
+                <input type="password" id="configApiKeyInput" class="config-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+                <button id="configToggleKeyVisibility" class="config-input-action" type="button" title="Show/Hide">&#128065;</button>
+              </div>
+            </div>
+
+            <div class="config-field">
+              <label class="config-field-label">
+                <span class="config-field-icon">&#9874;</span>
+                Model
+              </label>
+              <select id="configModelSelect" class="config-select">
+                <!-- Injected per provider -->
+              </select>
+            </div>
           </div>
-          <button class="settings-btn provider-config-btn" data-provider="anthropic">Configure</button>
-        </div>
-        <div class="settings-provider">
-          <div class="provider-status" id="statusGoogle"></div>
-          <div class="provider-info">
-            <div class="provider-name">Google</div>
-            <div class="provider-key-hint" id="hintGoogle">Not configured</div>
+
+          <!-- Actions -->
+          <div class="config-card-footer">
+            <button id="configTestBtn" class="config-btn config-btn-secondary" type="button">
+              <span class="config-btn-spinner" id="configTestSpinner"></span>
+              Test
+            </button>
+            <button id="configSaveBtn" class="config-btn config-btn-primary" type="button">Save</button>
           </div>
-          <button class="settings-btn provider-config-btn" data-provider="google">Configure</button>
-        </div>
-        <div class="settings-provider">
-          <div class="provider-status" id="statusXAI"></div>
-          <div class="provider-info">
-            <div class="provider-name">xAI</div>
-            <div class="provider-key-hint" id="hintXAI">Not configured</div>
-          </div>
-          <button class="settings-btn provider-config-btn" data-provider="xai">Configure</button>
-        </div>
-        <div class="settings-provider">
-          <div class="provider-status provider-status-ollama"></div>
-          <div class="provider-info">
-            <div class="provider-name">Ollama</div>
-            <div class="provider-key-hint">Always available</div>
-          </div>
-          <span class="provider-active-label">Local</span>
+
+          <!-- Result -->
+          <div class="config-result" id="configTestResult"></div>
         </div>
       </div>
 
-      <div class="settings-section">
-        <div class="settings-section-title">Cloud Model</div>
-        <div class="settings-cloud-mode">
-          <select id="cloudModelSelect">
-            <option value="auto" selected>Auto (uses best available)</option>
-            <option value="openai-gpt-4o-mini">OpenAI GPT-4o Mini</option>
-            <option value="openai-gpt-4o">OpenAI GPT-4o</option>
-            <option value="anthropic-claude-3-5-haiku">Anthropic Claude 3.5 Haiku</option>
-            <option value="anthropic-claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
-            <option value="google-gemini-2-0-flash">Google Gemini 2.0 Flash</option>
-            <option value="xai-grok-2-mini">xAI Grok 2 Mini</option>
-          </select>
+      <!-- Provider list -->
+      <div class="settings-providers-view" id="settingsProvidersView">
+        <div class="settings-section">
+          <div class="settings-section-title">AI Providers</div>
+          <div class="provider-list">
+
+            <!-- Ollama -->
+            <div class="provider-row" id="card-ollama">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-ollama">O</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">Ollama</div>
+                  <div class="provider-row-desc">Local inference engine</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <span class="provider-badge provider-badge-local">Local</span>
+                <div class="provider-active-bar" id="active-ollama"></div>
+              </div>
+            </div>
+
+            <!-- OpenAI -->
+            <div class="provider-row" id="card-openai">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-openai">O</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">OpenAI</div>
+                  <div class="provider-row-desc" id="hintOpenAI">Not configured</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <button class="settings-btn provider-config-btn" data-provider="openai">Configure</button>
+                <div class="provider-active-bar" id="active-openai"></div>
+              </div>
+            </div>
+
+            <!-- Anthropic -->
+            <div class="provider-row" id="card-anthropic">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-anthropic">A</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">Anthropic</div>
+                  <div class="provider-row-desc" id="hintAnthropic">Not configured</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <button class="settings-btn provider-config-btn" data-provider="anthropic">Configure</button>
+                <div class="provider-active-bar" id="active-anthropic"></div>
+              </div>
+            </div>
+
+            <!-- Google -->
+            <div class="provider-row" id="card-google">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-google">G</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">Google</div>
+                  <div class="provider-row-desc" id="hintGoogle">Not configured</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <button class="settings-btn provider-config-btn" data-provider="google">Configure</button>
+                <div class="provider-active-bar" id="active-google"></div>
+              </div>
+            </div>
+
+            <!-- xAI -->
+            <div class="provider-row" id="card-xai">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-xai">x</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">xAI</div>
+                  <div class="provider-row-desc" id="hintXAI">Not configured</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <button class="settings-btn provider-config-btn" data-provider="xai">Configure</button>
+                <div class="provider-active-bar" id="active-xai"></div>
+              </div>
+            </div>
+
+            <!-- DeepSeek -->
+            <div class="provider-row" id="card-deepseek">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-deepseek">D</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">DeepSeek</div>
+                  <div class="provider-row-desc" id="hintDeepSeek">Not configured</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <button class="settings-btn provider-config-btn" data-provider="deepseek">Configure</button>
+                <div class="provider-active-bar" id="active-deepseek"></div>
+              </div>
+            </div>
+
+            <!-- Groq -->
+            <div class="provider-row" id="card-groq">
+              <div class="provider-row-left">
+                <div class="provider-logo provider-logo-groq">G</div>
+                <div class="provider-row-info">
+                  <div class="provider-row-name">Groq</div>
+                  <div class="provider-row-desc" id="hintGroq">Not configured</div>
+                </div>
+              </div>
+              <div class="provider-row-right">
+                <button class="settings-btn provider-config-btn" data-provider="groq">Configure</button>
+                <div class="provider-active-bar" id="active-groq"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Cloud Model</div>
+          <div class="settings-cloud-mode">
+            <select id="cloudModelSelect">
+              <option value="auto" selected>Auto (uses best available)</option>
+              <option value="openai-gpt-4o-mini">OpenAI GPT-4o Mini</option>
+              <option value="openai-gpt-4o">OpenAI GPT-4o</option>
+              <option value="anthropic-claude-3-5-haiku">Anthropic Claude 3.5 Haiku</option>
+              <option value="anthropic-claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
+              <option value="google-gemini-2-0-flash">Google Gemini 2.0 Flash</option>
+              <option value="xai-grok-2-mini">xAI Grok 2 Mini</option>
+              <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
+              <option value="groq-llama-3-3-70b">Groq Llama 3.3 70B</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

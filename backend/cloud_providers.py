@@ -96,6 +96,18 @@ def get_xai_key():
         raise ValueError("xAI API key not configured")
     return key
 
+def get_deepseek_key():
+    key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not key:
+        raise ValueError("DeepSeek API key not configured")
+    return key
+
+def get_groq_key():
+    key = os.getenv("GROQ_API_KEY", "").strip()
+    if not key:
+        raise ValueError("Groq API key not configured")
+    return key
+
 # ==============================
 # 🤖 CLOUD PROVIDERS
 # ==============================
@@ -228,6 +240,70 @@ def ask_grok(prompt, model="grok-2-mini", stream=False):
     return response
 
 
+def ask_deepseek(prompt, model="deepseek-chat", stream=False):
+    """DeepSeek"""
+    api_key = get_deepseek_key()
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3
+    }
+
+    if stream:
+        body["stream"] = True
+
+    response = requests.post(
+        "https://api.deepseek.com/v1/chat/completions",
+        headers=headers,
+        json=body,
+        stream=stream,
+        timeout=60
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"DeepSeek error: {response.status_code} - {response.text}")
+
+    return response
+
+
+def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False):
+    """Groq"""
+    api_key = get_groq_key()
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3
+    }
+
+    if stream:
+        body["stream"] = True
+
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers=headers,
+        json=body,
+        stream=stream,
+        timeout=60
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Groq error: {response.status_code} - {response.text}")
+
+    return response
+
+
 def ask_gpt_stream(prompt, model="gpt-4o-mini", messages=None):
     """OpenAI streaming"""
     final_prompt = build_prompt(prompt, messages=messages)
@@ -322,6 +398,48 @@ def ask_grok_stream(prompt, model="grok-2-mini", messages=None):
     """xAI Grok streaming"""
     final_prompt = build_prompt(prompt, messages=messages)
     resp = ask_grok(final_prompt, model=model, stream=True)
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        if line.startswith("data: "):
+            data = line[6:]
+            if data == "[DONE]":
+                break
+            import json
+            try:
+                obj = json.loads(data)
+                content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                if content:
+                    yield content
+            except:
+                pass
+
+
+def ask_deepseek_stream(prompt, model="deepseek-chat", messages=None):
+    """DeepSeek streaming"""
+    final_prompt = build_prompt(prompt, messages=messages)
+    resp = ask_deepseek(final_prompt, model=model, stream=True)
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        if line.startswith("data: "):
+            data = line[6:]
+            if data == "[DONE]":
+                break
+            import json
+            try:
+                obj = json.loads(data)
+                content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                if content:
+                    yield content
+            except:
+                pass
+
+
+def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", messages=None):
+    """Groq streaming"""
+    final_prompt = build_prompt(prompt, messages=messages)
+    resp = ask_groq(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:
             continue

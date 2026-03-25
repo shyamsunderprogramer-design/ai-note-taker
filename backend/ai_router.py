@@ -320,7 +320,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     if provider == "cloud":
         # Use cloud provider for streaming
         try:
-            from cloud_providers import ask_gpt_stream, ask_claude_stream, ask_gemini_stream, ask_grok_stream, build_prompt as cloud_build_prompt, clean_ai_output as cloud_clean
+            from cloud_providers import ask_gpt_stream, ask_claude_stream, ask_gemini_stream, ask_grok_stream, ask_deepseek_stream, ask_groq_stream, build_prompt as cloud_build_prompt, clean_ai_output as cloud_clean
             final_prompt = cloud_build_prompt(prompt, mode or "adaptive", style, messages)
             model_map = {
                 "openai-gpt-4o-mini": ("openai", "gpt-4o-mini"),
@@ -329,6 +329,8 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 "anthropic-claude-3-5-sonnet": ("anthropic", "claude-3-5-sonnet-20241022"),
                 "google-gemini-2-0-flash": ("google", "gemini-2.0-flash"),
                 "xai-grok-2-mini": ("xai", "grok-2-mini"),
+                "deepseek-deepseek-chat": ("deepseek", "deepseek-chat"),
+                "groq-llama-3-3-70b": ("groq", "llama-3.3-70b-versatile"),
             }
             resolved = model_map.get(mode, ("openai", "gpt-4o-mini"))
             provider_name, model_name = resolved
@@ -343,6 +345,12 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                     yield chunk
             elif provider_name == "xai":
                 for chunk in ask_grok_stream(final_prompt, model=model_name, messages=messages):
+                    yield chunk
+            elif provider_name == "deepseek":
+                for chunk in ask_deepseek_stream(final_prompt, model=model_name, messages=messages):
+                    yield chunk
+            elif provider_name == "groq":
+                for chunk in ask_groq_stream(final_prompt, model=model_name, messages=messages):
                     yield chunk
             return
         except Exception as e:

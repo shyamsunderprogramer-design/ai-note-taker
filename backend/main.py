@@ -147,6 +147,8 @@ def list_providers():
         "anthropic": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
         "google": bool(os.getenv("GOOGLE_API_KEY", "").strip()),
         "xai": bool(os.getenv("XAI_API_KEY", "").strip()),
+        "deepseek": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
+        "groq": bool(os.getenv("GROQ_API_KEY", "").strip()),
         "ollama": True  # Ollama is always available if configured
     }
 
@@ -158,7 +160,7 @@ async def configure_provider(provider: str = Query(...), api_key: str = Query(..
     import os
     load_dotenv()
 
-    valid_providers = ["openai", "anthropic", "google", "xai"]
+    valid_providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
     if provider not in valid_providers:
         return {"error": "Invalid provider"}
 
@@ -167,7 +169,9 @@ async def configure_provider(provider: str = Query(...), api_key: str = Query(..
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
         "google": "GOOGLE_API_KEY",
-        "xai": "XAI_API_KEY"
+        "xai": "XAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "groq": "GROQ_API_KEY"
     }
 
     # Save to .env file
@@ -283,7 +287,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
     # Route to cloud provider
     try:
-        from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, clean_ai_output as cloud_clean
+        from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
         prompt = build_prompt(text, CURRENT_MODE)
 
@@ -298,6 +302,12 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
             response_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
         elif provider == "xai":
             resp = ask_grok(prompt, model=model)
+            response_text = resp.json()["choices"][0]["message"]["content"]
+        elif provider == "deepseek":
+            resp = ask_deepseek(prompt, model=model)
+            response_text = resp.json()["choices"][0]["message"]["content"]
+        elif provider == "groq":
+            resp = ask_groq(prompt, model=model)
             response_text = resp.json()["choices"][0]["message"]["content"]
         else:
             return {"text": text, "response": "", "error": f"Unknown provider: {provider}"}

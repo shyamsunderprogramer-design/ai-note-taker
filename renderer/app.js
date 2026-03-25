@@ -1556,11 +1556,14 @@ appMenu.addEventListener("click", async (e) => {
     settingsPanel.classList.add("open")
     try {
       const providers = await window.api.getProviders()
-      updateProviderUI("openAI", providers.openai)
+      updateProviderUI("openai", providers.openai)
       updateProviderUI("anthropic", providers.anthropic)
       updateProviderUI("google", providers.google)
-      updateProviderUI("xAI", providers.xai)
+      updateProviderUI("xai", providers.xai)
+      updateProviderUI("deepseek", providers.deepseek)
+      updateProviderUI("groq", providers.groq)
     } catch (e) { console.error(e) }
+    updateActiveProviders()
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) cloudModelSelect.value = savedCloudModel
   }
@@ -1631,91 +1634,333 @@ async function loadAboutStatus() {
 // SETTINGS PANEL
 // ==============================
 let activeProvider = null
+let isConfigPanelOpen = false
 
+// DOM refs for config panel
+const providerConfigPanel = document.getElementById("providerConfigPanel")
+const settingsProvidersView = document.getElementById("settingsProvidersView")
+const settingsBackBtn = document.getElementById("settingsBackBtn")
+const settingsHeaderTitle = document.getElementById("settingsHeaderTitle")
+const configProviderName = document.getElementById("configProviderName")
+const configProviderStatus = document.getElementById("configProviderStatus")
+const configProviderIcon = document.getElementById("configProviderIcon")
+const configApiKeyInput = document.getElementById("configApiKeyInput")
+const configToggleKeyVisibility = document.getElementById("configToggleKeyVisibility")
+const configEnabledToggle = document.getElementById("configEnabledToggle")
+const configEnabledStatus = document.getElementById("configEnabledStatus")
+const configModelSelect = document.getElementById("configModelSelect")
+const configTestBtn = document.getElementById("configTestBtn")
+const configSaveBtn = document.getElementById("configSaveBtn")
+const configTestResult = document.getElementById("configTestResult")
+
+// Provider metadata
+const PROVIDER_META = {
+  openai: {
+    name: "OpenAI",
+    models: [
+      { value: "openai-gpt-4o-mini", label: "GPT-4o Mini" },
+      { value: "openai-gpt-4o", label: "GPT-4o" },
+    ]
+  },
+  anthropic: {
+    name: "Anthropic",
+    models: [
+      { value: "anthropic-claude-3-5-haiku", label: "Claude 3.5 Haiku" },
+      { value: "anthropic-claude-3-5-sonnet", label: "Claude 3.5 Sonnet" },
+    ]
+  },
+  google: {
+    name: "Google",
+    models: [
+      { value: "google-gemini-2-0-flash", label: "Gemini 2.0 Flash" },
+    ]
+  },
+  xai: {
+    name: "xAI",
+    models: [
+      { value: "xai-grok-2-mini", label: "Grok 2 Mini" },
+    ]
+  },
+  deepseek: {
+    name: "DeepSeek",
+    models: [
+      { value: "deepseek-deepseek-chat", label: "DeepSeek Chat" },
+    ]
+  },
+  groq: {
+    name: "Groq",
+    models: [
+      { value: "groq-llama-3-3-70b", label: "Llama 3.3 70B" },
+      { value: "groq-llama-3-1-8b", label: "Llama 3.1 8B" },
+    ]
+  }
+}
+
+// Open inline config panel for a provider
+function openProviderConfig(provider) {
+  activeProvider = provider
+  isConfigPanelOpen = true
+
+  const meta = PROVIDER_META[provider]
+  if (!meta) return
+
+  configProviderName.textContent = meta.name
+  configProviderIcon.innerHTML = "&#9679;"
+  configProviderIcon.style.color = {
+    openai: "#6ee7b7",
+    anthropic: "#fcd34d",
+    google: "#fcd34d",
+    xai: "rgba(255,255,255,0.8)",
+    deepseek: "#7dd3fc",
+    groq: "#fca5a5",
+  }[provider] || "rgba(255,255,255,0.5)"
+
+  // Load stored config
+  loadProviderConfig(provider)
+
+  // Populate model select
+  configModelSelect.innerHTML = ""
+  meta.models.forEach(m => {
+    const opt = document.createElement("option")
+    opt.value = m.value
+    opt.textContent = m.label
+    configModelSelect.appendChild(opt)
+  })
+
+  // Switch views
+  settingsProvidersView.style.display = "none"
+  providerConfigPanel.classList.add("open")
+  settingsBackBtn.style.display = "flex"
+  settingsHeaderTitle.textContent = meta.name
+
+  configApiKeyInput.focus()
+}
+
+function closeProviderConfig() {
+  isConfigPanelOpen = false
+  activeProvider = null
+  providerConfigPanel.classList.remove("open")
+  settingsProvidersView.style.display = ""
+  settingsBackBtn.style.display = "none"
+  settingsHeaderTitle.textContent = "Settings"
+  configTestResult.classList.remove("show", "success", "error")
+  configTestResult.textContent = ""
+}
+
+// Load provider config from store
+async function loadProviderConfig(provider) {
+  const stored = await window.api.storeGet("provider_" + provider) || {}
+  const hasKey = await checkProviderHasKey(provider)
+
+  configApiKeyInput.value = stored.apiKey || ""
+  configEnabledToggle.checked = stored.enabled !== false && hasKey
+
+  const statusEl = document.getElementById("configProviderStatus")
+  const statusText = document.getElementById("configStatusText")
+  if (hasKey) {
+    if (statusEl) statusEl.className = "config-card-status configured"
+    if (statusText) statusText.textContent = "Configured"
+  } else {
+    if (statusEl) statusEl.className = "config-card-status"
+    if (statusText) statusText.textContent = "Not configured"
+  }
+
+  if (stored.model) {
+    configModelSelect.value = stored.model
+  }
+}
+
+// Check if provider has API key configured (from backend)
+async function checkProviderHasKey(provider) {
+  try {
+    const providers = await window.api.getProviders()
+    return !!providers[provider]
+  } catch {
+    return false
+  }
+}
+
+// Update enabled status in config panel header
+function updateEnabledStatus() {
+  const enabled = configEnabledToggle.checked
+  const statusEl = document.getElementById("configProviderStatus")
+  const statusText = document.getElementById("configStatusText")
+  if (enabled) {
+    if (statusEl) statusEl.className = "config-card-status enabled"
+    if (statusText) statusText.textContent = "Enabled"
+  } else {
+    if (statusEl) statusEl.className = "config-card-status"
+    if (statusText) statusText.textContent = "Configured"
+  }
+}
+
+// Toggle key visibility
+configToggleKeyVisibility.addEventListener("click", () => {
+  const isPassword = configApiKeyInput.type === "password"
+  configApiKeyInput.type = isPassword ? "text" : "password"
+  configToggleKeyVisibility.textContent = isPassword ? "&#128064;" : "&#128065;"
+})
+
+// Enable toggle
+configEnabledToggle.addEventListener("change", () => {
+  updateEnabledStatus()
+})
+
+// Back button
+settingsBackBtn.addEventListener("click", closeProviderConfig)
+
+// Close settings panel
 closeSettingsBtn.addEventListener("click", () => {
-  settingsPanel.classList.remove("open")
+  if (isConfigPanelOpen) {
+    closeProviderConfig()
+  } else {
+    settingsPanel.classList.remove("open")
+  }
+})
+
+// Test button
+configTestBtn.addEventListener("click", async () => {
+  const apiKey = configApiKeyInput.value.trim()
+  if (!apiKey) {
+    configTestResult.className = "provider-config-test-result show error"
+    configTestResult.textContent = "Enter an API key first"
+    return
+  }
+
+  configTestResult.className = "provider-config-test-result show"
+  configTestResult.style.color = "var(--text-dim)"
+  configTestResult.textContent = "Testing..."
+
+  try {
+    // Try to call the backend configure endpoint
+    const result = await window.api.configureProvider(activeProvider, apiKey)
+    if (result.error) throw new Error(result.error)
+
+    // Send a minimal test request
+    const healthUrl = window.api.getHealthUrl()
+    const base = healthUrl.replace("/health", "")
+    const testUrl = `${base}/providers`
+    const resp = await fetch(testUrl)
+    const data = await resp.json()
+
+    if (data[activeProvider]) {
+      configTestResult.className = "provider-config-test-result show success"
+      configTestResult.textContent = "Connection successful"
+    } else {
+      configTestResult.className = "provider-config-test-result show error"
+      configTestResult.textContent = "Key saved but not detected — restart backend"
+    }
+  } catch (e) {
+    configTestResult.className = "provider-config-test-result show error"
+    configTestResult.textContent = "Test failed: " + e.message
+  }
+})
+
+// Save button
+configSaveBtn.addEventListener("click", async () => {
+  const apiKey = configApiKeyInput.value.trim()
+  const enabled = configEnabledToggle.checked
+  const model = configModelSelect.value
+
+  try {
+    // Save API key to backend
+    if (apiKey) {
+      await window.api.configureProvider(activeProvider, apiKey)
+    }
+
+    // Save config to local store
+    await window.api.storeSet("provider_" + activeProvider, {
+      apiKey,
+      enabled,
+      model
+    })
+
+    // Update UI
+    updateProviderUI(activeProvider, !!apiKey)
+    updateActiveProviders()
+
+    // Show success
+    configTestResult.className = "provider-config-test-result show success"
+    configTestResult.textContent = "Saved successfully"
+
+    // Auto-close after short delay
+    setTimeout(() => {
+      closeProviderConfig()
+    }, 800)
+  } catch (e) {
+    configTestResult.className = "provider-config-test-result show error"
+    configTestResult.textContent = "Save failed: " + e.message
+  }
+})
+
+// Enter/Escape on config panel input
+configApiKeyInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") configTestBtn.click()
 })
 
 function updateProviderUI(key, configured) {
-  const statusEl = document.getElementById("status" + key)
-  const hintEl = document.getElementById("hint" + key)
-  if (statusEl) statusEl.classList.toggle("configured", configured)
-  if (hintEl) hintEl.textContent = configured ? "Configured" : "Not configured"
+  const card = document.getElementById("card-" + key)
+  const hintNames = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "XAI", deepseek: "DeepSeek", groq: "Groq", ollama: "Ollama" }
+  const hintId = "hint" + (hintNames[key] || key.charAt(0).toUpperCase() + key.slice(1))
+  const hintEl = document.getElementById(hintId)
+  if (card) card.classList.toggle("configured", configured)
+  if (hintEl) hintEl.textContent = configured ? "Ready" : "Not configured"
 }
 
-// Provider config buttons
+function updateActiveProviders() {
+  const selected = cloudModelSelect ? cloudModelSelect.value : "auto"
+  const activeMap = {
+    "openai-gpt-4o-mini": "openai",
+    "openai-gpt-4o": "openai",
+    "anthropic-claude-3-5-haiku": "anthropic",
+    "anthropic-claude-3-5-sonnet": "anthropic",
+    "google-gemini-2-0-flash": "google",
+    "xai-grok-2-mini": "xai",
+    "deepseek-deepseek-chat": "deepseek",
+    "groq-llama-3-3-70b": "groq",
+  }
+  const activeKey = activeMap[selected]
+
+  // Clear all active bars
+  document.querySelectorAll(".provider-active-bar").forEach(el => el.classList.remove("active"))
+  document.querySelectorAll(".provider-row").forEach(el => el.classList.remove("active"))
+
+  // Set active for the current cloud model provider, or ollama
+  if (activeKey) {
+    const bar = document.getElementById("active-" + activeKey)
+    if (bar) bar.classList.add("active")
+    const card = document.getElementById("card-" + activeKey)
+    if (card) card.classList.add("active")
+  } else {
+    // Ollama is active (default/local mode)
+    const bar = document.getElementById("active-ollama")
+    if (bar) bar.classList.add("active")
+    const card = document.getElementById("card-ollama")
+    if (card) card.classList.add("active")
+  }
+}
+
+// Provider config buttons — open inline panel
 document.querySelectorAll(".provider-config-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    try {
-      activeProvider = btn.getAttribute("data-provider")
-      if (!activeProvider) {
-        console.error("[Settings] No provider data on button:", btn)
-        return
-      }
-      const names = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "xAI" }
-      modalProviderName.textContent = names[activeProvider] || activeProvider
-      apiKeyInput.value = ""
-      apiKeyModal.classList.add("open")
-      apiKeyInput.focus()
-      console.log("[Settings] API key modal opened for:", activeProvider)
-    } catch (e) {
-      console.error("[Settings] Error opening config modal:", e)
-    }
+    const provider = btn.getAttribute("data-provider")
+    if (!provider) return
+    openProviderConfig(provider)
   })
 })
 
-modalCancel.addEventListener("click", () => {
-  apiKeyModal.classList.remove("open")
-  activeProvider = null
-})
-
-modalSave.addEventListener("click", async () => {
-  if (!activeProvider) {
-    console.error("[Settings] modalSave called but activeProvider is null")
-    return
-  }
-  const key = apiKeyInput.value.trim()
-  if (!key) {
-    console.warn("[Settings] No API key entered")
-    return
-  }
-  try {
-    console.log("[Settings] Sending API key for:", activeProvider)
-    const result = await window.api.configureProvider(activeProvider, key)
-    console.log("[Settings] Configure result:", result)
-    apiKeyModal.classList.remove("open")
-    // Update UI - map provider names to HTML ID format
-    const providerMap = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "XAI" }
-    updateProviderUI(providerMap[activeProvider] || activeProvider, true)
-    activeProvider = null
-  } catch (e) {
-    console.error("[Settings] Failed to save API key:", e)
-  }
-})
-
-apiKeyInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") modalSave.click()
-  if (e.key === "Escape") modalCancel.click()
-})
-
-cloudModelSelect?.addEventListener("change", async () => {
-  await window.api.storeSet("cloudModel", cloudModelSelect.value)
-})
-
-// Close settings panel when clicking outside
+// Close settings when clicking outside
 document.addEventListener("click", (e) => {
   if (
     settingsPanel.classList.contains("open") &&
     !settingsPanel.contains(e.target) &&
     !menuBtn.contains(e.target)
   ) {
-    settingsPanel.classList.remove("open")
-  }
-  if (
-    apiKeyModal.classList.contains("open") &&
-    !apiKeyModal.querySelector(".modal-box").contains(e.target)
-  ) {
-    apiKeyModal.classList.remove("open")
+    if (isConfigPanelOpen) {
+      closeProviderConfig()
+    } else {
+      settingsPanel.classList.remove("open")
+    }
   }
 })
 async function init() {
