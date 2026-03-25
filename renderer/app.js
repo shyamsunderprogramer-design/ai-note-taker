@@ -26,17 +26,10 @@ const maxBtn = document.getElementById("maxBtn")
 const closeBtn = document.getElementById("closeBtn")
 const modeSelect = document.getElementById("modeSelect") // hidden, kept for compatibility
 const modelSelect = document.getElementById("modelSelect")
-const fontSizeSelect = document.getElementById("fontSizeSelect") // hidden fallback
-const fontSizeRange = document.getElementById("fontSizeRange")
-const fontSizeValue = document.getElementById("fontSizeValue")
-const responseStyleSelect = document.getElementById("responseStyleSelect") // hidden fallback
-const responseStyleControl = document.getElementById("responseStyleControl")
-const contextLengthSelect = document.getElementById("contextLengthSelect") // hidden fallback
-const contextStepper = document.getElementById("contextStepper")
-const contextValue = document.getElementById("contextValue")
-const tokenLimitSelect = document.getElementById("tokenLimitSelect") // hidden fallback
-const tokenStepper = document.getElementById("tokenStepper")
-const tokenLimitValue = document.getElementById("tokenLimitValue")
+const fontSizeSelect = document.getElementById("fontSizeSelect")
+const responseStyleSelect = document.getElementById("responseStyleSelect")
+const contextLengthSelect = document.getElementById("contextLengthSelect")
+const tokenLimitSelect = document.getElementById("tokenLimitSelect")
 const tokenCounter = document.getElementById("tokenCounter")
 const chatArea = document.getElementById("chatArea")
 const chatWelcome = document.getElementById("chatWelcome")
@@ -119,8 +112,7 @@ function getSelectedModel() {
 }
 
 function getSelectedResponseStyle() {
-  const activeSeg = document.querySelector(".seg-btn.active")
-  return activeSeg ? activeSeg.getAttribute("data-value") : (responseStyleSelect?.value || "concise")
+  return responseStyleSelect?.value || "concise"
 }
 
 function setListeningUI(listening) {
@@ -135,11 +127,11 @@ function setListeningUI(listening) {
 }
 
 function getSelectedContextLength() {
-  return CONTEXT_STEPS[contextIdx] ?? 3
+  return parseInt(contextLengthSelect?.value || "3", 10)
 }
 
 function getSelectedTokenLimit() {
-  return TOKEN_STEPS[tokenIdx] ?? 128000
+  return parseInt(tokenLimitSelect?.value || "128000", 10)
 }
 
 function estimateTokens(text) {
@@ -1324,101 +1316,28 @@ document.querySelectorAll(".mode-pill").forEach(pill => {
 })
 
 // ==============================
-// RESPONSE STYLE SEGMENTED CONTROL
+// CONTROL EVENTS
 // ==============================
-document.querySelectorAll(".seg-btn", ).forEach(btn => {
-  btn.addEventListener("click", async () => {
-    const value = btn.getAttribute("data-value")
-    document.querySelectorAll(".seg-btn").forEach(b => b.classList.remove("active"))
-    btn.classList.add("active")
-    if (responseStyleSelect) responseStyleSelect.value = value
-    await window.api.storeSet("responseStyle", value)
-  })
+fontSizeSelect?.addEventListener("change", async () => {
+  document.documentElement.style.setProperty("--font-size", fontSizeSelect.value + "px")
+  await window.api.storeSet("fontSize", fontSizeSelect.value)
 })
 
-// ==============================
-// CONTEXT STEPPER
-// ==============================
-const CONTEXT_STEPS = [0, 1, 3, 5, 10]
-let contextIdx = 2 // default: 3
-
-function updateContextStepper() {
-  const val = CONTEXT_STEPS[contextIdx]
-  if (contextValue) contextValue.textContent = val === 0 ? "Off" : val
-  if (contextLengthSelect) contextLengthSelect.value = val
-  return val
-}
-
-contextStepper?.querySelector(".stepper-minus")?.addEventListener("click", async () => {
-  if (contextIdx > 0) {
-    contextIdx--
-    const val = updateContextStepper()
-    await window.api.storeSet("contextLength", val)
-  }
+modeSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("mode", modeSelect.value)
 })
 
-contextStepper?.querySelector(".stepper-plus")?.addEventListener("click", async () => {
-  if (contextIdx < CONTEXT_STEPS.length - 1) {
-    contextIdx++
-    const val = updateContextStepper()
-    await window.api.storeSet("contextLength", val)
-  }
+contextLengthSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("contextLength", contextLengthSelect.value)
 })
 
-// ==============================
-// TOKEN STEPPER
-// ==============================
-const TOKEN_STEPS = [8000, 32000, 128000, 256000, 512000, 1024000]
-const TOKEN_LABELS = ["8K", "32K", "128K", "256K", "512K", "1M"]
-let tokenIdx = 2 // default: 128K
-
-function updateTokenStepper() {
-  const val = TOKEN_STEPS[tokenIdx]
-  const label = TOKEN_LABELS[tokenIdx]
-  if (tokenLimitValue) tokenLimitValue.textContent = label
-  if (tokenLimitSelect) tokenLimitSelect.value = val
-  return val
-}
-
-tokenStepper?.querySelector(".stepper-minus")?.addEventListener("click", async () => {
-  if (tokenIdx > 0) {
-    tokenIdx--
-    const val = updateTokenStepper()
-    await window.api.storeSet("tokenLimit", val)
-  }
+tokenLimitSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("tokenLimit", tokenLimitSelect.value)
 })
 
-tokenStepper?.querySelector(".stepper-plus")?.addEventListener("click", async () => {
-  if (tokenIdx < TOKEN_STEPS.length - 1) {
-    tokenIdx++
-    const val = updateTokenStepper()
-    await window.api.storeSet("tokenLimit", val)
-  }
+responseStyleSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("responseStyle", responseStyleSelect.value)
 })
-
-// ==============================
-// FONT SIZE SLIDER
-// ==============================
-function updateSliderFill(slider) {
-  const min = parseFloat(slider.min) || 0
-  const max = parseFloat(slider.max) || 100
-  const val = parseFloat(slider.value)
-  const pct = ((val - min) / (max - min)) * 100
-  slider.style.background = `linear-gradient(to right, var(--primary) ${pct}%, var(--line) ${pct}%)`
-}
-
-fontSizeRange?.addEventListener("input", async () => {
-  const val = fontSizeRange.value
-  if (fontSizeValue) fontSizeValue.textContent = val
-  document.documentElement.style.setProperty("--font-size", val + "px")
-  if (fontSizeSelect) fontSizeSelect.value = val
-  updateSliderFill(fontSizeRange)
-  await window.api.storeSet("fontSize", val)
-})
-
-// ==============================
-// LEGACY SELECT EVENTS (kept for compatibility)
-// ==============================
 modelSelect?.addEventListener("change", async () => {
   await window.api.storeSet("model", modelSelect.value)
 })
@@ -1754,22 +1673,13 @@ async function loadAboutStatus() {
 // SETTINGS PANEL
 // ==============================
 let activeProvider = null
-let isConfigPanelOpen = false
 
 // DOM refs for config panel
 const providerConfigPanel = document.getElementById("providerConfigPanel")
 const settingsProvidersView = document.getElementById("settingsProvidersView")
-const settingsBackBtn = document.getElementById("settingsBackBtn")
-const settingsHeaderTitle = document.getElementById("settingsHeaderTitle")
 const configProviderName = document.getElementById("configProviderName")
-const configProviderStatus = document.getElementById("configProviderStatus")
 const configProviderIcon = document.getElementById("configProviderIcon")
 const configApiKeyInput = document.getElementById("configApiKeyInput")
-const configToggleKeyVisibility = document.getElementById("configToggleKeyVisibility")
-const configEnabledToggle = document.getElementById("configEnabledToggle")
-const configEnabledStatus = document.getElementById("configEnabledStatus")
-const configModelSelect = document.getElementById("configModelSelect")
-const configTestBtn = document.getElementById("configTestBtn")
 const configSaveBtn = document.getElementById("configSaveBtn")
 const configTestResult = document.getElementById("configTestResult")
 
@@ -1837,13 +1747,11 @@ const PROVIDER_META = {
 // Open inline config panel for a provider
 function openProviderConfig(provider) {
   activeProvider = provider
-  isConfigPanelOpen = true
 
   const meta = PROVIDER_META[provider]
   if (!meta) return
 
   configProviderName.textContent = meta.name
-  configProviderIcon.innerHTML = "&#9679;"
   configProviderIcon.style.color = {
     openai: "#6ee7b7",
     anthropic: "#fcd34d",
@@ -1856,32 +1764,18 @@ function openProviderConfig(provider) {
   // Load stored config
   loadProviderConfig(provider)
 
-  // Populate model select
-  configModelSelect.innerHTML = ""
-  meta.models.forEach(m => {
-    const opt = document.createElement("option")
-    opt.value = m.value
-    opt.textContent = m.label
-    configModelSelect.appendChild(opt)
-  })
-
-  // Switch views
+  // Switch views - show config panel, hide provider list
   settingsProvidersView.style.display = "none"
   providerConfigPanel.classList.add("open")
-  settingsBackBtn.style.display = "flex"
-  settingsHeaderTitle.textContent = meta.name
 
   configApiKeyInput.focus()
 }
 
 function closeProviderConfig() {
-  isConfigPanelOpen = false
   activeProvider = null
   providerConfigPanel.classList.remove("open")
   settingsProvidersView.style.display = ""
-  settingsBackBtn.style.display = "none"
-  settingsHeaderTitle.textContent = "Settings"
-  configTestResult.classList.remove("show", "success", "error")
+  configTestResult.className = "config-inline-result"
   configTestResult.textContent = ""
 }
 
@@ -1891,20 +1785,11 @@ async function loadProviderConfig(provider) {
   const hasKey = await checkProviderHasKey(provider)
 
   configApiKeyInput.value = stored.apiKey || ""
-  configEnabledToggle.checked = stored.enabled !== false && hasKey
 
-  const statusEl = document.getElementById("configProviderStatus")
-  const statusText = document.getElementById("configStatusText")
-  if (hasKey) {
-    if (statusEl) statusEl.className = "config-card-status configured"
-    if (statusText) statusText.textContent = "Configured"
-  } else {
-    if (statusEl) statusEl.className = "config-card-status"
-    if (statusText) statusText.textContent = "Not configured"
-  }
-
-  if (stored.model) {
-    configModelSelect.value = stored.model
+  const statusBadge = document.getElementById("configStatusBadge")
+  if (statusBadge) {
+    statusBadge.textContent = hasKey ? "Configured" : "Not configured"
+    statusBadge.className = hasKey ? "config-status-badge configured" : "config-status-badge"
   }
 }
 
@@ -1918,107 +1803,36 @@ async function checkProviderHasKey(provider) {
   }
 }
 
-// Update enabled status in config panel header
-function updateEnabledStatus() {
-  const enabled = configEnabledToggle.checked
-  const statusEl = document.getElementById("configProviderStatus")
-  const statusText = document.getElementById("configStatusText")
-  if (enabled) {
-    if (statusEl) statusEl.className = "config-card-status enabled"
-    if (statusText) statusText.textContent = "Enabled"
-  } else {
-    if (statusEl) statusEl.className = "config-card-status"
-    if (statusText) statusText.textContent = "Configured"
-  }
-}
-
-// Toggle key visibility
-configToggleKeyVisibility.addEventListener("click", () => {
-  const isPassword = configApiKeyInput.type === "password"
-  configApiKeyInput.type = isPassword ? "text" : "password"
-  configToggleKeyVisibility.textContent = isPassword ? "&#128064;" : "&#128065;"
-})
-
-// Enable toggle
-configEnabledToggle.addEventListener("change", () => {
-  updateEnabledStatus()
-})
-
-// Back button
-settingsBackBtn.addEventListener("click", closeProviderConfig)
-
 // Close settings panel
 closeSettingsBtn.addEventListener("click", () => {
-  if (isConfigPanelOpen) {
-    closeProviderConfig()
-  } else {
-    settingsPanel.classList.remove("open")
-  }
-})
-
-// Test button
-configTestBtn.addEventListener("click", async () => {
-  const apiKey = configApiKeyInput.value.trim()
-  if (!apiKey) {
-    configTestResult.className = "provider-config-test-result show error"
-    configTestResult.textContent = "Enter an API key first"
-    return
-  }
-
-  configTestResult.className = "provider-config-test-result show"
-  configTestResult.style.color = "var(--text-dim)"
-  configTestResult.textContent = "Testing..."
-
-  try {
-    // Try to call the backend configure endpoint
-    const result = await window.api.configureProvider(activeProvider, apiKey)
-    if (result.error) throw new Error(result.error)
-
-    // Send a minimal test request
-    const healthUrl = window.api.getHealthUrl()
-    const base = healthUrl.replace("/health", "")
-    const testUrl = `${base}/providers`
-    const resp = await fetch(testUrl)
-    const data = await resp.json()
-
-    if (data[activeProvider]) {
-      configTestResult.className = "provider-config-test-result show success"
-      configTestResult.textContent = "Connection successful"
-    } else {
-      configTestResult.className = "provider-config-test-result show error"
-      configTestResult.textContent = "Key saved but not detected — restart backend"
-    }
-  } catch (e) {
-    configTestResult.className = "provider-config-test-result show error"
-    configTestResult.textContent = "Test failed: " + e.message
-  }
+  settingsPanel.classList.remove("open")
 })
 
 // Save button
 configSaveBtn.addEventListener("click", async () => {
   const apiKey = configApiKeyInput.value.trim()
-  const enabled = configEnabledToggle.checked
-  const model = configModelSelect.value
+  if (!apiKey) {
+    configTestResult.className = "config-inline-result error"
+    configTestResult.textContent = "Enter an API key first"
+    return
+  }
 
   try {
     // Save API key to backend
-    if (apiKey) {
-      await window.api.configureProvider(activeProvider, apiKey)
-    }
+    await window.api.configureProvider(activeProvider, apiKey)
 
     // Save config to local store
     await window.api.storeSet("provider_" + activeProvider, {
       apiKey,
-      enabled,
-      model
+      enabled: true
     })
 
     // Update UI
-    updateProviderUI(activeProvider, !!apiKey)
+    updateProviderUI(activeProvider, true)
     updateActiveProviders()
 
     // Show success
-    configTestResult.className = "provider-config-test-result show success"
+    configTestResult.className = "config-inline-result success"
     configTestResult.textContent = "Saved successfully"
 
     // Auto-close after short delay
@@ -2026,23 +1840,21 @@ configSaveBtn.addEventListener("click", async () => {
       closeProviderConfig()
     }, 800)
   } catch (e) {
-    configTestResult.className = "provider-config-test-result show error"
+    configTestResult.className = "config-inline-result error"
     configTestResult.textContent = "Save failed: " + e.message
   }
 })
 
-// Enter/Escape on config panel input
+// Enter key on config input
 configApiKeyInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") configTestBtn.click()
+  if (e.key === "Enter") configSaveBtn.click()
 })
 
 function updateProviderUI(key, configured) {
   const card = document.getElementById("card-" + key)
-  const hintNames = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", xai: "XAI", deepseek: "DeepSeek", groq: "Groq", ollama: "Ollama" }
-  const hintId = "hint" + (hintNames[key] || key.charAt(0).toUpperCase() + key.slice(1))
-  const hintEl = document.getElementById(hintId)
+  const statusDot = document.getElementById("status-dot-" + key)
   if (card) card.classList.toggle("configured", configured)
-  if (hintEl) hintEl.textContent = configured ? "Ready" : "Not configured"
+  if (statusDot) statusDot.classList.toggle("active", configured)
 }
 
 function updateActiveProviders() {
@@ -2119,11 +1931,7 @@ document.addEventListener("click", (e) => {
     !settingsPanel.contains(e.target) &&
     !menuBtn.contains(e.target)
   ) {
-    if (isConfigPanelOpen) {
-      closeProviderConfig()
-    } else {
-      settingsPanel.classList.remove("open")
-    }
+    settingsPanel.classList.remove("open")
   }
 })
 async function init() {
@@ -2134,51 +1942,31 @@ async function init() {
 
     // Font size
     const savedFontSize = await window.api.storeGet("fontSize")
-    if (savedFontSize) {
-      if (fontSizeRange) fontSizeRange.value = savedFontSize
-      if (fontSizeValue) fontSizeValue.textContent = savedFontSize
-      if (fontSizeSelect) fontSizeSelect.value = savedFontSize
+    if (savedFontSize && fontSizeSelect) {
+      fontSizeSelect.value = savedFontSize
       document.documentElement.style.setProperty("--font-size", savedFontSize + "px")
-      if (fontSizeRange) updateSliderFill(fontSizeRange)
-    } else {
-      if (fontSizeRange) updateSliderFill(fontSizeRange)
     }
 
     // Mode
     const savedMode = await window.api.storeGet("mode")
     if (savedMode && modeSelect) modeSelect.value = savedMode
 
-    // Mode change handler
-    modeSelect?.addEventListener("change", async () => {
-      const value = modeSelect.value
-      await window.api.storeSet("mode", value)
-    })
-
     // Response style
     const savedResponseStyle = await window.api.storeGet("responseStyle")
-    if (savedResponseStyle) {
-      if (responseStyleSelect) responseStyleSelect.value = savedResponseStyle
-      document.querySelectorAll(".seg-btn").forEach(b => {
-        b.classList.toggle("active", b.getAttribute("data-value") === savedResponseStyle)
-      })
+    if (savedResponseStyle && responseStyleSelect) {
+      responseStyleSelect.value = savedResponseStyle
     }
 
-    // Context stepper
+    // Context
     const savedContextLength = await window.api.storeGet("contextLength")
-    if (savedContextLength) {
-      if (contextLengthSelect) contextLengthSelect.value = savedContextLength
-      contextIdx = CONTEXT_STEPS.indexOf(parseInt(savedContextLength, 10))
-      if (contextIdx < 0) contextIdx = 2
-      updateContextStepper()
+    if (savedContextLength && contextLengthSelect) {
+      contextLengthSelect.value = savedContextLength
     }
 
-    // Token stepper
+    // Token limit
     const savedTokenLimit = await window.api.storeGet("tokenLimit")
-    if (savedTokenLimit) {
-      if (tokenLimitSelect) tokenLimitSelect.value = savedTokenLimit
-      tokenIdx = TOKEN_STEPS.indexOf(parseInt(savedTokenLimit, 10))
-      if (tokenIdx < 0) tokenIdx = 2
-      updateTokenStepper()
+    if (savedTokenLimit && tokenLimitSelect) {
+      tokenLimitSelect.value = savedTokenLimit
     }
 
     // Model

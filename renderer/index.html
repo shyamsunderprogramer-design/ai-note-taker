@@ -40,115 +40,133 @@
     <div class="controls-strip">
 
       <!-- Mode: dropdown -->
-      <div class="ctrl-group ctrl-mode">
+      <div class="ctrl-group">
         <label>Mode</label>
-        <div class="ctrl-select-wrap">
-          <select id="modeSelect">
-            <option value="auto">Auto</option>
-            <option value="fast">Fast</option>
-            <option value="adaptive">Adaptive</option>
-            <option value="universal">Universal</option>
-            <option value="interview">Interview</option>
-            <option value="reasoning">Reasoning</option>
-            <option value="cloud">Cloud</option>
-            <option value="code">Code</option>
-          </select>
-        </div>
+        <select id="modeSelect">
+          <option value="auto" selected>Auto</option>
+          <option value="fast">Fast</option>
+          <option value="adaptive">Adaptive</option>
+          <option value="universal">Universal</option>
+          <option value="interview">Interview</option>
+          <option value="reasoning">Reasoning</option>
+          <option value="cloud">Cloud</option>
+          <option value="code">Code</option>
+        </select>
       </div>
 
       <!-- Model: dropdown -->
-      <div class="ctrl-group ctrl-model">
+      <div class="ctrl-group">
         <label>Model</label>
-        <div class="ctrl-select-wrap">
-          <select id="modelSelect">
-            <option value="auto">Auto (best available)</option>
-            <optgroup label="OpenAI">
-              <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
-              <option value="openai-gpt-4o">GPT-4o</option>
-              <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
-              <option value="openai-o1-mini">o1 Mini</option>
-              <option value="openai-o3-mini">o3 Mini</option>
-              <option value="openai-gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            </optgroup>
-            <optgroup label="Anthropic">
-              <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
-              <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-              <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
-              <option value="anthropic-claude-opus-4-20250514">Claude Opus 4</option>
-            </optgroup>
-            <optgroup label="Google">
-              <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
-              <option value="google-gemini-2-0-flash-exp">Gemini 2.0 Flash Exp</option>
-              <option value="google-gemini-1-5-flash">Gemini 1.5 Flash</option>
-              <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
-              <option value="google-gemini-pro">Gemini Pro</option>
-            </optgroup>
-            <optgroup label="xAI">
-              <option value="xai-grok-2-mini">Grok 2 Mini</option>
-              <option value="xai-grok-2">Grok 2</option>
-              <option value="xai-grok-beta">Grok Beta</option>
-            </optgroup>
-            <optgroup label="DeepSeek">
-              <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
-              <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
-              <option value="deepseek-deepseek-math">DeepSeek Math</option>
-            </optgroup>
-            <optgroup label="Groq">
-              <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
-              <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
-              <option value="groq-llama-3-2-1b">Llama 3.2 1B</option>
-              <option value="groq-llama-3-2-3b">Llama 3.2 3B</option>
-              <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
-              <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
-            </optgroup>
-            <optgroup label="Ollama (Local)">
-              <option value="phi3:latest">Phi3</option>
-              <option value="tinyllama:latest">TinyLlama</option>
-              <option value="llama3:latest">Llama3</option>
-              <option value="mistral:latest">Mistral</option>
-            </optgroup>
-          </select>
-        </div>
+        <select id="modelSelect">
+          <option value="auto" selected>Auto</option>
+          <optgroup label="OpenAI">
+            <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
+            <option value="openai-gpt-4o">GPT-4o</option>
+            <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
+            <option value="openai-o1-mini">o1 Mini</option>
+            <option value="openai-o3-mini">o3 Mini</option>
+            <option value="openai-gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          </optgroup>
+          <optgroup label="Anthropic">
+            <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
+            <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
+            <option value="anthropic-claude-opus-4-20250514">Claude Opus 4</option>
+          </optgroup>
+          <optgroup label="Google">
+            <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
+            <option value="google-gemini-2-0-flash-exp">Gemini 2.0 Flash Exp</option>
+            <option value="google-gemini-1-5-flash">Gemini 1.5 Flash</option>
+            <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
+            <option value="google-gemini-pro">Gemini Pro</option>
+          </optgroup>
+          <optgroup label="xAI">
+            <option value="xai-grok-2-mini">Grok 2 Mini</option>
+            <option value="xai-grok-2">Grok 2</option>
+            <option value="xai-grok-beta">Grok Beta</option>
+          </optgroup>
+          <optgroup label="DeepSeek">
+            <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
+            <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
+            <option value="deepseek-deepseek-math">DeepSeek Math</option>
+          </optgroup>
+          <optgroup label="Groq">
+            <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
+            <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
+            <option value="groq-llama-3-2-1b">Llama 3.2 1B</option>
+            <option value="groq-llama-3-2-3b">Llama 3.2 3B</option>
+            <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
+            <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
+          </optgroup>
+          <optgroup label="Ollama (Local)">
+            <option value="phi3:latest">Phi3</option>
+            <option value="tinyllama:latest">TinyLlama</option>
+            <option value="llama3:latest">Llama3</option>
+            <option value="mistral:latest">Mistral</option>
+          </optgroup>
+        </select>
       </div>
 
-      <!-- Font: slider -->
-      <div class="ctrl-group ctrl-font">
+      <!-- Font: dropdown -->
+      <div class="ctrl-group">
         <label>Font</label>
-        <div class="ctrl-slider-wrap">
-          <span class="ctrl-slider-value" id="fontSizeValue">14</span>
-          <input type="range" id="fontSizeRange" class="ctrl-slider" min="10" max="32" value="14" step="1" />
-        </div>
+        <select id="fontSizeSelect">
+          <option value="10">10px</option>
+          <option value="12">12px</option>
+          <option value="14" selected>14px</option>
+          <option value="16">16px</option>
+          <option value="18">18px</option>
+          <option value="20">20px</option>
+          <option value="24">24px</option>
+          <option value="28">28px</option>
+          <option value="32">32px</option>
+          <option value="40">40px</option>
+          <option value="48">48px</option>
+          <option value="64">64px</option>
+          <option value="80">80px</option>
+          <option value="96">96px</option>
+          <option value="128">128px</option>
+          <option value="160">160px</option>
+          <option value="192">192px</option>
+        </select>
       </div>
 
-      <!-- Response: segmented -->
-      <div class="ctrl-group ctrl-response">
+      <!-- Response: dropdown -->
+      <div class="ctrl-group">
         <label>Response</label>
-        <div class="seg-control" id="responseStyleControl">
-          <button class="seg-btn active" data-value="concise">Concise</button>
-          <button class="seg-btn" data-value="detailed">Detailed</button>
-          <button class="seg-btn" data-value="bulletpoint">Bullet</button>
-        </div>
+        <select id="responseStyleSelect">
+          <option value="concise" selected>Concise</option>
+          <option value="detailed">Detailed</option>
+          <option value="bulletpoint">Bullet</option>
+        </select>
       </div>
 
-      <!-- Context: stepper -->
-      <div class="ctrl-group ctrl-context">
+      <!-- Context: dropdown -->
+      <div class="ctrl-group">
         <label>Context</label>
-        <div class="ctrl-stepper" id="contextStepper">
-          <button class="stepper-btn stepper-minus" type="button">&#8722;</button>
-          <span class="stepper-value" id="contextValue">3</span>
-          <button class="stepper-btn stepper-plus" type="button">&#43;</button>
-        </div>
+        <select id="contextLengthSelect">
+          <option value="0">Off</option>
+          <option value="1">1 msg</option>
+          <option value="3" selected>3 msg</option>
+          <option value="5">5 msg</option>
+          <option value="10">10 msg</option>
+        </select>
       </div>
 
-      <!-- Tokens: stepper -->
-      <div class="ctrl-group ctrl-tokens">
+      <!-- Tokens: dropdown -->
+      <div class="ctrl-group">
         <label>Tokens</label>
-        <div class="ctrl-stepper" id="tokenStepper">
-          <button class="stepper-btn stepper-minus" type="button">&#8722;</button>
-          <span class="stepper-value" id="tokenLimitValue">128K</span>
-          <button class="stepper-btn stepper-plus" type="button">&#43;</button>
-        </div>
+        <select id="tokenLimitSelect">
+          <option value="8000">8K</option>
+          <option value="32000">32K</option>
+          <option value="128000" selected>128K</option>
+          <option value="256000">256K</option>
+          <option value="512000">512K</option>
+          <option value="1024000">1024K</option>
+        </select>
       </div>
+
+      <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
 
     </div>
 
@@ -214,231 +232,136 @@
   <!-- Settings panel -->
   <div class="settings-panel" id="settingsPanel">
     <div class="settings-header">
-      <button id="settingsBackBtn" class="win-btn" type="button" title="Back" style="display:none">&#8592;</button>
-      <span id="settingsHeaderTitle">Settings</span>
+      <span>Settings</span>
       <button id="closeSettingsBtn" class="win-btn" type="button" title="Close">×</button>
     </div>
     <div class="settings-body">
 
       <!-- Provider config panel (inline) -->
       <div class="provider-config-panel" id="providerConfigPanel">
-        <div class="config-card">
-          <!-- Header -->
-          <div class="config-card-header">
-            <div class="config-card-icon-wrap">
-              <span class="config-card-icon" id="configProviderIcon">&#9679;</span>
-            </div>
-            <div class="config-card-header-info">
-              <div class="config-card-name" id="configProviderName">Provider</div>
-              <div class="config-card-status" id="configProviderStatus">
-                <span class="config-status-dot"></span>
-                <span id="configStatusText">Not configured</span>
-              </div>
-            </div>
-            <label class="toggle-switch" title="Enable provider">
-              <input type="checkbox" id="configEnabledToggle" />
-              <span class="toggle-slider"></span>
-            </label>
+        <div class="config-inline">
+          <div class="config-inline-header">
+            <span class="config-provider-icon" id="configProviderIcon">&#9679;</span>
+            <span class="config-provider-name" id="configProviderName">Provider</span>
+            <span class="config-status-badge" id="configStatusBadge">Not configured</span>
           </div>
-
-          <!-- Form -->
-          <div class="config-card-body">
-            <div class="config-field">
-              <label class="config-field-label">
-                <span class="config-field-icon">&#128273;</span>
-                API Key
-              </label>
-              <div class="config-input-wrap">
-                <input type="password" id="configApiKeyInput" class="config-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
-                <button id="configToggleKeyVisibility" class="config-input-action" type="button" title="Show/Hide">&#128065;</button>
-              </div>
-            </div>
-
-            <div class="config-field">
-              <label class="config-field-label">
-                <span class="config-field-icon">&#9874;</span>
-                Model
-              </label>
-              <select id="configModelSelect" class="config-select">
-                <!-- Injected per provider -->
-              </select>
-            </div>
+          <div class="config-inline-body">
+            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key (sk-...)" autocomplete="off" spellcheck="false" />
+            <button id="configSaveBtn" class="config-inline-save" type="button">Save</button>
           </div>
-
-          <!-- Actions -->
-          <div class="config-card-footer">
-            <button id="configTestBtn" class="config-btn config-btn-secondary" type="button">
-              <span class="config-btn-spinner" id="configTestSpinner"></span>
-              Test
-            </button>
-            <button id="configSaveBtn" class="config-btn config-btn-primary" type="button">Save</button>
-          </div>
-
-          <!-- Result -->
-          <div class="config-result" id="configTestResult"></div>
+          <div class="config-inline-result" id="configTestResult"></div>
         </div>
       </div>
 
       <!-- Provider list -->
       <div class="settings-providers-view" id="settingsProvidersView">
         <div class="settings-section">
-          <div class="settings-section-title">AI Providers</div>
+          <div class="settings-section-label">AI Providers</div>
           <div class="provider-list">
 
             <!-- Ollama -->
             <div class="provider-row" id="card-ollama">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-ollama">O</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">Ollama</div>
-                  <div class="provider-row-desc">Local inference engine</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <span class="provider-badge provider-badge-local">Local</span>
-                <div class="provider-active-bar" id="active-ollama"></div>
-              </div>
+              <span class="provider-logo provider-logo-ollama">O</span>
+              <span class="provider-name">Ollama</span>
+              <span class="provider-badge">Local</span>
+              <span class="status-dot" id="status-dot-ollama"></span>
             </div>
 
             <!-- OpenAI -->
             <div class="provider-row" id="card-openai">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-openai">O</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">OpenAI</div>
-                  <div class="provider-row-desc" id="hintOpenAI">Not configured</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <button class="settings-btn provider-config-btn" data-provider="openai">Configure</button>
-                <div class="provider-active-bar" id="active-openai"></div>
-              </div>
+              <span class="provider-logo provider-logo-openai">O</span>
+              <span class="provider-name">OpenAI</span>
+              <span class="status-dot" id="status-dot-openai"></span>
+              <button class="settings-btn provider-config-btn" data-provider="openai">Configure</button>
             </div>
 
             <!-- Anthropic -->
             <div class="provider-row" id="card-anthropic">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-anthropic">A</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">Anthropic</div>
-                  <div class="provider-row-desc" id="hintAnthropic">Not configured</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <button class="settings-btn provider-config-btn" data-provider="anthropic">Configure</button>
-                <div class="provider-active-bar" id="active-anthropic"></div>
-              </div>
+              <span class="provider-logo provider-logo-anthropic">A</span>
+              <span class="provider-name">Anthropic</span>
+              <span class="status-dot" id="status-dot-anthropic"></span>
+              <button class="settings-btn provider-config-btn" data-provider="anthropic">Configure</button>
             </div>
 
             <!-- Google -->
             <div class="provider-row" id="card-google">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-google">G</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">Google</div>
-                  <div class="provider-row-desc" id="hintGoogle">Not configured</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <button class="settings-btn provider-config-btn" data-provider="google">Configure</button>
-                <div class="provider-active-bar" id="active-google"></div>
-              </div>
+              <span class="provider-logo provider-logo-google">G</span>
+              <span class="provider-name">Google</span>
+              <span class="status-dot" id="status-dot-google"></span>
+              <button class="settings-btn provider-config-btn" data-provider="google">Configure</button>
             </div>
 
             <!-- xAI -->
             <div class="provider-row" id="card-xai">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-xai">x</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">xAI</div>
-                  <div class="provider-row-desc" id="hintXAI">Not configured</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <button class="settings-btn provider-config-btn" data-provider="xai">Configure</button>
-                <div class="provider-active-bar" id="active-xai"></div>
-              </div>
+              <span class="provider-logo provider-logo-xai">x</span>
+              <span class="provider-name">xAI</span>
+              <span class="status-dot" id="status-dot-xai"></span>
+              <button class="settings-btn provider-config-btn" data-provider="xai">Configure</button>
             </div>
 
             <!-- DeepSeek -->
             <div class="provider-row" id="card-deepseek">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-deepseek">D</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">DeepSeek</div>
-                  <div class="provider-row-desc" id="hintDeepSeek">Not configured</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <button class="settings-btn provider-config-btn" data-provider="deepseek">Configure</button>
-                <div class="provider-active-bar" id="active-deepseek"></div>
-              </div>
+              <span class="provider-logo provider-logo-deepseek">D</span>
+              <span class="provider-name">DeepSeek</span>
+              <span class="status-dot" id="status-dot-deepseek"></span>
+              <button class="settings-btn provider-config-btn" data-provider="deepseek">Configure</button>
             </div>
 
             <!-- Groq -->
             <div class="provider-row" id="card-groq">
-              <div class="provider-row-left">
-                <div class="provider-logo provider-logo-groq">G</div>
-                <div class="provider-row-info">
-                  <div class="provider-row-name">Groq</div>
-                  <div class="provider-row-desc" id="hintGroq">Not configured</div>
-                </div>
-              </div>
-              <div class="provider-row-right">
-                <button class="settings-btn provider-config-btn" data-provider="groq">Configure</button>
-                <div class="provider-active-bar" id="active-groq"></div>
-              </div>
+              <span class="provider-logo provider-logo-groq">G</span>
+              <span class="provider-name">Groq</span>
+              <span class="status-dot" id="status-dot-groq"></span>
+              <button class="settings-btn provider-config-btn" data-provider="groq">Configure</button>
             </div>
 
           </div>
         </div>
 
         <div class="settings-section">
-          <div class="settings-section-title">Cloud Model</div>
-          <div class="settings-cloud-mode">
-            <select id="cloudModelSelect">
-              <option value="auto" selected>Auto (best available)</option>
-              <optgroup label="OpenAI">
-                <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
-                <option value="openai-gpt-4o">GPT-4o</option>
-                <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="openai-o1-mini">o1 Mini</option>
-                <option value="openai-o3-mini">o3 Mini</option>
-                <option value="openai-gpt-3.5-turbo">GPT-3.5 Turbo</option>
-              </optgroup>
-              <optgroup label="Anthropic">
-                <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
-                <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                <option value="anthropic-claude-opus-4-20250514">Claude Opus 4</option>
-              </optgroup>
-              <optgroup label="Google">
-                <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
-                <option value="google-gemini-2-0-flash-exp">Gemini 2.0 Flash Exp</option>
-                <option value="google-gemini-1-5-flash">Gemini 1.5 Flash</option>
-                <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
-                <option value="google-gemini-pro">Gemini Pro</option>
-              </optgroup>
-              <optgroup label="xAI">
-                <option value="xai-grok-2-mini">Grok 2 Mini</option>
-                <option value="xai-grok-2">Grok 2</option>
-                <option value="xai-grok-beta">Grok Beta</option>
-              </optgroup>
-              <optgroup label="DeepSeek">
-                <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
-                <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
-                <option value="deepseek-deepseek-math">DeepSeek Math</option>
-              </optgroup>
-              <optgroup label="Groq">
-                <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
-                <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
-                <option value="groq-llama-3-2-1b">Llama 3.2 1B</option>
-                <option value="groq-llama-3-2-3b">Llama 3.2 3B</option>
-                <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
-                <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
-              </optgroup>
-            </select>
-          </div>
+          <div class="settings-section-label">Cloud Model</div>
+          <select id="cloudModelSelect" class="cloud-select">
+            <option value="auto" selected>Auto (best available)</option>
+            <optgroup label="OpenAI">
+              <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
+              <option value="openai-gpt-4o">GPT-4o</option>
+              <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
+              <option value="openai-o1-mini">o1 Mini</option>
+              <option value="openai-o3-mini">o3 Mini</option>
+              <option value="openai-gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            </optgroup>
+            <optgroup label="Anthropic">
+              <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
+              <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+              <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
+              <option value="anthropic-claude-opus-4-20250514">Claude Opus 4</option>
+            </optgroup>
+            <optgroup label="Google">
+              <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
+              <option value="google-gemini-2-0-flash-exp">Gemini 2.0 Flash Exp</option>
+              <option value="google-gemini-1-5-flash">Gemini 1.5 Flash</option>
+              <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
+              <option value="google-gemini-pro">Gemini Pro</option>
+            </optgroup>
+            <optgroup label="xAI">
+              <option value="xai-grok-2-mini">Grok 2 Mini</option>
+              <option value="xai-grok-2">Grok 2</option>
+              <option value="xai-grok-beta">Grok Beta</option>
+            </optgroup>
+            <optgroup label="DeepSeek">
+              <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
+              <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
+              <option value="deepseek-deepseek-math">DeepSeek Math</option>
+            </optgroup>
+            <optgroup label="Groq">
+              <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
+              <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
+              <option value="groq-llama-3-2-1b">Llama 3.2 1B</option>
+              <option value="groq-llama-3-2-3b">Llama 3.2 3B</option>
+              <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
+              <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
+            </optgroup>
+          </select>
         </div>
       </div>
     </div>

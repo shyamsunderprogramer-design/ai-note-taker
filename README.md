@@ -15,10 +15,12 @@ A smart voice note-taking app with screen capture protection and AI-powered resp
 - **Streaming responses** - Real-time AI answer display
 - **Multiple AI providers**:
   - Ollama (local, default)
-  - OpenAI (GPT-4o, GPT-4o Mini)
-  - Anthropic (Claude 3.5 Haiku, Sonnet)
-  - Google (Gemini 2.0 Flash)
-  - xAI (Grok 2 Mini)
+  - OpenAI (GPT-4o, GPT-4o Mini, o1 Mini, o3 Mini)
+  - Anthropic (Claude 3.5 Haiku, Sonnet, Opus 4)
+  - Google (Gemini 2.0 Flash, 1.5 Pro)
+  - xAI (Grok 2 Mini, Grok Beta)
+  - DeepSeek (Chat, Coder, Math)
+  - Groq (Llama 3.3 70B, Mixtral, Qwen)
 - **Response styles**: Concise, Detailed, Bullet points
 
 ### Modes
@@ -205,9 +207,11 @@ Configure API keys for cloud AI providers:
 1. Click the **menu button** (☰)
 2. Select **Settings**
 3. Click **Configure** next to your provider
-4. Enter your API key
+4. Enter your API key and click **Save**
 
-Available providers: OpenAI, Anthropic, Google, xAI
+Available providers: OpenAI, Anthropic, Google, xAI, DeepSeek, Groq
+
+**API Key Storage**: Keys are stored locally in `backend/.env` and never committed to git.
 
 ---
 
