@@ -289,33 +289,269 @@ body {
 }
 
 /* ==============================
-   ROW 2: CONTROLS STRIP
+   ROW 2: CONTROLS STRIP (FLAGSHIP)
    ============================== */
 .controls-strip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 10px;
+  padding: 6px 0;
   flex-wrap: wrap;
   width: 100%;
   box-sizing: border-box;
 }
 
+/* Mode pills - full width row */
+.ctrl-mode {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.mode-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.mode-pill {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.786em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.mode-pill:hover {
+  border-color: var(--line-bright);
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+.mode-pill.active {
+  background: linear-gradient(135deg, rgba(59,130,246,0.5), rgba(37,99,235,0.5));
+  border-color: rgba(147,197,253,0.4);
+  color: rgba(255,255,255,0.95);
+  box-shadow: 0 0 12px rgba(59,130,246,0.25);
+  font-weight: 600;
+}
+
+/* Individual ctrl groups */
 .ctrl-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   flex-shrink: 0;
 }
 
 .ctrl-group label {
   font-size: 0.643em;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-dim);
   padding-left: 2px;
+}
+
+/* Select dropdown wrapper */
+.ctrl-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ctrl-select-wrap select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-main);
+  font-size: 0.857em;
+  padding: 5px 28px 5px 10px;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 90px;
+}
+.ctrl-select-wrap select:hover {
+  border-color: var(--line-bright);
+  background: rgba(255,255,255,0.07);
+}
+.ctrl-select-wrap select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+.ctrl-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid rgba(255,255,255,0.35);
+  pointer-events: none;
+}
+.ctrl-select-wrap select option {
+  background: rgba(25, 30, 50, 0.98);
+  color: var(--text-main);
+}
+
+/* Font slider */
+.ctrl-font {
+  min-width: 90px;
+}
+
+.ctrl-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ctrl-slider-value {
+  font-size: 0.786em;
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctrl-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 60px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--line);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ctrl-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  box-shadow: 0 0 6px var(--primary-glow);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.ctrl-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+.ctrl-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 6px var(--primary-glow);
+}
+
+/* Segmented control (Response) */
+.seg-control {
+  display: flex;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px;
+  gap: 1px;
+}
+
+.seg-btn {
+  flex: 1;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.786em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.seg-btn:hover {
+  color: var(--text-main);
+  background: rgba(255,255,255,0.04);
+}
+.seg-btn.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+
+/* Stepper (Context / Tokens) */
+.ctrl-stepper {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px;
+  gap: 0;
+  overflow: hidden;
+}
+
+.stepper-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 1em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+.stepper-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-main);
+}
+.stepper-btn:active {
+  background: rgba(255,255,255,0.1);
+  transform: scale(0.92);
+}
+
+.stepper-value {
+  flex: 1;
+  text-align: center;
+  font-size: 0.857em;
+  font-weight: 700;
+  color: var(--text-main);
+  min-width: 32px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+/* Token counter pill */
+.token-counter {
+  font-size: 0.714em;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 12px;
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 select {

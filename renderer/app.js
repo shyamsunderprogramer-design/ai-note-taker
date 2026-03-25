@@ -24,12 +24,19 @@ const listenLabel = document.getElementById("listenLabel")
 const minBtn = document.getElementById("minBtn")
 const maxBtn = document.getElementById("maxBtn")
 const closeBtn = document.getElementById("closeBtn")
-const modeSelect = document.getElementById("modeSelect")
+const modeSelect = document.getElementById("modeSelect") // hidden, kept for compatibility
 const modelSelect = document.getElementById("modelSelect")
-const fontSizeSelect = document.getElementById("fontSizeSelect")
-const responseStyleSelect = document.getElementById("responseStyleSelect")
-const contextLengthSelect = document.getElementById("contextLengthSelect")
-const tokenLimitSelect = document.getElementById("tokenLimitSelect")
+const fontSizeSelect = document.getElementById("fontSizeSelect") // hidden fallback
+const fontSizeRange = document.getElementById("fontSizeRange")
+const fontSizeValue = document.getElementById("fontSizeValue")
+const responseStyleSelect = document.getElementById("responseStyleSelect") // hidden fallback
+const responseStyleControl = document.getElementById("responseStyleControl")
+const contextLengthSelect = document.getElementById("contextLengthSelect") // hidden fallback
+const contextStepper = document.getElementById("contextStepper")
+const contextValue = document.getElementById("contextValue")
+const tokenLimitSelect = document.getElementById("tokenLimitSelect") // hidden fallback
+const tokenStepper = document.getElementById("tokenStepper")
+const tokenLimitValue = document.getElementById("tokenLimitValue")
 const tokenCounter = document.getElementById("tokenCounter")
 const chatArea = document.getElementById("chatArea")
 const chatWelcome = document.getElementById("chatWelcome")
@@ -104,11 +111,17 @@ document.addEventListener("keydown", (e) => {
 // HELPERS
 // ==============================
 function getSelectedMode() {
-  return modeSelect.value || "auto"
+  const activePill = document.querySelector(".mode-pill.active")
+  return activePill ? activePill.getAttribute("data-value") : "auto"
 }
 
 function getSelectedModel() {
   return modelSelect.value || "auto"
+}
+
+function getSelectedResponseStyle() {
+  const activeSeg = document.querySelector(".seg-btn.active")
+  return activeSeg ? activeSeg.getAttribute("data-value") : (responseStyleSelect?.value || "concise")
 }
 
 function setListeningUI(listening) {
@@ -123,11 +136,11 @@ function setListeningUI(listening) {
 }
 
 function getSelectedContextLength() {
-  return parseInt(contextLengthSelect ? contextLengthSelect.value : 0, 10)
+  return CONTEXT_STEPS[contextIdx] ?? 3
 }
 
 function getSelectedTokenLimit() {
-  return parseInt(tokenLimitSelect ? tokenLimitSelect.value : 128000, 10)
+  return TOKEN_STEPS[tokenIdx] ?? 128000
 }
 
 function estimateTokens(text) {
@@ -1137,7 +1150,7 @@ async function submitAudio(blob) {
 // ==============================
 async function streamAIResponse(query) {
   const mode = getSelectedMode()
-  const responseStyle = responseStyleSelect ? responseStyleSelect.value : "concise"
+  const responseStyle = getSelectedResponseStyle()
   const cloudModel = cloudModelSelect ? cloudModelSelect.value : "auto"
   const provider = (mode === "cloud" || mode === "fast" && cloudModel !== "auto") ? cloudModel : "ollama"
   const contextMessages = getContextMessages()
@@ -1291,23 +1304,119 @@ function stopTracks() {
 }
 
 // ==============================
-// BUTTON EVENTS
+// MODE PILLS
 // ==============================
-fontSizeSelect.addEventListener("change", async () => {
-  document.documentElement.style.setProperty("--font-size", fontSizeSelect.value + "px")
-  await window.api.storeSet("fontSize", fontSizeSelect.value)
+const MODE_MAP = {
+  auto: "auto", fast: "fast", adaptive: "adaptive",
+  universal: "universal", interview: "interview", reasoning: "reasoning",
+  cloud: "cloud", code: "code"
+}
+
+document.querySelectorAll(".mode-pill").forEach(pill => {
+  pill.addEventListener("click", async () => {
+    const value = pill.getAttribute("data-value")
+    document.querySelectorAll(".mode-pill").forEach(p => p.classList.remove("active"))
+    pill.classList.add("active")
+    if (modeSelect) modeSelect.value = value
+    await window.api.storeSet("mode", value)
+  })
 })
 
-modeSelect.addEventListener("change", async () => {
-  await window.api.storeSet("mode", modeSelect.value)
+// ==============================
+// RESPONSE STYLE SEGMENTED CONTROL
+// ==============================
+document.querySelectorAll(".seg-btn", ).forEach(btn => {
+  btn.addEventListener("click", async () => {
+    const value = btn.getAttribute("data-value")
+    document.querySelectorAll(".seg-btn").forEach(b => b.classList.remove("active"))
+    btn.classList.add("active")
+    if (responseStyleSelect) responseStyleSelect.value = value
+    await window.api.storeSet("responseStyle", value)
+  })
 })
 
-contextLengthSelect.addEventListener("change", async () => {
-  await window.api.storeSet("contextLength", contextLengthSelect.value)
+// ==============================
+// CONTEXT STEPPER
+// ==============================
+const CONTEXT_STEPS = [0, 1, 3, 5, 10]
+let contextIdx = 2 // default: 3
+
+function updateContextStepper() {
+  const val = CONTEXT_STEPS[contextIdx]
+  if (contextValue) contextValue.textContent = val === 0 ? "Off" : val
+  if (contextLengthSelect) contextLengthSelect.value = val
+  return val
+}
+
+contextStepper?.querySelector(".stepper-minus")?.addEventListener("click", async () => {
+  if (contextIdx > 0) {
+    contextIdx--
+    const val = updateContextStepper()
+    await window.api.storeSet("contextLength", val)
+  }
 })
 
-tokenLimitSelect.addEventListener("change", async () => {
-  await window.api.storeSet("tokenLimit", tokenLimitSelect.value)
+contextStepper?.querySelector(".stepper-plus")?.addEventListener("click", async () => {
+  if (contextIdx < CONTEXT_STEPS.length - 1) {
+    contextIdx++
+    const val = updateContextStepper()
+    await window.api.storeSet("contextLength", val)
+  }
+})
+
+// ==============================
+// TOKEN STEPPER
+// ==============================
+const TOKEN_STEPS = [8000, 32000, 128000, 256000, 512000, 1024000]
+const TOKEN_LABELS = ["8K", "32K", "128K", "256K", "512K", "1M"]
+let tokenIdx = 2 // default: 128K
+
+function updateTokenStepper() {
+  const val = TOKEN_STEPS[tokenIdx]
+  const label = TOKEN_LABELS[tokenIdx]
+  if (tokenLimitValue) tokenLimitValue.textContent = label
+  if (tokenLimitSelect) tokenLimitSelect.value = val
+  return val
+}
+
+tokenStepper?.querySelector(".stepper-minus")?.addEventListener("click", async () => {
+  if (tokenIdx > 0) {
+    tokenIdx--
+    const val = updateTokenStepper()
+    await window.api.storeSet("tokenLimit", val)
+  }
+})
+
+tokenStepper?.querySelector(".stepper-plus")?.addEventListener("click", async () => {
+  if (tokenIdx < TOKEN_STEPS.length - 1) {
+    tokenIdx++
+    const val = updateTokenStepper()
+    await window.api.storeSet("tokenLimit", val)
+  }
+})
+
+// ==============================
+// FONT SIZE SLIDER
+// ==============================
+fontSizeRange?.addEventListener("input", async () => {
+  const val = fontSizeRange.value
+  if (fontSizeValue) fontSizeValue.textContent = val
+  document.documentElement.style.setProperty("--font-size", val + "px")
+  if (fontSizeSelect) fontSizeSelect.value = val
+  await window.api.storeSet("fontSize", val)
+})
+
+// ==============================
+// LEGACY SELECT EVENTS (kept for compatibility)
+// ==============================
+modelSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("model", modelSelect.value)
+})
+
+// Cloud model select — update active provider indicator
+cloudModelSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("cloudModel", cloudModelSelect.value)
+  updateActiveProviders()
 })
 
 minBtn.addEventListener("click", () => {
@@ -1563,9 +1672,9 @@ appMenu.addEventListener("click", async (e) => {
       updateProviderUI("deepseek", providers.deepseek)
       updateProviderUI("groq", providers.groq)
     } catch (e) { console.error(e) }
-    updateActiveProviders()
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) cloudModelSelect.value = savedCloudModel
+    updateActiveProviders()
   }
   else if (action === "shortcuts") {
     shortcutsModal.classList.add("open")
@@ -1653,13 +1762,17 @@ const configTestBtn = document.getElementById("configTestBtn")
 const configSaveBtn = document.getElementById("configSaveBtn")
 const configTestResult = document.getElementById("configTestResult")
 
-// Provider metadata
+// Provider metadata — full model catalog
 const PROVIDER_META = {
   openai: {
     name: "OpenAI",
     models: [
       { value: "openai-gpt-4o-mini", label: "GPT-4o Mini" },
       { value: "openai-gpt-4o", label: "GPT-4o" },
+      { value: "openai-gpt-4-turbo", label: "GPT-4 Turbo" },
+      { value: "openai-o1-mini", label: "o1 Mini (Reasoning)" },
+      { value: "openai-o3-mini", label: "o3 Mini (Reasoning)" },
+      { value: "openai-gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
     ]
   },
   anthropic: {
@@ -1667,24 +1780,34 @@ const PROVIDER_META = {
     models: [
       { value: "anthropic-claude-3-5-haiku", label: "Claude 3.5 Haiku" },
       { value: "anthropic-claude-3-5-sonnet", label: "Claude 3.5 Sonnet" },
+      { value: "anthropic-claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+      { value: "anthropic-claude-opus-4-20250514", label: "Claude Opus 4" },
     ]
   },
   google: {
     name: "Google",
     models: [
       { value: "google-gemini-2-0-flash", label: "Gemini 2.0 Flash" },
+      { value: "google-gemini-2-0-flash-exp", label: "Gemini 2.0 Flash Exp" },
+      { value: "google-gemini-1-5-flash", label: "Gemini 1.5 Flash" },
+      { value: "google-gemini-1-5-pro", label: "Gemini 1.5 Pro" },
+      { value: "google-gemini-pro", label: "Gemini Pro" },
     ]
   },
   xai: {
     name: "xAI",
     models: [
       { value: "xai-grok-2-mini", label: "Grok 2 Mini" },
+      { value: "xai-grok-2", label: "Grok 2" },
+      { value: "xai-grok-beta", label: "Grok Beta" },
     ]
   },
   deepseek: {
     name: "DeepSeek",
     models: [
       { value: "deepseek-deepseek-chat", label: "DeepSeek Chat" },
+      { value: "deepseek-deepseek-coder", label: "DeepSeek Coder" },
+      { value: "deepseek-deepseek-math", label: "DeepSeek Math" },
     ]
   },
   groq: {
@@ -1692,6 +1815,10 @@ const PROVIDER_META = {
     models: [
       { value: "groq-llama-3-3-70b", label: "Llama 3.3 70B" },
       { value: "groq-llama-3-1-8b", label: "Llama 3.1 8B" },
+      { value: "groq-llama-3-2-1b", label: "Llama 3.2 1B" },
+      { value: "groq-llama-3-2-3b", label: "Llama 3.2 3B" },
+      { value: "groq-mixtral-8x7b", label: "Mixtral 8x7B" },
+      { value: "groq-qwen-2-5-72b", label: "Qwen 2.5 72B" },
     ]
   }
 }
@@ -1910,14 +2037,39 @@ function updateProviderUI(key, configured) {
 function updateActiveProviders() {
   const selected = cloudModelSelect ? cloudModelSelect.value : "auto"
   const activeMap = {
+    // OpenAI
     "openai-gpt-4o-mini": "openai",
     "openai-gpt-4o": "openai",
+    "openai-gpt-4-turbo": "openai",
+    "openai-o1-mini": "openai",
+    "openai-o3-mini": "openai",
+    "openai-gpt-3.5-turbo": "openai",
+    // Anthropic
     "anthropic-claude-3-5-haiku": "anthropic",
     "anthropic-claude-3-5-sonnet": "anthropic",
+    "anthropic-claude-sonnet-4-20250514": "anthropic",
+    "anthropic-claude-opus-4-20250514": "anthropic",
+    // Google
     "google-gemini-2-0-flash": "google",
+    "google-gemini-2-0-flash-exp": "google",
+    "google-gemini-1-5-flash": "google",
+    "google-gemini-1-5-pro": "google",
+    "google-gemini-pro": "google",
+    // xAI
     "xai-grok-2-mini": "xai",
+    "xai-grok-2": "xai",
+    "xai-grok-beta": "xai",
+    // DeepSeek
     "deepseek-deepseek-chat": "deepseek",
+    "deepseek-deepseek-coder": "deepseek",
+    "deepseek-deepseek-math": "deepseek",
+    // Groq
     "groq-llama-3-3-70b": "groq",
+    "groq-llama-3-1-8b": "groq",
+    "groq-llama-3-2-1b": "groq",
+    "groq-llama-3-2-3b": "groq",
+    "groq-mixtral-8x7b": "groq",
+    "groq-qwen-2-5-72b": "groq",
   }
   const activeKey = activeMap[selected]
 
@@ -1968,25 +2120,56 @@ async function init() {
     await waitForBackend()
 
     // Restore user preferences
+
+    // Font size
     const savedFontSize = await window.api.storeGet("fontSize")
     if (savedFontSize) {
-      fontSizeSelect.value = savedFontSize
+      if (fontSizeRange) fontSizeRange.value = savedFontSize
+      if (fontSizeValue) fontSizeValue.textContent = savedFontSize
+      if (fontSizeSelect) fontSizeSelect.value = savedFontSize
       document.documentElement.style.setProperty("--font-size", savedFontSize + "px")
     }
 
+    // Mode pills
     const savedMode = await window.api.storeGet("mode")
     if (savedMode) {
-      modeSelect.value = savedMode
+      if (modeSelect) modeSelect.value = savedMode
+      document.querySelectorAll(".mode-pill").forEach(p => {
+        p.classList.toggle("active", p.getAttribute("data-value") === savedMode)
+      })
     }
 
+    // Response style
+    const savedResponseStyle = await window.api.storeGet("responseStyle")
+    if (savedResponseStyle) {
+      if (responseStyleSelect) responseStyleSelect.value = savedResponseStyle
+      document.querySelectorAll(".seg-btn").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-value") === savedResponseStyle)
+      })
+    }
+
+    // Context stepper
     const savedContextLength = await window.api.storeGet("contextLength")
-    if (savedContextLength && contextLengthSelect) {
-      contextLengthSelect.value = savedContextLength
+    if (savedContextLength) {
+      if (contextLengthSelect) contextLengthSelect.value = savedContextLength
+      contextIdx = CONTEXT_STEPS.indexOf(parseInt(savedContextLength, 10))
+      if (contextIdx < 0) contextIdx = 2
+      updateContextStepper()
     }
 
+    // Token stepper
     const savedTokenLimit = await window.api.storeGet("tokenLimit")
-    if (savedTokenLimit && tokenLimitSelect) {
-      tokenLimitSelect.value = savedTokenLimit
+    if (savedTokenLimit) {
+      if (tokenLimitSelect) tokenLimitSelect.value = savedTokenLimit
+      tokenIdx = TOKEN_STEPS.indexOf(parseInt(savedTokenLimit, 10))
+      if (tokenIdx < 0) tokenIdx = 2
+      updateTokenStepper()
+    }
+
+    // Model
+    const savedModel = await window.api.storeGet("model")
+    if (savedModel && modelSelect) {
+      modelSelect.value = savedModel
     }
 
     // Right-click context menu for copying selected text

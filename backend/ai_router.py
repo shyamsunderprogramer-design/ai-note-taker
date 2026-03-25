@@ -320,17 +320,47 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     if provider == "cloud":
         # Use cloud provider for streaming
         try:
-            from cloud_providers import ask_gpt_stream, ask_claude_stream, ask_gemini_stream, ask_grok_stream, ask_deepseek_stream, ask_groq_stream, build_prompt as cloud_build_prompt, clean_ai_output as cloud_clean
+            from cloud_providers import (
+                ask_gpt_stream, ask_claude_stream, ask_gemini_stream,
+                ask_grok_stream, ask_deepseek_stream, ask_groq_stream,
+                build_prompt as cloud_build_prompt,
+                clean_ai_output as cloud_clean
+            )
             final_prompt = cloud_build_prompt(prompt, mode or "adaptive", style, messages)
             model_map = {
+                # OpenAI
                 "openai-gpt-4o-mini": ("openai", "gpt-4o-mini"),
                 "openai-gpt-4o": ("openai", "gpt-4o"),
+                "openai-gpt-4-turbo": ("openai", "gpt-4-turbo"),
+                "openai-o1-mini": ("openai", "o1-mini"),
+                "openai-o3-mini": ("openai", "o3-mini"),
+                "openai-gpt-3.5-turbo": ("openai", "gpt-3.5-turbo"),
+                # Anthropic
                 "anthropic-claude-3-5-haiku": ("anthropic", "claude-3-5-haiku-20241022"),
                 "anthropic-claude-3-5-sonnet": ("anthropic", "claude-3-5-sonnet-20241022"),
+                "anthropic-claude-sonnet-4-20250514": ("anthropic", "claude-sonnet-4-20250514"),
+                "anthropic-claude-opus-4-20250514": ("anthropic", "claude-opus-4-20250514"),
+                # Google
                 "google-gemini-2-0-flash": ("google", "gemini-2.0-flash"),
+                "google-gemini-2-0-flash-exp": ("google", "gemini-2.0-flash-exp"),
+                "google-gemini-1-5-flash": ("google", "gemini-1.5-flash"),
+                "google-gemini-1-5-pro": ("google", "gemini-1.5-pro"),
+                "google-gemini-pro": ("google", "gemini-pro"),
+                # xAI
                 "xai-grok-2-mini": ("xai", "grok-2-mini"),
+                "xai-grok-2": ("xai", "grok-2"),
+                "xai-grok-beta": ("xai", "grok-beta"),
+                # DeepSeek
                 "deepseek-deepseek-chat": ("deepseek", "deepseek-chat"),
+                "deepseek-deepseek-coder": ("deepseek", "deepseek-coder"),
+                "deepseek-deepseek-math": ("deepseek", "deepseek-math"),
+                # Groq
                 "groq-llama-3-3-70b": ("groq", "llama-3.3-70b-versatile"),
+                "groq-llama-3-1-8b": ("groq", "llama-3.1-8b-instant"),
+                "groq-llama-3-2-1b": ("groq", "llama-3.2-1b-preview"),
+                "groq-llama-3-2-3b": ("groq", "llama-3.2-3b-preview"),
+                "groq-mixtral-8x7b": ("groq", "mixtral-8x7b-32768"),
+                "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
             }
             resolved = model_map.get(mode, ("openai", "gpt-4o-mini"))
             provider_name, model_name = resolved
