@@ -306,10 +306,39 @@ function copyConversation(conversation) {
     const label = msg.role === "user" ? "You:" : "AI:"
     return `${label} ${msg.text}`
   }).join("\n\n")
-  navigator.clipboard.writeText(text).then(() => {
-    // Show brief toast feedback
-    showToast("Conversation copied!")
-  })
+
+  // Use clipboard API with fallback for Electron
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("Conversation copied!")
+    }).catch(err => {
+      console.error("Clipboard API error:", err)
+      fallbackCopyText(text)
+    })
+  } else {
+    fallbackCopyText(text)
+  }
+}
+
+function fallbackCopyText(text) {
+  // Fallback using textarea selection for Electron compatibility
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.style.position = "fixed"
+  textarea.style.left = "-9999px"
+  textarea.style.top = "0"
+  textarea.setAttribute("readonly", "")
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    const success = document.execCommand("copy")
+    showToast(success ? "Conversation copied!" : "Copy failed")
+  } catch (err) {
+    console.error("Fallback copy error:", err)
+    showToast("Copy failed")
+  } finally {
+    document.body.removeChild(textarea)
+  }
 }
 
 function showToast(message) {
@@ -659,7 +688,7 @@ async function renderHistoryList() {
 
     convs.forEach(conv => {
       const isActive = conv.id === currentConversationId
-      const msgCount = conv.messages?.length || 0
+      const msgCount = conv.messageCount || 0
       const lastMsg = conv.messages?.slice(-1)[0]
       const mode = lastMsg?.mode || "adaptive"
       const firstUserMsg = conv.messages?.find(m => m.role === "user")
@@ -1479,7 +1508,7 @@ if (resizeHandle) {
   document.addEventListener("mousemove", (e) => {
     if (!isResizing) return
     const delta = e.screenY - startY
-    const newHeight = Math.max(300, startHeight + delta)
+    const newHeight = Math.max(280, startHeight + delta)
     window.api.resizeWindow(null, newHeight)
   })
 

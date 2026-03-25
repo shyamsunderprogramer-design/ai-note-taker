@@ -43,6 +43,41 @@ process.on("unhandledRejection", (reason) => {
 // ==============================
 // WINDOW STATE
 // ==============================
+const DEFAULT_BOUNDS = { width: 420, height: 320, x: undefined, y: undefined }
+
+function validateBounds(bounds) {
+  // Ensure window has valid dimensions
+  if (!bounds.width || bounds.width < 360) bounds.width = DEFAULT_BOUNDS.width
+  if (!bounds.height || bounds.height < 280) bounds.height = DEFAULT_BOUNDS.height
+
+  // Ensure window is on a visible screen
+  const displays = require("electron").screen.getAllDisplays()
+  const windowCenter = {
+    x: bounds.x !== undefined ? bounds.x + bounds.width / 2 : bounds.x,
+    y: bounds.y !== undefined ? bounds.y + bounds.height / 2 : bounds.y
+  }
+
+  let onScreen = false
+  for (const display of displays) {
+    const { x, y, width, height } = display.bounds
+    if (windowCenter.x >= x && windowCenter.x <= x + width &&
+        windowCenter.y >= y && windowCenter.y <= y + height) {
+      onScreen = true
+      break
+    }
+  }
+
+  // If no saved position or not on screen, center on primary display
+  if (bounds.x === undefined || bounds.y === undefined || !onScreen) {
+    const primary = require("electron").screen.getPrimaryDisplay()
+    const { width: screenWidth, height: screenHeight } = primary.workAreaSize
+    bounds.x = Math.round((screenWidth - bounds.width) / 2)
+    bounds.y = Math.round((screenHeight - bounds.height) / 2)
+  }
+
+  return bounds
+}
+
 function saveBounds() {
   if (win && !win.isMaximized() && !win.isMinimized()) {
     store.set("windowBounds", win.getBounds())
@@ -53,15 +88,16 @@ function saveBounds() {
 // WINDOW CREATION
 // ==============================
 function createWindow() {
-  const savedBounds = store.get("windowBounds", { width: 960, height: 720 })
+  const savedBounds = store.get("windowBounds", DEFAULT_BOUNDS)
+  const bounds = validateBounds(savedBounds)
 
   win = new BrowserWindow({
-    width: savedBounds.width,
-    height: savedBounds.height,
-    x: savedBounds.x,
-    y: savedBounds.y,
-    minWidth: 520,
-    minHeight: 480,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+    minWidth: 360,
+    minHeight: 280,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
@@ -87,15 +123,6 @@ function createWindow() {
 
   // Initialize stealth after window loads
   stealth.init(win)
-
-  // Prevent background from going opaque on resize/maximize
-  win.on("maximize", () => {
-    win.setBackgroundColor("#00000000")
-  })
-
-  win.on("unmaximize", () => {
-    win.setBackgroundColor("#00000000")
-  })
 }
 
 // ==============================
@@ -260,7 +287,6 @@ ipcMain.handle("window:restore", () => {
   } else {
     w.setSize(960, 720)
   }
-  w.setResizable(true)
   w.show()
   w.focus()
 })
