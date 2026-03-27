@@ -202,6 +202,53 @@ function escapeHtml(text) {
     .replace(/'/g, "&#039;")
 }
 
+function formatLists(text) {
+  if (!text) return text
+  const lines = text.split("\n")
+  const result = []
+  let inList = false
+  let listType = null // 'ol', 'ul', null
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)/)
+    const bulletMatch = trimmed.match(/^[-*]\s+(.*)/)
+    const letteredMatch = trimmed.match(/^([a-z])\.\s+(.*)/)
+
+    if (numberedMatch || letteredMatch) {
+      if (!inList || listType !== "ol") {
+        if (inList) result.push(listType === "ol" ? "</ol>" : "</ul>")
+        result.push("<ol class='chat-list'>")
+        inList = true
+        listType = "ol"
+      }
+      const content = numberedMatch ? numberedMatch[2] : letteredMatch[2]
+      result.push(`<li>${content}</li>`)
+    } else if (bulletMatch) {
+      if (!inList || listType !== "ul") {
+        if (inList) result.push(listType === "ol" ? "</ol>" : "</ul>")
+        result.push("<ul class='chat-list'>")
+        inList = true
+        listType = "ul"
+      }
+      result.push(`<li>${bulletMatch[1]}</li>`)
+    } else {
+      if (inList) {
+        result.push(listType === "ol" ? "</ol>" : "</ul>")
+        inList = false
+        listType = null
+      }
+      result.push(line)
+    }
+  }
+
+  if (inList) {
+    result.push(listType === "ol" ? "</ol>" : "</ul>")
+  }
+
+  return result.join("\n")
+}
+
 function formatDate(timestamp) {
   if (!timestamp) return ""
   const d = new Date(timestamp)
@@ -263,6 +310,8 @@ function loadConversationIntoUI(conversation) {
     } else {
       addMessage("assistant", msg.text)
     }
+    // Keep currentMessages in sync for context on next query
+    currentMessages.push({ role: msg.role, text: msg.text, timestamp: msg.timestamp || Date.now() })
   })
 
   suppressAutoSave = false
@@ -966,17 +1015,40 @@ function addErrorMessage(text) {
   return msg
 }
 
-// Helper to set text with newline support
-function setBubbleText(bubble, text) {
-  // Escape HTML and convert newlines to <br>
-  const escaped = text
+// Helper to set text with newline support and optional list formatting
+function setBubbleText(bubble, text, applyLists = true) {
+  // Step 1: normalize text into clean lines
+  let cleaned = text
+    .replace(/\*\*([^*:]+)\*\*/g, "$1")           // **bold** -> bold
+    .replace(/\*\*([^*:]+)\*\*:\s*/g, "$1")       // **bold**: -> bold
+    .replace(/^#{1,6}\s*/gm, "")                   // ### Header and ###1. -> clean
+    // Split mid-paragraph bullets: "text- bullet" -> "text\n- bullet"
+    .replace(/(\S)\s*-\s+/g, "$1\n- ")
+    // Split mid-paragraph bullets: "text* bullet" -> "text\n* bullet"
+    .replace(/(\S)\s*\*\s+/g, "$1\n* ")
+    // Split numbered items that run together: "text1. item" -> "text\n1. item"
+    .replace(/(\S)(\d+\.)/g, "$1\n$2")
+    // Split space-before-number: "text 1. item" -> "text\n1. item"
+    .replace(/\s+(\d+\.)/g, "\n$1")
+    // Split double-newlines
+    .replace(/\n\n+/g, "\n")
+
+  // Step 2: escape HTML
+  cleaned = cleaned
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;")
-    .replace(/\n/g, "<br>")
-  bubble.innerHTML = escaped
+
+  // Step 3: strip [auto] tag
+  cleaned = cleaned.replace(/\s*\[auto\]\s*$/gi, "")
+
+  // Step 4: split into lines, filter empty, wrap each
+  const lines = cleaned.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+  const html = lines.map(l => `<span>${l}</span>`).join("<br>")
+
+  bubble.innerHTML = html
 }
 
 function streamMessage(role, text) {
@@ -984,16 +1056,11 @@ function streamMessage(role, text) {
 
   if (latestBotMessage && latestBotMessage.role === "assistant") {
     // Streaming chunk for assistant message - accumulate text
-    latestBotMessage.bubble.innerHTML += text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;")
-      .replace(/\n/g, "<br>")
-    if (latestBotMessage.accumulatedText !== undefined) {
-      latestBotMessage.accumulatedText += text
-    }
+    latestBotMessage.accumulatedText = (latestBotMessage.accumulatedText || "") + text
+    // Strip leading "AI:" prefix for display
+    const displayText = latestBotMessage.accumulatedText.replace(/^AI:\s*/i, "")
+    // Use setBubbleText without list formatting during streaming
+    setBubbleText(latestBotMessage.bubble, displayText, false)
     scrollChat()
     return latestBotMessage.element
   }
@@ -1017,9 +1084,12 @@ function streamMessage(role, text) {
     copyBtn.className = "msg-copy-btn"
     copyBtn.textContent = "Copy"
     copyBtn.addEventListener("click", () => {
-      const textToCopy = latestBotMessage && latestBotMessage.accumulatedText !== undefined
+      let textToCopy = (latestBotMessage && latestBotMessage.accumulatedText !== undefined)
         ? latestBotMessage.accumulatedText
-        : bubble.innerText.replace(/\[.*?\]\s*$/, "").trim()
+        : bubble.innerText
+      // Strip [mode] tag and leading "AI:" prefix
+      textToCopy = textToCopy.replace(/\[.*?\]\s*$/, "").trim()
+      textToCopy = textToCopy.replace(/^AI:\s*/i, "").trim()
       navigator.clipboard.writeText(textToCopy).then(() => {
         copyBtn.textContent = "✓"
         copyBtn.classList.add("copied")
@@ -1050,9 +1120,18 @@ function streamMessage(role, text) {
 function finishStream() {
   // Save assistant message to currentMessages before clearing
   if (latestBotMessage && latestBotMessage.role === "assistant" && !suppressAutoSave) {
-    // Get plain text, stripping the mode tag if present
-    const rawText = latestBotMessage.bubble.innerText || ""
-    const text = rawText.replace(/\[.*?\]\s*$/, "").trim()
+    // Use accumulatedText which is the raw unformatted text
+    let text = (latestBotMessage.accumulatedText || "").trim()
+    // Strip [mode] tag from the end if present
+    text = text.replace(/\[.*?\]\s*$/, "").trim()
+    // Strip leading "AI:" prefix that some models return
+    text = text.replace(/^AI:\s*/i, "")
+    // Strip ParagraphN: artifacts
+    text = text.replace(/^Paragraph\s*\d+:\s*/gim, "")
+    // Strip "Conversation history:" labels
+    text = text.replace(/^Conversation history:\s*/gim, "")
+    // Strip echoed "You:" or "AI:" labels at line starts
+    text = text.replace(/^(You|AI)\s*:\s*/gim, "")
     const modeTag = document.querySelector(".mode-tag")
     const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
     currentMessages.push({ role: "assistant", text, timestamp: Date.now(), mode: currentMode })
@@ -1159,36 +1238,47 @@ async function streamAIResponse(query) {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let buffer = ""
 
-    // Create assistant message element for streaming
+    // Create assistant message element for streaming (initial empty message)
     streamMessage("assistant", "")
+
+    let rawText = ""
+    let lastRawLen = 0
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
 
-      buffer += decoder.decode(value, { stream: true })
+      const chunk = decoder.decode(value, { stream: true })
+      rawText += chunk
+      lastRawLen = rawText.length
+
       if (latestBotMessage && latestBotMessage.bubble) {
-        let processed = buffer
+        // Strip leading "AI:" prefix and mode tags from display
+        let displayText = rawText.replace(/^AI:\s*/i, "").replace(/\[.*?\]\s*$/, "").trim()
+
+        // Escape HTML safely (skip < > to preserve any embedded formatting)
+        const escaped = displayText
           .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;")
+          .replace(/\n/g, "<br>")
 
-        // Ensure bullet points are on separate lines
-        processed = processed.replace(/\* /g, "<br>* ")
+        // Rebuild innerHTML with blinking cursor at end
+        latestBotMessage.bubble.innerHTML = escaped + '<span class="typing-cursor"></span>'
 
-        latestBotMessage.bubble.innerHTML += processed
-        // Also update plain text accumulator for copy functionality
-        if (latestBotMessage.accumulatedText !== undefined) {
-          latestBotMessage.accumulatedText += buffer
-        }
+        // Update raw accumulator for copy/save
+        latestBotMessage.accumulatedText = rawText
       }
-      buffer = ""
       scrollChat()
     }
+
+    // Stream done — clean up cursor, show final text
+    if (latestBotMessage && latestBotMessage.bubble) {
+      let finalText = rawText.replace(/^AI:\s*/i, "").replace(/\[.*?\]\s*$/, "").trim()
+      setBubbleText(latestBotMessage.bubble, finalText, true)
+    }
+    scrollChat()
 
     // Add mode info
     const modelInfo = ` <span class="mode-tag">[${mode}]</span>`
@@ -1595,12 +1685,12 @@ appMenu.addEventListener("click", async (e) => {
     settingsPanel.classList.add("open")
     try {
       const providers = await window.api.getProviders()
-      updateProviderUI("openai", providers.openai)
-      updateProviderUI("anthropic", providers.anthropic)
-      updateProviderUI("google", providers.google)
-      updateProviderUI("xai", providers.xai)
-      updateProviderUI("deepseek", providers.deepseek)
-      updateProviderUI("groq", providers.groq)
+      syncProviderRow("openai", !!providers.openai)
+      syncProviderRow("anthropic", !!providers.anthropic)
+      syncProviderRow("google", !!providers.google)
+      syncProviderRow("xai", !!providers.xai)
+      syncProviderRow("deepseek", !!providers.deepseek)
+      syncProviderRow("groq", !!providers.groq)
     } catch (e) { console.error(e) }
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) cloudModelSelect.value = savedCloudModel
@@ -1682,6 +1772,13 @@ const configProviderIcon = document.getElementById("configProviderIcon")
 const configApiKeyInput = document.getElementById("configApiKeyInput")
 const configSaveBtn = document.getElementById("configSaveBtn")
 const configTestResult = document.getElementById("configTestResult")
+const settingsBackBtn = document.getElementById("settingsBackBtn")
+const settingsTitle = document.getElementById("settingsTitle")
+
+// Back button — return to provider list from config view
+settingsBackBtn.addEventListener("click", () => {
+  closeProviderConfig()
+})
 
 // Provider metadata — full model catalog
 const PROVIDER_META = {
@@ -1768,6 +1865,10 @@ function openProviderConfig(provider) {
   settingsProvidersView.style.display = "none"
   providerConfigPanel.classList.add("open")
 
+  // Update header for config mode
+  settingsBackBtn.style.display = "flex"
+  settingsTitle.textContent = meta.name
+
   configApiKeyInput.focus()
 }
 
@@ -1777,6 +1878,10 @@ function closeProviderConfig() {
   settingsProvidersView.style.display = ""
   configTestResult.className = "config-inline-result"
   configTestResult.textContent = ""
+
+  // Restore header to Settings
+  settingsBackBtn.style.display = "none"
+  settingsTitle.textContent = "Settings"
 }
 
 // Load provider config from store
@@ -1787,10 +1892,18 @@ async function loadProviderConfig(provider) {
   configApiKeyInput.value = stored.apiKey || ""
 
   const statusBadge = document.getElementById("configStatusBadge")
+  const toggle = document.getElementById("toggle-" + provider)
+  const isEnabled = stored.enabled !== false && hasKey
   if (statusBadge) {
-    statusBadge.textContent = hasKey ? "Configured" : "Not configured"
-    statusBadge.className = hasKey ? "config-status-badge configured" : "config-status-badge"
+    if (isEnabled) {
+      statusBadge.textContent = "Connected"
+      statusBadge.className = "config-status-badge enabled"
+    } else {
+      statusBadge.textContent = hasKey ? "Disabled" : "Add API key to enable"
+      statusBadge.className = "config-status-badge"
+    }
   }
+  if (toggle) toggle.checked = isEnabled
 }
 
 // Check if provider has API key configured (from backend)
@@ -1803,8 +1916,9 @@ async function checkProviderHasKey(provider) {
   }
 }
 
-// Close settings panel
+// Close settings panel — reset to provider list first
 closeSettingsBtn.addEventListener("click", () => {
+  closeProviderConfig()
   settingsPanel.classList.remove("open")
 })
 
@@ -1827,9 +1941,8 @@ configSaveBtn.addEventListener("click", async () => {
       enabled: true
     })
 
-    // Update UI
-    updateProviderUI(activeProvider, true)
-    updateActiveProviders()
+    // Update UI — mark provider as enabled
+    syncProviderRow(activeProvider, true)
 
     // Show success
     configTestResult.className = "config-inline-result success"
@@ -1850,12 +1963,51 @@ configApiKeyInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") configSaveBtn.click()
 })
 
-function updateProviderUI(key, configured) {
+// Sync a provider row's enabled/disabled state
+function syncProviderRow(key, enabled) {
   const card = document.getElementById("card-" + key)
-  const statusDot = document.getElementById("status-dot-" + key)
-  if (card) card.classList.toggle("configured", configured)
-  if (statusDot) statusDot.classList.toggle("active", configured)
+  const toggle = document.getElementById("toggle-" + key)
+  const statusEl = document.getElementById("status-" + key)
+  if (!card) return
+
+  card.classList.toggle("provider-enabled", enabled)
+  card.classList.toggle("provider-disabled", !enabled)
+  if (toggle) toggle.checked = enabled
+  if (statusEl) {
+    statusEl.className = "provider-status " + (enabled ? "connected" : "dimmed")
+    statusEl.textContent = enabled ? "Connected" : "Add API key to enable"
+  }
 }
+
+// Wire up toggle switches for all cloud providers
+const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
+CLOUD_PROVIDERS.forEach(p => {
+  const toggle = document.getElementById("toggle-" + p)
+  if (!toggle) return
+  toggle.addEventListener("change", async () => {
+    const isEnabled = toggle.checked
+    const stored = await window.api.storeGet("provider_" + p) || {}
+    const hasKey = await checkProviderHasKey(p)
+
+    if (isEnabled && !hasKey) {
+      // Need API key — open config panel
+      openProviderConfig(p)
+      return
+    }
+
+    // Persist enabled state
+    if (stored.apiKey) {
+      await window.api.storeSet("provider_" + p, { ...stored, enabled: isEnabled })
+    }
+
+    // Notify backend
+    if (isEnabled) {
+      try { await window.api.configureProvider(p, stored.apiKey) } catch {}
+    }
+
+    syncProviderRow(p, isEnabled)
+  })
+})
 
 function updateActiveProviders() {
   const selected = cloudModelSelect ? cloudModelSelect.value : "auto"
@@ -1896,23 +2048,12 @@ function updateActiveProviders() {
   }
   const activeKey = activeMap[selected]
 
-  // Clear all active bars
-  document.querySelectorAll(".provider-active-bar").forEach(el => el.classList.remove("active"))
+  // Clear .active from all provider rows
   document.querySelectorAll(".provider-row").forEach(el => el.classList.remove("active"))
 
-  // Set active for the current cloud model provider, or ollama
-  if (activeKey) {
-    const bar = document.getElementById("active-" + activeKey)
-    if (bar) bar.classList.add("active")
-    const card = document.getElementById("card-" + activeKey)
-    if (card) card.classList.add("active")
-  } else {
-    // Ollama is active (default/local mode)
-    const bar = document.getElementById("active-ollama")
-    if (bar) bar.classList.add("active")
-    const card = document.getElementById("card-ollama")
-    if (card) card.classList.add("active")
-  }
+  // Set .active for the current cloud model provider, or ollama
+  const activeCard = document.getElementById("card-" + (activeKey || "ollama"))
+  if (activeCard) activeCard.classList.add("active")
 }
 
 // Provider config buttons — open inline panel
@@ -1926,11 +2067,20 @@ document.querySelectorAll(".provider-config-btn").forEach(btn => {
 
 // Close settings when clicking outside
 document.addEventListener("click", (e) => {
-  if (
-    settingsPanel.classList.contains("open") &&
-    !settingsPanel.contains(e.target) &&
-    !menuBtn.contains(e.target)
-  ) {
+  if (!settingsPanel.classList.contains("open")) return
+
+  const clickedAppMenu = appMenu.contains(e.target)
+
+  if (clickedAppMenu) return
+
+  if (!settingsPanel.contains(e.target) && !menuBtn.contains(e.target)) {
+    // If config panel is open, just go back to provider list
+    if (providerConfigPanel.classList.contains("open")) {
+      closeProviderConfig()
+      return
+    }
+    // Otherwise close the whole panel
+    closeProviderConfig()
     settingsPanel.classList.remove("open")
   }
 })
@@ -1987,8 +2137,22 @@ async function init() {
     // Sync stealth state on startup
     await syncStealthState()
     updateStealthUI(null, isUndetectable)
+
+    // Sync all provider rows on startup
+    await syncAllProviderRows()
   } catch (e) {
     console.error(e)
+  }
+}
+
+// Sync all cloud provider rows — called on init
+async function syncAllProviderRows() {
+  const providers = await window.api.getProviders()
+  for (const p of CLOUD_PROVIDERS) {
+    const hasKey = !!providers[p]
+    const stored = (await window.api.storeGet("provider_" + p)) || {}
+    const isEnabled = stored.enabled !== false && hasKey
+    syncProviderRow(p, isEnabled)
   }
 }
 

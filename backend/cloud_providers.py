@@ -2,21 +2,19 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from utils import clean_ai_output
-
 load_dotenv()
 
 
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
-    """Build prompt for cloud providers (same logic as ai_router but for cloud)"""
+    """Build prompt for cloud providers"""
     if style == "concise":
-        style_instruction = "Give a very short answer in 1-2 sentences only."
+        style_instruction = "Answer in 1-2 sentences only. Be direct."
     elif style == "detailed":
-        style_instruction = "Give a detailed explanation in paragraph form."
+        style_instruction = "Answer in detail with clear explanations."
     elif style == "bulletpoint":
-        style_instruction = "Respond using ONLY bullet points with asterisk (*) prefix, ONE bullet per line, NO numbered lists.\nFormat:\n* point one here\n* point two here\n* point three here\nEach line MUST start with exactly one asterisk (*) followed by a space, then the text. No numbers, no dashes, no other symbols."
+        style_instruction = "Use bullet points with asterisk (*). One bullet per line."
     else:
-        style_instruction = "Give a concise answer."
+        style_instruction = "Answer concisely."
 
     # Build conversation history context
     history_block = ""
@@ -25,48 +23,16 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
         for msg in messages:
             role_label = "You" if msg.get("role") == "user" else "AI"
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
-        history_block = "Conversation history:\n" + "\n".join(history_lines) + "\n\n"
+        history_block = "Conversation:\n" + "\n".join(history_lines) + "\n\n"
 
-    return f"""Answer the user's question directly.
-{style_instruction}
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+    return f"""Instructions:
+- {style_instruction}
+- Do not repeat the user's question
+- Do not echo labels like You: or AI:
+- If unclear, say: Please clarify
 
-{history_block}User question: {user_input}
-"""
-
-    if mode == "summary":
-        return f"""You are a meeting notes assistant. Read the conversation transcript below and produce a structured summary.
-
-STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS (use the same markdown formatting):
-
-# [Topic / Title from conversation]
-
-## Overview
-[Brief 1-2 sentence overview of what this conversation was about]
-
-## Key Points
-[3-5 bullet points of the most important things discussed]
-* bullet one
-* bullet two
-* ...
-
-## Next Steps / Action Items
-[Any tasks, follow-ups, or action items mentioned]
-* action item one
-* action item two
-* ...
-
-## Details
-[Additional important details, definitions, or context that came up]
-- detail one
-- detail two
-
-Do not mention that you are an AI or that you received a transcript. Just produce the summary directly.
-Conversation transcript:
-{user_input}
-"""
+{history_block}User: {user_input}
+AI:"""
 
 # ==============================
 # 🌐 API KEYS & CONFIGS
@@ -304,9 +270,9 @@ def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False):
     return response
 
 
-def ask_gpt_stream(prompt, model="gpt-4o-mini", messages=None):
+def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise", messages=None):
     """OpenAI streaming"""
-    final_prompt = build_prompt(prompt, messages=messages)
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     resp = ask_gpt(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:
@@ -325,9 +291,9 @@ def ask_gpt_stream(prompt, model="gpt-4o-mini", messages=None):
                 pass
 
 
-def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", messages=None):
+def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive", style="concise", messages=None):
     """Anthropic streaming"""
-    final_prompt = build_prompt(prompt, messages=messages)
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     api_key = get_anthropic_key()
     headers = {
         "x-api-key": api_key,
@@ -368,9 +334,9 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", messages=None):
                 pass
 
 
-def ask_gemini_stream(prompt, model="gemini-2.0-flash", messages=None):
+def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="concise", messages=None):
     """Google Gemini streaming"""
-    final_prompt = build_prompt(prompt, messages=messages)
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     api_key = get_google_key()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
     body = {
@@ -394,9 +360,9 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", messages=None):
                 pass
 
 
-def ask_grok_stream(prompt, model="grok-2-mini", messages=None):
+def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise", messages=None):
     """xAI Grok streaming"""
-    final_prompt = build_prompt(prompt, messages=messages)
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     resp = ask_grok(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:
@@ -415,9 +381,9 @@ def ask_grok_stream(prompt, model="grok-2-mini", messages=None):
                 pass
 
 
-def ask_deepseek_stream(prompt, model="deepseek-chat", messages=None):
+def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="concise", messages=None):
     """DeepSeek streaming"""
-    final_prompt = build_prompt(prompt, messages=messages)
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     resp = ask_deepseek(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:
@@ -436,9 +402,9 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", messages=None):
                 pass
 
 
-def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", messages=None):
+def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", style="concise", messages=None):
     """Groq streaming"""
-    final_prompt = build_prompt(prompt, messages=messages)
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     resp = ask_groq(final_prompt, model=model, stream=True)
     for line in resp.iter_lines():
         if not line:

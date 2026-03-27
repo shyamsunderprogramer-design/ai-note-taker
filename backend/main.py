@@ -342,6 +342,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
 
         try:
             buffer = ""
+            MAX_BUFFER = 200  # force flush when buffer gets large
 
             for chunk in route_ai_stream(q, mode, style, provider, messages):
                 if not chunk:
@@ -349,7 +350,8 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
 
                 buffer += chunk
 
-                if chunk.endswith((" ", ".", ",", "?", "!", "\n")):
+                # Flush on punctuation OR when buffer is large enough
+                if chunk.endswith((" ", ".", ",", "?", "!", "\n")) or len(buffer) >= MAX_BUFFER:
                     cleaned_buffer = clean_ai_output(buffer)
                     if cleaned_buffer:
                         yield cleaned_buffer + " "

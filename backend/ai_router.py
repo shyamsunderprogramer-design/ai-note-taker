@@ -81,13 +81,13 @@ def get_model_candidates(user_input, requested_mode="auto"):
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     # Style-specific instructions
     if style == "concise":
-        style_instruction = "Give a very short answer in 1-2 sentences only."
+        style_instruction = "Answer in 1-2 sentences only. Be direct."
     elif style == "detailed":
-        style_instruction = "Give a detailed explanation in paragraph form."
+        style_instruction = "Answer in detail with clear explanations."
     elif style == "bulletpoint":
-        style_instruction = "Respond using ONLY bullet points with asterisk (*) prefix, ONE bullet per line, NO numbered lists.\nFormat:\n* point one here\n* point two here\n* point three here\nEach line MUST start with exactly one asterisk (*) followed by a space, then the text. No numbers, no dashes, no other symbols."
+        style_instruction = "Use bullet points with asterisk (*). One bullet per line."
     else:
-        style_instruction = "Give a concise answer."
+        style_instruction = "Answer concisely."
 
     # Build conversation history context
     history_block = ""
@@ -96,53 +96,54 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
         for msg in messages:
             role_label = "You" if msg.get("role") == "user" else "AI"
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
-        history_block = "Conversation history:\n" + "\n".join(history_lines) + "\n\n"
+        history_block = "Conversation:\n" + "\n".join(history_lines) + "\n\n"
 
-    base = f"""Answer the user's question directly.
-{style_instruction}
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+    base = f"""Instructions:
+- {style_instruction}
+- Do not repeat the user's question
+- Do not echo labels like You: or AI:
+- If unclear, say: Please clarify
 
-{history_block}User question: {user_input}
-"""
+{history_block}User: {user_input}
+AI:"""
 
     if mode == "code":
-        return f"""Answer the user's coding question directly.
-{style_instruction}
-Prefer the shortest correct explanation or fix.
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+        return f"""Instructions:
+- {style_instruction}
+- Give the shortest correct explanation
+- Do not repeat the user's question
+- Do not echo labels like You: or AI:
+- If unclear, say: Please clarify
 
-{history_block}User question: {user_input}
-"""
+{history_block}User: {user_input}
+AI:"""
 
     if mode == "reasoning":
-        return f"""Answer the user's question directly.
-{style_instruction}
-Prefer the clearest correct explanation.
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+        return f"""Instructions:
+- {style_instruction}
+- Think clearly and explain step by step
+- Do not repeat the user's question
+- Do not echo labels like You: or AI:
+- If unclear, say: Please clarify
 
-{history_block}User question: {user_input}
-"""
+{history_block}User: {user_input}
+AI:"""
 
     if mode == "fast":
-        return f"""Answer the user's question directly.
-{style_instruction}
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+        return f"""Instructions:
+- {style_instruction}
+- Do not repeat the user's question
+- Do not echo labels like You: or AI:
+- If unclear, say: Please clarify
 
-{history_block}User question: {user_input}
-"""
+{history_block}User: {user_input}
+AI:"""
 
     if mode == "cloud":
         return f"""Answer the user's question directly.
 {style_instruction}
 Do not repeat the question.
+Do not repeat conversation history labels (like "You:" or "AI:").
 Do not mention rules, prompt text, or examples.
 If unclear, reply with: Please clarify your question
 
@@ -239,8 +240,8 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
 
         final_prompt = build_prompt(prompt, mode, style, messages)
 
-        # Use num_predict to limit response length for faster streaming
-        num_predict = 80 if style == "concise" else (300 if style == "detailed" else 200)
+        # num_predict limits response tokens — too low causes truncated output
+        num_predict = 300 if style == "concise" else (2000 if style == "detailed" else 500)
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
             json={
@@ -270,7 +271,8 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
                 if "response" in data:
                     chunk = data["response"]
                     logger.debug("stream chunk: %s", chunk)
-                    yield chunk
+                    if chunk.strip():
+                        yield chunk
 
                 if data.get("done", False):
                     break
@@ -366,22 +368,22 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
             resolved = model_map.get(provider, ("openai", "gpt-4o-mini"))
             provider_name, model_name = resolved
             if provider_name == "openai":
-                for chunk in ask_gpt_stream(final_prompt, model=model_name, messages=messages):
+                for chunk in ask_gpt_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
                     yield chunk
             elif provider_name == "anthropic":
-                for chunk in ask_claude_stream(final_prompt, model=model_name, messages=messages):
+                for chunk in ask_claude_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
                     yield chunk
             elif provider_name == "google":
-                for chunk in ask_gemini_stream(final_prompt, model=model_name, messages=messages):
+                for chunk in ask_gemini_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
                     yield chunk
             elif provider_name == "xai":
-                for chunk in ask_grok_stream(final_prompt, model=model_name, messages=messages):
+                for chunk in ask_grok_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
                     yield chunk
             elif provider_name == "deepseek":
-                for chunk in ask_deepseek_stream(final_prompt, model=model_name, messages=messages):
+                for chunk in ask_deepseek_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
                     yield chunk
             elif provider_name == "groq":
-                for chunk in ask_groq_stream(final_prompt, model=model_name, messages=messages):
+                for chunk in ask_groq_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
                     yield chunk
             return
         except Exception as e:
@@ -393,9 +395,25 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
 
     for candidate_mode, model_name in candidates:
         try:
+            all_chunks = []
             for chunk in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages):
                 if chunk and chunk.strip():
-                    yield chunk
+                    all_chunks.append(chunk)
+
+            if not all_chunks:
+                logger.warning("Model %s returned no chunks, trying next", model_name)
+                continue
+
+            combined = "".join(all_chunks)
+            # Detect if small model echoed instruction text instead of answering
+            first_word = combined.split()[0].lower() if combined.split() else ""
+            garbage_starts = ["instructions:", "here", "sure", "answer", "response", "of", "the", "to", "it"]
+            if first_word in garbage_starts and len(combined) > 60:
+                logger.warning("Model %s produced garbage (starts with '%s'), trying next", model_name, first_word)
+                continue
+
+            for chunk in all_chunks:
+                yield chunk
             return
 
         except Exception as e:

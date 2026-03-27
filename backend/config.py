@@ -16,7 +16,7 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
 # Default fallback model (must exist in `ollama list`)
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
-MODEL_FAST = os.getenv("OLLAMA_MODEL_FAST", "tinyllama:latest")
+MODEL_FAST = os.getenv("OLLAMA_MODEL_FAST", "qwen2.5:1.5b")
 MODEL_CLOUD = os.getenv("OLLAMA_MODEL_CLOUD", "minimax-m2.7:cloud")
 MODEL_REASONING = os.getenv("OLLAMA_MODEL_REASONING", "qwen2.5:1.5b")
 MODEL_CODE = os.getenv("OLLAMA_MODEL_CODE", "qwen2.5:1.5b")
