@@ -1918,15 +1918,6 @@ select option {
   100% { opacity: 0; }
 }
 
-/* Token counter display */
-.token-counter {
-  font-size: 0.786em;
-  color: var(--text-dim);
-  padding: 0 6px;
-  align-self: center;
-  white-space: nowrap;
-}
-
 /* ==============================
    RESPONSIVE
    ============================== */
