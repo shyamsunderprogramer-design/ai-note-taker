@@ -1084,46 +1084,48 @@ function copyCodeBlock(btn) {
   })
 }
 
-// Helper to highlight YAML syntax
-function highlightYaml(code) {
-  // YAML syntax highlighting - process line by line
-  const lines = code.split("\n")
-  return lines.map(line => {
-    // Match key: value pattern with optional leading whitespace
-    const yamlLineRegex = /^(\s*)([\w-]+)(\s*:\s*)(.*)$/
-    const match = line.match(yamlLineRegex)
+// Detect language from code content if not specified
+function detectCodeLanguage(code) {
+  const trimmed = code.trim()
+  if (trimmed.startsWith("apiVersion:") || trimmed.includes("Kind:") || trimmed.includes("metadata:")) return "yaml"
+  else if (trimmed.startsWith("import ") || trimmed.startsWith("package ")) return "java"
+  else if (trimmed.startsWith("from ") || trimmed.startsWith("import ") && trimmed.includes("def ")) return "python"
+  else if (trimmed.includes("function") || trimmed.includes("const ") || trimmed.includes("let ") || trimmed.includes("=>")) return "javascript"
+  else if (trimmed.includes("public class") || trimmed.includes("namespace ") || trimmed.includes("using System")) return "csharp"
+  else if (trimmed.includes("func ") && trimmed.includes("package ")) return "go"
+  else if (trimmed.includes("fn ") && trimmed.includes("let mut")) return "rust"
+  else if (trimmed.includes("<") && trimmed.includes(">") && (trimmed.includes("/>") || trimmed.includes("</"))) return "xml"
+  else if (trimmed.startsWith("{") && trimmed.includes(":")) return "json"
+  return "code"
+}
 
-    if (!match) {
-      // Check for list items
-      if (line.trim().startsWith("-")) {
-        const content = line.trim().substring(1).trim()
-        return `<span class="yaml-list">${escapeHtml(line)}</span>`
+// Helper to highlight code using hljs (already loaded locally)
+function highlightCode(code, lang) {
+  if (lang === "yaml" || lang === "code") {
+    // Use auto-detect for better highlighting
+    if (window.hljs && window.hljs.highlightAuto) {
+      try {
+        const result = window.hljs.highlightAuto(code)
+        return result.value
+      } catch (e) {}
+    }
+    return escapeHtml(code)
+  }
+  if (window.hljs && window.hljs.highlight) {
+    try {
+      const result = window.hljs.highlight(code, { language: lang, ignoreIllegals: true })
+      return result.value
+    } catch (e) {
+      // Fall back to auto-detect
+      try {
+        const result = window.hljs.highlightAuto(code)
+        return result.value
+      } catch (e2) {
+        return escapeHtml(code)
       }
-      return escapeHtml(line)
     }
-
-    const [, indent, key, colon, value] = match
-
-    // Convert leading spaces to &nbsp; to preserve indentation
-    const preservedIndent = indent.replace(/ /g, '&nbsp;')
-
-    let highlightedValue
-    if (value.match(/^['"].*['"]$/)) {
-      highlightedValue = `<span class="yaml-string">${escapeHtml(value)}</span>`
-    } else if (value.match(/^\d+\.?\d*$/)) {
-      highlightedValue = `<span class="yaml-number">${escapeHtml(value)}</span>`
-    } else if (value === 'true' || value === 'false' || value === 'null') {
-      highlightedValue = `<span class="yaml-bool">${escapeHtml(value)}</span>`
-    } else if (value.startsWith('-')) {
-      highlightedValue = `<span class="yaml-list">${escapeHtml(value)}</span>`
-    } else if (value === '' || value === '|') {
-      highlightedValue = escapeHtml(value)
-    } else {
-      highlightedValue = `<span class="yaml-value">${escapeHtml(value)}</span>`
-    }
-
-    return `${preservedIndent}<span class="yaml-key">${escapeHtml(key)}</span>${escapeHtml(colon)}${highlightedValue}`
-  }).join("\n")
+  }
+  return escapeHtml(code)
 }
 
 // ==============================
@@ -1133,7 +1135,6 @@ function highlightYaml(code) {
 /**
  * Full message formatter — handles code blocks, headings, lists,
  * paragraphs, blockquotes, and inline markdown (bold, italic, code).
- * Returns sanitized HTML that adapts to window width.
  */
 function formatMessage(rawText) {
   if (!rawText) return ""
@@ -1142,12 +1143,12 @@ function formatMessage(rawText) {
   const sanitizedText = sanitizeInput(rawText)
 
   // Step 1: Extract code blocks BEFORE any text processing
-  // Handle multi-line fences: ```java\n...\n```
   const codeBlocks = []
-  let text = sanitizedText.replace(/```[a-z]*\s*([\s\S]*?)```/g, (_, code) => {
-    const id = codeBlocks.length
-    codeBlocks.push({ code, id })
-    return `§K8CODE${id}K8§`
+  const codeBlockLangs = []
+  let text = sanitizedText.replace(/```([a-z]*)\s*([\s\S]*?)```/g, (_, lang, code) => {
+    codeBlocks.push(code)
+    codeBlockLangs.push(lang || "code")
+    return `§K8CODE${codeBlocks.length - 1}K8§`
   })
 
   // Step 2: Process inline code (must be before other replacements)
@@ -1183,13 +1184,22 @@ function formatMessage(rawText) {
     return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
   })
 
-  // Step 8: Parse lists (bullet and numbered) — must be done before paragraphs
+  // Step 8: Parse lists (bullet and numbered)
   text = parseLists(text)
 
-  // Step 9: Paragraphs — split on double newlines
+  // Step 9: Restore code blocks as multi-line code with syntax highlighting
+  for (let i = 0; i < codeBlocks.length; i++) {
+    const code = codeBlocks[i]
+    const lang = codeBlockLangs[i] || detectCodeLanguage(code.trim())
+    const highlighted = highlightCode(code.trim(), lang)
+    const codeHtml = `<pre class="code-block"><code class="hljs language-${lang}">${highlighted}</code></pre>`
+    text = text.replace(`§K8CODE${i}K8§`, codeHtml)
+  }
+
+  // Step 10: Paragraphs — split on double newlines
   const paragraphParts = []
-  const lines = text.split(/\n\n+/)
-  for (const part of lines) {
+  const parts = text.split(/\n\n+/)
+  for (const part of parts) {
     const trimmed = part.trim()
     if (!trimmed) continue
     // Already wrapped in block-level tag?
@@ -1197,33 +1207,10 @@ function formatMessage(rawText) {
         trimmed.startsWith("<blockquote") || trimmed.startsWith("<pre") || trimmed.startsWith("<hr")) {
       paragraphParts.push(trimmed)
     } else {
-      // Wrap in <p>, converting single newlines to <br> within paragraphs
       paragraphParts.push(`<p>${trimmed.replace(/\n/g, "<br>")}</p>`)
     }
   }
   text = paragraphParts.join("\n")
-
-  // Step 10: Restore code blocks with syntax highlighting
-  for (const { code, id } of codeBlocks) {
-    const copyBtn = `<button class="code-copy-btn" onclick="copyCodeBlock(this)">Copy</button>`
-    const trimmed = code.trim()
-    let lang = "code"
-    if (trimmed.startsWith("apiVersion:") || trimmed.includes("Kind:") || trimmed.includes("metadata:")) lang = "yaml"
-    else if (trimmed.startsWith("import ") || trimmed.includes("public class")) lang = "java"
-    else if (trimmed.startsWith("from ") || trimmed.includes("import ") && trimmed.includes("def ")) lang = "python"
-    else if (trimmed.includes("function") || trimmed.includes("const ") || trimmed.includes("let ")) lang = "javascript"
-
-    let highlightedCode
-    if (lang === "yaml") {
-      highlightedCode = highlightYaml(code)
-    } else {
-      highlightedCode = escapeHtml(code).replace(/\\n/g, "\n")
-    }
-
-    const langLabel = `<span class="code-lang">${lang}</span>`
-    const codeBlockHtml = `<pre class="code-block" data-lang="${lang}"><div class="code-header">${langLabel}${copyBtn}</div><code class="code-content">${highlightedCode}</code></pre>`
-    text = text.replace(`§K8CODE${id}K8§`, codeBlockHtml)
-  }
 
   return text
 }
@@ -1310,29 +1297,53 @@ function typeWord(bubble, word) {
  * Finalize bubble after streaming — replace typing nodes with full HTML.
  */
 function finalizeBubble(bubble, html) {
-  bubble._typingNode = null
-  bubble._typingCursor = null
+  bubble._typing = false
+  bubble._textNode = null
+  bubble._cursorSpan = null
+  console.log("[finalizeBubble] html len:", html.length, "has hljs:", html.includes("hljs-keyword"), "has span:", html.includes("<span"))
   bubble.innerHTML = html
+  console.log("[finalizeBubble] innerHTML len:", bubble.innerHTML.length, "innerText sample:", bubble.innerText?.slice(0, 100))
 }
 
 /**
- * Helper to set text with industrial-grade formatting.
- * During streaming (showCursor=true), uses typing effect.
+ * Helper to set text with formatting.
+ * During streaming (showCursor=true): raw text + blinking cursor.
+ * On final render: full formatMessage() formatting once.
  */
 function setBubbleText(bubble, text, showCursor = false) {
+  // Debug: verify hljs is available
+  if (!window._hljsDebug) {
+    window._hljsDebug = true
+    console.log("[setBubbleText] hljs:", !!window.hljs, "highlight:", typeof window.hljs?.highlight)
+    const test = window.hljs?.highlight("def x(): pass", {language: "python", ignoreIllegals: true})
+    console.log("[setBubbleText] hljs test:", test?.value?.slice(0, 50))
+  }
   if (!text && text !== 0) {
     bubble.innerHTML = ""
     return
   }
 
-  // Remove loading indicator if present
   const loadingIndicator = bubble.querySelector(".loading-indicator")
-  if (loadingIndicator) {
-    loadingIndicator.remove()
+  if (loadingIndicator) loadingIndicator.remove()
+
+  // During streaming: raw text with cursor
+  if (showCursor) {
+    if (!bubble._typing) {
+      bubble._typing = true
+      bubble.innerHTML = ""
+      bubble._textNode = document.createTextNode("")
+      bubble._cursorSpan = document.createElement("span")
+      bubble._cursorSpan.className = "typing-cursor"
+      bubble._cursorSpan.textContent = "\u00A0"
+      bubble.appendChild(bubble._textNode)
+      bubble.appendChild(bubble._cursorSpan)
+    }
+    bubble._textNode.textContent = text
+    return
   }
 
-  const html = formatMessage(text)
-  bubble.innerHTML = showCursor ? html + '<span class="typing-cursor"></span>' : html
+  // Final: full formatting
+  finalizeBubble(bubble, formatMessage(text))
 }
 
 // ==============================
@@ -1612,9 +1623,8 @@ async function streamAIResponse(query) {
         .replace(/^(You|AI)\s*:\s*/gim, "")
 
       latestBotMessage.accumulatedText = finalText
-
-      // Render final formatted version
-      setBubbleText(latestBotMessage.bubble, finalText)
+      // Finalize with formatted HTML (showCursor=false triggers finalizeBubble)
+      finalizeBubble(latestBotMessage.bubble, formatMessage(finalText))
 
       // Add model badge
       if (latestBotMessage.modelDisplay || modelDisplay) {
@@ -1753,7 +1763,8 @@ async function streamAIRace(query) {
         .replace(/^(You|AI)\s*:\s*/gim, "")
 
       latestBotMessage.accumulatedText = finalText
-      setBubbleText(latestBotMessage.bubble, finalText)
+      // Finalize with formatted HTML
+      finalizeBubble(latestBotMessage.bubble, formatMessage(finalText))
 
       if (latestBotMessage.modelDisplay) {
         const label = latestBotMessage.element.querySelector(".msg-label")
