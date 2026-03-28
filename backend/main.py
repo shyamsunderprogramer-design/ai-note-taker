@@ -363,17 +363,24 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
 
 
 @app.get("/stream-race")
-def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str = None):
+def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str = None, enabled: str = None):
     """
     Fire all configured providers in parallel using ThreadPoolExecutor + as_completed.
     Returns the FIRST successful full response (ignores errors/429s from cloud providers).
     Falls back to Ollama if all clouds fail.
+    Only providers specified in 'enabled' param (comma-separated) will be used.
     """
     from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
     import concurrent.futures
     import logging
 
     logger = logging.getLogger(__name__)
+
+    # Parse enabled providers from frontend
+    enabled_set = None
+    if enabled:
+        enabled_set = set(enabled.split(","))
+        logger.info("Race mode: only using enabled providers from frontend: %s", enabled_set)
 
     messages = None
     if context:
@@ -387,18 +394,36 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
     load_dotenv()
 
     available = []
-    if os.getenv("OPENAI_API_KEY", "").strip():
-        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-    if os.getenv("ANTHROPIC_API_KEY", "").strip():
-        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-    if os.getenv("GOOGLE_API_KEY", "").strip():
-        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-    if os.getenv("XAI_API_KEY", "").strip():
-        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-    if os.getenv("DEEPSEEK_API_KEY", "").strip():
-        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-    if os.getenv("GROQ_API_KEY", "").strip():
-        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+    # If enabled_set from frontend is provided, only use those providers
+    if enabled_set:
+        if "openai" in enabled_set and os.getenv("OPENAI_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
+        if "anthropic" in enabled_set and os.getenv("ANTHROPIC_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
+        if "google" in enabled_set and os.getenv("GOOGLE_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
+        if "xai" in enabled_set and os.getenv("XAI_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
+        if "deepseek" in enabled_set and os.getenv("DEEPSEEK_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
+        if "groq" in enabled_set and os.getenv("GROQ_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+    else:
+        # Legacy behavior: use all providers with API keys
+        if os.getenv("OPENAI_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
+        if os.getenv("ANTHROPIC_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
+        if os.getenv("GOOGLE_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
+        if os.getenv("XAI_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
+        if os.getenv("DEEPSEEK_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
+        if os.getenv("GROQ_API_KEY", "").strip():
+            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+
+    # Always add ollama
     available.append("ollama")
 
     # Deduplicate by provider name

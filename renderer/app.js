@@ -1712,7 +1712,19 @@ async function streamAIRace(query) {
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const contextMessages = getContextMessages()
-  const raceUrl = window.api.getRaceUrl(query, mode, responseStyle, contextMessages)
+
+  // Get enabled providers from store
+  const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
+  const enabledProviders = []
+  for (const p of CLOUD_PROVIDERS) {
+    const stored = await window.api.storeGet("provider_" + p) || {}
+    if (stored.enabled && stored.apiKey) {
+      enabledProviders.push(p)
+    }
+  }
+
+  // If no providers enabled, use empty string to explicitly disable cloud providers
+  const raceUrl = window.api.getRaceUrl(query, mode, responseStyle, contextMessages, enabledProviders)
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
@@ -2811,13 +2823,11 @@ CLOUD_PROVIDERS.forEach(p => {
       return
     }
 
-    // Persist enabled state
-    if (stored.apiKey) {
-      await window.api.storeSet("provider_" + p, { ...stored, enabled: isEnabled })
-    }
+    // Persist enabled state in store
+    await window.api.storeSet("provider_" + p, { ...stored, enabled: isEnabled })
 
-    // Notify backend
-    if (isEnabled) {
+    // Notify backend to update .env
+    if (isEnabled && stored.apiKey) {
       try { await window.api.configureProvider(p, stored.apiKey) } catch {}
     }
 
