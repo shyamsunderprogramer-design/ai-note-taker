@@ -862,7 +862,7 @@ select option {
   border-radius: var(--radius-md);
   padding: 12px 16px;
   margin: 8px 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
   font-size: 0.85em;
   line-height: 1.6;
@@ -900,6 +900,16 @@ select option {
 .yaml-bool { color: #f38ba8; }     /* Pink - boolean/null */
 .yaml-list { color: #cba6f7; }      /* Purple - list items */
 .yaml-value { color: #cdd6f4; }    /* Light - default values */
+
+/* Java/Python/JavaScript syntax colors */
+.code-keyword { color: #cba6f7; }   /* Purple - keywords */
+.code-string { color: #a6e3a1; }    /* Green - strings */
+.code-number { color: #fab387; }    /* Orange - numbers */
+.code-comment { color: #6c7086; font-style: italic; } /* Gray - comments */
+.code-function { color: #89b4fa; }   /* Blue - functions */
+.code-operator { color: #89dceb; }  /* Cyan - operators */
+.code-class { color: #f9e2af; }     /* Yellow - class names */
+.code-decorator { color: #f5c2e7; } /* Pink - decorators */
 
 /* Inline code */
 .code-inline {
@@ -2107,7 +2117,7 @@ select option {
   background: #0d1117;
   border-radius: 10px;
   margin: 10px 0;
-  overflow: hidden;
+  overflow-x: hidden;
   border: 1px solid rgba(255,255,255,0.08);
   max-width: 100%;
 }
@@ -2148,8 +2158,9 @@ select option {
 .code-content {
   display: block;
   padding: 14px 16px;
-  overflow-x: auto;
-  white-space: pre;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
   tab-size: 2;
   font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
   font-size: 13px;

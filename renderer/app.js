@@ -1141,14 +1141,13 @@ function formatMessage(rawText) {
   // Sanitize input first
   const sanitizedText = sanitizeInput(rawText)
 
-  // Step 1: Extract and remove code blocks (they need special handling)
+  // Step 1: Extract code blocks BEFORE any text processing
+  // Handle multi-line fences: ```java\n...\n```
   const codeBlocks = []
-  let text = sanitizedText.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    const langLabel = lang || "code"
-    const escapedCode = escapeHtml(code.trimEnd())
+  let text = sanitizedText.replace(/```[a-z]*\s*([\s\S]*?)```/g, (_, code) => {
     const id = codeBlocks.length
-    codeBlocks.push({ lang: langLabel, code: code, escapedCode, id })
-    return `{{K8CODE${id}K8}}`
+    codeBlocks.push({ code, id })
+    return `§K8CODE${id}K8§`
   })
 
   // Step 2: Process inline code (must be before other replacements)
@@ -1204,13 +1203,26 @@ function formatMessage(rawText) {
   }
   text = paragraphParts.join("\n")
 
-  // Step 10: Restore code blocks
-  for (const { lang, escapedCode, id } of codeBlocks) {
+  // Step 10: Restore code blocks with syntax highlighting
+  for (const { code, id } of codeBlocks) {
     const copyBtn = `<button class="code-copy-btn" onclick="copyCodeBlock(this)">Copy</button>`
-    const langLabel = `<span class="code-lang">${escapeHtml(lang)}</span>`
-    const codeWithNewlines = escapedCode.replace(/ /g, "&nbsp;").replace(/\n/g, "<br>")
-    const codeBlockHtml = `<pre class="code-block" data-lang="${escapeHtml(lang)}"><div class="code-header">${langLabel}${copyBtn}</div><code class="code-content">${codeWithNewlines}</code></pre>`
-    text = text.replace(`{{K8CODE${id}K8}}`, codeBlockHtml)
+    const trimmed = code.trim()
+    let lang = "code"
+    if (trimmed.startsWith("apiVersion:") || trimmed.includes("Kind:") || trimmed.includes("metadata:")) lang = "yaml"
+    else if (trimmed.startsWith("import ") || trimmed.includes("public class")) lang = "java"
+    else if (trimmed.startsWith("from ") || trimmed.includes("import ") && trimmed.includes("def ")) lang = "python"
+    else if (trimmed.includes("function") || trimmed.includes("const ") || trimmed.includes("let ")) lang = "javascript"
+
+    let highlightedCode
+    if (lang === "yaml") {
+      highlightedCode = highlightYaml(code)
+    } else {
+      highlightedCode = escapeHtml(code).replace(/\\n/g, "\n")
+    }
+
+    const langLabel = `<span class="code-lang">${lang}</span>`
+    const codeBlockHtml = `<pre class="code-block" data-lang="${lang}"><div class="code-header">${langLabel}${copyBtn}</div><code class="code-content">${highlightedCode}</code></pre>`
+    text = text.replace(`§K8CODE${id}K8§`, codeBlockHtml)
   }
 
   return text
