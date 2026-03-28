@@ -43,7 +43,7 @@ def resolve_mode(user_input, requested_mode="auto"):
         if any(keyword in prompt for keyword in INTERVIEW_HINTS) or word_count >= 12:
             return "interview"
         return "adaptive"
-        
+
 
     if word_count <= 8:
         return "fast"
@@ -235,8 +235,11 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
 
 
 def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", messages=None):
+    """Yields SSE event strings — meta, content chunks, done, error."""
+    import time
+    start = time.time()
     try:
-        logger.info("Streaming (%s mode, %s style): %s", mode, style, prompt)
+        logger.info("Streaming (%s mode, %s style): %s", mode, style, prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
         final_prompt = build_prompt(prompt, mode, style, messages)
 
@@ -258,36 +261,67 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         )
 
         if response.status_code != 200:
-            yield "AI service unavailable."
+            logger.error("Ollama service returned status %d", response.status_code)
+            yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
             return
 
+        model_display = model_name or get_ai_model(mode)
+        yield _make_meta(model_display, "ollama")
+
+        chunk_count = 0
         for line in response.iter_lines():
             if not line:
                 continue
 
             try:
-                data = json.loads(line.decode("utf-8"))
+                data = json.loads(line.decode("utf-8", errors="replace"))
 
                 if "response" in data:
                     chunk = data["response"]
-                    logger.debug("stream chunk: %s", chunk)
                     if chunk.strip():
-                        yield chunk
+                        yield _make_content(chunk)
+                        chunk_count += 1
 
                 if data.get("done", False):
                     break
 
+            except json.JSONDecodeError as e:
+                logger.warning("Stream JSON decode error: %s, line: %s", e, line[:100])
+                continue
             except Exception as e:
                 logger.warning("Stream parse error: %s", e)
+                continue
 
-        logger.debug("Stream complete")
+        ms = int((time.time() - start) * 1000)
+        logger.debug("Stream complete: %d chunks in %dms", chunk_count, ms)
+        yield _make_done(ms)
 
     except requests.exceptions.Timeout:
-        yield "AI response timeout. Try again."
+        logger.error("Ollama streaming timeout after %ds", AI_TIMEOUT)
+        yield _make_error("AI response timeout. Please try again.")
+
+    except requests.exceptions.ConnectionError:
+        logger.error("Ollama connection error")
+        yield _make_error("Cannot connect to AI service. Is Ollama running?")
 
     except Exception as e:
-        logger.error("Streaming error: %s", e)
-        yield "AI error occurred."
+        logger.error("Streaming error: %s", e, exc_info=True)
+        yield _make_error("AI error occurred.")
+
+
+def _make_meta(model, provider):
+    return f"event: meta\ndata: {{\"type\":\"meta\",\"model\":\"{model}\",\"provider\":\"{provider}\"}}\n\n"
+
+def _make_content(chunk):
+    import json
+    return f"event: chunk\ndata: {json.dumps({'type':'chunk','content':chunk})}\n\n"
+
+def _make_done(ms):
+    return f"event: done\ndata: {{\"type\":\"done\",\"ms\":{ms}}}\n\n"
+
+def _make_error(msg):
+    import json
+    return f"event: error\ndata: {json.dumps({'type':'error','message':msg})}\n\n"
 
 
 def route_ai(prompt, mode="adaptive", style="concise"):
@@ -319,105 +353,45 @@ def route_ai(prompt, mode="adaptive", style="concise"):
 
 
 def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None):
+    """
+    Yields SSE event strings (meta, content, done, error).
+    Cloud providers yield their own SSE strings directly.
+    Ollama falls through to ask_ollama_stream().
+    """
     # Check if provider looks like a cloud model string (has a provider prefix with dash)
     if provider and provider != "ollama" and "-" in provider:
-        # Use cloud provider for streaming
         try:
-            from cloud_providers import (
-                ask_gpt_stream, ask_claude_stream, ask_gemini_stream,
-                ask_grok_stream, ask_deepseek_stream, ask_groq_stream,
-                build_prompt as cloud_build_prompt,
-                clean_ai_output as cloud_clean
-            )
-            final_prompt = cloud_build_prompt(prompt, mode or "adaptive", style, messages)
-            model_map = {
-                # OpenAI
-                "openai-gpt-4o-mini": ("openai", "gpt-4o-mini"),
-                "openai-gpt-4o": ("openai", "gpt-4o"),
-                "openai-gpt-4-turbo": ("openai", "gpt-4-turbo"),
-                "openai-o1-mini": ("openai", "o1-mini"),
-                "openai-o3-mini": ("openai", "o3-mini"),
-                "openai-gpt-3.5-turbo": ("openai", "gpt-3.5-turbo"),
-                # Anthropic
-                "anthropic-claude-3-5-haiku": ("anthropic", "claude-3-5-haiku-20241022"),
-                "anthropic-claude-3-5-sonnet": ("anthropic", "claude-3-5-sonnet-20241022"),
-                "anthropic-claude-sonnet-4-20250514": ("anthropic", "claude-sonnet-4-20250514"),
-                "anthropic-claude-opus-4-20250514": ("anthropic", "claude-opus-4-20250514"),
-                # Google
-                "google-gemini-2-0-flash": ("google", "gemini-2.0-flash"),
-                "google-gemini-2-0-flash-exp": ("google", "gemini-2.0-flash-exp"),
-                "google-gemini-1-5-flash": ("google", "gemini-1.5-flash"),
-                "google-gemini-1-5-pro": ("google", "gemini-1.5-pro"),
-                "google-gemini-pro": ("google", "gemini-pro"),
-                # xAI
-                "xai-grok-2-mini": ("xai", "grok-2-mini"),
-                "xai-grok-2": ("xai", "grok-2"),
-                "xai-grok-beta": ("xai", "grok-beta"),
-                # DeepSeek
-                "deepseek-deepseek-chat": ("deepseek", "deepseek-chat"),
-                "deepseek-deepseek-coder": ("deepseek", "deepseek-coder"),
-                "deepseek-deepseek-math": ("deepseek", "deepseek-math"),
-                # Groq
-                "groq-llama-3-3-70b": ("groq", "llama-3.3-70b-versatile"),
-                "groq-llama-3-1-8b": ("groq", "llama-3.1-8b-instant"),
-                "groq-llama-3-2-1b": ("groq", "llama-3.2-1b-preview"),
-                "groq-llama-3-2-3b": ("groq", "llama-3.2-3b-preview"),
-                "groq-mixtral-8x7b": ("groq", "mixtral-8x7b-32768"),
-                "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
-            }
-            resolved = model_map.get(provider, ("openai", "gpt-4o-mini"))
-            provider_name, model_name = resolved
-            if provider_name == "openai":
-                for chunk in ask_gpt_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
-                    yield chunk
-            elif provider_name == "anthropic":
-                for chunk in ask_claude_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
-                    yield chunk
-            elif provider_name == "google":
-                for chunk in ask_gemini_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
-                    yield chunk
-            elif provider_name == "xai":
-                for chunk in ask_grok_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
-                    yield chunk
-            elif provider_name == "deepseek":
-                for chunk in ask_deepseek_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
-                    yield chunk
-            elif provider_name == "groq":
-                for chunk in ask_groq_stream(final_prompt, model=model_name, mode=mode, style=style, messages=messages):
-                    yield chunk
-            return
+            from cloud_providers import get_stream_fn, PROVIDER_MODEL_MAP
+            stream_fn = get_stream_fn(provider)
+            if stream_fn:
+                resolved = PROVIDER_MODEL_MAP.get(provider, ("openai", "gpt-4o-mini"))
+                model_name = resolved[1]
+                for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages):
+                    yield event
+                return
         except Exception as e:
             logger.error("Cloud stream error: %s", e)
-            yield "Cloud AI error."
+            yield _make_error(f"Cloud AI error: {e}")
             return
 
+    # Ollama — iterate candidates until one succeeds
     resolved_mode, candidates = get_model_candidates(prompt, mode)
 
     for candidate_mode, model_name in candidates:
         try:
-            all_chunks = []
-            for chunk in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages):
-                if chunk and chunk.strip():
-                    all_chunks.append(chunk)
+            accumulated = []
+            for event in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages):
+                accumulated.append(event)
+                # Check for error early
+                if event.startswith("event: error"):
+                    accumulated = []
+                    break
+                yield event
 
-            if not all_chunks:
-                logger.warning("Model %s returned no chunks, trying next", model_name)
-                continue
-
-            combined = "".join(all_chunks)
-            # Detect if small model echoed instruction text instead of answering
-            first_word = combined.split()[0].lower() if combined.split() else ""
-            garbage_starts = ["instructions:", "here", "sure", "answer", "response", "of", "the", "to", "it"]
-            if first_word in garbage_starts and len(combined) > 60:
-                logger.warning("Model %s produced garbage (starts with '%s'), trying next", model_name, first_word)
-                continue
-
-            for chunk in all_chunks:
-                yield chunk
-            return
+            if accumulated:
+                return
 
         except Exception as e:
             logger.error("AI stream error: %s", e)
 
-    yield "AI error"
-
+    yield _make_error("AI error")

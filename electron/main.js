@@ -116,6 +116,7 @@ function createWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   win.loadFile(path.join(__dirname, "../renderer/index.html"))
+  win.webContents.openDevTools({ mode: "detach" })
 
   // Save window bounds on move/resize
   win.on("resize", saveBounds)
@@ -367,6 +368,16 @@ app.whenReady().then(async () => {
   // Request microphone permission
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(permission === "media")
+  })
+
+  // Disable caching for renderer files to ensure latest version is always loaded
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (details.url.includes("file://")) {
+      details.requestHeaders["Cache-Control"] = "no-cache, no-store, must-revalidate"
+      details.requestHeaders["Pragma"] = "no-cache"
+      details.requestHeaders["Expires"] = "0"
+    }
+    callback({ requestHeaders: details.requestHeaders })
   })
 
   await startBackend()

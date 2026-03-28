@@ -39,7 +39,7 @@ def clean_ai_output(text):
     # Remove prompt artifacts
     cleaned = re.sub(r"(?i)\b(user question|question|rules|rule|preface|example|examples|constraints|behavior|answer)\s*:\s*", " ", cleaned)
 
-    # Normalize 2+ spaces to single space
-    cleaned = re.sub(r" {2,}", " ", cleaned)
+    # Normalize multiple spaces between words to single space (preserves indentation)
+    cleaned = re.sub(r"(\S) {2,}(\S)", r"\1 \2", cleaned)
 
     return cleaned.strip()

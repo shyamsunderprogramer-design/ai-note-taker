@@ -1,4 +1,8 @@
+import asyncio
+import concurrent.futures
+import json
 import os
+import queue
 import shutil
 import signal
 import sys
@@ -328,6 +332,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
 @app.get("/stream")
 def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama", context: str = None):
+    """SSE stream endpoint — yields event: meta/chunk/done/error"""
     def generator():
         STATE["is_streaming"] = True
 
@@ -341,35 +346,144 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
                 pass
 
         try:
-            buffer = ""
-            MAX_BUFFER = 200  # force flush when buffer gets large
+            # Yield provider/mode info as first event
+            yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
-            for chunk in route_ai_stream(q, mode, style, provider, messages):
-                if not chunk:
-                    continue
-
-                buffer += chunk
-
-                # Flush on punctuation OR when buffer is large enough
-                if chunk.endswith((" ", ".", ",", "?", "!", "\n")) or len(buffer) >= MAX_BUFFER:
-                    cleaned_buffer = clean_ai_output(buffer)
-                    if cleaned_buffer:
-                        yield cleaned_buffer + " "
-                    buffer = ""
-
-            if buffer:
-                cleaned_buffer = clean_ai_output(buffer)
-                if cleaned_buffer:
-                    yield cleaned_buffer
+            for event in route_ai_stream(q, mode, style, provider, messages):
+                yield event
 
         except Exception as e:
-            print("[ERROR] Stream error:", e)
-            yield "AI error"
+            import json
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
 
         finally:
             STATE["is_streaming"] = False
 
-    return StreamingResponse(generator(), media_type="text/plain")
+    return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+@app.get("/stream-race")
+def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str = None):
+    """
+    Fire all configured providers in parallel using ThreadPoolExecutor + as_completed.
+    Returns the FIRST successful full response (ignores errors/429s from cloud providers).
+    Falls back to Ollama if all clouds fail.
+    """
+    from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
+    import concurrent.futures
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    messages = None
+    if context:
+        try:
+            messages = json.loads(context)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse context JSON")
+            pass
+
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    available = []
+    if os.getenv("OPENAI_API_KEY", "").strip():
+        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
+    if os.getenv("ANTHROPIC_API_KEY", "").strip():
+        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
+    if os.getenv("GOOGLE_API_KEY", "").strip():
+        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
+    if os.getenv("XAI_API_KEY", "").strip():
+        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
+    if os.getenv("DEEPSEEK_API_KEY", "").strip():
+        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
+    if os.getenv("GROQ_API_KEY", "").strip():
+        available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+    available.append("ollama")
+
+    # Deduplicate by provider name
+    seen = set()
+    selected = []
+    for pk in available:
+        pname = pk.split("-")[0]
+        if pname not in seen:
+            seen.add(pname)
+            selected.append(pk)
+    selected = selected[:4]  # Limit to 4 concurrent providers
+
+    logger.info("Race mode: %s providers selected: %s", len(selected), selected)
+
+    def fetch_events(pk):
+        """Collect all SSE events from a provider. Returns (pk, events_list, error)."""
+        try:
+            if pk == "ollama":
+                from ai_router import ask_ollama_stream
+                events = list(ask_ollama_stream(q, mode=mode, style=style, messages=messages))
+            else:
+                resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
+                model_name = resolved[1]
+                stream_fn = get_stream_fn(pk)
+                if stream_fn is None:
+                    return (pk, [], f"No stream function for {pk}")
+                events = list(stream_fn(q, model=model_name, mode=mode, style=style, messages=messages))
+            # Check if events contains an error
+            has_error = any("event: error" in e for e in events)
+            if has_error:
+                # Extract error message
+                for e in events:
+                    if "event: error" in e:
+                        return (pk, [], e)
+                return (pk, [], "Unknown error")
+            logger.info("Provider %s succeeded with %d events", pk, len(events))
+            return (pk, events, None)
+        except Exception as e:
+            logger.error("Provider %s failed: %s", pk, e)
+            return (pk, [], str(e))
+
+    def race_generator():
+        STATE["is_streaming"] = True
+        winner_found = False
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(selected)) as executor:
+                futures = {
+                    executor.submit(fetch_events, pk): pk
+                    for pk in selected
+                }
+
+                for future in concurrent.futures.as_completed(futures, timeout=60.0):
+                    pk = futures[future]
+                    try:
+                        winner_pk, events, err = future.result(timeout=0)
+                        if err is None and events and len(events) > 0:
+                            # Success! Yield all events
+                            logger.info("Winner: %s", winner_pk)
+                            for event in events:
+                                yield event
+                            winner_found = True
+                            # Cancel remaining futures
+                            for f in futures:
+                                f.cancel()
+                            break
+                        # Error or empty — try next provider
+                        logger.debug("Provider %s failed or empty, trying next", pk)
+                    except concurrent.futures.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.warning("Exception in race loop: %s", e)
+                        pass
+
+            if not winner_found:
+                logger.error("All providers failed in race mode")
+                yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"All providers failed\"}}\n\n"
+
+        except Exception as e:
+            logger.error("Race generator error: %s", e)
+            yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"Race mode error: {str(e)}\"}}\n\n"
+        finally:
+            STATE["is_streaming"] = False
+
+    return StreamingResponse(race_generator(), media_type="text/event-stream")
 
 
 def shutdown_handler(*args):

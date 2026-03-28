@@ -173,11 +173,11 @@ function getContextMessages() {
 
 function setProcessingUI(processing) {
   if (processing) {
-    listenBtn.classList.add("listening")
+    listenBtn.classList.add("listening", "processing")
     listenBtn.disabled = true
     listenLabel.textContent = "Processing..."
   } else {
-    listenBtn.classList.remove("listening")
+    listenBtn.classList.remove("listening", "processing")
     listenBtn.disabled = false
     listenLabel.textContent = "Start"
   }
@@ -959,7 +959,14 @@ function addMessage(role, text) {
   const label = role === "user" ? "You" : "AI"
   const bubble = document.createElement("div")
   bubble.className = "msg-bubble"
-  setBubbleText(bubble, text)
+
+  // Add loading state for empty assistant messages
+  if (role === "assistant" && (!text || text === "")) {
+    msg.classList.add("loading")
+    bubble.innerHTML = '<span class="loading-indicator">Thinking...</span>'
+  } else {
+    setBubbleText(bubble, text)
+  }
 
   msg.innerHTML = `<span class="msg-label">${label}</span>`
   msg.appendChild(bubble)
@@ -1015,52 +1022,781 @@ function addErrorMessage(text) {
   return msg
 }
 
-// Helper to set text with newline support and optional list formatting
-function setBubbleText(bubble, text, applyLists = true) {
-  // Step 1: normalize text into clean lines
-  let cleaned = text
-    .replace(/\*\*([^*:]+)\*\*/g, "$1")           // **bold** -> bold
-    .replace(/\*\*([^*:]+)\*\*:\s*/g, "$1")       // **bold**: -> bold
-    .replace(/^#{1,6}\s*/gm, "")                   // ### Header and ###1. -> clean
-    // Split mid-paragraph bullets: "text- bullet" -> "text\n- bullet"
-    .replace(/(\S)\s*-\s+/g, "$1\n- ")
-    // Split mid-paragraph bullets: "text* bullet" -> "text\n* bullet"
-    .replace(/(\S)\s*\*\s+/g, "$1\n* ")
-    // Split numbered items that run together: "text1. item" -> "text\n1. item"
-    .replace(/(\S)(\d+\.)/g, "$1\n$2")
-    // Split space-before-number: "text 1. item" -> "text\n1. item"
-    .replace(/\s+(\d+\.)/g, "\n$1")
-    // Split double-newlines
-    .replace(/\n\n+/g, "\n")
-
-  // Step 2: escape HTML
-  cleaned = cleaned
+/**
+ * Escape HTML entities to prevent XSS attacks.
+ * Handles special characters: &, <, >, ", ', `
+ */
+function escapeHtml(text) {
+  if (!text) return ""
+  const str = String(text)
+  return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;")
+    .replace(/`/g, "&#x60;")
+}
 
-  // Step 3: strip [auto] tag
-  cleaned = cleaned.replace(/\s*\[auto\]\s*$/gi, "")
+/**
+ * Sanitize URL to prevent XSS.
+ * Returns empty string if URL is invalid or uses dangerous protocols.
+ */
+function sanitizeUrl(url) {
+  if (!url || typeof url !== "string") return ""
+  try {
+    const parsed = new URL(url)
+    // Only allow safe protocols
+    const safeProtocols = ["http:", "https:", "ftp:", "mailto:"]
+    if (!safeProtocols.includes(parsed.protocol)) {
+      return ""
+    }
+    return url
+  } catch {
+    return ""
+  }
+}
 
-  // Step 4: split into lines, filter empty, wrap each
-  const lines = cleaned.split("\n").map(l => l.trim()).filter(l => l.length > 0)
-  const html = lines.map(l => `<span>${l}</span>`).join("<br>")
+/**
+ * Validate and sanitize user input.
+ * Returns the sanitized input or empty string if invalid.
+ */
+function sanitizeInput(text) {
+  if (!text || typeof text !== "string") return ""
+  // Remove null bytes and control characters (except newline, tab)
+  // Don't trim() here — formatMessage handles that for text content
+  // but we need to preserve markers like {{CODE_BLOCK_0}}
+  return text.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, "")
+}
 
+// Copy code block from a code block's copy button (called from onclick)
+function copyCodeBlock(btn) {
+  const pre = btn.closest(".code-block")
+  if (!pre) return
+  const code = pre.querySelector(".code-content")
+  if (!code) return
+  const tmp = document.createElement("div")
+  tmp.innerHTML = code.innerHTML
+  const text = tmp.textContent || tmp.innerText || ""
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = "Copied!"
+    setTimeout(() => { btn.textContent = "Copy" }, 1500)
+  })
+}
+
+// Helper to highlight YAML syntax
+function highlightYaml(code) {
+  // YAML syntax highlighting - process line by line
+  const lines = code.split("\n")
+  return lines.map(line => {
+    // Match key: value pattern with optional leading whitespace
+    const yamlLineRegex = /^(\s*)([\w-]+)(\s*:\s*)(.*)$/
+    const match = line.match(yamlLineRegex)
+
+    if (!match) {
+      // Check for list items
+      if (line.trim().startsWith("-")) {
+        const content = line.trim().substring(1).trim()
+        return `<span class="yaml-list">${escapeHtml(line)}</span>`
+      }
+      return escapeHtml(line)
+    }
+
+    const [, indent, key, colon, value] = match
+
+    // Convert leading spaces to &nbsp; to preserve indentation
+    const preservedIndent = indent.replace(/ /g, '&nbsp;')
+
+    let highlightedValue
+    if (value.match(/^['"].*['"]$/)) {
+      highlightedValue = `<span class="yaml-string">${escapeHtml(value)}</span>`
+    } else if (value.match(/^\d+\.?\d*$/)) {
+      highlightedValue = `<span class="yaml-number">${escapeHtml(value)}</span>`
+    } else if (value === 'true' || value === 'false' || value === 'null') {
+      highlightedValue = `<span class="yaml-bool">${escapeHtml(value)}</span>`
+    } else if (value.startsWith('-')) {
+      highlightedValue = `<span class="yaml-list">${escapeHtml(value)}</span>`
+    } else if (value === '' || value === '|') {
+      highlightedValue = escapeHtml(value)
+    } else {
+      highlightedValue = `<span class="yaml-value">${escapeHtml(value)}</span>`
+    }
+
+    return `${preservedIndent}<span class="yaml-key">${escapeHtml(key)}</span>${escapeHtml(colon)}${highlightedValue}`
+  }).join("\n")
+}
+
+// ==============================
+// INDUSTRIAL-GRADE MESSAGE FORMATTING ENGINE
+// ==============================
+
+/**
+ * Full message formatter — handles code blocks, headings, lists,
+ * paragraphs, blockquotes, and inline markdown (bold, italic, code).
+ * Returns sanitized HTML that adapts to window width.
+ */
+function formatMessage(rawText) {
+  if (!rawText) return ""
+
+  // Sanitize input first
+  const sanitizedText = sanitizeInput(rawText)
+
+  // Step 1: Extract and remove code blocks (they need special handling)
+  const codeBlocks = []
+  let text = sanitizedText.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const langLabel = lang || "code"
+    const escapedCode = escapeHtml(code.trimEnd())
+    const id = codeBlocks.length
+    codeBlocks.push({ lang: langLabel, code: code, escapedCode, id })
+    return `{{K8CODE${id}K8}}`
+  })
+
+  // Step 2: Process inline code (must be before other replacements)
+  text = text.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escapeHtml(code)}</code>`)
+
+  // Step 3: Bold, italic, strikethrough
+  text = text.replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong>$1</strong>")
+  text = text.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+  text = text.replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
+  text = text.replace(/___([\s\S]+?)___/g, "<strong>$1</strong>")
+  text = text.replace(/__([\s\S]+?)__/g, "<strong>$1</strong>")
+  text = text.replace(/_(?![_\s])([\s\S]+?)_(?![_\s])/g, "<em>$1</em>")
+  text = text.replace(/~~([\s\S]+?)~~/g, "<del>$1</del>")
+
+  // Step 4: Headings
+  text = text.replace(/^### (.+)$/gm, "<h4>$1</h4>")
+  text = text.replace(/^## (.+)$/gm, "<h3>$1</h3>")
+  text = text.replace(/^# (.+)$/gm, "<h2>$1</h2>")
+
+  // Step 5: Blockquotes
+  text = text.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>")
+
+  // Step 6: Horizontal rules
+  text = text.replace(/^---+$/gm, "<hr>")
+  text = text.replace(/^\*\*\*+$/gm, "<hr>")
+
+  // Step 7: Inline links [text](url) - with URL sanitization
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+    const safeUrl = sanitizeUrl(url)
+    if (!safeUrl) {
+      return escapeHtml(text) // Return plain text if URL is unsafe
+    }
+    return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+  })
+
+  // Step 8: Parse lists (bullet and numbered) — must be done before paragraphs
+  text = parseLists(text)
+
+  // Step 9: Paragraphs — split on double newlines
+  const paragraphParts = []
+  const lines = text.split(/\n\n+/)
+  for (const part of lines) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    // Already wrapped in block-level tag?
+    if (trimmed.startsWith("<h") || trimmed.startsWith("<ul") || trimmed.startsWith("<ol") ||
+        trimmed.startsWith("<blockquote") || trimmed.startsWith("<pre") || trimmed.startsWith("<hr")) {
+      paragraphParts.push(trimmed)
+    } else {
+      // Wrap in <p>, converting single newlines to <br> within paragraphs
+      paragraphParts.push(`<p>${trimmed.replace(/\n/g, "<br>")}</p>`)
+    }
+  }
+  text = paragraphParts.join("\n")
+
+  // Step 10: Restore code blocks
+  for (const { lang, escapedCode, id } of codeBlocks) {
+    const copyBtn = `<button class="code-copy-btn" onclick="copyCodeBlock(this)">Copy</button>`
+    const langLabel = `<span class="code-lang">${escapeHtml(lang)}</span>`
+    const codeWithNewlines = escapedCode.replace(/ /g, "&nbsp;").replace(/\n/g, "<br>")
+    const codeBlockHtml = `<pre class="code-block" data-lang="${escapeHtml(lang)}"><div class="code-header">${langLabel}${copyBtn}</div><code class="code-content">${codeWithNewlines}</code></pre>`
+    text = text.replace(`{{K8CODE${id}K8}}`, codeBlockHtml)
+  }
+
+  return text
+}
+
+/**
+ * Parse bullet and numbered lists into proper HTML.
+ */
+function parseLists(text) {
+  const lines = text.split("\n")
+  const result = []
+  let inList = false
+  let listType = null
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    // Check for list item
+    const bulletMatch = trimmed.match(/^[-*+]\s+(.*)/)
+    const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)/)
+    const letteredMatch = trimmed.match(/^([a-z])\.\s+(.*)/)
+
+    if (bulletMatch) {
+      if (!inList || listType !== "ul") {
+        if (inList) result.push(listType === "ul" ? "</ul>" : "</ol>")
+        result.push("<ul class='chat-list'>")
+        inList = true
+        listType = "ul"
+      }
+      const content = bulletMatch[1]
+        .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
+        .replace(/`([^`]+)`/g, `<code class="inline-code">$1</code>`)
+      result.push(`<li>${content}</li>`)
+    } else if (numberedMatch || letteredMatch) {
+      if (!inList || listType !== "ol") {
+        if (inList) result.push(listType === "ul" ? "</ul>" : "</ol>")
+        result.push("<ol class='chat-list'>")
+        inList = true
+        listType = "ol"
+      }
+      const content = (numberedMatch ? numberedMatch[2] : letteredMatch[2])
+        .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
+        .replace(/`([^`]+)`/g, `<code class="inline-code">$1</code>`)
+      result.push(`<li>${content}</li>`)
+    } else {
+      if (inList) {
+        result.push(listType === "ul" ? "</ul>" : "</ol>")
+        inList = false
+        listType = null
+      }
+      result.push(line)
+    }
+  }
+
+  if (inList) {
+    result.push(listType === "ul" ? "</ul>" : "</ol>")
+  }
+
+  return result.join("\n")
+}
+
+/**
+ * Typing effect — appends a single word to the bubble's visible text node
+ * without full re-render. Returns the new visible text length.
+ */
+function typeWord(bubble, word) {
+  if (!bubble._typingNode) {
+    bubble._typingNode = document.createTextNode("")
+    bubble._typingCursor = document.createElement("span")
+    bubble._typingCursor.className = "typing-cursor"
+    bubble._typingCursor.textContent = "\u00A0"
+    bubble.innerHTML = ""
+    bubble.appendChild(bubble._typingNode)
+    bubble.appendChild(bubble._typingCursor)
+  }
+  bubble._typingNode.textContent += word + " "
+  bubble._typingCursor.textContent = "\u00A0"
+  return bubble._typingNode.textContent.length
+}
+
+/**
+ * Finalize bubble after streaming — replace typing nodes with full HTML.
+ */
+function finalizeBubble(bubble, html) {
+  bubble._typingNode = null
+  bubble._typingCursor = null
   bubble.innerHTML = html
 }
 
+/**
+ * Helper to set text with industrial-grade formatting.
+ * During streaming (showCursor=true), uses typing effect.
+ */
+function setBubbleText(bubble, text, showCursor = false) {
+  if (!text && text !== 0) {
+    bubble.innerHTML = ""
+    return
+  }
+
+  // Remove loading indicator if present
+  const loadingIndicator = bubble.querySelector(".loading-indicator")
+  if (loadingIndicator) {
+    loadingIndicator.remove()
+  }
+
+  const html = formatMessage(text)
+  bubble.innerHTML = showCursor ? html + '<span class="typing-cursor"></span>' : html
+}
+
+// ==============================
+// SSE STREAMING — READER + DISPATCH
+// ==============================
+
+/**
+ * Parse SSE event data from a buffer.
+ * Returns an array of {event, data} objects as buffer is consumed.
+ */
+function parseSSEEvents(buffer) {
+  const events = []
+  // Normalize line endings
+  const text = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+  const lines = text.split("\n")
+  buffer = ""
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line === "" || line === undefined) {
+      continue
+    }
+    if (line.startsWith("event:")) {
+      const eventType = line.slice(6).trim()
+      // Read the next line as data
+      if (i + 1 < lines.length) {
+        const dataLine = lines[++i]
+        if (dataLine.startsWith("data:")) {
+          const dataStr = dataLine.slice(5).trim()
+          try {
+            const data = JSON.parse(dataStr)
+            events.push({ event: eventType, data })
+          } catch {
+            events.push({ event: eventType, data: { raw: dataStr } })
+          }
+        }
+      }
+    } else if (line.startsWith("data:")) {
+      const dataStr = line.slice(5).trim()
+      try {
+        const data = JSON.parse(dataStr)
+        events.push({ event: "message", data })
+      } catch {
+        events.push({ event: "message", data: { raw: dataStr } })
+      }
+    } else if (!line.startsWith(":") && line.trim()) {
+      // Partial line — keep in buffer for next iteration
+      buffer += line + "\n"
+    }
+  }
+  return { events, buffer }
+}
+
+/**
+ * Parse SSE events from a fetch ReadableStream.
+ * Yields raw event objects as they arrive.
+ */
+// Robust SSE parser — yields {event, data} objects from a fetch ReadableStream
+async function* SSEStream(reader, decoder, signal) {
+  let buffer = ""
+  const LINE_FEED = 10
+  let eventType = "message"
+
+  try {
+    while (true) {
+      if (signal?.aborted) break
+
+      let readPromise
+      const abortHandler = () => {
+        if (readPromise) readPromise.cancel?.()
+      }
+      signal?.addEventListener("abort", abortHandler)
+
+      let result
+      try {
+        result = await reader.read()
+      } catch(err) {
+        signal?.removeEventListener("abort", abortHandler)
+        if (err.message?.includes("aborted")) {
+          yield { event: "stream-done", data: {} }
+          break
+        }
+        throw err
+      }
+      signal?.removeEventListener("abort", abortHandler)
+
+      const { done, value } = result
+
+      if (done) {
+        // Yield any remaining buffer content (might be a partial last event)
+        if (buffer.trim()) {
+          const line = buffer.trim()
+          if (line.startsWith("data:")) {
+            try {
+              yield { event: eventType, data: JSON.parse(line.slice(5).trim()) }
+            } catch {}
+          }
+        }
+        // Always yield a special done event so the caller knows stream ended
+        yield { event: "stream-done", data: {} }
+        break
+      }
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Process complete lines
+      while (buffer.includes(LINE_FEED)) {
+        if (signal?.aborted) break
+
+        const lfIndex = buffer.indexOf(LINE_FEED)
+        const line = buffer.slice(0, lfIndex)
+        buffer = buffer.slice(lfIndex + 1)
+
+        if (!line.trim() || line.startsWith(":")) continue
+
+        if (line.startsWith("event:")) {
+          eventType = line.slice(6).trim()
+          continue
+        }
+
+        if (line.startsWith("data:")) {
+          const dataStr = line.slice(5).trim()
+          try {
+            yield { event: eventType, data: JSON.parse(dataStr) }
+          } catch (e) {
+            console.warn("[SSE] Bad JSON:", dataStr, e.message)
+          }
+        } else {
+          // Partial line — put it back and wait for more data
+          buffer = line + "\n" + buffer
+          break
+        }
+      }
+    }
+  } catch (err) {
+    if (err.message !== "aborted") {
+      console.error("[SSE] Stream error:", err)
+      yield { event: "stream-error", data: { message: err.message } }
+    }
+  }
+}
+
+// ==============================
+// STREAM AI RESPONSE (SSE-AWARE)
+// ==============================
+// Parse SSE events from a complete text body (non-streaming)
+function parseSSEFromText(text) {
+  const events = []
+  if (!text) return events
+
+  // Split on double newlines (SSE message separator)
+  const messages = text.split(/\n\n+/)
+  let eventType = "message"
+
+  for (const msg of messages) {
+    const lines = msg.split("\n")
+    eventType = "message"
+    let dataStr = ""
+
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventType = line.slice(6).trim()
+      } else if (line.startsWith("data:")) {
+        dataStr = line.slice(5).trim()
+        try {
+          const data = JSON.parse(dataStr)
+          events.push({ event: eventType, data })
+        } catch {}
+      }
+    }
+  }
+  return events
+}
+
+async function streamAIResponse(query) {
+  console.log("[streamAIResponse] Starting stream for:", query)
+  const mode = getSelectedMode()
+  const responseStyle = getSelectedResponseStyle()
+  const selectedModel = modelSelect ? modelSelect.value : "auto"
+  const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
+  const provider = isCloudModel ? selectedModel : "ollama"
+
+  // If "auto" is selected, race all configured providers — fastest wins
+  if (selectedModel === "auto") {
+    await streamAIRace(query)
+    return
+  }
+  const contextMessages = getContextMessages()
+  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages)
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    console.warn("[streamAIResponse] Timeout — aborting fetch")
+    controller.abort()
+  }, 60000)
+
+  try {
+    const response = await fetch(streamUrl, { signal: controller.signal })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      addErrorMessage("AI stream failed")
+      setProcessingUI(false)
+      return
+    }
+
+    const text = await response.text()
+    const events = parseSSEFromText(text)
+
+    // Create assistant message element
+    streamMessage("assistant", "")
+
+    let modelName = null
+    let modelProvider = null
+    let modelDisplay = null
+    let accumulatedText = ""
+
+    for (const { event, data } of events) {
+      if (event === "error" && data.type === "error") {
+        if (latestBotMessage) {
+          setBubbleText(latestBotMessage.bubble,
+            `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
+        }
+        latestBotMessage = null
+        setProcessingUI(false)
+        return
+      }
+
+      if (event === "meta" && data.type === "meta") {
+        modelName = data.model || modelName
+        modelProvider = data.provider || modelProvider
+        modelDisplay = data.display || modelDisplay
+        if (latestBotMessage) {
+          latestBotMessage.modelName = modelDisplay || modelName
+          latestBotMessage.modelProvider = modelProvider
+        }
+        continue
+      }
+
+      if (event === "chunk" && data.type === "chunk") {
+        accumulatedText += data.content
+
+        if (latestBotMessage) {
+          latestBotMessage.accumulatedText = accumulatedText
+
+          const displayText = accumulatedText
+            .replace(/^AI:\s*/i, "")
+            .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+            .replace(/^Paragraph\s*\d+:\s*/gim, "")
+            .replace(/^Conversation history:\s*/gim, "")
+            .replace(/^(You|AI)\s*:\s*/gim, "")
+
+          if (displayText.trim() && latestBotMessage.element) {
+            latestBotMessage.element.classList.remove("loading")
+            const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
+            if (loadingIndicator) loadingIndicator.remove()
+          }
+
+          setBubbleText(latestBotMessage.bubble, displayText, true)
+          scrollChat()
+        }
+        continue
+      }
+
+      if (event === "done" && data.type === "done") {
+        break
+      }
+    }
+
+    // Final cleanup
+    if (latestBotMessage) {
+      let finalText = accumulatedText
+        .replace(/^AI:\s*/i, "")
+        .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+        .replace(/^Paragraph\s*\d+:\s*/gim, "")
+        .replace(/^Conversation history:\s*/gim, "")
+        .replace(/^(You|AI)\s*:\s*/gim, "")
+
+      latestBotMessage.accumulatedText = finalText
+
+      // Render final formatted version
+      setBubbleText(latestBotMessage.bubble, finalText)
+
+      // Add model badge
+      if (latestBotMessage.modelDisplay || modelDisplay) {
+        const label = latestBotMessage.element.querySelector(".msg-label")
+        if (label) {
+          const badge = document.createElement("span")
+          badge.className = "model-badge"
+          badge.textContent = `[${latestBotMessage.modelDisplay || modelDisplay}]`
+          label.appendChild(badge)
+        }
+      }
+
+      // Save to conversation
+      if (!suppressAutoSave) {
+        const modeTag = document.querySelector(".mode-tag")
+        const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
+        currentMessages.push({ role: "assistant", text: finalText, timestamp: Date.now(), mode: currentMode })
+        saveCurrentConversation()
+      }
+
+      latestBotMessage = null
+    }
+
+    showSummarizeButton()
+    setProcessingUI(false)
+  } catch (e) {
+    clearTimeout(timeoutId)
+    console.error("Stream error:", e)
+    addErrorMessage("AI response failed")
+    if (latestBotMessage) {
+      latestBotMessage = null
+    }
+    setProcessingUI(false)
+  }
+}
+
+// ==============================
+// STREAM AI RESPONSE — RACE MODE
+// First provider to respond wins
+// ==============================
+
+async function streamAIRace(query) {
+  console.log("[streamAIRace] Starting race for:", query)
+  const mode = getSelectedMode()
+  const responseStyle = getSelectedResponseStyle()
+  const contextMessages = getContextMessages()
+  const raceUrl = window.api.getRaceUrl(query, mode, responseStyle, contextMessages)
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    console.warn("[streamAIRace] Timeout — aborting fetch")
+    controller.abort()
+  }, 60000)
+
+  try {
+    const response = await fetch(raceUrl, { signal: controller.signal })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      addErrorMessage("Race stream failed")
+      setProcessingUI(false)
+      return
+    }
+
+    const text = await response.text()
+    const events = parseSSEFromText(text)
+
+    // Create assistant message element
+    streamMessage("assistant", "")
+
+    let modelName = null
+    let modelProvider = null
+    let modelDisplay = null
+    let accumulatedText = ""
+
+    for (const { event, data } of events) {
+      if (event === "meta" && data.type === "meta") {
+        modelName = data.model || modelName
+        modelProvider = data.provider || modelProvider
+        modelDisplay = data.display || modelDisplay
+        if (latestBotMessage) {
+          latestBotMessage.modelName = modelDisplay || modelName
+          latestBotMessage.modelProvider = modelProvider
+          latestBotMessage.modelDisplay = modelDisplay || modelName
+        }
+        continue
+      }
+
+      if (event === "chunk" && data.type === "chunk") {
+        accumulatedText += data.content
+        if (latestBotMessage) {
+          latestBotMessage.accumulatedText = accumulatedText
+
+          const displayText = accumulatedText
+            .replace(/^AI:\s*/i, "")
+            .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+            .replace(/^Paragraph\s*\d+:\s*/gim, "")
+            .replace(/^Conversation history:\s*/gim, "")
+            .replace(/^(You|AI)\s*:\s*/gim, "")
+
+          // Remove loading state when we have content
+          if (displayText.trim() && latestBotMessage.element) {
+            latestBotMessage.element.classList.remove("loading")
+            const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
+            if (loadingIndicator) loadingIndicator.remove()
+          }
+
+          setBubbleText(latestBotMessage.bubble, displayText, true)
+          scrollChat()
+        }
+        continue
+      }
+
+      if (event === "done" && data.type === "done") {
+        break
+      }
+
+      if (event === "error" && data.type === "error") {
+        if (latestBotMessage) {
+          setBubbleText(latestBotMessage.bubble,
+            `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
+        }
+        latestBotMessage = null
+        setProcessingUI(false)
+        return
+      }
+    }
+
+    // Final cleanup
+    if (latestBotMessage) {
+      let finalText = accumulatedText
+        .replace(/^AI:\s*/i, "")
+        .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+        .replace(/^Paragraph\s*\d+:\s*/gim, "")
+        .replace(/^Conversation history:\s*/gim, "")
+        .replace(/^(You|AI)\s*:\s*/gim, "")
+
+      latestBotMessage.accumulatedText = finalText
+      setBubbleText(latestBotMessage.bubble, finalText)
+
+      if (latestBotMessage.modelDisplay) {
+        const label = latestBotMessage.element.querySelector(".msg-label")
+        if (label) {
+          const badge = document.createElement("span")
+          badge.className = "model-badge"
+          badge.textContent = `[${latestBotMessage.modelDisplay}]`
+          label.appendChild(badge)
+        }
+      }
+
+      if (!suppressAutoSave) {
+        const modeTag = document.querySelector(".mode-tag")
+        const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
+        currentMessages.push({ role: "assistant", text: finalText, timestamp: Date.now(), mode: currentMode })
+        saveCurrentConversation()
+      }
+
+      latestBotMessage = null
+    }
+
+    showSummarizeButton()
+    setProcessingUI(false)
+  } catch (e) {
+    clearTimeout(timeoutId)
+    console.error("Race stream error:", e)
+    addErrorMessage("AI race response failed")
+    if (latestBotMessage) {
+      latestBotMessage = null
+    }
+    setProcessingUI(false)
+  }
+}
+
+// ==============================
+// STREAM MESSAGE (message element factory)
+// ==============================
 function streamMessage(role, text) {
   removeWelcome()
 
+  // If streaming an assistant message, accumulate
   if (latestBotMessage && latestBotMessage.role === "assistant") {
-    // Streaming chunk for assistant message - accumulate text
     latestBotMessage.accumulatedText = (latestBotMessage.accumulatedText || "") + text
-    // Strip leading "AI:" prefix for display
-    const displayText = latestBotMessage.accumulatedText.replace(/^AI:\s*/i, "")
-    // Use setBubbleText without list formatting during streaming
-    setBubbleText(latestBotMessage.bubble, displayText, false)
+    const displayText = latestBotMessage.accumulatedText
+      .replace(/^AI:\s*/i, "")
+      .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+
+    // Remove loading class when we have actual content
+    if (displayText.trim()) {
+      latestBotMessage.element.classList.remove("loading")
+      const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
+      if (loadingIndicator) loadingIndicator.remove()
+    }
+
+    setBubbleText(latestBotMessage.bubble, displayText)
     scrollChat()
     return latestBotMessage.element
   }
@@ -1071,12 +1807,22 @@ function streamMessage(role, text) {
   const label = role === "user" ? "You" : "AI"
   const bubble = document.createElement("div")
   bubble.className = "msg-bubble"
-  setBubbleText(bubble, text)
 
-  msg.innerHTML = `<span class="msg-label">${label}</span>`
+  // Add loading state for empty assistant messages
+  if (role === "assistant" && (!text || text === "")) {
+    msg.classList.add("loading")
+    bubble.innerHTML = '<span class="loading-indicator">Thinking...</span>'
+  } else {
+    setBubbleText(bubble, text)
+  }
+
+  const labelEl = document.createElement("span")
+  labelEl.className = "msg-label"
+  labelEl.textContent = label
+  msg.appendChild(labelEl)
   msg.appendChild(bubble)
 
-  // Add copy button for assistant streaming messages
+  // Add copy button for assistant messages
   if (role === "assistant") {
     const actions = document.createElement("div")
     actions.className = "msg-actions"
@@ -1087,7 +1833,6 @@ function streamMessage(role, text) {
       let textToCopy = (latestBotMessage && latestBotMessage.accumulatedText !== undefined)
         ? latestBotMessage.accumulatedText
         : bubble.innerText
-      // Strip [mode] tag and leading "AI:" prefix
       textToCopy = textToCopy.replace(/\[.*?\]\s*$/, "").trim()
       textToCopy = textToCopy.replace(/^AI:\s*/i, "").trim()
       navigator.clipboard.writeText(textToCopy).then(() => {
@@ -1101,10 +1846,9 @@ function streamMessage(role, text) {
   }
 
   chatArea.appendChild(msg)
-
   scrollChat()
 
-  latestBotMessage = { role, element: msg, bubble, accumulatedText: role === "assistant" ? text : undefined }
+  latestBotMessage = { role, element: msg, bubble, accumulatedText: role === "assistant" ? (text || "") : undefined }
 
   // Track user messages
   if (!suppressAutoSave && role === "user") {
@@ -1117,29 +1861,6 @@ function streamMessage(role, text) {
   return msg
 }
 
-function finishStream() {
-  // Save assistant message to currentMessages before clearing
-  if (latestBotMessage && latestBotMessage.role === "assistant" && !suppressAutoSave) {
-    // Use accumulatedText which is the raw unformatted text
-    let text = (latestBotMessage.accumulatedText || "").trim()
-    // Strip [mode] tag from the end if present
-    text = text.replace(/\[.*?\]\s*$/, "").trim()
-    // Strip leading "AI:" prefix that some models return
-    text = text.replace(/^AI:\s*/i, "")
-    // Strip ParagraphN: artifacts
-    text = text.replace(/^Paragraph\s*\d+:\s*/gim, "")
-    // Strip "Conversation history:" labels
-    text = text.replace(/^Conversation history:\s*/gim, "")
-    // Strip echoed "You:" or "AI:" labels at line starts
-    text = text.replace(/^(You|AI)\s*:\s*/gim, "")
-    const modeTag = document.querySelector(".mode-tag")
-    const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
-    currentMessages.push({ role: "assistant", text, timestamp: Date.now(), mode: currentMode })
-    saveCurrentConversation()
-  }
-  latestBotMessage = null
-  showSummarizeButton()
-}
 
 // ==============================
 // BACKEND CONNECTION
@@ -1213,86 +1934,6 @@ async function submitAudio(blob) {
 
   // Use streaming endpoint for AI response
   await streamAIResponse(data.text)
-}
-
-// ==============================
-// STREAM AI RESPONSE
-// ==============================
-async function streamAIResponse(query) {
-  const mode = getSelectedMode()
-  const responseStyle = getSelectedResponseStyle()
-  const selectedModel = modelSelect ? modelSelect.value : "auto"
-  // If a cloud model is selected (has a provider prefix), use it as provider
-  const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
-  const provider = isCloudModel ? selectedModel : "ollama"
-  const contextMessages = getContextMessages()
-  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages)
-
-  try {
-    const response = await fetch(streamUrl)
-    if (!response.ok) {
-      addErrorMessage("AI stream failed")
-      setProcessingUI(false)
-      return
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-
-    // Create assistant message element for streaming (initial empty message)
-    streamMessage("assistant", "")
-
-    let rawText = ""
-    let lastRawLen = 0
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const chunk = decoder.decode(value, { stream: true })
-      rawText += chunk
-      lastRawLen = rawText.length
-
-      if (latestBotMessage && latestBotMessage.bubble) {
-        // Strip leading "AI:" prefix and mode tags from display
-        let displayText = rawText.replace(/^AI:\s*/i, "").replace(/\[.*?\]\s*$/, "").trim()
-
-        // Escape HTML safely (skip < > to preserve any embedded formatting)
-        const escaped = displayText
-          .replace(/&/g, "&amp;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;")
-          .replace(/\n/g, "<br>")
-
-        // Rebuild innerHTML with blinking cursor at end
-        latestBotMessage.bubble.innerHTML = escaped + '<span class="typing-cursor"></span>'
-
-        // Update raw accumulator for copy/save
-        latestBotMessage.accumulatedText = rawText
-      }
-      scrollChat()
-    }
-
-    // Stream done — clean up cursor, show final text
-    if (latestBotMessage && latestBotMessage.bubble) {
-      let finalText = rawText.replace(/^AI:\s*/i, "").replace(/\[.*?\]\s*$/, "").trim()
-      setBubbleText(latestBotMessage.bubble, finalText, true)
-    }
-    scrollChat()
-
-    // Add mode info
-    const modelInfo = ` <span class="mode-tag">[${mode}]</span>`
-    if (latestBotMessage && latestBotMessage.bubble) {
-      latestBotMessage.bubble.innerHTML += modelInfo
-    }
-    scrollChat()
-    finishStream()
-    setProcessingUI(false)
-  } catch (e) {
-    console.error("Stream error:", e)
-    addErrorMessage("AI response failed")
-    setProcessingUI(false)
-  }
 }
 
 // ==============================
@@ -1889,14 +2530,29 @@ async function loadProviderConfig(provider) {
   const stored = await window.api.storeGet("provider_" + provider) || {}
   const hasKey = await checkProviderHasKey(provider)
 
-  configApiKeyInput.value = stored.apiKey || ""
+  // Mask the API key for security (show only first 8 chars)
+  const apiKey = stored.apiKey || ""
+  configApiKeyInput.value = apiKey
+  if (apiKey && apiKey.length > 12) {
+    configApiKeyInput.placeholder = apiKey.substring(0, 8) + "••••••••"
+  }
 
   const statusBadge = document.getElementById("configStatusBadge")
   const toggle = document.getElementById("toggle-" + provider)
   const isEnabled = stored.enabled !== false && hasKey
+
   if (statusBadge) {
     if (isEnabled) {
-      statusBadge.textContent = "Connected"
+      const lastUpdated = stored.lastUpdated
+      let timeText = "Connected"
+      if (lastUpdated) {
+        const elapsed = Date.now() - lastUpdated
+        const minutes = Math.floor(elapsed / 60000)
+        if (minutes < 1) timeText = "Just configured"
+        else if (minutes < 60) timeText = `Active (${minutes}m ago)`
+        else timeText = `Active (${Math.floor(minutes / 60)}h ago)`
+      }
+      statusBadge.textContent = timeText
       statusBadge.className = "config-status-badge enabled"
     } else {
       statusBadge.textContent = hasKey ? "Disabled" : "Add API key to enable"
@@ -1923,22 +2579,77 @@ closeSettingsBtn.addEventListener("click", () => {
 })
 
 // Save button
+/**
+ * Validate API key format for different providers.
+ * Returns true if format is valid, false otherwise.
+ */
+function validateApiKeyFormat(provider, apiKey) {
+  const formats = {
+    openai: /^sk-[a-zA-Z0-9]{20,}$/,
+    anthropic: /^sk-ant-[a-zA-Z0-9_-]{20,}$/,
+    google: /^[a-zA-Z0-9_-]{20,}$/,
+    xai: /^xai-[a-zA-Z0-9_-]{20,}$/,
+    deepseek: /^sk-[a-zA-Z0-9_-]{20,}$/,
+    groq: /^gsk_[a-zA-Z0-9_-]{20,}$/
+  }
+  const regex = formats[provider]
+  if (!regex) return true // Unknown provider, skip validation
+  return regex.test(apiKey)
+}
+
+/**
+ * Get API key format hint for a provider.
+ */
+function getApiKeyHint(provider) {
+  const hints = {
+    openai: "Format: sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    anthropic: "Format: sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx",
+    google: "Format: AIza... (starts with AIza)",
+    xai: "Format: xai-xxxxxxxxxxxxxxxxxxxxxxxx",
+    deepseek: "Format: sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    groq: "Format: gsk_xxxxxxxxxxxxxxxxxxxxxx"
+  }
+  return hints[provider] || "Enter your API key"
+}
+
 configSaveBtn.addEventListener("click", async () => {
-  const apiKey = configApiKeyInput.value.trim()
+  const apiKey = sanitizeInput(configApiKeyInput.value.trim())
+
   if (!apiKey) {
     configTestResult.className = "config-inline-result error"
     configTestResult.textContent = "Enter an API key first"
+    configApiKeyInput.focus()
     return
   }
 
+  // Validate API key format
+  if (!validateApiKeyFormat(activeProvider, apiKey)) {
+    configTestResult.className = "config-inline-result error"
+    configTestResult.textContent = "Invalid API key format. " + getApiKeyHint(activeProvider)
+    configApiKeyInput.focus()
+    return
+  }
+
+  // Show loading state
+  configSaveBtn.disabled = true
+  configSaveBtn.textContent = "Saving..."
+  configTestResult.className = "config-inline-result"
+  configTestResult.textContent = "Verifying API key..."
+
   try {
     // Save API key to backend
-    await window.api.configureProvider(activeProvider, apiKey)
+    const result = await window.api.configureProvider(activeProvider, apiKey)
 
-    // Save config to local store
+    // Check if backend returned an error
+    if (result && result.error) {
+      throw new Error(result.error)
+    }
+
+    // Save config to local store (store sanitized key)
     await window.api.storeSet("provider_" + activeProvider, {
-      apiKey,
-      enabled: true
+      apiKey, // Store the key (already sanitized)
+      enabled: true,
+      lastUpdated: Date.now()
     })
 
     // Update UI — mark provider as enabled
@@ -1946,15 +2657,33 @@ configSaveBtn.addEventListener("click", async () => {
 
     // Show success
     configTestResult.className = "config-inline-result success"
-    configTestResult.textContent = "Saved successfully"
+    configTestResult.textContent = "✓ Saved successfully"
+
+    // Clear the input field for security
+    configApiKeyInput.value = ""
 
     // Auto-close after short delay
     setTimeout(() => {
       closeProviderConfig()
     }, 800)
   } catch (e) {
+    console.error("Provider config error:", e)
     configTestResult.className = "config-inline-result error"
-    configTestResult.textContent = "Save failed: " + e.message
+
+    // Provide more user-friendly error messages
+    let errorMsg = e.message || "Unknown error"
+    if (errorMsg.includes("401") || errorMsg.includes("403")) {
+      errorMsg = "Invalid API key. Please check your key."
+    } else if (errorMsg.includes("429")) {
+      errorMsg = "Rate limited. Please try again later."
+    } else if (errorMsg.includes("connection") || errorMsg.includes("network")) {
+      errorMsg = "Network error. Please check your connection."
+    }
+
+    configTestResult.textContent = "Failed: " + errorMsg
+  } finally {
+    configSaveBtn.disabled = false
+    configSaveBtn.textContent = "Save"
   }
 })
 

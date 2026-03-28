@@ -43,6 +43,19 @@ contextBridge.exposeInMainWorld("api", {
   // Transcribe endpoint
   getTranscribeUrl: () => `${BASE_URL}/transcribe`,
 
+  // Race mode stream URL — fires all providers, fastest wins
+  getRaceUrl: (query, mode = "fast", responseStyle = "concise", context = null) => {
+    const encodedQuery = encodeURIComponent(query || "")
+    const encodedMode = encodeURIComponent(mode)
+    const encodedStyle = encodeURIComponent(responseStyle)
+    let url = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}`
+    if (context && Array.isArray(context) && context.length > 0) {
+      const encodedContext = encodeURIComponent(JSON.stringify(context))
+      url += `&context=${encodedContext}`
+    }
+    return url
+  },
+
   // Cloud transcribe endpoint
   getCloudTranscribeUrl: () => `${BASE_URL}/transcribe-cloud`,
 
