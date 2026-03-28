@@ -625,6 +625,11 @@ function deleteConversation(id) {
 
 function closeHistoryPanel() {
   historyPanel.classList.remove("open")
+  // Reset scroll when closing
+  const historyList = document.getElementById("historyList")
+  if (historyList) {
+    historyList.scrollTop = 0
+  }
 }
 
 // ==============================
@@ -813,6 +818,9 @@ async function renderHistoryList() {
 
   // Render unpinned groups
   Object.keys(unpinnedGroups).forEach(group => renderGroup(group, unpinnedGroups[group], false))
+
+  // Ensure scroll is at top after rendering
+  historyList.scrollTop = 0
 }
 
 // ==============================
@@ -851,12 +859,45 @@ document.addEventListener("click", (e) => {
       <button class="history-dropdown-item danger" data-action="delete" data-id="${convId}"><span class="history-dropdown-icon">&#128465;</span>Delete</button>
     `
 
-    // Position dropdown relative to menu button
+    // Smart position dropdown to stay within viewport
     const rect = menuBtn.getBoundingClientRect()
-    dropdown.style.position = "fixed"
-    dropdown.style.top = rect.bottom + 4 + "px"
-    dropdown.style.right = window.innerWidth - rect.right + "px"
-    dropdown.style.zIndex = "99999"
+    const dropdownRect = dropdown.getBoundingClientRect()
+    const dropdownWidth = 150
+    const dropdownHeight = 180 // approximate
+    const padding = 10
+
+    let top, left
+
+    // Check available space on all sides
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const spaceRight = window.innerWidth - rect.right
+    const spaceLeft = rect.left
+
+    // Prefer below, but if not enough space, show above
+    if (spaceBelow >= dropdownHeight + padding || spaceBelow > spaceAbove) {
+      top = rect.bottom + 4
+    } else {
+      top = rect.top - dropdownHeight - 4
+    }
+
+    // Prefer left of button (inside panel), but if not enough space, show right
+    if (spaceLeft >= dropdownWidth + padding) {
+      left = rect.left - dropdownWidth - 4
+    } else if (spaceRight >= dropdownWidth + padding) {
+      left = rect.right + 4
+    } else {
+      // Center it if neither side has enough space
+      left = Math.max(padding, (window.innerWidth - dropdownWidth) / 2)
+    }
+
+    // Final bounds check
+    left = Math.max(padding, Math.min(left, window.innerWidth - dropdownWidth - padding))
+    top = Math.max(padding, Math.min(top, window.innerHeight - dropdownHeight - padding))
+
+    dropdown.style.top = top + "px"
+    dropdown.style.left = left + "px"
+    dropdown.style.right = "auto"
 
     document.body.appendChild(dropdown)
     requestAnimationFrame(() => dropdown.classList.add("open"))
@@ -2211,11 +2252,34 @@ summarizeBtn?.addEventListener("click", async () => {
 // HISTORY PANEL
 // ==============================
 historyBtn.addEventListener("click", () => {
+  const wasOpen = historyPanel.classList.contains("open")
   historyPanel.classList.toggle("open")
+
+  const historyList = document.getElementById("historyList")
+
   if (historyPanel.classList.contains("open")) {
+    // Opening - render and force scroll to top
     renderHistoryList()
+    // Force reflow and scroll to top
+    if (historyList) {
+      historyList.style.display = "none"
+      void historyList.offsetHeight
+      historyList.style.display = ""
+      historyList.scrollTop = 0
+    }
+  } else if (historyList) {
+    // Closing - reset scroll
+    historyList.scrollTop = 0
   }
 })
+
+// Back button — close history panel
+const historyBackBtn = document.getElementById("historyBackBtn")
+if (historyBackBtn) {
+  historyBackBtn.addEventListener("click", () => {
+    closeHistoryPanel()
+  })
+}
 
 // Search input — live filter
 const historySearchInput = document.getElementById("historySearch")

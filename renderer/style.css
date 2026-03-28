@@ -42,6 +42,8 @@ html, body {
   -webkit-font-smoothing: antialiased;
   height: 100%;
   width: 100%;
+  position: relative;
+  overscroll-behavior: none;
 }
 
 /* Apply font-size to root explicitly and all descendants */
@@ -539,8 +541,10 @@ select option {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 6px 14px 0;
+  padding: 8px 14px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .summarize-btn {
@@ -631,13 +635,14 @@ select option {
   flex-direction: column;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  padding-bottom: 4px;
 }
 
 .chat-area {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 14px 16px 20px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
   background: transparent;
@@ -980,21 +985,19 @@ select option {
    HISTORY PANEL
    ============================== */
 .history-panel {
-  position: absolute;
-  top: 0; right: -280px;
+  position: fixed;
+  top: 0;
+  right: -280px;
+  bottom: 0;
   width: 280px;
   max-width: 100vw;
-  max-height: 100vh;
-  height: 100%;
   background: rgba(18, 21, 36, 0.99);
   border-left: 1px solid var(--line);
   transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 500;
+  z-index: 9999;
   display: flex;
   flex-direction: column;
-  border-radius: 0 12px 12px 0;
   overflow: hidden;
-  box-shadow: -8px 0 32px rgba(0,0,0,0.4);
 }
 .history-panel.open { right: 0; }
 
@@ -1009,6 +1012,28 @@ select option {
   color: var(--text-main);
   flex-shrink: 0;
   background: rgba(18, 21, 36, 0.99);
+  gap: 8px;
+}
+
+.history-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.history-back-btn:hover {
+  border-color: var(--line-bright);
+  background: var(--surface-hover);
+  color: var(--text-main);
 }
 
 .history-conversation-count {
@@ -1093,11 +1118,13 @@ select option {
    ============================== */
 .history-list {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: scroll;
   padding: 8px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
   background: rgba(18, 21, 36, 0.99);
+  touch-action: pan-y;
+  contain: strict;
 }
 .history-list::-webkit-scrollbar { width: 4px; }
 .history-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
@@ -1332,8 +1359,10 @@ select option {
 
 /* Dropdown menu */
 .history-dropdown {
-  position: absolute;
-  top: 44px; right: 10px;
+  position: fixed;
+  top: auto;
+  right: auto;
+  bottom: auto;
   background: rgba(20, 24, 42, 0.99);
   border: 1px solid var(--line-bright);
   border-radius: 12px;

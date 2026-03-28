@@ -461,9 +461,11 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
                             for event in events:
                                 yield event
                             winner_found = True
-                            # Cancel remaining futures
+                            # Cancel remaining futures and wait for them
                             for f in futures:
                                 f.cancel()
+                            # Wait for cancellation to complete before exiting with block
+                            executor.shutdown(wait=True, cancel_futures=True)
                             break
                         # Error or empty — try next provider
                         logger.debug("Provider %s failed or empty, trying next", pk)
@@ -471,7 +473,6 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
                         break
                     except Exception as e:
                         logger.warning("Exception in race loop: %s", e)
-                        pass
 
             if not winner_found:
                 logger.error("All providers failed in race mode")
