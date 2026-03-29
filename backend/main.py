@@ -166,6 +166,7 @@ def list_providers():
         "xai": bool(os.getenv("XAI_API_KEY", "").strip()),
         "deepseek": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
         "groq": bool(os.getenv("GROQ_API_KEY", "").strip()),
+        "ollama-cloud": bool(os.getenv("OLLAMA_CLOUD_API_KEY", "").strip()),
         "ollama": True  # Ollama is always available if configured
     }
 
@@ -266,7 +267,7 @@ async def configure_provider(body: dict):
     provider = body.get("provider")
     api_key = body.get("api_key")
 
-    valid_providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
+    valid_providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud"]
     if provider not in valid_providers:
         return {"error": "Invalid provider"}
 
@@ -280,7 +281,8 @@ async def configure_provider(body: dict):
         "google": "GOOGLE_API_KEY",
         "xai": "XAI_API_KEY",
         "deepseek": "DEEPSEEK_API_KEY",
-        "groq": "GROQ_API_KEY"
+        "groq": "GROQ_API_KEY",
+        "ollama-cloud": "OLLAMA_CLOUD_API_KEY"
     }
 
     # Save to .env file
@@ -498,50 +500,65 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
     from dotenv import load_dotenv
     load_dotenv()
 
-    available = []
+    # Separate cloud and local providers
+    cloud_providers = []
+    local_providers = []
+
     # If enabled_set from frontend is provided, only use those providers
     if enabled_set:
         if "openai" in enabled_set and os.getenv("OPENAI_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
         if "anthropic" in enabled_set and os.getenv("ANTHROPIC_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
         if "google" in enabled_set and os.getenv("GOOGLE_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
         if "xai" in enabled_set and os.getenv("XAI_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
         if "deepseek" in enabled_set and os.getenv("DEEPSEEK_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
         if "groq" in enabled_set and os.getenv("GROQ_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+        if "ollama-cloud" in enabled_set and os.getenv("OLLAMA_CLOUD_API_KEY", "").strip():
+            cloud_providers.append("ollama-cloud")
+        # Only add local ollama if explicitly enabled in frontend
+        if "ollama" in enabled_set:
+            local_providers.append("ollama")
     else:
-        # Legacy behavior: use all providers with API keys
+        # Legacy: use all cloud providers with API keys, plus ollama as fallback
         if os.getenv("OPENAI_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
         if os.getenv("ANTHROPIC_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
         if os.getenv("GOOGLE_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
         if os.getenv("XAI_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
         if os.getenv("DEEPSEEK_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
         if os.getenv("GROQ_API_KEY", "").strip():
-            available.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-
-    # Always add ollama
-    available.append("ollama")
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
+        if os.getenv("OLLAMA_CLOUD_API_KEY", "").strip():
+            cloud_providers.append("ollama-cloud")
+        # Add local ollama as fallback (always available)
+        local_providers.append("ollama")
 
     # Deduplicate by provider name
-    seen = set()
-    selected = []
-    for pk in available:
-        pname = pk.split("-")[0]
-        if pname not in seen:
-            seen.add(pname)
-            selected.append(pk)
-    selected = selected[:4]  # Limit to 4 concurrent providers
+    def deduplicate(provider_list):
+        seen = set()
+        result = []
+        for pk in provider_list:
+            pname = pk.split("-")[0]
+            if pname not in seen:
+                seen.add(pname)
+                result.append(pk)
+        return result
 
-    logger.info("Race mode: %s providers selected: %s", len(selected), selected)
+    cloud_providers = deduplicate(cloud_providers)[:4]  # Limit to 4 concurrent
+    local_providers = deduplicate(local_providers)
+
+    # Combine: clouds first, then local as fallback
+    all_providers = cloud_providers + local_providers
+    logger.info("Race mode: clouds=%s, local=%s, combined=%s", cloud_providers, local_providers, all_providers)
 
     def fetch_events(pk):
         """Collect all SSE events from a provider. Returns (pk, events_list, error)."""
@@ -575,11 +592,12 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
         STATE["is_streaming"] = True
         winner_found = False
 
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(selected)) as executor:
+        # Phase 1: Race cloud providers
+        if cloud_providers:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(cloud_providers)) as executor:
                 futures = {
                     executor.submit(fetch_events, pk): pk
-                    for pk in selected
+                    for pk in cloud_providers
                 }
 
                 for future in concurrent.futures.as_completed(futures, timeout=60.0):
@@ -587,11 +605,10 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
                     try:
                         winner_pk, events, err = future.result(timeout=0)
                         if err is None and events and len(events) > 0:
-                            # Success! Yield all events with winner info injected into meta
-                            logger.info("Winner: %s", winner_pk)
+                            # Cloud provider succeeded!
+                            logger.info("Cloud winner: %s", winner_pk)
                             winner_display = MODEL_DISPLAY_NAMES.get(winner_pk, winner_pk)
                             for event in events:
-                                # Inject winner flag into the first meta event
                                 if event.startswith("event: meta\n"):
                                     import re as _re
                                     m = _re.search(r"data: (\{.*\})\n\n", event)
@@ -602,28 +619,59 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
                                         event = f"event: meta\ndata: {json.dumps(meta_obj)}\n\n"
                                 yield event
                             winner_found = True
-                            # Cancel remaining futures and wait for them
                             for f in futures:
                                 f.cancel()
-                            # Wait for cancellation to complete before exiting with block
                             executor.shutdown(wait=True, cancel_futures=True)
                             break
-                        # Error or empty — try next provider
-                        logger.debug("Provider %s failed or empty, trying next", pk)
+                        logger.debug("Cloud provider %s failed, trying next", pk)
                     except concurrent.futures.CancelledError:
                         break
                     except Exception as e:
-                        logger.warning("Exception in race loop: %s", e)
+                        logger.warning("Exception in cloud race: %s", e)
 
-            if not winner_found:
-                logger.error("All providers failed in race mode")
-                yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"All providers failed\"}}\n\n"
+        # Phase 2: Fall back to local providers if no cloud succeeded
+        if not winner_found and local_providers:
+            logger.info("All clouds failed, trying local providers: %s", local_providers)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(local_providers)) as executor:
+                futures = {
+                    executor.submit(fetch_events, pk): pk
+                    for pk in local_providers
+                }
 
-        except Exception as e:
-            logger.error("Race generator error: %s", e)
-            yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"Race mode error: {str(e)}\"}}\n\n"
-        finally:
-            STATE["is_streaming"] = False
+                for future in concurrent.futures.as_completed(futures, timeout=60.0):
+                    pk = futures[future]
+                    try:
+                        winner_pk, events, err = future.result(timeout=0)
+                        if err is None and events and len(events) > 0:
+                            # Local provider succeeded!
+                            logger.info("Local winner: %s", winner_pk)
+                            winner_display = MODEL_DISPLAY_NAMES.get(winner_pk, winner_pk)
+                            for event in events:
+                                if event.startswith("event: meta\n"):
+                                    import re as _re
+                                    m = _re.search(r"data: (\{.*\})\n\n", event)
+                                    if m:
+                                        meta_obj = json.loads(m.group(1))
+                                        meta_obj["winner"] = True
+                                        meta_obj["winnerName"] = winner_display
+                                        event = f"event: meta\ndata: {json.dumps(meta_obj)}\n\n"
+                                yield event
+                            winner_found = True
+                            for f in futures:
+                                f.cancel()
+                            executor.shutdown(wait=True, cancel_futures=True)
+                            break
+                        logger.debug("Local provider %s failed, trying next", pk)
+                    except concurrent.futures.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.warning("Exception in local race: %s", e)
+
+        if not winner_found:
+            logger.error("All providers failed in race mode")
+            yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"All providers failed\"}}\n\n"
+
+        STATE["is_streaming"] = False
 
     return StreamingResponse(race_generator(), media_type="text/event-stream")
 

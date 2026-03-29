@@ -1791,8 +1791,8 @@ async function streamAIRace(query) {
   const responseStyle = getSelectedResponseStyle()
   const contextMessages = getContextMessages()
 
-  // Get enabled providers from store
-  const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
+  // Get enabled providers from store - clouds first, then ollama as fallback
+  const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud"]
   const enabledProviders = []
   for (const p of CLOUD_PROVIDERS) {
     const stored = await window.api.storeGet("provider_" + p) || {}
@@ -1800,6 +1800,8 @@ async function streamAIRace(query) {
       enabledProviders.push(p)
     }
   }
+  // Always include local ollama as fallback (will be used if all clouds fail)
+  enabledProviders.push("ollama")
 
   // Build race URL directly in renderer (encodeURIComponent is available here)
   const BASE_URL = "http://127.0.0.1:8000"
@@ -2697,6 +2699,12 @@ const PROVIDER_META = {
       { value: "groq-mixtral-8x7b", label: "Mixtral 8x7B" },
       { value: "groq-qwen-2-5-72b", label: "Qwen 2.5 72B" },
     ]
+  },
+  "ollama-cloud": {
+    name: "Ollama Cloud",
+    models: [
+      { value: "ollama-cloud", label: "Ollama Cloud (qwen2.5)" },
+    ]
   }
 }
 
@@ -2715,6 +2723,7 @@ function openProviderConfig(provider) {
     xai: "rgba(255,255,255,0.8)",
     deepseek: "#7dd3fc",
     groq: "#fca5a5",
+    "ollama-cloud": "#f97316",
   }[provider] || "rgba(255,255,255,0.5)"
 
   // Load stored config
@@ -2748,11 +2757,13 @@ async function loadProviderConfig(provider) {
   const stored = await window.api.storeGet("provider_" + provider) || {}
   const hasKey = await checkProviderHasKey(provider)
 
-  // Mask the API key for security (show only first 8 chars)
-  const apiKey = stored.apiKey || ""
-  configApiKeyInput.value = apiKey
-  if (apiKey && apiKey.length > 12) {
-    configApiKeyInput.placeholder = apiKey.substring(0, 8) + "••••••••"
+  // Clear the API key input for security
+  configApiKeyInput.value = ""
+  // Only show masked placeholder if key exists (no actual key in input)
+  if (hasKey) {
+    configApiKeyInput.placeholder = "API key configured ••••••••"
+  } else {
+    configApiKeyInput.placeholder = getApiKeyHint(provider)
   }
 
   const statusBadge = document.getElementById("configStatusBadge")
@@ -2808,7 +2819,8 @@ function validateApiKeyFormat(provider, apiKey) {
     google: /^[a-zA-Z0-9_-]{20,}$/,
     xai: /^xai-[a-zA-Z0-9_-]{20,}$/,
     deepseek: /^sk-[a-zA-Z0-9_-]{20,}$/,
-    groq: /^gsk_[a-zA-Z0-9_-]{20,}$/
+    groq: /^gsk_[a-zA-Z0-9_-]{20,}$/,
+    "ollama-cloud": /^.{10,}$/  // Ollama Cloud: any string, min 10 chars
   }
   const regex = formats[provider]
   if (!regex) return true // Unknown provider, skip validation
@@ -2825,7 +2837,8 @@ function getApiKeyHint(provider) {
     google: "Format: AIza... (starts with AIza)",
     xai: "Format: xai-xxxxxxxxxxxxxxxxxxxxxxxx",
     deepseek: "Format: sk-xxxxxxxxxxxxxxxxxxxxxxxx",
-    groq: "Format: gsk_xxxxxxxxxxxxxxxxxxxxxx"
+    groq: "Format: gsk_xxxxxxxxxxxxxxxxxxxxxx",
+    "ollama-cloud": "Format: Your ollama.com API key (10+ chars)"
   }
   return hints[provider] || "Enter your API key"
 }
@@ -2862,13 +2875,6 @@ configSaveBtn.addEventListener("click", async () => {
     if (result && result.error) {
       throw new Error(result.error)
     }
-
-    // Save config to local store (store sanitized key)
-    await window.api.storeSet("provider_" + activeProvider, {
-      apiKey, // Store the key (already sanitized)
-      enabled: true,
-      lastUpdated: Date.now()
-    })
 
     // Update UI — mark provider as enabled
     syncProviderRow(activeProvider, true)
@@ -2921,14 +2927,21 @@ function syncProviderRow(key, enabled) {
   card.classList.toggle("provider-disabled", !enabled)
   if (toggle) toggle.checked = enabled
   if (statusEl) {
-    statusEl.className = "provider-status " + (enabled ? "connected" : "dimmed")
-    statusEl.textContent = enabled ? "Connected" : "Add API key to enable"
+    // Local ollama doesn't need API key
+    if (key === "ollama") {
+      statusEl.className = "provider-status " + (enabled ? "connected" : "dimmed")
+      statusEl.textContent = enabled ? "Running locally" : "Disabled"
+    } else {
+      statusEl.className = "provider-status " + (enabled ? "connected" : "dimmed")
+      statusEl.textContent = enabled ? "Connected" : "Add API key to enable"
+    }
   }
 }
 
-// Wire up toggle switches for all cloud providers
-const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
-CLOUD_PROVIDERS.forEach(p => {
+// Wire up toggle switches for cloud providers (NOT local ollama - it has no API key)
+// Local ollama is always enabled by default and doesn't need API key
+const CLOUD_PROVIDERS_WITH_KEY = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud"]
+CLOUD_PROVIDERS_WITH_KEY.forEach(p => {
   const toggle = document.getElementById("toggle-" + p)
   if (!toggle) return
   toggle.addEventListener("change", async () => {
@@ -2953,6 +2966,18 @@ CLOUD_PROVIDERS.forEach(p => {
     syncProviderRow(p, isEnabled)
   })
 })
+
+// Local Ollama - always enabled, no API key needed
+const ollamaToggle = document.getElementById("toggle-ollama")
+if (ollamaToggle) {
+  ollamaToggle.checked = true
+  ollamaToggle.addEventListener("change", async () => {
+    // Local ollama is always on - just persist state
+    const stored = await window.api.storeGet("provider_ollama") || {}
+    await window.api.storeSet("provider_ollama", { ...stored, enabled: ollamaToggle.checked })
+    syncProviderRow("ollama", ollamaToggle.checked)
+  })
+}
 
 function updateActiveProviders() {
   const selected = cloudModelSelect ? cloudModelSelect.value : "auto"

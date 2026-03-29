@@ -11,8 +11,12 @@ load_dotenv()
 # ==============================
 # 🌐 OLLAMA CONFIG
 # ==============================
-# Base URL where Ollama server is running
+# Base URL where Ollama server is running (local)
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+
+# Ollama Cloud URL (ollama.com or custom cloud endpoint)
+OLLAMA_CLOUD_URL = os.getenv("OLLAMA_CLOUD_URL", "https://ollama.com")
+OLLAMA_CLOUD_API_KEY = os.getenv("OLLAMA_CLOUD_API_KEY", "")
 
 # Default fallback model (must exist in `ollama list`)
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")

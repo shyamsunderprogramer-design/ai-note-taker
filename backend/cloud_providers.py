@@ -100,6 +100,80 @@ def get_groq_key():
         raise ValueError("Groq API key not configured")
     return key
 
+def get_ollama_cloud_key():
+    key = os.getenv("OLLAMA_CLOUD_API_KEY", "").strip()
+    if not key:
+        raise ValueError("Ollama Cloud API key not configured")
+    return key
+
+
+# ==============================
+# OLLAMA CLOUD (ollama.com)
+# ==============================
+
+def ask_ollama_cloud(prompt, model="qwen2.5:1.5b", stream=False, mode="adaptive", style="concise", messages=None):
+    """Ollama Cloud - uses https://ollama.com/api/chat endpoint"""
+    import time
+    start = time.time()
+
+    api_key = get_ollama_cloud_key()
+    url = "https://ollama.com/api/chat"
+
+    # Build conversation for chat endpoint
+    chat_messages = []
+    if messages:
+        for msg in messages:
+            chat_messages.append({"role": msg.get("role", "user"), "content": msg.get("text", "")})
+    chat_messages.append({"role": "user", "content": prompt})
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "model": model,
+        "messages": chat_messages,
+        "stream": stream
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=body, stream=stream, timeout=60)
+        if response.status_code != 200:
+            yield _make_error(f"Ollama Cloud error: HTTP {response.status_code}")
+            return
+
+        if stream:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    import json as _json
+                    data = _json.loads(line.decode("utf-8"))
+                    if "message" in data:
+                        content = data["message"].get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    if data.get("done", False):
+                        break
+                except Exception:
+                    pass
+        else:
+            data = response.json()
+            if "message" in data:
+                yield _make_content(data["message"].get("content", ""))
+
+    except Exception as e:
+        yield _make_error(f"Ollama Cloud error: {str(e)}")
+
+    ms = int((time.time() - start) * 1000)
+    yield _make_done(ms)
+
+
+def ask_ollama_cloud_stream(prompt, model="qwen2.5:1.5b", mode="adaptive", style="concise", messages=None):
+    """Streaming version of Ollama Cloud"""
+    yield from ask_ollama_cloud(prompt, model=model, stream=True, mode=mode, style=style, messages=messages)
+
 
 # ==============================
 # BASE NON-STREAMING
@@ -514,6 +588,8 @@ PROVIDER_MODEL_MAP = {
     "groq-llama-3-2-3b": ("groq", "llama-3.2-3b-preview"),
     "groq-mixtral-8x7b": ("groq", "mixtral-8x7b-32768"),
     "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
+    # Ollama Cloud
+    "ollama-cloud": ("ollama-cloud", "qwen2.5:1.5b"),
 }
 
 MODEL_DISPLAY_NAMES = {
@@ -551,6 +627,7 @@ MODEL_DISPLAY_NAMES = {
     "groq-mixtral-8x7b": "Mixtral 8x7B",
     "groq-qwen-2-5-72b": "Qwen 2.5 72B",
     "ollama": "Ollama",
+    "ollama-cloud": "Ollama Cloud",
 }
 
 
@@ -570,4 +647,6 @@ def get_stream_fn(provider_key):
         return ask_deepseek_stream
     elif provider_name == "groq":
         return ask_groq_stream
+    elif provider_name == "ollama-cloud":
+        return ask_ollama_cloud_stream
     return None

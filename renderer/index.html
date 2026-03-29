@@ -273,20 +273,37 @@
           <div class="settings-section-label">AI Providers</div>
           <div class="provider-list">
 
-            <!-- Ollama -->
+            <!-- Ollama Local -->
             <div class="provider-row" id="card-ollama">
               <span class="provider-logo provider-logo-ollama">O</span>
               <div class="provider-info">
                 <div class="provider-name-row">
-                  <span class="provider-name">Ollama</span>
-                  <span class="provider-badge">Local+Cloud</span>
+                  <span class="provider-name">Ollama Local</span>
+                  <span class="provider-badge">Local</span>
                 </div>
-                <span class="provider-status" id="status-ollama">Local model</span>
+                <span class="provider-status" id="status-ollama">No API key needed</span>
               </div>
               <label class="provider-toggle">
                 <input type="checkbox" id="toggle-ollama" checked />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
+            </div>
+
+            <!-- Ollama Cloud -->
+            <div class="provider-row" id="card-ollama-cloud">
+              <span class="provider-logo provider-logo-ollama">O</span>
+              <div class="provider-info">
+                <div class="provider-name-row">
+                  <span class="provider-name">Ollama Cloud</span>
+                  <span class="provider-enabled-dot" id="dot-ollama-cloud"></span>
+                </div>
+                <span class="provider-status dimmed" id="status-ollama-cloud">Add API key to enable</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="toggle-ollama-cloud" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+              <button class="provider-config-btn" id="cfg-ollama-cloud" data-provider="ollama-cloud">Configure</button>
             </div>
 
             <!-- OpenAI -->
@@ -571,6 +588,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=92"></script>
+  <script src="app.js?v=96"></script>
 </body>
 </html>
