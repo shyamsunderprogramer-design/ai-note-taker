@@ -1152,31 +1152,76 @@ function detectCodeLanguage(code) {
   return "code"
 }
 
+// Simple YAML syntax highlighter - works without hljs language detection
+function highlightYAML(code) {
+  if (!code) return ""
+  const escaped = escapeHtml(code)
+  const lines = escaped.split("\n")
+  const result = []
+
+  for (const line of lines) {
+    // Match: key: value (with optional indent)
+    const keyMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_-]*)(\s*:\s*)(.*)/)
+    if (keyMatch) {
+      const [, indent, key, colon, value] = keyMatch
+      let highlighted = `${indent}<span class="yaml-key">${key}</span>${colon}`
+
+      if (value) {
+        // Check if value is quoted string
+        const strMatch = value.match(/^(['"])(.*)(\1)\s*$/)
+        if (strMatch) {
+          highlighted += `<span class="yaml-string">${strMatch[1]}${strMatch[2]}${strMatch[1]}</span>`
+        }
+        // Check if number
+        else if (/^-?\d+\.?\d*$/.test(value.trim())) {
+          highlighted += `<span class="yaml-number">${value.trim()}</span>`
+        }
+        // Check if boolean or null
+        else if (/^(true|false|null|yes|no)$/i.test(value.trim())) {
+          highlighted += `<span class="yaml-bool">${value.trim()}</span>`
+        }
+        // Otherwise it's a plain value (string)
+        else {
+          highlighted += `<span class="yaml-string">${value}</span>`
+        }
+      }
+      result.push(highlighted)
+    }
+    // Match: - list item (dash at start of line after indent)
+    else if (line.match(/^(\s*)-\s+/)) {
+      result.push(line.replace(/^(\s*)(-\s+)(.*)/, '$1<span class="yaml-dash">$2</span><span class="yaml-string">$3</span>'))
+    }
+    // Regular text line
+    else {
+      result.push(line)
+    }
+  }
+
+  return result.join("\n")
+}
+
 // Helper to highlight code using hljs (already loaded locally)
 function highlightCode(code, lang) {
-  if (lang === "yaml" || lang === "code") {
-    // Use auto-detect for better highlighting
-    if (window.hljs && window.hljs.highlightAuto) {
-      try {
-        const result = window.hljs.highlightAuto(code)
-        return result.value
-      } catch (e) {}
-    }
-    return escapeHtml(code)
+  // For YAML, use our custom highlighter for better results
+  if (lang === "yaml") {
+    return highlightYAML(code)
   }
+
   if (window.hljs && window.hljs.highlight) {
     try {
       const result = window.hljs.highlight(code, { language: lang, ignoreIllegals: true })
       return result.value
     } catch (e) {
-      // Fall back to auto-detect
-      try {
-        const result = window.hljs.highlightAuto(code)
-        return result.value
-      } catch (e2) {
-        return escapeHtml(code)
+      // Fall back to YAML highlighter for k8s-like content
+      if (code.includes("apiVersion:") || code.includes("Kind:") || code.includes("metadata:")) {
+        return highlightYAML(code)
       }
+      return escapeHtml(code)
     }
+  }
+  // Fall back to YAML highlighter
+  if (code.includes("apiVersion:") || code.includes("Kind:") || code.includes("metadata:")) {
+    return highlightYAML(code)
   }
   return escapeHtml(code)
 }

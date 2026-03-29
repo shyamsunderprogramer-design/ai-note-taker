@@ -888,26 +888,24 @@ select option {
 
 /* Code block styling - multi-color syntax highlighting */
 .code-block {
-  background: rgba(30, 30, 46, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-  margin: 10px 0;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0;
   overflow-x: auto;
   font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.85em;
-  line-height: 1.65;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  line-height: 1.6;
   max-width: 100%;
   box-sizing: border-box;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
   tab-size: 2;
 }
 
 .code-block code.hljs {
-  background: transparent;
+  background: transparent !important;
   padding: 0;
   font-size: inherit;
   font-family: inherit;
@@ -917,8 +915,19 @@ select option {
   white-space: pre-wrap;
   word-break: break-word;
   tab-size: 2;
-  /* Don't set color here - let hljs token colors show through */
 }
+
+/* Ensure all hljs spans inside code blocks have transparent bg */
+.code-block .hljs {
+  background: transparent !important;
+}
+
+/* YAML syntax highlighting - matching GitHub dark theme colors */
+.code-block .yaml-key { color: #7ee787; }     /* green - keys */
+.code-block .yaml-string { color: #a5d6ff; }  /* blue - strings */
+.code-block .yaml-number { color: #79c0ff; }  /* cyan - numbers */
+.code-block .yaml-bool { color: #ff7b72; }   /* red - boolean */
+.code-block .yaml-dash { color: #f2cc60; }    /* yellow - dash */
 
 /* Code block scrollbar */
 .code-block::-webkit-scrollbar { height: 4px; }
