@@ -1,18 +1,22 @@
 import asyncio
 import concurrent.futures
 import json
+import logging
 import os
 import queue
+import re
+import requests
 import shutil
 import signal
 import sys
 import threading
 import time
 
-from fastapi import FastAPI, File, Query, UploadFile, WebSocket
+from fastapi import FastAPI, File, Form, Query, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
+from config import OLLAMA_URL
 from whisper_handler import (
     clean_text,
     is_meaningful,
@@ -27,6 +31,15 @@ from whisper_handler import (
 sys.stdout.reconfigure(encoding="utf-8")
 
 app = FastAPI()
+
+# Sanitize API keys from uvicorn access logs
+class APIKeyFilter(logging.Filter):
+    def filter(self, record):
+        record.msg = re.sub(r"api_key=[^&\s]*", "api_key=***", str(record.msg))
+        return True
+
+uvicorn_logger = logging.getLogger("uvicorn.access")
+uvicorn_logger.addFilter(APIKeyFilter())
 
 UPLOAD_DIR = "temp_audio"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -157,16 +170,108 @@ def list_providers():
     }
 
 
+@app.get("/ollama/models")
+def list_ollama_models():
+    """Proxy to Ollama's GET /api/tags — returns installed local models."""
+    try:
+        response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        return {"error": f"Ollama returned {response.status_code}", "models": []}
+    except Exception as e:
+        return {"error": str(e), "models": []}
+
+
+@app.post("/ollama/pull")
+def pull_ollama_model(model: str = Query(...)):
+    """Trigger a model pull — runs async, returns immediately."""
+    import threading
+    def background_pull():
+        try:
+            logger.info("Starting model pull: %s", model)
+            pull_resp = requests.post(
+                f"{OLLAMA_URL}/api/pull",
+                json={"name": model},
+                stream=True,
+                timeout=3600
+            )
+            # Read the stream to ensure completion (or failure)
+            for line in pull_resp.iter_lines():
+                if line:
+                    logger.info("[Ollama pull] %s", line.decode("utf-8", errors="replace"))
+            logger.info("Model pull complete: %s", model)
+        except Exception as e:
+            logger.error("Model pull failed for %s: %s", model, e)
+
+    threading.Thread(target=background_pull, daemon=True).start()
+    return {"status": "pull_started", "model": model}
+
+
+@app.delete("/ollama/models/{model_name}")
+def delete_ollama_model(model_name: str):
+    """Delete a local Ollama model."""
+    try:
+        response = requests.delete(
+            f"{OLLAMA_URL}/api/delete",
+            json={"name": model_name},
+            timeout=30
+        )
+        if response.status_code == 200:
+            return {"status": "deleted", "model": model_name}
+        return {"error": f"Failed to delete model: {response.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/ask-with-image")
+async def ask_with_image(
+    query: str = Form(...),
+    mode: str = Form("adaptive"),
+    style: str = Form("concise"),
+    provider: str = Form("ollama"),
+    context: str = Form(None),
+    image_b64: str = Form(None)
+):
+    """Accept text + optional base64 screenshot, stream AI response via SSE."""
+    messages = None
+    if context:
+        try:
+            import json
+            messages = json.loads(context)
+        except Exception:
+            pass
+
+    def generator():
+        STATE["is_streaming"] = True
+        try:
+            from ai_router import ask_ollama_vision_stream
+            for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages):
+                yield event
+        except Exception as e:
+            import json
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
+        finally:
+            STATE["is_streaming"] = False
+
+    return StreamingResponse(generator(), media_type="text/event-stream")
+
+
 @app.post("/configure")
-async def configure_provider(provider: str = Query(...), api_key: str = Query(...)):
-    """Save API key for a cloud provider — accepts JSON body or form fields."""
+async def configure_provider(body: dict):
+    """Save API key for a cloud provider — accepts JSON body (NOT query params)."""
     from dotenv import load_dotenv
     import os
     load_dotenv()
 
+    provider = body.get("provider")
+    api_key = body.get("api_key")
+
     valid_providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
     if provider not in valid_providers:
         return {"error": "Invalid provider"}
+
+    if not api_key:
+        return {"error": "Missing api_key"}
 
     # Map provider names to env var names
     env_vars = {
@@ -466,6 +571,7 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
             return (pk, [], str(e))
 
     def race_generator():
+        from cloud_providers import MODEL_DISPLAY_NAMES
         STATE["is_streaming"] = True
         winner_found = False
 
@@ -481,9 +587,19 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
                     try:
                         winner_pk, events, err = future.result(timeout=0)
                         if err is None and events and len(events) > 0:
-                            # Success! Yield all events
+                            # Success! Yield all events with winner info injected into meta
                             logger.info("Winner: %s", winner_pk)
+                            winner_display = MODEL_DISPLAY_NAMES.get(winner_pk, winner_pk)
                             for event in events:
+                                # Inject winner flag into the first meta event
+                                if event.startswith("event: meta\n"):
+                                    import re as _re
+                                    m = _re.search(r"data: (\{.*\})\n\n", event)
+                                    if m:
+                                        meta_obj = json.loads(m.group(1))
+                                        meta_obj["winner"] = True
+                                        meta_obj["winnerName"] = winner_display
+                                        event = f"event: meta\ndata: {json.dumps(meta_obj)}\n\n"
                                 yield event
                             winner_found = True
                             # Cancel remaining futures and wait for them

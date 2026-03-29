@@ -29,7 +29,7 @@ MODEL_CODE = os.getenv("OLLAMA_MODEL_CODE", "qwen2.5:1.5b")
 MODEL_INTERVIEW = os.getenv("OLLAMA_MODEL_INTERVIEW", "llama3:latest")
 MODEL_UNIVERSAL = os.getenv("OLLAMA_MODEL_UNIVERSAL", "mistral:latest")
 MODEL_ADAPTIVE = os.getenv("OLLAMA_MODEL_ADAPTIVE", DEFAULT_MODEL)
-ALLOWED_MODES = ("auto", "fast", "cloud", "interview", "universal", "adaptive", "reasoning", "code")
+ALLOWED_MODES = ("auto", "fast", "cloud", "interview", "universal", "adaptive", "reasoning", "code", "turbo")
 
 
 # ==============================
@@ -39,7 +39,11 @@ ALLOWED_MODES = ("auto", "fast", "cloud", "interview", "universal", "adaptive", 
 AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.3"))
 
 # Timeout for AI requests (seconds)
-AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "60"))
+AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "30"))
+
+# Super-fast mode: tiny model for instant responses
+MODEL_TURBO = os.getenv("OLLAMA_MODEL_TURBO", "phi:latest")  # ~360M params, very fast
+TURBO_MAX_TOKENS = int(os.getenv("TURBO_MAX_TOKENS", "150"))  # Very short responses
 
 
 # ==============================
@@ -57,6 +61,9 @@ def get_ai_model(mode="adaptive"):
 
     if mode == "reasoning":
         return MODEL_REASONING
+
+    if mode == "turbo":
+        return MODEL_TURBO
 
     if mode == "code":
         return MODEL_CODE

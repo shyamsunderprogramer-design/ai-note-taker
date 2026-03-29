@@ -1,8 +1,11 @@
+import logging
 import os
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("cloud_providers")
 
 
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):

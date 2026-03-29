@@ -2,8 +2,8 @@
 <html>
 <head>
   <title>AI Note Taker</title>
-  <link rel="stylesheet" href="style.css?v=16">
   <link rel="stylesheet" href="hljs-github-dark.min.css">
+  <link rel="stylesheet" href="style.css?v=23">
   <script src="hljs.min.js"></script>
 </head>
 <body>
@@ -46,6 +46,7 @@
         <select id="modeSelect">
           <option value="auto" selected>Auto</option>
           <option value="fast">Fast</option>
+          <option value="turbo">Turbo ⚡</option>
           <option value="adaptive">Adaptive</option>
           <option value="universal">Universal</option>
           <option value="interview">Interview</option>
@@ -100,10 +101,20 @@
             <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
           </optgroup>
           <optgroup label="Ollama (Local)">
-            <option value="phi3:latest">Phi3</option>
-            <option value="tinyllama:latest">TinyLlama</option>
-            <option value="llama3:latest">Llama3</option>
-            <option value="mistral:latest">Mistral</option>
+            <option value="qwen2.5:1.5b">Qwen 2.5 1.5B</option>
+            <option value="deepseek-r1:8b">DeepSeek R1 8B</option>
+            <option value="deepseek-r1:latest">DeepSeek R1 Latest</option>
+            <option value="qwen3.5:latest">Qwen 3.5 Latest</option>
+          </optgroup>
+          <optgroup label="Ollama Cloud">
+            <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
+            <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
+            <option value="glm-4.7:cloud">GLM 4.7</option>
+            <option value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</option>
+            <option value="rnj-1:8b-cloud">RNJ-1 8B</option>
+            <option value="nemotron-3-super:cloud">Nemotron 3 Super</option>
+            <option value="kimi-k2.5:cloud">Kimi K2.5</option>
+            <option value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</option>
           </optgroup>
         </select>
       </div>
@@ -268,7 +279,7 @@
               <div class="provider-info">
                 <div class="provider-name-row">
                   <span class="provider-name">Ollama</span>
-                  <span class="provider-badge">Local</span>
+                  <span class="provider-badge">Local+Cloud</span>
                 </div>
                 <span class="provider-status" id="status-ollama">Local model</span>
               </div>
@@ -429,8 +440,32 @@
                 <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
                 <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
               </optgroup>
+              <optgroup label="Ollama Cloud">
+                <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
+                <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
+                <option value="glm-4.7:cloud">GLM 4.7</option>
+                <option value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</option>
+                <option value="rnj-1:8b-cloud">RNJ-1 8B</option>
+                <option value="nemotron-3-super:cloud">Nemotron 3 Super</option>
+                <option value="kimi-k2.5:cloud">Kimi K2.5</option>
+                <option value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</option>
+              </optgroup>
             </select>
           </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
+          <div class="settings-section-label">Ollama Models</div>
+          <div class="ollama-models-list" id="ollamaModelsList">
+            <div class="ollama-models-loading">Loading models...</div>
+          </div>
+          <div class="ollama-pull-row">
+            <input type="text" id="ollamaPullInput" class="ollama-pull-input" placeholder="e.g. llama3:latest" />
+            <button id="ollamaPullBtn" class="ollama-pull-btn">Pull</button>
+          </div>
+          <div class="ollama-pull-status" id="ollamaPullStatus"></div>
         </div>
       </div>
     </div>
@@ -536,6 +571,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=89"></script>
 </body>
 </html>

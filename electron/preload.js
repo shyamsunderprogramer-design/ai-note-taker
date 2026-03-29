@@ -62,6 +62,19 @@ contextBridge.exposeInMainWorld("api", {
   // Cloud transcribe endpoint
   getCloudTranscribeUrl: () => `${BASE_URL}/transcribe-cloud`,
 
+  // Ollama model management
+  getOllamaModelsUrl: () => `${BASE_URL}/ollama/models`,
+  pullOllamaModel: (model) => {
+    return fetch(`${BASE_URL}/ollama/pull?model=${encodeURIComponent(model)}`, { method: "POST" })
+  },
+  deleteOllamaModel: (model) => {
+    return fetch(`${BASE_URL}/ollama/models/${encodeURIComponent(model)}`, { method: "DELETE" })
+  },
+
+  // Screenshot capture + multimodal AI
+  captureScreenshot: () => ipcRenderer.invoke("window:capture-screenshot"),
+  getAskWithImageUrl: () => `${BASE_URL}/ask-with-image`,
+
   // Set AI mode on backend
   setMode: async (mode) => {
     const response = await fetch(`${BASE_URL}/set-mode?mode=${encodeURIComponent(mode)}`, {
@@ -77,10 +90,12 @@ contextBridge.exposeInMainWorld("api", {
     return response.json()
   },
 
-  // Configure provider API key
+  // Configure provider API key — sends via JSON body (not URL)
   configureProvider: async (provider, apiKey) => {
-    const response = await fetch(`${BASE_URL}/configure?provider=${encodeURIComponent(provider)}&api_key=${encodeURIComponent(apiKey)}`, {
-      method: "POST"
+    const response = await fetch(`${BASE_URL}/configure`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, api_key: apiKey })
     })
     return response.json()
   },
@@ -109,6 +124,9 @@ contextBridge.exposeInMainWorld("api", {
 
   // Save file with dialog
   saveFile: (options) => ipcRenderer.invoke("dialog:save-file", options),
+
+  // Copy text to clipboard (Electron-safe)
+  copyToClipboard: (text) => ipcRenderer.invoke("clipboard:write", text),
 
   // Listen for stealth state changes (triggered by shortcuts in main process)
   onStealthStateChanged: (callback) => {

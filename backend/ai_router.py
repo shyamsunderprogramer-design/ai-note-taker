@@ -4,7 +4,7 @@ import re
 
 import requests
 
-from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model
+from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, MODEL_TURBO, TURBO_MAX_TOKENS
 from utils import clean_ai_output
 
 logger = logging.getLogger("ai_router")
@@ -243,8 +243,11 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
 
         final_prompt = build_prompt(prompt, mode, style, messages)
 
-        # num_predict limits response tokens — too low causes truncated output
-        num_predict = 300 if style == "concise" else (2000 if style == "detailed" else 500)
+        # Cloud models like qwen3.5:397b-cloud and minimax-m2.7:cloud are more capable
+        # and produce better responses, so give them more tokens
+        is_cloud_model = model_name and (":cloud" in str(model_name) or "-cloud" in str(model_name))
+        is_turbo = mode == "turbo"
+        num_predict = TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else (2000 if style == "detailed" else 500)))
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
             json={
@@ -309,6 +312,79 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         yield _make_error("AI error occurred.")
 
 
+def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="concise", messages=None):
+    """Ollama streaming with optional image — for multimodal (vision) models like llava."""
+    import time
+    start = time.time()
+    try:
+        final_prompt = build_prompt(prompt, mode, style, messages)
+        num_predict = 300 if style == "concise" else (2000 if style == "detailed" else 500)
+
+        payload = {
+            "model": get_ai_model(mode),
+            "prompt": final_prompt,
+            "stream": True,
+            "options": {
+                "temperature": AI_TEMPERATURE,
+                "num_predict": num_predict
+            }
+        }
+        if image_b64:
+            payload["images"] = [image_b64]
+
+        logger.info("Vision stream: model=%s, has_image=%s, prompt=%s",
+            get_ai_model(mode), bool(image_b64), prompt[:80] + "...")
+
+        response = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json=payload,
+            stream=True,
+            timeout=AI_TIMEOUT
+        )
+
+        if response.status_code != 200:
+            logger.error("Ollama vision service returned status %d: %s", response.status_code, response.text)
+            yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
+            return
+
+        model_display = get_ai_model(mode)
+        yield _make_meta(model_display, "ollama")
+
+        chunk_count = 0
+        for line in response.iter_lines():
+            if not line:
+                continue
+            try:
+                data = json.loads(line.decode("utf-8", errors="replace"))
+                if "response" in data:
+                    chunk = data["response"]
+                    if chunk.strip():
+                        yield _make_content(chunk)
+                        chunk_count += 1
+                if data.get("done", False):
+                    break
+            except json.JSONDecodeError as e:
+                logger.warning("Vision stream JSON decode error: %s", e)
+                continue
+            except Exception as e:
+                logger.warning("Vision stream parse error: %s", e)
+                continue
+
+        ms = int((time.time() - start) * 1000)
+        logger.debug("Vision stream complete: %d chunks in %dms", chunk_count, ms)
+        yield _make_done(ms)
+
+    except requests.exceptions.Timeout:
+        logger.error("Vision stream timeout after %ds", AI_TIMEOUT)
+        yield _make_error("AI response timeout. Please try again.")
+    except requests.exceptions.ConnectionError:
+        logger.error("Vision stream connection error")
+        yield _make_error("Cannot connect to AI service. Is Ollama running?")
+    except Exception as e:
+        logger.error("Vision stream error: %s", e, exc_info=True)
+        yield _make_error("AI error occurred.")
+
+
 def _make_meta(model, provider):
     return f"event: meta\ndata: {{\"type\":\"meta\",\"model\":\"{model}\",\"provider\":\"{provider}\"}}\n\n"
 
@@ -358,7 +434,21 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     Cloud providers yield their own SSE strings directly.
     Ollama falls through to ask_ollama_stream().
     """
-    # Check if provider looks like a cloud model string (has a provider prefix with dash)
+    # Check if provider looks like an Ollama model name (contains colon)
+    # e.g. "qwen3.5:397b-cloud", "deepseek-r1:8b", "minimax-m2.7:cloud"
+    # Cloud providers use dashes, not colons: "anthropic-claude-3-5-haiku", "openai-gpt-4o-mini"
+    if provider and ":" in provider:
+        # This is an Ollama model (local or cloud) — use Ollama streaming directly
+        try:
+            for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages):
+                yield event
+            return
+        except Exception as e:
+            logger.error("Ollama stream error: %s", e)
+            yield _make_error(f"Ollama error: {e}")
+            return
+
+    # Cloud providers (OpenAI, Anthropic, Google, etc.) — use cloud_providers module
     if provider and provider != "ollama" and "-" in provider:
         try:
             from cloud_providers import get_stream_fn, PROVIDER_MODEL_MAP

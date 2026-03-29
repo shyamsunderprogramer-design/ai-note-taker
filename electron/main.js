@@ -305,6 +305,18 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   return { undetectable: stealth.isUndetectable() }
 })
 
+// Capture screenshot — returns base64 PNG for multimodal AI
+ipcMain.handle("window:capture-screenshot", async () => {
+  if (!win) return null
+  try {
+    const image = await win.webContents.capturePage()
+    return image.toPNG().toString("base64")
+  } catch (e) {
+    logger.error("[Screenshot] capturePage error:", e)
+    return null
+  }
+})
+
 // Broadcast stealth state changes to renderer (for shortcut-triggered toggles)
 function broadcastStealthState() {
   if (win && win.webContents) {
@@ -319,6 +331,13 @@ function broadcastStealthState() {
 ipcMain.handle("app:open-logs", () => {
   const { shell } = require("electron")
   shell.openPath(log.transports.file.getFile().path.replace(/[^\/\\]+$/, ""))
+})
+
+// Clipboard write
+ipcMain.handle("clipboard:write", async (_event, text) => {
+  const { clipboard } = require("electron")
+  clipboard.writeText(text)
+  return true
 })
 
 // File save dialog

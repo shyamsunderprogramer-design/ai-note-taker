@@ -778,7 +778,7 @@ async function renderHistoryList() {
       // Emoji icons for modes
       const modeEmoji = {
         adaptive: "⚡", auto: "⚡", fast: "🔥", cloud: "☁️",
-        universal: "✨", interview: "💬", reasoning: "🧠", code: "💻"
+        universal: "✨", interview: "💬", reasoning: "🧠", code: "💻", turbo: "⚡"
       }
       const icon = modeEmoji[mode] || "💬"
       const previewIcon = previewRole === "user" ? "👤" : "🤖"
@@ -1004,7 +1004,7 @@ function addMessage(role, text) {
   // Add loading state for empty assistant messages
   if (role === "assistant" && (!text || text === "")) {
     msg.classList.add("loading")
-    bubble.innerHTML = '<span class="loading-indicator">Thinking...</span>'
+    bubble.innerHTML = '<span class="loading-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>'
   } else {
     setBubbleText(bubble, text)
   }
@@ -1020,10 +1020,22 @@ function addMessage(role, text) {
     copyBtn.className = "msg-copy-btn"
     copyBtn.textContent = "Copy"
     copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(text).then(() => {
+      // Get text from bubble's data attribute or innerText
+      let textToCopy = bubble.dataset.fullText || bubble.innerText || text || ""
+      textToCopy = textToCopy.replace(/\[.*?\]\s*$/, "").trim()
+      textToCopy = textToCopy.replace(/^AI:\s*/i, "").trim()
+      if (!textToCopy) {
+        copyBtn.textContent = "Empty"
+        setTimeout(() => { copyBtn.textContent = "Copy" }, 1000)
+        return
+      }
+      window.api.copyToClipboard(textToCopy).then(() => {
         copyBtn.textContent = "✓"
         copyBtn.classList.add("copied")
         setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("copied") }, 1500)
+      }).catch(() => {
+        copyBtn.textContent = "Error"
+        setTimeout(() => { copyBtn.textContent = "Copy" }, 1000)
       })
     })
     actions.appendChild(copyBtn)
@@ -1205,9 +1217,9 @@ function formatMessage(rawText) {
   text = text.replace(/~~([\s\S]+?)~~/g, "<del>$1</del>")
 
   // Step 4: Headings
-  text = text.replace(/^### (.+)$/gm, "<h4>$1</h4>")
-  text = text.replace(/^## (.+)$/gm, "<h3>$1</h3>")
-  text = text.replace(/^# (.+)$/gm, "<h2>$1</h2>")
+  text = text.replace(/^###\s*(.+)$/gm, "<h4>$1</h4>")
+  text = text.replace(/^##\s*(.+)$/gm, "<h3>$1</h3>")
+  text = text.replace(/^#\s*(.+)$/gm, "<h2>$1</h2>")
 
   // Step 5: Blockquotes
   text = text.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>")
@@ -1237,8 +1249,9 @@ function formatMessage(rawText) {
     text = text.replace(`§K8CODE${i}K8§`, codeHtml)
   }
 
-  // Step 10: Paragraphs — split on double newlines
+  // Step 10: Paragraphs — split on double newlines but preserve code blocks
   const paragraphParts = []
+  // Split but keep track of code block markers
   const parts = text.split(/\n\n+/)
   for (const part of parts) {
     const trimmed = part.trim()
@@ -1248,7 +1261,12 @@ function formatMessage(rawText) {
         trimmed.startsWith("<blockquote") || trimmed.startsWith("<pre") || trimmed.startsWith("<hr")) {
       paragraphParts.push(trimmed)
     } else {
-      paragraphParts.push(`<p>${trimmed.replace(/\n/g, "<br>")}</p>`)
+      // Check if this contains code blocks
+      if (trimmed.includes("<pre class=\"code-block\"")) {
+        paragraphParts.push(trimmed)
+      } else {
+        paragraphParts.push(`<p>${trimmed.replace(/\n/g, "<br>")}</p>`)
+      }
     }
   }
   text = paragraphParts.join("\n")
@@ -1269,10 +1287,10 @@ function parseLists(text) {
     const line = lines[i]
     const trimmed = line.trim()
 
-    // Check for list item
+    // Check for list item (space after number is optional)
     const bulletMatch = trimmed.match(/^[-*+]\s+(.*)/)
-    const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)/)
-    const letteredMatch = trimmed.match(/^([a-z])\.\s+(.*)/)
+    const numberedMatch = trimmed.match(/^(\d+)\.\s*(.*)/)
+    const letteredMatch = trimmed.match(/^([a-z])\.\s*(.*)/)
 
     if (bulletMatch) {
       if (!inList || listType !== "ul") {
@@ -1293,11 +1311,12 @@ function parseLists(text) {
         inList = true
         listType = "ol"
       }
-      const content = (numberedMatch ? numberedMatch[2] : letteredMatch[2])
+      const rawContent = numberedMatch ? (numberedMatch[2] || "") : (letteredMatch[2] || "")
+      const content = rawContent
         .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
         .replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
         .replace(/`([^`]+)`/g, `<code class="inline-code">$1</code>`)
-      result.push(`<li>${content}</li>`)
+      if (content.trim()) result.push(`<li>${content}</li>`)
     } else {
       if (inList) {
         result.push(listType === "ul" ? "</ul>" : "</ol>")
@@ -1341,9 +1360,11 @@ function finalizeBubble(bubble, html) {
   bubble._typing = false
   bubble._textNode = null
   bubble._cursorSpan = null
-  console.log("[finalizeBubble] html len:", html.length, "has hljs:", html.includes("hljs-keyword"), "has span:", html.includes("<span"))
+  // Store the plain text for copy button before setting HTML
+  const tempDiv = document.createElement("div")
+  tempDiv.innerHTML = html
+  bubble.dataset.fullText = tempDiv.textContent || tempDiv.innerText || ""
   bubble.innerHTML = html
-  console.log("[finalizeBubble] innerHTML len:", bubble.innerHTML.length, "innerText sample:", bubble.innerText?.slice(0, 100))
 }
 
 /**
@@ -1380,6 +1401,8 @@ function setBubbleText(bubble, text, showCursor = false) {
       bubble.appendChild(bubble._cursorSpan)
     }
     bubble._textNode.textContent = text
+    // Store raw text for copy button
+    bubble.dataset.fullText = text
     return
   }
 
@@ -1581,6 +1604,9 @@ async function streamAIResponse(query) {
     controller.abort()
   }, 60000)
 
+  // Create assistant message with loading animation BEFORE fetch
+  streamMessage("assistant", "")
+
   try {
     const response = await fetch(streamUrl, { signal: controller.signal })
     clearTimeout(timeoutId)
@@ -1591,70 +1617,82 @@ async function streamAIResponse(query) {
       return
     }
 
-    const text = await response.text()
-    const events = parseSSEFromText(text)
-
-    // Create assistant message element
-    streamMessage("assistant", "")
-
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
     let modelName = null
     let modelProvider = null
     let modelDisplay = null
     let accumulatedText = ""
 
-    for (const { event, data } of events) {
-      if (event === "error" && data.type === "error") {
-        if (latestBotMessage) {
-          setBubbleText(latestBotMessage.bubble,
-            `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
-        }
-        latestBotMessage = null
-        setProcessingUI(false)
-        return
-      }
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-      if (event === "meta" && data.type === "meta") {
-        modelName = data.model || modelName
-        modelProvider = data.provider || modelProvider
-        modelDisplay = data.display || modelDisplay
-        if (latestBotMessage) {
-          latestBotMessage.modelName = modelDisplay || modelName
-          latestBotMessage.modelProvider = modelProvider
-        }
-        continue
-      }
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop()
 
-      if (event === "chunk" && data.type === "chunk") {
-        accumulatedText += data.content
+      for (const line of lines) {
+        if (line.startsWith("event:")) continue
+        if (line.startsWith("data:")) {
+          const dataStr = line.slice(5).trim()
+          let data
+          try { data = JSON.parse(dataStr) } catch { continue }
 
-        if (latestBotMessage) {
-          latestBotMessage.accumulatedText = accumulatedText
-
-          const displayText = accumulatedText
-            .replace(/^AI:\s*/i, "")
-            .replace(/\[MODEL:[^\]]*\]\s*/g, "")
-            .replace(/^Paragraph\s*\d+:\s*/gim, "")
-            .replace(/^Conversation history:\s*/gim, "")
-            .replace(/^(You|AI)\s*:\s*/gim, "")
-
-          if (displayText.trim() && latestBotMessage.element) {
-            latestBotMessage.element.classList.remove("loading")
-            const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
-            if (loadingIndicator) loadingIndicator.remove()
+          if (data.type === "error") {
+            if (latestBotMessage) {
+              setBubbleText(latestBotMessage.bubble,
+                `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
+            }
+            latestBotMessage = null
+            setProcessingUI(false)
+            return
           }
 
-          setBubbleText(latestBotMessage.bubble, displayText, true)
-          scrollChat()
-        }
-        continue
-      }
+          if (data.type === "meta") {
+            modelName = data.model || modelName
+            modelProvider = data.provider || modelProvider
+            modelDisplay = data.display || modelDisplay
+            if (latestBotMessage) {
+              latestBotMessage.modelName = modelDisplay || modelName
+              latestBotMessage.modelProvider = modelProvider
+              latestBotMessage.modelDisplay = modelDisplay || modelName
+            }
+            continue
+          }
 
-      if (event === "done" && data.type === "done") {
-        break
+          if (data.type === "chunk") {
+            accumulatedText += data.content
+            if (latestBotMessage) {
+              latestBotMessage.accumulatedText = accumulatedText
+              const displayText = accumulatedText
+                .replace(/^AI:\s*/i, "")
+                .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+                .replace(/^Paragraph\s*\d+:\s*/gim, "")
+                .replace(/^Conversation history:\s*/gim, "")
+                .replace(/^(You|AI)\s*:\s*/gim, "")
+
+              if (displayText.trim() && latestBotMessage.element) {
+                latestBotMessage.element.classList.remove("loading")
+                const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
+                if (loadingIndicator) loadingIndicator.remove()
+              }
+
+              setBubbleText(latestBotMessage.bubble, displayText, true)
+              scrollChat()
+              // Yield to event loop to allow browser to paint between chunks
+              await new Promise(r => setTimeout(r, 0))
+            }
+            continue
+          }
+
+          if (data.type === "done") break
+        }
       }
     }
 
-    // Final cleanup
+    // Final cleanup for non-race mode
     if (latestBotMessage) {
       let finalText = accumulatedText
         .replace(/^AI:\s*/i, "")
@@ -1664,21 +1702,18 @@ async function streamAIResponse(query) {
         .replace(/^(You|AI)\s*:\s*/gim, "")
 
       latestBotMessage.accumulatedText = finalText
-      // Finalize with formatted HTML (showCursor=false triggers finalizeBubble)
       finalizeBubble(latestBotMessage.bubble, formatMessage(finalText))
 
-      // Add model badge
-      if (latestBotMessage.modelDisplay || modelDisplay) {
+      if (latestBotMessage.modelDisplay) {
         const label = latestBotMessage.element.querySelector(".msg-label")
         if (label) {
           const badge = document.createElement("span")
           badge.className = "model-badge"
-          badge.textContent = `[${latestBotMessage.modelDisplay || modelDisplay}]`
+          badge.textContent = `[${latestBotMessage.modelDisplay}]`
           label.appendChild(badge)
         }
       }
 
-      // Save to conversation
       if (!suppressAutoSave) {
         const modeTag = document.querySelector(".mode-tag")
         const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
@@ -1693,11 +1728,9 @@ async function streamAIResponse(query) {
     setProcessingUI(false)
   } catch (e) {
     clearTimeout(timeoutId)
-    console.error("Stream error:", e)
+    console.error("AI stream error:", e)
     addErrorMessage("AI response failed")
-    if (latestBotMessage) {
-      latestBotMessage = null
-    }
+    if (latestBotMessage) latestBotMessage = null
     setProcessingUI(false)
   }
 }
@@ -1723,14 +1756,28 @@ async function streamAIRace(query) {
     }
   }
 
-  // If no providers enabled, use empty string to explicitly disable cloud providers
-  const raceUrl = window.api.getRaceUrl(query, mode, responseStyle, contextMessages, enabledProviders)
+  // Build race URL directly in renderer (encodeURIComponent is available here)
+  const BASE_URL = "http://127.0.0.1:8000"
+  const encodedQuery = encodeURIComponent(query || "")
+  const encodedMode = encodeURIComponent(mode)
+  const encodedStyle = encodeURIComponent(responseStyle)
+  let raceUrl = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}`
+  if (contextMessages && Array.isArray(contextMessages) && contextMessages.length > 0) {
+    raceUrl += `&context=${encodeURIComponent(JSON.stringify(contextMessages))}`
+  }
+  if (enabledProviders.length > 0) {
+    raceUrl += `&enabled=${encodeURIComponent(enabledProviders.join(","))}`
+  }
+  console.log("[streamAIRace] Race URL:", raceUrl)
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
     console.warn("[streamAIRace] Timeout — aborting fetch")
     controller.abort()
   }, 60000)
+
+  // Create assistant message with loading animation BEFORE fetch (immediate feedback)
+  streamMessage("assistant", "")
 
   try {
     const response = await fetch(raceUrl, { signal: controller.signal })
@@ -1742,67 +1789,88 @@ async function streamAIRace(query) {
       return
     }
 
-    const text = await response.text()
-    const events = parseSSEFromText(text)
-
-    // Create assistant message element
-    streamMessage("assistant", "")
-
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
     let modelName = null
     let modelProvider = null
     let modelDisplay = null
     let accumulatedText = ""
 
-    for (const { event, data } of events) {
-      if (event === "meta" && data.type === "meta") {
-        modelName = data.model || modelName
-        modelProvider = data.provider || modelProvider
-        modelDisplay = data.display || modelDisplay
-        if (latestBotMessage) {
-          latestBotMessage.modelName = modelDisplay || modelName
-          latestBotMessage.modelProvider = modelProvider
-          latestBotMessage.modelDisplay = modelDisplay || modelName
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() // Keep incomplete last line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          continue
         }
-        continue
-      }
-
-      if (event === "chunk" && data.type === "chunk") {
-        accumulatedText += data.content
-        if (latestBotMessage) {
-          latestBotMessage.accumulatedText = accumulatedText
-
-          const displayText = accumulatedText
-            .replace(/^AI:\s*/i, "")
-            .replace(/\[MODEL:[^\]]*\]\s*/g, "")
-            .replace(/^Paragraph\s*\d+:\s*/gim, "")
-            .replace(/^Conversation history:\s*/gim, "")
-            .replace(/^(You|AI)\s*:\s*/gim, "")
-
-          // Remove loading state when we have content
-          if (displayText.trim() && latestBotMessage.element) {
-            latestBotMessage.element.classList.remove("loading")
-            const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
-            if (loadingIndicator) loadingIndicator.remove()
+        if (line.startsWith("data:")) {
+          const dataStr = line.slice(5).trim()
+          let data
+          try {
+            data = JSON.parse(dataStr)
+          } catch {
+            continue
           }
 
-          setBubbleText(latestBotMessage.bubble, displayText, true)
-          scrollChat()
-        }
-        continue
-      }
+          if (data.type === "meta") {
+            modelName = data.model || modelName
+            modelProvider = data.provider || modelProvider
+            modelDisplay = data.display || modelDisplay
+            if (latestBotMessage) {
+              latestBotMessage.modelName = modelDisplay || modelName
+              latestBotMessage.modelProvider = modelProvider
+              latestBotMessage.modelDisplay = modelDisplay || modelName
+            }
+            continue
+          }
 
-      if (event === "done" && data.type === "done") {
-        break
-      }
+          if (data.type === "chunk") {
+            accumulatedText += data.content
+            if (latestBotMessage) {
+              latestBotMessage.accumulatedText = accumulatedText
 
-      if (event === "error" && data.type === "error") {
-        if (latestBotMessage) {
-          setBubbleText(latestBotMessage.bubble,
-            `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
+              const displayText = accumulatedText
+                .replace(/^AI:\s*/i, "")
+                .replace(/\[MODEL:[^\]]*\]\s*/g, "")
+                .replace(/^Paragraph\s*\d+:\s*/gim, "")
+                .replace(/^Conversation history:\s*/gim, "")
+                .replace(/^(You|AI)\s*:\s*/gim, "")
+
+              // Remove loading state when we have content
+              if (displayText.trim() && latestBotMessage.element) {
+                latestBotMessage.element.classList.remove("loading")
+                const loadingIndicator = latestBotMessage.bubble.querySelector(".loading-indicator")
+                if (loadingIndicator) loadingIndicator.remove()
+              }
+
+              setBubbleText(latestBotMessage.bubble, displayText, true)
+              scrollChat()
+              // Yield to event loop to allow browser to paint between chunks
+              await new Promise(r => setTimeout(r, 0))
+            }
+            continue
+          }
+
+          if (data.type === "done") {
+            break
+          }
+
+          if (data.type === "error") {
+            if (latestBotMessage) {
+              setBubbleText(latestBotMessage.bubble,
+                `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
+            }
+            latestBotMessage = null
+            setProcessingUI(false)
+            return
+          }
         }
-        latestBotMessage = null
-        setProcessingUI(false)
-        return
       }
     }
 
@@ -1887,7 +1955,7 @@ function streamMessage(role, text) {
   // Add loading state for empty assistant messages
   if (role === "assistant" && (!text || text === "")) {
     msg.classList.add("loading")
-    bubble.innerHTML = '<span class="loading-indicator">Thinking...</span>'
+    bubble.innerHTML = '<span class="loading-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>'
   } else {
     setBubbleText(bubble, text)
   }
@@ -1906,15 +1974,21 @@ function streamMessage(role, text) {
     copyBtn.className = "msg-copy-btn"
     copyBtn.textContent = "Copy"
     copyBtn.addEventListener("click", () => {
-      let textToCopy = (latestBotMessage && latestBotMessage.accumulatedText !== undefined)
-        ? latestBotMessage.accumulatedText
-        : bubble.innerText
+      let textToCopy = bubble.dataset.fullText || bubble.innerText || text || ""
       textToCopy = textToCopy.replace(/\[.*?\]\s*$/, "").trim()
       textToCopy = textToCopy.replace(/^AI:\s*/i, "").trim()
+      if (!textToCopy) {
+        copyBtn.textContent = "Empty"
+        setTimeout(() => { copyBtn.textContent = "Copy" }, 1000)
+        return
+      }
       navigator.clipboard.writeText(textToCopy).then(() => {
         copyBtn.textContent = "✓"
         copyBtn.classList.add("copied")
         setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("copied") }, 1500)
+      }).catch(() => {
+        copyBtn.textContent = "Error"
+        setTimeout(() => { copyBtn.textContent = "Copy" }, 1000)
       })
     })
     actions.appendChild(copyBtn)
