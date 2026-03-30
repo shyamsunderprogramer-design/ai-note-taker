@@ -838,6 +838,11 @@ select option {
   letter-spacing: 0.08em;
   padding: 0 4px;
 }
+.msg-time {
+  font-size: 0.65em;
+  color: #888;
+  margin-left: 6px;
+}
 .chat-message.user .msg-label { color: var(--primary); }
 .chat-message.assistant .msg-label { color: var(--accent); }
 
@@ -947,6 +952,11 @@ select option {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   vertical-align: middle;
+}
+.time-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+  font-size: 0.6em;
+  padding: 2px 8px;
 }
 
 /* Winner banner — race mode winner display */
@@ -2470,6 +2480,11 @@ select option {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   vertical-align: middle;
+}
+.time-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+  font-size: 0.6em;
+  padding: 2px 8px;
 }
 
 /* Typing cursor */

@@ -111,7 +111,7 @@ def get_ollama_cloud_key():
 # OLLAMA CLOUD (ollama.com)
 # ==============================
 
-def ask_ollama_cloud(prompt, model="qwen2.5:1.5b", stream=False, mode="adaptive", style="concise", messages=None):
+def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", style="concise", messages=None):
     """Ollama Cloud - uses https://ollama.com/api/chat endpoint"""
     import time
     start = time.time()
@@ -144,6 +144,8 @@ def ask_ollama_cloud(prompt, model="qwen2.5:1.5b", stream=False, mode="adaptive"
             return
 
         if stream:
+            # Send meta first so frontend knows which model
+            yield _make_meta(model, "ollama-cloud")
             for line in response.iter_lines():
                 if not line:
                     continue
@@ -160,6 +162,7 @@ def ask_ollama_cloud(prompt, model="qwen2.5:1.5b", stream=False, mode="adaptive"
                     pass
         else:
             data = response.json()
+            yield _make_meta(model, "ollama-cloud")
             if "message" in data:
                 yield _make_content(data["message"].get("content", ""))
 
@@ -589,7 +592,7 @@ PROVIDER_MODEL_MAP = {
     "groq-mixtral-8x7b": ("groq", "mixtral-8x7b-32768"),
     "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
     # Ollama Cloud
-    "ollama-cloud": ("ollama-cloud", "qwen2.5:1.5b"),
+    "ollama-cloud": ("ollama-cloud", "minimax-m2"),
 }
 
 MODEL_DISPLAY_NAMES = {

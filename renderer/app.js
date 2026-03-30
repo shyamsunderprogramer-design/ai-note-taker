@@ -1009,7 +1009,7 @@ function addMessage(role, text) {
     setBubbleText(bubble, text)
   }
 
-  msg.innerHTML = `<span class="msg-label">${label}</span>`
+  msg.innerHTML = `<span class="msg-label">${label}</span><span class="msg-time">${new Date().toLocaleTimeString()}</span>`
   msg.appendChild(bubble)
 
   // Add copy button for assistant messages
@@ -1756,6 +1756,12 @@ async function streamAIResponse(query) {
           badge.className = "model-badge"
           badge.textContent = `[${latestBotMessage.modelDisplay}]`
           label.appendChild(badge)
+          // Add response time
+          const elapsed = Date.now() - requestStartTime
+          const timeBadge = document.createElement("span")
+          timeBadge.className = "model-badge time-badge"
+          timeBadge.textContent = `${(elapsed / 1000).toFixed(1)}s`
+          label.appendChild(timeBadge)
         }
       }
 
@@ -1790,13 +1796,24 @@ async function streamAIRace(query) {
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const contextMessages = getContextMessages()
+  const requestStartTime = Date.now()
 
-  // Get enabled providers from store - clouds first, then ollama as fallback
+  // Get enabled providers - check both UI toggle (local storage) and backend API key status
   const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud"]
   const enabledProviders = []
+
+  // Get which providers have API keys from backend
+  let backendProviders = {}
+  try {
+    backendProviders = await window.api.getProviders()
+  } catch (e) {
+    console.warn("Could not fetch providers from backend", e)
+  }
+
   for (const p of CLOUD_PROVIDERS) {
     const stored = await window.api.storeGet("provider_" + p) || {}
-    if (stored.enabled && stored.apiKey) {
+    // Check if toggle is enabled AND backend has the API key
+    if (stored.enabled && backendProviders[p]) {
       enabledProviders.push(p)
     }
   }
@@ -1941,6 +1958,12 @@ async function streamAIRace(query) {
           badge.className = "model-badge"
           badge.textContent = `[${latestBotMessage.modelDisplay}]`
           label.appendChild(badge)
+          // Add response time
+          const elapsed = Date.now() - requestStartTime
+          const timeBadge = document.createElement("span")
+          timeBadge.className = "model-badge time-badge"
+          timeBadge.textContent = `${(elapsed / 1000).toFixed(1)}s`
+          label.appendChild(timeBadge)
         }
       }
 

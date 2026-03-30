@@ -480,8 +480,11 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
     from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
     import concurrent.futures
     import logging
+    import time as time_module
 
     logger = logging.getLogger(__name__)
+    race_start = time_module.time()
+    logger.info("[RACE START] query='%s' mode=%s style=%s", q[:50], mode, style)
 
     # Parse enabled providers from frontend
     enabled_set = None
@@ -562,6 +565,9 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
 
     def fetch_events(pk):
         """Collect all SSE events from a provider. Returns (pk, events_list, error)."""
+        import time as fetch_time
+        fetch_start = fetch_time.time()
+        logger.info("[PROVIDER START] %s", pk)
         try:
             if pk == "ollama":
                 from ai_router import ask_ollama_stream
@@ -581,10 +587,10 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
                     if "event: error" in e:
                         return (pk, [], e)
                 return (pk, [], "Unknown error")
-            logger.info("Provider %s succeeded with %d events", pk, len(events))
+            logger.info("Provider %s succeeded with %d events (%.1fs)", pk, len(events), fetch_time.time() - fetch_start)
             return (pk, events, None)
         except Exception as e:
-            logger.error("Provider %s failed: %s", pk, e)
+            logger.error("Provider %s failed: %s (%.1fs)", pk, e, fetch_time.time() - fetch_start)
             return (pk, [], str(e))
 
     def race_generator():
@@ -671,6 +677,7 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
             logger.error("All providers failed in race mode")
             yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"All providers failed\"}}\n\n"
 
+        logger.info("[RACE COMPLETE] total_time=%.1fs", time_module.time() - race_start)
         STATE["is_streaming"] = False
 
     return StreamingResponse(race_generator(), media_type="text/event-stream")
