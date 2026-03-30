@@ -778,7 +778,8 @@ async function renderHistoryList() {
       // Emoji icons for modes
       const modeEmoji = {
         adaptive: "⚡", auto: "⚡", fast: "🔥", cloud: "☁️",
-        universal: "✨", interview: "💬", reasoning: "🧠", code: "💻", turbo: "⚡"
+        universal: "✨", interview: "💬", reasoning: "🧠", code: "💻",
+        turbo: "⚡", instant: "⚡"
       }
       const icon = modeEmoji[mode] || "💬"
       const previewIcon = previewRole === "user" ? "👤" : "🤖"
@@ -986,9 +987,10 @@ function removeWelcome() {
 }
 
 function scrollChat() {
-  requestAnimationFrame(() => {
-    chatArea.scrollTop = chatArea.scrollHeight
-  })
+  // Auto-scroll disabled - user controls scrolling
+  // requestAnimationFrame(() => {
+  //   chatArea.scrollTop = chatArea.scrollHeight
+  // })
 }
 
 function addMessage(role, text) {
@@ -1433,19 +1435,18 @@ function setBubbleText(bubble, text, showCursor = false) {
   const loadingIndicator = bubble.querySelector(".loading-indicator")
   if (loadingIndicator) loadingIndicator.remove()
 
-  // During streaming: raw text with cursor
+  // During streaming: apply basic formatting with cursor
   if (showCursor) {
     if (!bubble._typing) {
       bubble._typing = true
       bubble.innerHTML = ""
-      bubble._textNode = document.createTextNode("")
       bubble._cursorSpan = document.createElement("span")
       bubble._cursorSpan.className = "typing-cursor"
       bubble._cursorSpan.textContent = "\u00A0"
-      bubble.appendChild(bubble._textNode)
-      bubble.appendChild(bubble._cursorSpan)
     }
-    bubble._textNode.textContent = text
+    // Apply basic formatting even during streaming
+    bubble.innerHTML = formatMessage(text) + " "
+    bubble.appendChild(bubble._cursorSpan)
     // Store raw text for copy button
     bubble.dataset.fullText = text
     return
@@ -1726,8 +1727,6 @@ async function streamAIResponse(query) {
 
               setBubbleText(latestBotMessage.bubble, displayText, true)
               scrollChat()
-              // Yield to event loop to allow browser to paint between chunks
-              await new Promise(r => setTimeout(r, 0))
             }
             continue
           }
@@ -1915,8 +1914,6 @@ async function streamAIRace(query) {
 
               setBubbleText(latestBotMessage.bubble, displayText, true)
               scrollChat()
-              // Yield to event loop to allow browser to paint between chunks
-              await new Promise(r => setTimeout(r, 0))
             }
             continue
           }
@@ -2575,6 +2572,7 @@ appMenu.addEventListener("click", async (e) => {
       syncProviderRow("xai", !!providers.xai)
       syncProviderRow("deepseek", !!providers.deepseek)
       syncProviderRow("groq", !!providers.groq)
+      syncProviderRow("ollama-cloud", !!providers["ollama-cloud"])
     } catch (e) { console.error(e) }
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) cloudModelSelect.value = savedCloudModel

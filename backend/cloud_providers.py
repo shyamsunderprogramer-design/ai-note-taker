@@ -11,31 +11,34 @@ logger = logging.getLogger("cloud_providers")
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     """Build prompt for cloud providers"""
     if style == "concise":
-        style_instruction = "Answer in 1-2 sentences only. Be direct."
+        style_instruction = "Keep it short and conversational - like texting a knowledgeable friend. 1-2 sentences max."
     elif style == "detailed":
-        style_instruction = "Answer in detail with clear explanations."
+        style_instruction = "Explain like you're teaching a colleague. Use casual tone, not formal. Include real examples when helpful."
     elif style == "bulletpoint":
-        style_instruction = "Use bullet points with asterisk (*). One bullet per line."
+        style_instruction = "Use simple bullet points, not formal lists. Think handwritten notes, not documentation."
     else:
-        style_instruction = "Answer concisely."
+        style_instruction = "Be conversational - like explaining to a smart friend, not writing a textbook."
 
     # Build conversation history context
     history_block = ""
     if messages:
         history_lines = []
         for msg in messages:
-            role_label = "You" if msg.get("role") == "user" else "AI"
+            role_label = "You" if msg.get("role") == "user" else "Assistant"
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
-        history_block = "Conversation:\n" + "\n".join(history_lines) + "\n\n"
+        history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
     return f"""Instructions:
 - {style_instruction}
-- Do not repeat the user's question
-- Do not echo labels like You: or AI:
-- If unclear, say: Please clarify
+- Talk like a helpful developer friend, not a documentation writer
+- Use simple words, not jargon when possible
+- Include practical code examples that actually work
+- If something is complex, break it down into plain English first
+- Do not start with "Sure!" or "Of course!" - just get to the point
+- Do not use emojis in responses
 
-{history_block}User: {user_input}
-AI:"""
+{history_block}Question: {user_input}
+Answer:"""
 
 # ==============================
 # META STREAM FUNCTIONS

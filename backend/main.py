@@ -598,80 +598,37 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
         STATE["is_streaming"] = True
         winner_found = False
 
-        # Phase 1: Race cloud providers
-        if cloud_providers:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(cloud_providers)) as executor:
-                futures = {
-                    executor.submit(fetch_events, pk): pk
-                    for pk in cloud_providers
-                }
+        # For instant streaming, use single provider mode instead of parallel race
+        # Parallel race with list() blocks until complete response
+        # Use first available cloud, then local ollama as fallback
+        provider_order = cloud_providers + local_providers
 
-                for future in concurrent.futures.as_completed(futures, timeout=60.0):
-                    pk = futures[future]
-                    try:
-                        winner_pk, events, err = future.result(timeout=0)
-                        if err is None and events and len(events) > 0:
-                            # Cloud provider succeeded!
-                            logger.info("Cloud winner: %s", winner_pk)
-                            winner_display = MODEL_DISPLAY_NAMES.get(winner_pk, winner_pk)
-                            for event in events:
-                                if event.startswith("event: meta\n"):
-                                    import re as _re
-                                    m = _re.search(r"data: (\{.*\})\n\n", event)
-                                    if m:
-                                        meta_obj = json.loads(m.group(1))
-                                        meta_obj["winner"] = True
-                                        meta_obj["winnerName"] = winner_display
-                                        event = f"event: meta\ndata: {json.dumps(meta_obj)}\n\n"
-                                yield event
-                            winner_found = True
-                            for f in futures:
-                                f.cancel()
-                            executor.shutdown(wait=True, cancel_futures=True)
-                            break
-                        logger.debug("Cloud provider %s failed, trying next", pk)
-                    except concurrent.futures.CancelledError:
-                        break
-                    except Exception as e:
-                        logger.warning("Exception in cloud race: %s", e)
+        for pk in provider_order:
+            logger.info("[RACE] trying provider: %s", pk)
+            try:
+                if pk == "ollama":
+                    from ai_router import ask_ollama_stream
+                    stream_fn_or_events = ask_ollama_stream(q, mode=mode, style=style, messages=messages)
+                else:
+                    resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
+                    model_name = resolved[1]
+                    stream_fn = get_stream_fn(pk)
+                    if stream_fn is None:
+                        logger.warning("[RACE] no stream function for %s", pk)
+                        continue
+                    stream_fn_or_events = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)
 
-        # Phase 2: Fall back to local providers if no cloud succeeded
-        if not winner_found and local_providers:
-            logger.info("All clouds failed, trying local providers: %s", local_providers)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(local_providers)) as executor:
-                futures = {
-                    executor.submit(fetch_events, pk): pk
-                    for pk in local_providers
-                }
+                # Yield events immediately as they arrive (streaming!)
+                for event in stream_fn_or_events:
+                    yield event
 
-                for future in concurrent.futures.as_completed(futures, timeout=60.0):
-                    pk = futures[future]
-                    try:
-                        winner_pk, events, err = future.result(timeout=0)
-                        if err is None and events and len(events) > 0:
-                            # Local provider succeeded!
-                            logger.info("Local winner: %s", winner_pk)
-                            winner_display = MODEL_DISPLAY_NAMES.get(winner_pk, winner_pk)
-                            for event in events:
-                                if event.startswith("event: meta\n"):
-                                    import re as _re
-                                    m = _re.search(r"data: (\{.*\})\n\n", event)
-                                    if m:
-                                        meta_obj = json.loads(m.group(1))
-                                        meta_obj["winner"] = True
-                                        meta_obj["winnerName"] = winner_display
-                                        event = f"event: meta\ndata: {json.dumps(meta_obj)}\n\n"
-                                yield event
-                            winner_found = True
-                            for f in futures:
-                                f.cancel()
-                            executor.shutdown(wait=True, cancel_futures=True)
-                            break
-                        logger.debug("Local provider %s failed, trying next", pk)
-                    except concurrent.futures.CancelledError:
-                        break
-                    except Exception as e:
-                        logger.warning("Exception in local race: %s", e)
+                # If we get here without error, this provider succeeded
+                winner_found = True
+                break
+
+            except Exception as e:
+                logger.warning("[RACE] provider %s failed: %s", pk, e)
+                continue
 
         if not winner_found:
             logger.error("All providers failed in race mode")

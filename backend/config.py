@@ -46,8 +46,11 @@ AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.3"))
 AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "30"))
 
 # Super-fast mode: tiny model for instant responses
-MODEL_TURBO = os.getenv("OLLAMA_MODEL_TURBO", "phi:latest")  # ~360M params, very fast
+MODEL_TURBO = os.getenv("OLLAMA_MODEL_TURBO", "qwen2.5:1.5b")  # Small fast model
 TURBO_MAX_TOKENS = int(os.getenv("TURBO_MAX_TOKENS", "150"))  # Very short responses
+
+# Instant mode: ultra-fast for immediate responses
+INSTANT_MAX_TOKENS = int(os.getenv("INSTANT_MAX_TOKENS", "64"))  # Ultra short
 
 
 # ==============================
@@ -68,6 +71,9 @@ def get_ai_model(mode="adaptive"):
 
     if mode == "turbo":
         return MODEL_TURBO
+
+    if mode == "instant":
+        return MODEL_TURBO  # Same fast model, fewer tokens
 
     if mode == "code":
         return MODEL_CODE

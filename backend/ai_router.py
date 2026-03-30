@@ -4,7 +4,7 @@ import re
 
 import requests
 
-from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, MODEL_TURBO, TURBO_MAX_TOKENS
+from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, MODEL_TURBO, TURBO_MAX_TOKENS, INSTANT_MAX_TOKENS
 from utils import clean_ai_output
 
 logger = logging.getLogger("ai_router")
@@ -81,31 +81,34 @@ def get_model_candidates(user_input, requested_mode="auto"):
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     # Style-specific instructions
     if style == "concise":
-        style_instruction = "Answer in 1-2 sentences only. Be direct."
+        style_instruction = "Keep it short and conversational - like texting a knowledgeable friend. 1-2 sentences max."
     elif style == "detailed":
-        style_instruction = "Answer in detail with clear explanations."
+        style_instruction = "Explain like you're teaching a colleague. Use casual tone, not formal. Include real examples when helpful."
     elif style == "bulletpoint":
-        style_instruction = "Use bullet points with asterisk (*). One bullet per line."
+        style_instruction = "Use simple bullet points, not formal lists. Think handwritten notes, not documentation."
     else:
-        style_instruction = "Answer concisely."
+        style_instruction = "Be conversational - like explaining to a smart friend, not writing a textbook."
 
     # Build conversation history context
     history_block = ""
     if messages:
         history_lines = []
         for msg in messages:
-            role_label = "You" if msg.get("role") == "user" else "AI"
+            role_label = "You" if msg.get("role") == "user" else "Assistant"
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
-        history_block = "Conversation:\n" + "\n".join(history_lines) + "\n\n"
+        history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
     base = f"""Instructions:
 - {style_instruction}
-- Do not repeat the user's question
-- Do not echo labels like You: or AI:
-- If unclear, say: Please clarify
+- Talk like a helpful developer friend, not a documentation writer
+- Use simple words, not jargon when possible
+- Include practical code examples that actually work
+- If something is complex, break it down into plain English first
+- Do not start with "Sure!" or "Of course!" - just get to the point
+- Do not use emojis in responses
 
-{history_block}User: {user_input}
-AI:"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "code":
         return f"""Instructions:
@@ -247,7 +250,8 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         # and produce better responses, so give them more tokens
         is_cloud_model = model_name and (":cloud" in str(model_name) or "-cloud" in str(model_name))
         is_turbo = mode == "turbo"
-        num_predict = TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else (2000 if style == "detailed" else 500)))
+        is_instant = mode == "instant"
+        num_predict = INSTANT_MAX_TOKENS if is_instant else (TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else (2000 if style == "detailed" else 500))))
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
             json={
@@ -434,11 +438,26 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     Cloud providers yield their own SSE strings directly.
     Ollama falls through to ask_ollama_stream().
     """
-    # Check if provider looks like an Ollama model name (contains colon)
-    # e.g. "qwen3.5:397b-cloud", "deepseek-r1:8b", "minimax-m2.7:cloud"
-    # Cloud providers use dashes, not colons: "anthropic-claude-3-5-haiku", "openai-gpt-4o-mini"
-    if provider and ":" in provider:
-        # This is an Ollama model (local or cloud) — use Ollama streaming directly
+    # Check if provider is an Ollama Cloud model (has :cloud suffix)
+    # e.g. "minimax-m2.7:cloud", "qwen3.5:397b-cloud"
+    is_ollama_cloud = provider and provider.endswith(":cloud")
+
+    if is_ollama_cloud:
+        # Ollama Cloud model — use cloud_providers module
+        try:
+            from cloud_providers import ask_ollama_cloud_stream
+            for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages):
+                yield event
+            return
+        except Exception as e:
+            logger.error("Ollama Cloud stream error: %s", e)
+            yield _make_error(f"Ollama Cloud error: {e}")
+            return
+
+    # Check if provider looks like a local Ollama model name (contains colon)
+    # e.g. "qwen2.5:1.5b", "deepseek-r1:8b"
+    if provider and ":" in provider and not is_ollama_cloud:
+        # This is a local Ollama model — use Ollama streaming directly
         try:
             for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages):
                 yield event
