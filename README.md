@@ -322,8 +322,6 @@ ANT uses Electron's `setContentProtection()` API — the standard Windows mechan
 - OBS, Snipping Tool, Screen Recorder
 - Any screen capture application
 
-**Cluely charges $75/month for this feature.** ANT includes it for free.
-
 ### How It Works
 
 `electron/stealth.js` calls `window.setContentProtection(true)` which applies `WS_EX_FROMLEARN` (Windows) — the same underlying mechanism used by Netflix, Disney+, and other DRM-protected apps. It does not use any game-specific or anti-cheat APIs.
@@ -334,7 +332,7 @@ A separate privacy control in **Settings → Privacy → Screen Capture** lets y
 
 ### No Cloud Transcription
 
-Cluely sends all audio to Deepgram's cloud servers. ANT runs `faster-whisper` locally — audio never leaves your machine.
+All transcription runs locally via `faster-whisper` — audio never leaves your machine.
 
 ---
 
