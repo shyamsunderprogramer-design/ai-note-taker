@@ -34,6 +34,12 @@ function ensureConversationsDir() {
 let win
 let backendProcess = null
 
+// Keep window above all others by re-applying monitor level after any show operation
+function ensureTopmost(w) {
+  if (!w || PLATFORM !== "win32") return
+  w.setAlwaysOnTop(true, "monitor", 2147483647)
+}
+
 // ======================================
 // AUTO SCREENSHOT STATE
 // ======================================
@@ -126,10 +132,11 @@ function createWindow() {
     windowOpts.trafficLightPosition = { x: 12, y: 12 }
   }
 
-  // screen-saver level only works on Windows
+  // Windows: use "monitor" level — above all normal windows, PIP, fullscreen apps
+  // This is the highest normal window level, only below system notifications
   win = new BrowserWindow(windowOpts)
   if (PLATFORM === "win32") {
-    win.setAlwaysOnTop(true, "screen-saver", 1)
+    win.setAlwaysOnTop(true, "monitor", 2147483647)
   }
 
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
@@ -144,6 +151,7 @@ function createWindow() {
   win.on("resize", saveBounds)
   win.on("move", saveBounds)
   stealth.init(win)
+  ensureTopmost(win)
 }
 
 // ======================================
@@ -393,6 +401,7 @@ ipcMain.handle("window:restore", () => {
   }
   w.show()
   w.focus()
+  ensureTopmost(w)
 })
 
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
@@ -594,7 +603,7 @@ app.whenReady().then(async () => {
     if (stealth.isEnabled()) {
       stealth.disable()
       store.set("stealthState", false)
-      if (win) { win.restore(); win.show(); win.focus() }
+      if (win) { win.restore(); win.show(); win.focus(); ensureTopmost(win) }
     } else {
       stealth.enable()
       store.set("stealthState", true)
@@ -609,7 +618,7 @@ app.whenReady().then(async () => {
   registerShortcut("Alt+Space", "hide/show", () => {
     if (!win) return
     if (win.isVisible()) win.hide()
-    else { win.restore(); win.show(); win.focus() }
+    else { win.restore(); win.show(); win.focus(); ensureTopmost(win) }
   })
 
   // Ctrl+Arrow — move window
@@ -632,7 +641,7 @@ app.whenReady().then(async () => {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    else { win?.show(); win?.focus() }
+    else { win?.show(); win?.focus(); ensureTopmost(win) }
   })
 })
 
