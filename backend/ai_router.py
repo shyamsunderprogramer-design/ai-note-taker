@@ -23,6 +23,42 @@ TECHNICAL_KEYWORDS = (
 )
 INTERVIEW_HINTS = ("interview", "technical round", "tech round", "hiring manager")
 
+# Vision-capable model name patterns (partial match)
+VISION_MODEL_NAMES = ("llava", "qwen-vl", "moondream", "minicpm-v", "bakllava")
+
+# Cache for installed vision-capable models
+_vision_model_cache = None
+
+
+def _get_vision_model():
+    """
+    Return the name of an available vision-capable Ollama model, or None if none found.
+    Caches result for the session lifetime.
+    """
+    global _vision_model_cache
+    if _vision_model_cache is not None:
+        logger.info("[_get_vision_model] Using cached vision model: %s", _vision_model_cache)
+        return _vision_model_cache
+
+    try:
+        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        if resp.status_code == 200:
+            models = resp.json().get("models", [])
+            logger.info("[_get_vision_model] Available models: %s", [m.get("name") for m in models])
+            for m in models:
+                name = m.get("name", "")
+                for vision_name in VISION_MODEL_NAMES:
+                    if vision_name in name.lower():
+                        _vision_model_cache = name
+                        logger.info("[_get_vision_model] Found vision model: %s", name)
+                        return name
+    except Exception as e:
+        logger.warning("Could not fetch Ollama models to find vision model: %s", e)
+
+    _vision_model_cache = None
+    logger.warning("[_get_vision_model] No vision-capable model found")
+    return None
+
 
 def resolve_mode(user_input, requested_mode="auto"):
     if requested_mode and requested_mode != "auto":
@@ -81,13 +117,13 @@ def get_model_candidates(user_input, requested_mode="auto"):
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     # Style-specific instructions
     if style == "concise":
-        style_instruction = "Keep it short and conversational - like texting a knowledgeable friend. 1-2 sentences max."
+        style_instruction = "2 sentences max."
     elif style == "detailed":
-        style_instruction = "Explain like you're teaching a colleague. Use casual tone, not formal. Include real examples when helpful."
+        style_instruction = "2-3 paragraphs. Code if relevant."
     elif style == "bulletpoint":
-        style_instruction = "Use simple bullet points, not formal lists. Think handwritten notes, not documentation."
+        style_instruction = "4 bullets max."
     else:
-        style_instruction = "Be conversational - like explaining to a smart friend, not writing a textbook."
+        style_instruction = "Short."
 
     # Build conversation history context
     history_block = ""
@@ -98,81 +134,57 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
         history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
-    base = f"""Instructions:
-- {style_instruction}
-- Talk like a helpful developer friend, not a documentation writer
-- Use simple words, not jargon when possible
-- Include practical code examples that actually work
-- If something is complex, break it down into plain English first
-- Do not start with "Sure!" or "Of course!" - just get to the point
-- Do not use emojis in responses
+    base = f"""Slack message between two senior engineers.
+
+FORBIDDEN:
+- No headers/titles (=== or #)
+- No tables
+- No bullet lists
+- No numbered lists
+- No emojis
+- No code blocks unless asked
+- No "Here's" or "Sure" intros
+
+Write like a text message. Plain paragraphs only.
 
 {history_block}Question: {user_input}
 Answer:"""
 
     if mode == "code":
-        return f"""Instructions:
-- {style_instruction}
-- Give the shortest correct explanation
-- Do not repeat the user's question
-- Do not echo labels like You: or AI:
-- If unclear, say: Please clarify
+        return f"""Senior engineer. Code when asked. Plain text only.
 
-{history_block}User: {user_input}
-AI:"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "reasoning":
-        return f"""Instructions:
-- {style_instruction}
-- Think clearly and explain step by step
-- Do not repeat the user's question
-- Do not echo labels like You: or AI:
-- If unclear, say: Please clarify
+        return f"""Senior engineer thinking. Plain text.
 
-{history_block}User: {user_input}
-AI:"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "fast":
-        return f"""Instructions:
-- {style_instruction}
-- Do not repeat the user's question
-- Do not echo labels like You: or AI:
-- If unclear, say: Please clarify
+        return f"""Senior engineer. Fast answer. Plain text.
 
-{history_block}User: {user_input}
-AI:"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "cloud":
-        return f"""Answer the user's question directly.
-{style_instruction}
-Do not repeat the question.
-Do not repeat conversation history labels (like "You:" or "AI:").
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+        return f"""Senior engineer. Plain text answer.
 
-{history_block}User question: {user_input}
-"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "interview":
-        return f"""Answer only the user's question.
-{style_instruction}
-Keep it technical.
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+        return f"""Senior engineer. Technical. Plain text.
 
-{history_block}User question: {user_input}
-"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "universal":
-        return f"""Answer the user's question clearly and naturally.
-{style_instruction}
-Do not repeat the question.
-Do not mention rules, prompt text, or examples.
-If unclear, reply with: Please clarify your question
+        return f"""Senior engineer. Plain text answer.
 
-{history_block}User question: {user_input}
-"""
+{history_block}Question: {user_input}
+Answer:"""
 
     if mode == "summary":
         return f"""You are a meeting notes assistant. Read the conversation transcript below and produce a structured summary.
@@ -316,16 +328,33 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         yield _make_error("AI error occurred.")
 
 
-def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="concise", messages=None):
-    """Ollama streaming with optional image — for multimodal (vision) models like llava."""
+def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="concise", messages=None, model_name=None):
+    """Ollama streaming with optional image — for multimodal (vision) models like llava.
+
+    If image_b64 is provided but no vision model is available, attempts to pull one.
+    """
     import time
     start = time.time()
     try:
-        final_prompt = build_prompt(prompt, mode, style, messages)
+        # When image is provided, use raw prompt (build_prompt wrapper breaks vision models)
+        # Without image, use the standard wrapped prompt for text-only queries
+        if image_b64:
+            final_prompt = prompt
+        else:
+            final_prompt = build_prompt(prompt, mode, style, messages)
+
         num_predict = 300 if style == "concise" else (2000 if style == "detailed" else 500)
 
+        # When image is provided, try to find a vision-capable model
+        vision_model = model_name
+        if image_b64 and not vision_model:
+            vision_model = _get_vision_model()
+
+        model_to_use = vision_model or get_ai_model(mode)
+        logger.info("[ask_ollama_vision_stream] Using model: %s, has_image: %s", model_to_use, bool(image_b64))
+
         payload = {
-            "model": get_ai_model(mode),
+            "model": model_to_use,
             "prompt": final_prompt,
             "stream": True,
             "options": {
@@ -337,21 +366,31 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
             payload["images"] = [image_b64]
 
         logger.info("Vision stream: model=%s, has_image=%s, prompt=%s",
-            get_ai_model(mode), bool(image_b64), prompt[:80] + "...")
+            model_to_use, bool(image_b64), prompt[:80] + "...")
 
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
             json=payload,
             stream=True,
-            timeout=AI_TIMEOUT
+            timeout=120
         )
 
         if response.status_code != 200:
-            logger.error("Ollama vision service returned status %d: %s", response.status_code, response.text)
-            yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
+            try:
+                err_data = response.json()
+                err_msg = err_data.get("error", "")
+            except Exception:
+                err_msg = response.text
+
+            logger.error("Ollama vision service returned status %d: %s", response.status_code, err_msg)
+
+            if "memory" in err_msg.lower():
+                yield _make_error(f"Vision model '{model_to_use}' ran out of memory. Try a smaller model: ollama pull moondream")
+            else:
+                yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
             return
 
-        model_display = get_ai_model(mode)
+        model_display = model_to_use
         yield _make_meta(model_display, "ollama")
 
         chunk_count = 0

@@ -28,7 +28,10 @@ let _enabled = false
 let _undetectable = false
 
 // WDA_EXCLUDEFROMCAPTURE - excludes window from screen capture on Windows
+// Only defined here for documentation purposes; Electron's setContentProtection()
+// is available on all platforms (Win/macOS/Linux) but behaves slightly differently.
 const WDA_EXCLUDEFROMCAPTURE = 0x00000001
+const IS_WINDOWS = process.platform === "win32"
 
 /**
  * Initialize with Electron BrowserWindow

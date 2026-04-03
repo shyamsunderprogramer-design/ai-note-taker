@@ -5,6 +5,7 @@ let isListening = false
 let isStarting = false
 let isBackendReady = false
 let isUndetectable = false
+let isProcessing = false  // true while AI is streaming a response
 let mediaRecorder = null
 let mediaStream = null
 let audioChunks = []
@@ -14,6 +15,24 @@ let currentMessages = []
 let suppressAutoSave = false
 let historySortBy = "updatedAt" // "updatedAt" | "createdAt" | "title" | "messageCount"
 
+// Always-on mic state
+let alwaysOnActive = false
+let alwaysOnEventSource = null
+let alwaysOnTranscriptionBuffer = ""
+let alwaysOnLastHeardTime = 0
+const ALWAYS_ON_SILENCE_THRESHOLD = 2500 // ms of silence before sending to AI
+
+// Waveform visualization state
+let waveformAudioCtx = null
+let waveformAnalyser = null
+let waveformCanvasCtx = null
+let waveformAnimationId = null
+
+// Real-time streaming transcription state
+let transcribeWs = null      // WebSocket for live transcription
+let streamProcessor = null   // ScriptProcessorNode for PCM capture
+let partialTranscriptText = "" // Accumulated partial text
+
 // ==============================
 // DOM REFS
 // ==============================
@@ -21,6 +40,7 @@ const stealthBtn = document.getElementById("stealthBtn")
 const stealthLabel = document.getElementById("stealthLabel")
 const listenBtn = document.getElementById("listenBtn")
 const listenLabel = document.getElementById("listenLabel")
+const waveformCanvasEl = document.getElementById("waveformCanvas")
 const minBtn = document.getElementById("minBtn")
 const maxBtn = document.getElementById("maxBtn")
 const closeBtn = document.getElementById("closeBtn")
@@ -31,6 +51,11 @@ const responseStyleSelect = document.getElementById("responseStyleSelect")
 const contextLengthSelect = document.getElementById("contextLengthSelect")
 const tokenLimitSelect = document.getElementById("tokenLimitSelect")
 const tokenCounter = document.getElementById("tokenCounter")
+const autoSSBtn = document.getElementById("autoSSBtn")
+const alwaysOnBtn = document.getElementById("alwaysOnBtn")
+const smartModeBtn = document.getElementById("smartModeBtn")
+const autoSSDot = document.getElementById("autoSSDot")
+const alwaysOnDot = document.getElementById("alwaysOnDot")
 const chatArea = document.getElementById("chatArea")
 const chatWelcome = document.getElementById("chatWelcome")
 const summarizeBtn = document.getElementById("summarizeBtn")
@@ -58,6 +83,16 @@ window.api.onStealthStateChanged((state) => {
   stealthBtn.classList.toggle("undetectable", state.undetectable)
   stealthLabel.textContent = state.undetectable ? "Undetectable" : "Detectable"
 })
+
+// Global Ctrl+Enter — trigger AI from any app
+window.api.onTriggerAI(() => {
+  if (alwaysOnActive && alwaysOnTranscriptionBuffer.trim()) {
+    flushAlwaysOnBuffer()
+  } else if (!isListening && !isProcessing) {
+    listenBtn.click()
+  }
+})
+
 document.addEventListener("keydown", (e) => {
   // Escape — close panels
   if (e.key === "Escape") {
@@ -90,8 +125,12 @@ document.addEventListener("keydown", (e) => {
       return
     }
     if (tag === "select") return
-    // Enter elsewhere = toggle listening
+    // Enter elsewhere = toggle listening / flush always-on buffer
     e.preventDefault()
+    if (alwaysOnActive && alwaysOnTranscriptionBuffer.trim()) {
+      flushAlwaysOnBuffer()
+      return
+    }
     if (isListening) {
       stopListening()
     } else {
@@ -172,6 +211,7 @@ function getContextMessages() {
 }
 
 function setProcessingUI(processing) {
+  isProcessing = processing
   if (processing) {
     listenBtn.classList.add("listening", "processing")
     listenBtn.disabled = true
@@ -287,7 +327,11 @@ async function saveCurrentConversation() {
     id: currentConversationId,
     title,
     pinned,
-    messages: currentMessages
+    messages: currentMessages,
+    mode: getSelectedMode(),
+    isAutoScreenshot: autoSSBtn?.classList.contains("active"),
+    isAlwaysOnMic: alwaysOnActive,
+    savedAt: Date.now()
   }
 
   try {
@@ -303,6 +347,33 @@ function loadConversationIntoUI(conversation) {
   currentMessages = []
   currentConversationId = conversation.id
   suppressAutoSave = true
+
+  // Restore session metadata
+  if (conversation.mode) {
+    const modeTag = document.querySelector(".mode-tag")
+    if (modeTag) modeTag.textContent = conversation.mode
+  }
+
+  // Restore auto-screenshot state
+  if (conversation.isAutoScreenshot) {
+    autoSSBtn?.classList.add("active")
+    if (autoSSDot) autoSSDot.style.display = "block"
+    window.api.autoScreenshotSetEnabled(true, 5000)
+  } else {
+    autoSSBtn?.classList.remove("active")
+    if (autoSSDot) autoSSDot.style.display = "none"
+  }
+
+  // Restore always-on mic state
+  if (conversation.isAlwaysOnMic) {
+    alwaysOnActive = true
+    alwaysOnBtn?.classList.add("active")
+    if (alwaysOnDot) alwaysOnDot.style.display = "block"
+  } else {
+    alwaysOnActive = false
+    alwaysOnBtn?.classList.remove("active")
+    if (alwaysOnDot) alwaysOnDot.style.display = "none"
+  }
 
   conversation.messages.forEach(msg => {
     if (msg.role === "user") {
@@ -392,6 +463,17 @@ function fallbackCopyText(text) {
   } finally {
     document.body.removeChild(textarea)
   }
+}
+
+function showFullScreenshot(b64) {
+  const existing = document.querySelector(".screenshot-modal")
+  if (existing) existing.remove()
+  const modal = document.createElement("div")
+  modal.className = "screenshot-modal"
+  modal.innerHTML = `<button class="screenshot-modal-close">&#x2715;</button><img src="data:image/png;base64,${b64}" alt="Full screenshot" />`
+  modal.querySelector(".screenshot-modal-close").addEventListener("click", () => modal.remove())
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove() })
+  document.body.appendChild(modal)
 }
 
 function showToast(message) {
@@ -987,10 +1069,9 @@ function removeWelcome() {
 }
 
 function scrollChat() {
-  // Auto-scroll disabled - user controls scrolling
-  // requestAnimationFrame(() => {
-  //   chatArea.scrollTop = chatArea.scrollHeight
-  // })
+  requestAnimationFrame(() => {
+    chatArea.scrollTop = chatArea.scrollHeight
+  })
 }
 
 function addMessage(role, text) {
@@ -1041,6 +1122,33 @@ function addMessage(role, text) {
       })
     })
     actions.appendChild(copyBtn)
+
+    // Add Read button for TTS (browser SpeechSynthesis)
+    const readBtn = document.createElement("button")
+    readBtn.className = "msg-read-btn"
+    readBtn.textContent = "Read"
+    readBtn.addEventListener("click", () => {
+      const textToSpeak = bubble.dataset.fullText || bubble.innerText || text || ""
+      if (!textToSpeak.trim()) return
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume()
+        readBtn.textContent = "Pause"
+        return
+      }
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel()
+        readBtn.textContent = "Read"
+        return
+      }
+      const utterance = new SpeechSynthesisUtterance(textToSpeak)
+      utterance.rate = 1.2
+      utterance.onend = () => { readBtn.textContent = "Read" }
+      utterance.onerror = () => { readBtn.textContent = "Read" }
+      window.speechSynthesis.speak(utterance)
+      readBtn.textContent = "Pause"
+    })
+    actions.appendChild(readBtn)
+
     msg.appendChild(actions)
   }
 
@@ -1407,6 +1515,9 @@ function finalizeBubble(bubble, html) {
   bubble._typing = false
   bubble._textNode = null
   bubble._cursorSpan = null
+  // Remove loading class from message element to stop spinner animation
+  const msgEl = bubble.closest(".chat-message")
+  if (msgEl) msgEl.classList.remove("loading")
   // Store the plain text for copy button before setting HTML
   const tempDiv = document.createElement("div")
   tempDiv.innerHTML = html
@@ -1420,13 +1531,6 @@ function finalizeBubble(bubble, html) {
  * On final render: full formatMessage() formatting once.
  */
 function setBubbleText(bubble, text, showCursor = false) {
-  // Debug: verify hljs is available
-  if (!window._hljsDebug) {
-    window._hljsDebug = true
-    console.log("[setBubbleText] hljs:", !!window.hljs, "highlight:", typeof window.hljs?.highlight)
-    const test = window.hljs?.highlight("def x(): pass", {language: "python", ignoreIllegals: true})
-    console.log("[setBubbleText] hljs test:", test?.value?.slice(0, 50))
-  }
   if (!text && text !== 0) {
     bubble.innerHTML = ""
     return
@@ -1629,7 +1733,6 @@ function parseSSEFromText(text) {
 }
 
 async function streamAIResponse(query) {
-  console.log("[streamAIResponse] Starting stream for:", query)
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const selectedModel = modelSelect ? modelSelect.value : "auto"
@@ -1786,19 +1889,148 @@ async function streamAIResponse(query) {
 }
 
 // ==============================
+// STREAM AI RESPONSE WITH IMAGE (Vision)
+// ==============================
+async function streamAIResponseWithImage(query, screenshotB64) {
+  const mode = getSelectedMode()
+  const responseStyle = getSelectedResponseStyle()
+  const selectedModel = modelSelect ? modelSelect.value : "auto"
+  const provider = selectedModel !== "auto" ? selectedModel : "ollama"
+  const contextMessages = getContextMessages()
+  const requestStartTime = Date.now()
+
+  const formData = new FormData()
+  formData.append("query", query)
+  formData.append("mode", mode)
+  formData.append("style", responseStyle)
+  formData.append("provider", provider)
+  if (contextMessages) {
+    formData.append("context", JSON.stringify(contextMessages))
+  }
+  if (screenshotB64) {
+    formData.append("image_b64", screenshotB64)
+  }
+
+  // Create assistant message with loading animation BEFORE fetch
+  streamMessage("assistant", "")
+
+  try {
+    const response = await fetch(window.api.getAskWithImageUrl(), {
+      method: "POST",
+      body: formData
+    })
+
+    if (!response.ok) {
+      addErrorMessage("Vision AI stream failed")
+      setProcessingUI(false)
+      return
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let accumulatedText = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop()
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) continue
+        if (line.startsWith("data:")) {
+          const dataStr = line.slice(5).trim()
+          let data
+          try { data = JSON.parse(dataStr) } catch { continue }
+
+          if (data.type === "error") {
+            if (latestBotMessage) {
+              setBubbleText(latestBotMessage.bubble,
+                `<span class="error-text">Error: ${escapeHtml(data.message || "Unknown error")}</span>`)
+            }
+            latestBotMessage = null
+            setProcessingUI(false)
+            return
+          }
+
+          if (data.type === "meta") {
+            if (latestBotMessage) {
+              latestBotMessage.modelName = data.model
+              latestBotMessage.modelProvider = data.provider
+              latestBotMessage.modelDisplay = data.model
+            }
+            continue
+          }
+
+          if (data.type === "chunk") {
+            accumulatedText += data.content
+            if (latestBotMessage) {
+              latestBotMessage.accumulatedText = accumulatedText
+              setBubbleText(latestBotMessage.bubble, accumulatedText, true)
+              scrollChat()
+            }
+            continue
+          }
+
+          if (data.type === "done") break
+        }
+      }
+    }
+
+    // Finalize
+    if (latestBotMessage) {
+      latestBotMessage.accumulatedText = accumulatedText
+      finalizeBubble(latestBotMessage.bubble, formatMessage(accumulatedText))
+
+      const label = latestBotMessage.element.querySelector(".msg-label")
+      if (label) {
+        const badge = document.createElement("span")
+        badge.className = "model-badge"
+        badge.textContent = `[${latestBotMessage.modelDisplay || provider}]`
+        label.appendChild(badge)
+        const elapsed = Date.now() - requestStartTime
+        const timeBadge = document.createElement("span")
+        timeBadge.className = "model-badge time-badge"
+        timeBadge.textContent = `${(elapsed / 1000).toFixed(1)}s`
+        label.appendChild(timeBadge)
+      }
+
+      if (!suppressAutoSave) {
+        const modeTag = document.querySelector(".mode-tag")
+        const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
+        currentMessages.push({ role: "assistant", text: accumulatedText, timestamp: Date.now(), mode: currentMode })
+        saveCurrentConversation()
+      }
+
+      latestBotMessage = null
+    }
+
+    showSummarizeButton()
+    setProcessingUI(false)
+  } catch (e) {
+    console.error("Vision AI stream error:", e)
+    addErrorMessage("Vision AI response failed")
+    if (latestBotMessage) latestBotMessage = null
+    setProcessingUI(false)
+  }
+}
+
+// ==============================
 // STREAM AI RESPONSE — RACE MODE
 // First provider to respond wins
 // ==============================
 
 async function streamAIRace(query) {
-  console.log("[streamAIRace] Starting race for:", query)
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const contextMessages = getContextMessages()
   const requestStartTime = Date.now()
 
   // Get enabled providers - check both UI toggle (local storage) and backend API key status
-  const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud"]
+  const CLOUD_PROVIDERS = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud", "perplexity"]
   const enabledProviders = []
 
   // Get which providers have API keys from backend
@@ -1831,8 +2063,6 @@ async function streamAIRace(query) {
   if (enabledProviders.length > 0) {
     raceUrl += `&enabled=${encodeURIComponent(enabledProviders.join(","))}`
   }
-  console.log("[streamAIRace] Race URL:", raceUrl)
-
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
     console.warn("[streamAIRace] Timeout — aborting fetch")
@@ -1990,7 +2220,7 @@ async function streamAIRace(query) {
 // ==============================
 // STREAM MESSAGE (message element factory)
 // ==============================
-function streamMessage(role, text) {
+function streamMessage(role, text, opts = {}) {
   removeWelcome()
 
   // If streaming an assistant message, accumulate
@@ -2027,6 +2257,21 @@ function streamMessage(role, text) {
     setBubbleText(bubble, text)
   }
 
+  // Show screenshot icon on user message if screenshot was attached
+  if (role === "user" && opts.hasScreenshot && opts.screenshotB64) {
+    const screenshotThumb = document.createElement("div")
+    screenshotThumb.className = "msg-img-indicator"
+    screenshotThumb.title = "Click to view screenshot"
+    screenshotThumb.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+    screenshotThumb.style.display = "inline-flex"
+    screenshotThumb.style.alignItems = "center"
+    screenshotThumb.style.cursor = "pointer"
+    screenshotThumb.style.opacity = "0.7"
+    screenshotThumb.dataset.fullB64 = opts.screenshotB64
+    screenshotThumb.addEventListener("click", () => showFullScreenshot(opts.screenshotB64))
+    msg.appendChild(screenshotThumb)
+  }
+
   const labelEl = document.createElement("span")
   labelEl.className = "msg-label"
   labelEl.textContent = label
@@ -2059,6 +2304,33 @@ function streamMessage(role, text) {
       })
     })
     actions.appendChild(copyBtn)
+
+    // Add Read button for TTS (browser SpeechSynthesis)
+    const readBtn = document.createElement("button")
+    readBtn.className = "msg-read-btn"
+    readBtn.textContent = "Read"
+    readBtn.addEventListener("click", () => {
+      const textToSpeak = bubble.dataset.fullText || bubble.innerText || text || ""
+      if (!textToSpeak.trim()) return
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume()
+        readBtn.textContent = "Pause"
+        return
+      }
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel()
+        readBtn.textContent = "Read"
+        return
+      }
+      const utterance = new SpeechSynthesisUtterance(textToSpeak)
+      utterance.rate = 1.2
+      utterance.onend = () => { readBtn.textContent = "Read" }
+      utterance.onerror = () => { readBtn.textContent = "Read" }
+      window.speechSynthesis.speak(utterance)
+      readBtn.textContent = "Pause"
+    })
+    actions.appendChild(readBtn)
+
     msg.appendChild(actions)
   }
 
@@ -2103,6 +2375,7 @@ async function waitForBackend() {
 // SUBMIT TEXT (from text input)
 // ==============================
 async function submitText(text) {
+  window.speechSynthesis?.cancel()
   setProcessingUI(true)
 
   await window.api.setMode(getSelectedMode())
@@ -2114,11 +2387,30 @@ async function submitText(text) {
 // ==============================
 // SUBMIT AUDIO
 // ==============================
-async function submitAudio(blob) {
+async function submitAudio(blob, screenshotB64 = null) {
+  window.speechSynthesis?.cancel()
+
+  // If WebSocket streaming already produced text, use it instead of re-transcribing blob
+  const streamedText = textInput.value.trim()
+  if (streamedText) {
+    // Partial transcript from WS — submit directly as text
+    textInput.value = ""
+    setProcessingUI(true)
+    await window.api.setMode(getSelectedMode())
+    streamMessage("user", streamedText, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
+    if (screenshotB64) {
+      await streamAIResponseWithImage(streamedText, screenshotB64)
+    } else {
+      await streamAIResponse(streamedText)
+    }
+    return
+  }
+
   setProcessingUI(true)
 
   await window.api.setMode(getSelectedMode())
 
+  // Transcribe audio first
   const formData = new FormData()
   formData.append("file", blob, "audio.webm")
 
@@ -2142,15 +2434,19 @@ async function submitAudio(blob) {
 
   const data = await response.json()
 
-  if (data.text) {
-    streamMessage("user", data.text)
-  } else {
+  if (!data.text) {
     setProcessingUI(false)
     return
   }
 
-  // Use streaming endpoint for AI response
-  await streamAIResponse(data.text)
+  streamMessage("user", data.text, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
+
+  // If screenshot was captured, use vision endpoint
+  if (screenshotB64) {
+    await streamAIResponseWithImage(data.text, screenshotB64)
+  } else {
+    await streamAIResponse(data.text)
+  }
 }
 
 // ==============================
@@ -2158,6 +2454,12 @@ async function submitAudio(blob) {
 // ==============================
 listenBtn.addEventListener("click", async () => {
   if (isStarting) return
+
+  // If always-on mic is active and buffer has text, flush it to AI immediately
+  if (alwaysOnActive && alwaysOnTranscriptionBuffer.trim()) {
+    flushAlwaysOnBuffer()
+    return
+  }
 
   // If text input has content, submit text instead of voice
   const typedText = textInput.value.trim()
@@ -2191,6 +2493,9 @@ listenBtn.addEventListener("click", async () => {
     mediaRecorder = new MediaRecorder(mediaStream)
     audioChunks = []
 
+    // Setup waveform visualization
+    startWaveform(mediaStream)
+
     mediaRecorder.addEventListener("dataavailable", (e) => {
       if (e.data && e.data.size > 0) {
         audioChunks.push(e.data)
@@ -2203,16 +2508,30 @@ listenBtn.addEventListener("click", async () => {
       audioChunks = []
       stopTracks()
 
+      console.log("[mediaRecorder] stop event fired, audioBlob size:", audioBlob.size)
+
       if (audioBlob.size === 0) {
         setListeningUI(false)
         return
       }
 
       setListeningUI(false)
-      await submitAudio(audioBlob)
+      // Auto-screenshot: grab latest from ring buffer if active
+      let screenshotB64 = null
+      if (autoSSBtn && autoSSBtn.classList.contains("active")) {
+        try {
+          screenshotB64 = await window.api.overlayGetLatestScreenshot()
+        } catch (e) {
+          console.warn("Auto-screenshot buffer read failed:", e)
+        }
+      }
+      await submitAudio(audioBlob, screenshotB64)
     })
 
     mediaRecorder.start()
+
+    // Start real-time streaming transcription pipeline
+    startStreamingTranscription()
 
   } catch (e) {
     console.error(e)
@@ -2225,6 +2544,9 @@ listenBtn.addEventListener("click", async () => {
 })
 
 function stopListening() {
+  // Stop WebSocket streaming first (triggers final transcription)
+  stopStreamingTranscription()
+
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop()
   } else {
@@ -2236,11 +2558,189 @@ function stopListening() {
 // TRACK CLEANUP
 // ==============================
 function stopTracks() {
+  stopWaveform()
   if (mediaStream) {
     for (const track of mediaStream.getTracks()) {
       track.stop()
     }
     mediaStream = null
+  }
+}
+
+// ==============================
+// REAL-TIME STREAMING TRANSCRIPTION
+// ==============================
+
+/**
+ * Start streaming audio from the microphone to the backend via WebSocket.
+ * Partial transcriptions appear in real-time in the text input.
+ * If the WebSocket errors, the existing MediaRecorder blob path is used as fallback.
+ */
+function startStreamingTranscription() {
+  partialTranscriptText = ""
+
+  transcribeWs = new WebSocket("ws://127.0.0.1:8000/ws/transcribe")
+
+  transcribeWs.addEventListener("open", () => {
+    console.log("[transcribeWs] connected")
+
+    // Create audio pipeline: MediaStream → ScriptProcessor → Float32 PCM → WebSocket
+    const audioCtx = new AudioContext()
+    const source = audioCtx.createMediaStreamSource(mediaStream)
+    streamProcessor = audioCtx.createScriptProcessor(4096, 1, 1)
+
+    streamProcessor.onaudioprocess = (e) => {
+      if (transcribeWs?.readyState === WebSocket.OPEN) {
+        const inputData = e.inputBuffer.getChannelData(0)
+        // Downsample from system sample rate (e.g. 48000) to 16000 Hz
+        const downsampled = downsampleBuffer(inputData, e.inputBuffer.sampleRate, 16000)
+        transcribeWs.send(downsampled.buffer)
+      }
+    }
+
+    source.connect(streamProcessor)
+    streamProcessor.connect(audioCtx.destination)
+    // Keep audioCtx alive for the duration — don't close it here
+  })
+
+  transcribeWs.addEventListener("message", (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      if (data.type === "partial") {
+        partialTranscriptText = data.text
+        showPartialTranscript(data.text)
+      } else if (data.type === "final") {
+        confirmPartialTranscript(data.text)
+      }
+    } catch {}
+  })
+
+  transcribeWs.addEventListener("error", () => {
+    console.warn("[transcribeWs] error — falling back to blob recording")
+    stopStreamingPipeline()
+    // MediaRecorder blob path will handle it alone
+  })
+}
+
+/** Stop the WebSocket and audio pipeline. */
+function stopStreamingTranscription() {
+  if (transcribeWs) {
+    transcribeWs.close()
+    transcribeWs = null
+  }
+  stopStreamingPipeline()
+}
+
+/** Disconnect and clean up the audio pipeline. */
+function stopStreamingPipeline() {
+  if (streamProcessor) {
+    try { streamProcessor.disconnect() } catch {}
+    streamProcessor = null
+  }
+  partialTranscriptText = ""
+}
+
+/**
+ * Linear interpolation downsampler.
+ * @param {Float32Array} buffer - input audio buffer
+ * @param {number} fromRate - source sample rate (e.g. 48000)
+ * @param {number} toRate - target sample rate (e.g. 16000)
+ * @returns {Float32Array} downsampled buffer
+ */
+function downsampleBuffer(buffer, fromRate, toRate) {
+  if (fromRate === toRate) return buffer
+  const ratio = fromRate / toRate
+  const newLen = Math.round(buffer.length / ratio)
+  const result = new Float32Array(newLen)
+  for (let i = 0; i < newLen; i++) {
+    const srcIdx = i * ratio
+    const idx = Math.floor(srcIdx)
+    const frac = srcIdx - idx
+    result[i] = (buffer[idx] || 0) * (1 - frac) + (buffer[idx + 1] || 0) * frac
+  }
+  return result
+}
+
+/** Show interim transcription in the input field with italic green styling. */
+function showPartialTranscript(text) {
+  textInput.value = text
+  textInput.classList.add("partial-transcript")
+}
+
+/** Confirm final transcription — remove italic styling. */
+function confirmPartialTranscript(text) {
+  textInput.classList.remove("partial-transcript")
+  if (text) {
+    textInput.value = text
+  }
+  partialTranscriptText = ""
+}
+
+// ==============================
+// WAVEFORM VISUALIZATION
+// ==============================
+function startWaveform(stream) {
+  try {
+    waveformAudioCtx = new AudioContext()
+    waveformAnalyser = waveformAudioCtx.createAnalyser()
+    waveformAnalyser.fftSize = 256
+    const source = waveformAudioCtx.createMediaStreamSource(stream)
+    source.connect(waveformAnalyser)
+
+    waveformCanvasCtx = waveformCanvasEl.getContext("2d")
+    waveformCanvasEl.width = waveformCanvasEl.offsetWidth || 80
+    waveformCanvasEl.height = waveformCanvasEl.offsetHeight || 32
+    waveformCanvasEl.classList.add("active")
+
+    const dataArray = new Uint8Array(waveformAnalyser.frequencyBinCount)
+
+    function draw() {
+      if (!waveformAnalyser) return
+      waveformAnimationId = requestAnimationFrame(draw)
+      waveformAnalyser.getByteTimeDomainData(dataArray)
+
+      waveformCanvasCtx.fillStyle = "rgba(0,0,0,0)"
+      waveformCanvasCtx.fillRect(0, 0, waveformCanvasEl.width, waveformCanvasEl.height)
+      waveformCanvasCtx.lineWidth = 1.5
+      waveformCanvasCtx.strokeStyle = "#16a34a"
+      waveformCanvasCtx.beginPath()
+
+      const sliceWidth = waveformCanvasEl.width / dataArray.length
+      let x = 0
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0
+        const y = (v * waveformCanvasEl.height) / 2
+        if (i === 0) waveformCanvasCtx.moveTo(x, y)
+        else waveformCanvasCtx.lineTo(x, y)
+        x += sliceWidth
+      }
+      waveformCanvasCtx.lineTo(waveformCanvasEl.width, waveformCanvasEl.height / 2)
+      waveformCanvasCtx.stroke()
+    }
+    draw()
+  } catch (e) {
+    console.warn("Waveform setup failed:", e)
+  }
+}
+
+function stopWaveform() {
+  if (waveformAnimationId) {
+    cancelAnimationFrame(waveformAnimationId)
+    waveformAnimationId = null
+  }
+  if (waveformCanvasCtx) {
+    waveformCanvasCtx.clearRect(0, 0, waveformCanvasEl.width, waveformCanvasEl.height)
+    waveformCanvasCtx = null
+  }
+  if (waveformAnalyser) {
+    waveformAnalyser = null
+  }
+  if (waveformAudioCtx) {
+    waveformAudioCtx.close()
+    waveformAudioCtx = null
+  }
+  if (waveformCanvasEl) {
+    waveformCanvasEl.classList.remove("active")
   }
 }
 
@@ -2338,20 +2838,17 @@ summarizeBtn?.addEventListener("click", async () => {
       return `${role}: ${m.text}`
     }).join("\n\n")
 
-    // Call the AI summary endpoint
-    const mode = getSelectedMode()
-    const responseStyle = "detailed"
+    // Call the AI summary endpoint with proper SSE parsing
     const selectedModel = modelSelect ? modelSelect.value : "auto"
     const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
     const provider = isCloudModel ? selectedModel : "ollama"
 
-    // Build URL manually since we need a different prompt
     const healthUrl = window.api.getHealthUrl()
     const base = healthUrl.replace("/health", "")
     const params = new URLSearchParams({
       q: transcript,
       mode: "summary",
-      style: responseStyle,
+      style: "detailed",
       provider
     })
     const url = `${base}/stream?${params.toString()}`
@@ -2359,29 +2856,61 @@ summarizeBtn?.addEventListener("click", async () => {
     const response = await fetch(url)
     if (!response.ok) throw new Error("Summary failed")
 
-    // Stream the summary into a summary block
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-
+    // Create summary block BEFORE streaming so we can append to it
     const summaryBlock = document.createElement("div")
     summaryBlock.className = "summary-block"
-    summaryBlock.innerHTML = `<div class="summary-block-title">&#10022; Summary</div><div class="summary-block-content" id="summaryContent"></div>`
+    summaryBlock.innerHTML = `<div class="summary-block-title">&#10022; Meeting Notes</div><div class="summary-block-content" id="summaryContent"></div>`
     chatArea.appendChild(summaryBlock)
     scrollChat()
 
     const summaryContent = document.getElementById("summaryContent")
 
+    // Stream with proper SSE parsing (same approach as streamAIResponse)
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let accumulated = ""
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
+
       buffer += decoder.decode(value, { stream: true })
-      summaryContent.innerHTML = buffer
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
+      const lines = buffer.split("\n")
+      buffer = lines.pop() // Keep unparsed tail for next iteration
+
+      for (const line of lines) {
+        if (line.startsWith("data:")) {
+          const dataStr = line.slice(5).trim()
+          if (!dataStr) continue
+          try {
+            const data = JSON.parse(dataStr)
+            if (data.type === "chunk" && data.content) {
+              accumulated += data.content
+            }
+          } catch {}
+        }
+      }
+
+      // Render accumulated text using the existing formatMessage renderer
+      summaryContent.innerHTML = formatMessage(accumulated)
       scrollChat()
     }
+
+    // Final render with full formatting
+    summaryContent.innerHTML = formatMessage(accumulated)
+
+    // Add copy button to summary block
+    const copyBtn = document.createElement("button")
+    copyBtn.className = "summary-copy-btn"
+    copyBtn.textContent = "Copy"
+    copyBtn.title = "Copy meeting notes"
+    copyBtn.addEventListener("click", () => {
+      window.api.copyToClipboard(accumulated)
+      copyBtn.textContent = "Copied!"
+      setTimeout(() => { copyBtn.textContent = "Copy" }, 1500)
+    })
+    summaryBlock.querySelector(".summary-block-title").appendChild(copyBtn)
 
     scrollChat()
   } catch (e) {
@@ -2497,6 +3026,146 @@ stealthBtn.addEventListener("click", async () => {
   }
 })
 
+// Smart mode — code/coding assistance toggle
+let smartModeActive = false
+smartModeBtn?.addEventListener("click", async () => {
+  smartModeActive = !smartModeActive
+  smartModeBtn.classList.toggle("active", smartModeActive)
+  if (smartModeActive) {
+    // Switch to code mode
+    if (modeSelect) modeSelect.value = "code"
+    await window.api.storeSet("mode", "code")
+  } else {
+    // Restore previous mode from store
+    const saved = await window.api.storeGet("mode")
+    if (modeSelect) modeSelect.value = saved || "adaptive"
+  }
+})
+
+// Auto-screenshot toggle
+if (autoSSBtn) {
+  autoSSBtn.addEventListener("click", async () => {
+    const isActive = autoSSBtn.classList.contains("active")
+    const newState = !isActive
+    try {
+      await window.api.autoScreenshotSetEnabled(newState, 5000)
+      autoSSBtn.classList.toggle("active", newState)
+      if (autoSSDot) autoSSDot.style.display = newState ? "block" : "none"
+    } catch (e) {
+      console.error("autoScreenshotSetEnabled failed:", e)
+    }
+  })
+  // Restore state on load
+  ;(async () => {
+    try {
+      const status = await window.api.autoScreenshotGetStatus()
+      if (status && status.enabled) {
+        autoSSBtn.classList.add("active")
+        if (autoSSDot) autoSSDot.style.display = "block"
+      }
+    } catch {}
+  })()
+}
+
+// ==============================
+// ALWAYS-ON MIC — auto listen + transcribe + auto-query AI
+// ==============================
+function startAlwaysOnListen() {
+  if (alwaysOnEventSource) return
+  alwaysOnTranscriptionBuffer = ""
+  alwaysOnLastHeardTime = Date.now()
+
+  alwaysOnEventSource = new EventSource("http://127.0.0.1:8000/transcribe-stream")
+
+  alwaysOnEventSource.addEventListener("transcript", (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      if (data.text && data.text.trim()) {
+        alwaysOnTranscriptionBuffer += " " + data.text.trim()
+        alwaysOnLastHeardTime = Date.now()
+      }
+    } catch {}
+  })
+
+  alwaysOnEventSource.addEventListener("ping", () => {
+    // Check if silence threshold exceeded
+    const elapsed = Date.now() - alwaysOnLastHeardTime
+    if (alwaysOnTranscriptionBuffer.trim().length > 0 && elapsed > ALWAYS_ON_SILENCE_THRESHOLD) {
+      const text = alwaysOnTranscriptionBuffer.trim()
+      alwaysOnTranscriptionBuffer = ""
+      // Auto-send to AI with latest screenshot
+      autoSendToAI(text)
+    }
+  })
+
+  alwaysOnEventSource.onerror = () => {
+    stopAlwaysOnListen()
+  }
+}
+
+function stopAlwaysOnListen() {
+  if (alwaysOnEventSource) {
+    alwaysOnEventSource.close()
+    alwaysOnEventSource = null
+  }
+  alwaysOnTranscriptionBuffer = ""
+}
+
+function flushAlwaysOnBuffer() {
+  if (!alwaysOnTranscriptionBuffer.trim()) return
+  const text = alwaysOnTranscriptionBuffer.trim()
+  alwaysOnTranscriptionBuffer = ""
+  alwaysOnLastHeardTime = 0  // reset silence timer
+  autoSendToAI(text)
+}
+
+async function autoSendToAI(text) {
+  if (!text || !text.trim()) return
+  if (isProcessing) return  // skip if AI is busy
+
+  // Get latest screenshot from auto-screenshot buffer if active
+  let screenshotB64 = null
+  if (autoSSBtn && autoSSBtn.classList.contains("active")) {
+    try {
+      screenshotB64 = await window.api.overlayGetLatestScreenshot()
+    } catch {}
+  }
+
+  streamMessage("user", text, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
+  if (screenshotB64) {
+    await streamAIResponseWithImage(text, screenshotB64)
+  } else {
+    await streamAIResponse(text)
+  }
+}
+
+// Always-on mic toggle
+if (alwaysOnBtn) {
+  alwaysOnBtn.addEventListener("click", async () => {
+    const isActive = alwaysOnBtn.classList.contains("active")
+    const newState = !isActive
+    try {
+      const resp = await fetch("http://127.0.0.1:8000/set-always-on-mic", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `enabled=${newState}`
+      })
+      if (resp.ok) {
+        alwaysOnBtn.classList.toggle("active", newState)
+        if (alwaysOnDot) alwaysOnDot.style.display = newState ? "block" : "none"
+        alwaysOnActive = newState
+        if (newState) {
+          startAlwaysOnListen()
+        } else {
+          stopAlwaysOnListen()
+        }
+      }
+    } catch (e) {
+      console.error("set-always-on-mic failed:", e)
+    }
+  })
+}
+
 // ==============================
 // RESIZE HANDLE
 // ==============================
@@ -2573,6 +3242,7 @@ appMenu.addEventListener("click", async (e) => {
       syncProviderRow("deepseek", !!providers.deepseek)
       syncProviderRow("groq", !!providers.groq)
       syncProviderRow("ollama-cloud", !!providers["ollama-cloud"])
+      syncProviderRow("perplexity", !!providers.perplexity)
     } catch (e) { console.error(e) }
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) cloudModelSelect.value = savedCloudModel
@@ -2726,6 +3396,15 @@ const PROVIDER_META = {
     models: [
       { value: "ollama-cloud", label: "Ollama Cloud (qwen2.5)" },
     ]
+  },
+  perplexity: {
+    name: "Perplexity",
+    models: [
+      { value: "perplexity-sonar", label: "Sonar" },
+      { value: "perplexity-sonar-pro", label: "Sonar Pro" },
+      { value: "perplexity-sonar-reasoning", label: "Sonar Reasoning" },
+      { value: "perplexity-sonar-reasoning-plus", label: "Sonar Reasoning+" },
+    ]
   }
 }
 
@@ -2745,6 +3424,7 @@ function openProviderConfig(provider) {
     deepseek: "#7dd3fc",
     groq: "#fca5a5",
     "ollama-cloud": "#f97316",
+    perplexity: "#20B4E3",
   }[provider] || "rgba(255,255,255,0.5)"
 
   // Load stored config
@@ -2841,7 +3521,8 @@ function validateApiKeyFormat(provider, apiKey) {
     xai: /^xai-[a-zA-Z0-9_-]{20,}$/,
     deepseek: /^sk-[a-zA-Z0-9_-]{20,}$/,
     groq: /^gsk_[a-zA-Z0-9_-]{20,}$/,
-    "ollama-cloud": /^.{10,}$/  // Ollama Cloud: any string, min 10 chars
+    "ollama-cloud": /^.{10,}$/,  // Ollama Cloud: any string, min 10 chars
+    perplexity: /^pplx-[a-zA-Z0-9_-]{20,}$/,
   }
   const regex = formats[provider]
   if (!regex) return true // Unknown provider, skip validation
@@ -2859,7 +3540,8 @@ function getApiKeyHint(provider) {
     xai: "Format: xai-xxxxxxxxxxxxxxxxxxxxxxxx",
     deepseek: "Format: sk-xxxxxxxxxxxxxxxxxxxxxxxx",
     groq: "Format: gsk_xxxxxxxxxxxxxxxxxxxxxx",
-    "ollama-cloud": "Format: Your ollama.com API key (10+ chars)"
+    "ollama-cloud": "Format: Your ollama.com API key (10+ chars)",
+    perplexity: "Format: pplx-xxxxxxxxxxxxxxxxxxxxxxxx",
   }
   return hints[provider] || "Enter your API key"
 }
@@ -2961,7 +3643,7 @@ function syncProviderRow(key, enabled) {
 
 // Wire up toggle switches for cloud providers (NOT local ollama - it has no API key)
 // Local ollama is always enabled by default and doesn't need API key
-const CLOUD_PROVIDERS_WITH_KEY = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud"]
+const CLOUD_PROVIDERS_WITH_KEY = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud", "perplexity"]
 CLOUD_PROVIDERS_WITH_KEY.forEach(p => {
   const toggle = document.getElementById("toggle-" + p)
   if (!toggle) return
@@ -3036,6 +3718,11 @@ function updateActiveProviders() {
     "groq-llama-3-2-3b": "groq",
     "groq-mixtral-8x7b": "groq",
     "groq-qwen-2-5-72b": "groq",
+    // Perplexity
+    "perplexity-sonar": "perplexity",
+    "perplexity-sonar-pro": "perplexity",
+    "perplexity-sonar-reasoning": "perplexity",
+    "perplexity-sonar-reasoning-plus": "perplexity",
   }
   const activeKey = activeMap[selected]
 
@@ -3129,8 +3816,14 @@ async function init() {
     await syncStealthState()
     updateStealthUI(null, isUndetectable)
 
+    // Sync screenshot toggle on startup
+    await syncScreenshotState()
+
     // Sync all provider rows on startup
     await syncAllProviderRows()
+
+    // Run onboarding check on first launch
+    await checkOnboarding()
   } catch (e) {
     console.error(e)
   }
@@ -3139,12 +3832,112 @@ async function init() {
 // Sync all cloud provider rows — called on init
 async function syncAllProviderRows() {
   const providers = await window.api.getProviders()
-  for (const p of CLOUD_PROVIDERS) {
+  for (const p of CLOUD_PROVIDERS_WITH_KEY) {
     const hasKey = !!providers[p]
     const stored = (await window.api.storeGet("provider_" + p)) || {}
     const isEnabled = stored.enabled !== false && hasKey
     syncProviderRow(p, isEnabled)
   }
+}
+
+// Screenshot capture toggle — privacy control
+const toggleScreenshot = document.getElementById("toggle-screenshot")
+const screenshotStatusText = document.getElementById("screenshotStatusText")
+
+async function syncScreenshotState() {
+  if (!toggleScreenshot) return
+  const stored = await window.api.storeGet("screenshotEnabled")
+  const enabled = stored !== false // default true
+  toggleScreenshot.checked = enabled
+  if (screenshotStatusText) {
+    screenshotStatusText.textContent = enabled ? "Screenshots enabled" : "Screenshots disabled"
+  }
+}
+
+toggleScreenshot?.addEventListener("change", async () => {
+  const enabled = toggleScreenshot.checked
+  await window.api.storeSet("screenshotEnabled", enabled)
+  if (screenshotStatusText) {
+    screenshotStatusText.textContent = enabled ? "Screenshots enabled" : "Screenshots disabled"
+  }
+  // Apply to stealth module
+  await window.api.setUndetectable(enabled)
+})
+
+// ==============================
+// ONBOARDING
+// ==============================
+async function checkOnboarding() {
+  const hasOnboarded = await window.api.storeGet("hasOnboarded")
+  if (hasOnboarded) return
+
+  const checklist = document.getElementById("onboardingChecklist")
+  const note = document.getElementById("onboardingNote")
+  const closeBtn = document.getElementById("onboardingClose")
+  const modal = document.getElementById("onboardingModal")
+
+  // Step 1: Microphone
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream.getTracks().forEach(t => t.stop())
+    const micItem = checklist.querySelector('[data-step="mic"]')
+    micItem.className = "ok"
+    micItem.textContent = "Microphone access granted"
+  } catch {
+    const micItem = checklist.querySelector('[data-step="mic"]')
+    micItem.className = "fail"
+    micItem.textContent = "Microphone access denied — please allow in system settings"
+  }
+
+  // Step 2: Ollama
+  try {
+    const r = await fetch("http://127.0.0.1:8000/health")
+    if (r.ok) {
+      const ollamaItem = checklist.querySelector('[data-step="ollama"]')
+      ollamaItem.className = "ok"
+      ollamaItem.textContent = "Ollama backend running"
+    } else {
+      throw new Error("not ok")
+    }
+  } catch {
+    const ollamaItem = checklist.querySelector('[data-step="ollama"]')
+    ollamaItem.className = "fail"
+    ollamaItem.textContent = "Ollama not running — start with: python backend/main.py"
+  }
+
+  // Step 3: Vision model
+  try {
+    const r = await fetch("http://127.0.0.1:8000/providers")
+    if (r.ok) {
+      const visionItem = checklist.querySelector('[data-step="vision"]')
+      visionItem.className = "ok"
+      visionItem.textContent = "Vision model available (moondream/llava)"
+    } else {
+      throw new Error()
+    }
+  } catch {
+    const visionItem = checklist.querySelector('[data-step="vision"]')
+    visionItem.className = "fail"
+    visionItem.textContent = "Vision model not found — optional, voice will work without it"
+  }
+
+  // Check if all critical items passed
+  const micOk = checklist.querySelector('[data-step="mic"]').classList.contains("ok")
+  const ollamaOk = checklist.querySelector('[data-step="ollama"]').classList.contains("ok")
+
+  if (micOk && ollamaOk) {
+    note.textContent = "You're all set! Press Enter to start talking."
+    await window.api.storeSet("hasOnboarded", true)
+  } else if (!micOk) {
+    note.textContent = "Microphone access is required. Please restart and allow access."
+  } else {
+    note.textContent = "Start the backend with: python backend/main.py"
+  }
+
+  modal.classList.add("open")
+  closeBtn.addEventListener("click", () => {
+    modal.classList.remove("open")
+  })
 }
 
 init()

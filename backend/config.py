@@ -40,7 +40,7 @@ ALLOWED_MODES = ("auto", "fast", "cloud", "interview", "universal", "adaptive", 
 # ⚙️ RUNTIME SETTINGS
 # ==============================
 # AI behavior tuning (optional but useful)
-AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.3"))
+AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.1"))
 
 # Timeout for AI requests (seconds)
 AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "30"))

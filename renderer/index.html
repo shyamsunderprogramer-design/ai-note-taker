@@ -181,6 +181,24 @@
 
       <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
 
+      <!-- Smart mode — code-focused AI toggle -->
+      <button id="smartModeBtn" class="smart-mode-btn" type="button" title="Smart mode: enhanced code assistance">
+        <span class="smart-mode-icon">&#9889;</span>
+        <span class="smart-mode-label">Smart</span>
+      </button>
+
+      <!-- Auto-screenshot indicator -->
+      <button id="autoSSBtn" class="auto-ss-btn" type="button" title="Auto screenshot (background)">
+        <span class="auto-ss-dot" id="autoSSDot" style="display:none"></span>
+        <span class="auto-ss-icon">&#128247;</span>
+      </button>
+
+      <!-- Always-on mic indicator -->
+      <button id="alwaysOnBtn" class="always-on-btn" type="button" title="Always-on microphone">
+        <span class="always-on-dot" id="alwaysOnDot" style="display:none"></span>
+        <span class="always-on-icon">&#127908;</span>
+      </button>
+
     </div>
 
     <!-- ===== ROW 3: INPUT + ACTION ===== -->
@@ -193,6 +211,8 @@
         <span class="mic-icon">&#127908;</span>
         <span id="listenLabel">Start</span>
       </button>
+
+      <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
     </div>
 
     <!-- ===== ROW 4: AI RESPONSE ===== -->
@@ -409,6 +429,23 @@
               <button class="provider-config-btn" id="cfg-groq" data-provider="groq">Configure</button>
             </div>
 
+            <!-- Perplexity -->
+            <div class="provider-row" id="card-perplexity">
+              <span class="provider-logo provider-logo-perplexity">P</span>
+              <div class="provider-info">
+                <div class="provider-name-row">
+                  <span class="provider-name">Perplexity</span>
+                  <span class="provider-enabled-dot" id="dot-perplexity"></span>
+                </div>
+                <span class="provider-status dimmed" id="status-perplexity">Add API key to enable</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="toggle-perplexity" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+              <button class="provider-config-btn" id="cfg-perplexity" data-provider="perplexity">Configure</button>
+            </div>
+
           </div>
         </div>
 
@@ -458,6 +495,12 @@
                 <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
                 <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
               </optgroup>
+              <optgroup label="Perplexity">
+                <option value="perplexity-sonar">Sonar</option>
+                <option value="perplexity-sonar-pro">Sonar Pro</option>
+                <option value="perplexity-sonar-reasoning">Sonar Reasoning</option>
+                <option value="perplexity-sonar-reasoning-plus">Sonar Reasoning+</option>
+              </optgroup>
               <optgroup label="Ollama Cloud">
                 <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
                 <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
@@ -485,7 +528,41 @@
           </div>
           <div class="ollama-pull-status" id="ollamaPullStatus"></div>
         </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
+          <div class="settings-section-label">Privacy</div>
+          <div class="provider-row">
+            <span class="provider-logo" style="font-size:14px">&#128275;</span>
+            <div class="provider-info">
+              <div class="provider-name-row">
+                <span class="provider-name">Screen Capture</span>
+              </div>
+              <span class="provider-status dimmed" id="screenshotStatusText">Screenshots enabled</span>
+            </div>
+            <label class="provider-toggle">
+              <input type="checkbox" id="toggle-screenshot" checked />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Onboarding modal -->
+  <div class="modal-overlay" id="onboardingModal">
+    <div class="modal-box onboarding-box">
+      <div class="modal-title">Welcome to AI Note Taker</div>
+      <p class="onboarding-desc">Let's get you set up. We checked a few things:</p>
+      <ul class="onboarding-checklist" id="onboardingChecklist">
+        <li data-step="mic" class="checking">Checking microphone...</li>
+        <li data-step="ollama" class="checking">Checking Ollama...</li>
+        <li data-step="vision" class="checking">Checking vision model...</li>
+      </ul>
+      <p class="onboarding-note" id="onboardingNote"></p>
+      <button class="settings-btn modal-save-btn" id="onboardingClose">Get Started</button>
     </div>
   </div>
 

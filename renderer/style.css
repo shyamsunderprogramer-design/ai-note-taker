@@ -29,6 +29,34 @@
 }
 
 /* ==============================
+   LIGHT THEME — OS preference
+   ============================== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --text-main: rgba(0, 0, 0, 0.9);
+    --text-dim: rgba(0, 0, 0, 0.45);
+    --text-bright: rgba(0, 0, 0, 1);
+    --line: rgba(0, 0, 0, 0.1);
+    --line-bright: rgba(0, 0, 0, 0.2);
+    --surface: rgba(0, 0, 0, 0.02);
+    --surface-hover: rgba(0, 0, 0, 0.05);
+    --primary: #2563eb;
+    --primary-glow: rgba(37, 99, 235, 0.25);
+    --primary-light: rgba(37, 99, 235, 0.1);
+    --accent: #16a34a;
+    --accent-dim: rgba(22, 163, 74, 0.2);
+    --bubble-ai-bg: rgba(0, 0, 0, 0.04);
+    --bubble-user-bg: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(29, 78, 216, 0.1));
+    --danger: #dc2626;
+    --danger-dim: rgba(220, 38, 38, 0.2);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
+  }
+  html, body { background: rgba(255, 255, 255, 0.6); }
+}
+
+/* ==============================
    BASE
    ============================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -492,6 +520,10 @@ select option {
   color: var(--text-dim);
   font-size: 0.857em;
 }
+.text-input-wrap input.partial-transcript {
+  color: var(--accent);
+  font-style: italic;
+}
 
 /* Action button (Start/Stop) */
 .action-btn {
@@ -533,6 +565,127 @@ select option {
   50% { box-shadow: 0 0 35px rgba(34, 197, 94, 0.45); }
 }
 .mic-icon { font-size: clamp(10px, 0.93em, 16px); }
+
+/* Waveform canvas */
+.waveform-canvas {
+  width: 80px;
+  height: 32px;
+  border-radius: 4px;
+  background: transparent;
+  display: none;
+  flex-shrink: 0;
+}
+.waveform-canvas.active {
+  display: block;
+}
+
+/* Auto-screenshot button */
+.auto-ss-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin-left: 4px;
+  position: relative;
+}
+.auto-ss-btn:hover {
+  border-color: rgba(147, 197, 253, 0.4);
+  background: var(--surface-hover);
+}
+.auto-ss-btn.active {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.15);
+}
+.auto-ss-icon { font-size: 14px; line-height: 1; }
+.auto-ss-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Smart mode button — code/coding assistance */
+.smart-mode-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.786em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 4px;
+}
+.smart-mode-btn:hover {
+  border-color: var(--line-bright);
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+.smart-mode-btn.active {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+.smart-mode-icon { font-size: 12px; line-height: 1; }
+.smart-mode-label { line-height: 1; }
+
+/* Always-on mic button */
+.always-on-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin-left: 4px;
+  position: relative;
+}
+.always-on-btn:hover {
+  border-color: rgba(147, 197, 253, 0.4);
+  background: var(--surface-hover);
+}
+.always-on-btn.active {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.15);
+}
+.always-on-icon { font-size: 14px; line-height: 1; }
+.always-on-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: pulse-dot 2s infinite;
+}
 
 /* ==============================
    RESPONSE AREA HEADER (Summarize)
@@ -602,6 +755,22 @@ select option {
   align-items: center;
   gap: 6px;
 }
+.summary-copy-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  font-size: 0.714em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.05em;
+}
+.summary-copy-btn:hover {
+  background: rgba(34, 197, 94, 0.2);
+}
 .summary-block-content {
   font-size: 0.857em;
   line-height: 1.6;
@@ -648,6 +817,7 @@ select option {
   background: transparent;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  scroll-behavior: smooth;
 }
 .chat-area::-webkit-scrollbar { width: 4px; }
 .chat-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
@@ -1680,6 +1850,10 @@ select option {
   background: linear-gradient(135deg, rgba(239,68,68,0.3), rgba(185,28,28,0.15));
   color: #fca5a5;
 }
+.provider-logo-perplexity {
+  background: linear-gradient(135deg, rgba(32,180,227,0.3), rgba(14,117,168,0.15));
+  color: #20B4E3;
+}
 
 .provider-info {
   flex: 1;
@@ -2035,6 +2209,55 @@ select option {
 }
 
 /* ==============================
+   ONBOARDING MODAL
+   ============================== */
+.onboarding-box {
+  max-width: 400px;
+  text-align: center;
+}
+.onboarding-desc {
+  color: var(--text-dim);
+  margin: 8px 0 16px;
+  font-size: 0.9em;
+}
+.onboarding-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  text-align: left;
+}
+.onboarding-checklist li {
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 0.875em;
+  color: var(--text-main);
+}
+.onboarding-checklist li.checking {
+  color: var(--text-dim);
+}
+.onboarding-checklist li.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent);
+}
+.onboarding-checklist li.ok::before {
+  content: "✓ ";
+}
+.onboarding-checklist li.fail {
+  background: rgba(220, 38, 38, 0.15);
+  color: var(--danger);
+}
+.onboarding-checklist li.fail::before {
+  content: "✗ ";
+}
+.onboarding-note {
+  color: var(--text-dim);
+  font-size: 0.8em;
+  margin-bottom: 16px;
+  min-height: 1.2em;
+}
+
+/* ==============================
    API KEY MODAL
    ============================== */
 .modal-overlay {
@@ -2119,6 +2342,55 @@ select option {
   margin-top: 4px;
 }
 
+.msg-img-indicator {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  margin-right: 4px;
+}
+.msg-img-indicator:hover {
+  opacity: 1;
+}
+
+/* Full screenshot modal */
+.screenshot-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+.screenshot-modal img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.screenshot-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .msg-copy-btn {
   padding: 2px 8px;
   border: 1px solid var(--line);
@@ -2133,6 +2405,19 @@ select option {
 .chat-message:hover .msg-copy-btn { opacity: 1; }
 .msg-copy-btn:hover { border-color: var(--line-bright); color: var(--text-main); background: var(--surface-hover); }
 .msg-copy-btn.copied { color: #22c55e; border-color: #22c55e; opacity: 1; font-weight: 600; }
+.msg-read-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.714em;
+  cursor: pointer;
+  transition: all 0.15s;
+  opacity: 0.6;
+}
+.chat-message:hover .msg-read-btn { opacity: 1; }
+.msg-read-btn:hover { border-color: var(--line-bright); color: var(--text-main); background: var(--surface-hover); }
 
 /* ==============================
    APP MENU (gear menu)
@@ -2502,4 +2787,9 @@ select option {
 @keyframes blink-cursor {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
 }

@@ -11,13 +11,13 @@ logger = logging.getLogger("cloud_providers")
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     """Build prompt for cloud providers"""
     if style == "concise":
-        style_instruction = "Keep it short and conversational - like texting a knowledgeable friend. 1-2 sentences max."
+        style_instruction = "2 sentences max."
     elif style == "detailed":
-        style_instruction = "Explain like you're teaching a colleague. Use casual tone, not formal. Include real examples when helpful."
+        style_instruction = "2-3 paragraphs. Code if relevant."
     elif style == "bulletpoint":
-        style_instruction = "Use simple bullet points, not formal lists. Think handwritten notes, not documentation."
+        style_instruction = "4 bullets max."
     else:
-        style_instruction = "Be conversational - like explaining to a smart friend, not writing a textbook."
+        style_instruction = "Short."
 
     # Build conversation history context
     history_block = ""
@@ -28,14 +28,18 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
         history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
-    return f"""Instructions:
-- {style_instruction}
-- Talk like a helpful developer friend, not a documentation writer
-- Use simple words, not jargon when possible
-- Include practical code examples that actually work
-- If something is complex, break it down into plain English first
-- Do not start with "Sure!" or "Of course!" - just get to the point
-- Do not use emojis in responses
+    return f"""Slack message between two senior engineers.
+
+FORBIDDEN:
+- No headers/titles (=== or #)
+- No tables
+- No bullet lists
+- No numbered lists
+- No emojis
+- No code blocks unless asked
+- No "Here's" or "Sure" intros
+
+Write like a text message. Plain paragraphs only.
 
 {history_block}Question: {user_input}
 Answer:"""
@@ -107,6 +111,12 @@ def get_ollama_cloud_key():
     key = os.getenv("OLLAMA_CLOUD_API_KEY", "").strip()
     if not key:
         raise ValueError("Ollama Cloud API key not configured")
+    return key
+
+def get_perplexity_key():
+    key = os.getenv("PERPLEXITY_API_KEY", "").strip()
+    if not key:
+        raise ValueError("Perplexity API key not configured")
     return key
 
 
@@ -558,6 +568,66 @@ def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", st
 
 
 # ==============================
+# PERPLEXITY
+# ==============================
+
+def ask_perplexity(prompt, model="sonar", stream=False):
+    """Perplexity AI — uses OpenAI-compatible endpoint"""
+    api_key = get_perplexity_key()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3
+    }
+    if stream:
+        body["stream"] = True
+    response = requests.post(
+        "https://api.perplexity.ai/chat/completions",
+        headers=headers,
+        json=body,
+        stream=stream,
+        timeout=60
+    )
+    if response.status_code != 200:
+        raise Exception(f"Perplexity error: {response.status_code} - {response.text}")
+    return response
+
+
+def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise", messages=None):
+    """Perplexity streaming — yields SSE event strings"""
+    import time
+    start = time.time()
+    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
+    resp = ask_perplexity(final_prompt, model=model, stream=True)
+    yield _make_meta(model, "perplexity")
+    try:
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            decoded = line.decode("utf-8", errors="replace")
+            if decoded.startswith("data: "):
+                data = decoded[6:]
+                if data == "[DONE]":
+                    break
+                import json
+                try:
+                    obj = json.loads(data)
+                    content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                    if content:
+                        yield _make_content(content)
+                except Exception:
+                    pass
+    except Exception as e:
+        yield _make_error(str(e))
+    ms = int((time.time() - start) * 1000)
+    yield _make_done(ms)
+
+
+# ==============================
 # MODEL MAP — shared with ai_router
 # ==============================
 PROVIDER_MODEL_MAP = {
@@ -596,6 +666,11 @@ PROVIDER_MODEL_MAP = {
     "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
     # Ollama Cloud
     "ollama-cloud": ("ollama-cloud", "minimax-m2"),
+    # Perplexity
+    "perplexity-sonar": ("perplexity", "sonar"),
+    "perplexity-sonar-pro": ("perplexity", "sonar-pro"),
+    "perplexity-sonar-reasoning": ("perplexity", "sonar-reasoning"),
+    "perplexity-sonar-reasoning-plus": ("perplexity", "sonar-reasoning-plus"),
 }
 
 MODEL_DISPLAY_NAMES = {
@@ -634,6 +709,11 @@ MODEL_DISPLAY_NAMES = {
     "groq-qwen-2-5-72b": "Qwen 2.5 72B",
     "ollama": "Ollama",
     "ollama-cloud": "Ollama Cloud",
+    # Perplexity
+    "perplexity-sonar": "Sonar",
+    "perplexity-sonar-pro": "Sonar Pro",
+    "perplexity-sonar-reasoning": "Sonar Reasoning",
+    "perplexity-sonar-reasoning-plus": "Sonar Reasoning+",
 }
 
 
@@ -655,4 +735,6 @@ def get_stream_fn(provider_key):
         return ask_groq_stream
     elif provider_name == "ollama-cloud":
         return ask_ollama_cloud_stream
+    elif provider_name == "perplexity":
+        return ask_perplexity_stream
     return None

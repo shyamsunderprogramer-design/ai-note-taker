@@ -75,6 +75,13 @@ contextBridge.exposeInMainWorld("api", {
   captureScreenshot: () => ipcRenderer.invoke("window:capture-screenshot"),
   getAskWithImageUrl: () => `${BASE_URL}/ask-with-image`,
 
+  // Screenshot ring buffer (for auto-screenshot)
+  overlayGetLatestScreenshot: () => ipcRenderer.invoke("overlay:get-latest-screenshot"),
+
+  // Auto screenshot
+  autoScreenshotSetEnabled: (enabled, intervalMs) => ipcRenderer.invoke("auto-screenshot:set-enabled", enabled, intervalMs),
+  autoScreenshotGetStatus: () => ipcRenderer.invoke("auto-screenshot:get-status"),
+
   // Set AI mode on backend
   setMode: async (mode) => {
     const response = await fetch(`${BASE_URL}/set-mode?mode=${encodeURIComponent(mode)}`, {
@@ -128,9 +135,28 @@ contextBridge.exposeInMainWorld("api", {
   // Copy text to clipboard (Electron-safe)
   copyToClipboard: (text) => ipcRenderer.invoke("clipboard:write", text),
 
+  // Auto-updater
+  checkForUpdate: () => ipcRenderer.invoke("updater:check"),
+  downloadUpdate: () => ipcRenderer.invoke("updater:download"),
+  installUpdate: () => ipcRenderer.invoke("updater:install"),
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on("updater:available", (_event, info) => callback(info))
+  },
+  onUpdateProgress: (callback) => {
+    ipcRenderer.on("updater:progress", (_event, progress) => callback(progress))
+  },
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.on("updater:downloaded", (_event, info) => callback(info))
+  },
+
   // Listen for stealth state changes (triggered by shortcuts in main process)
   onStealthStateChanged: (callback) => {
     ipcRenderer.on("stealth:state-changed", (_event, state) => callback(state))
+  },
+
+  // Global Ctrl+Enter — trigger AI from any app
+  onTriggerAI: (callback) => {
+    ipcRenderer.on("trigger-ai", () => callback())
   }
 
 

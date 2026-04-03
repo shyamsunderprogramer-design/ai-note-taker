@@ -1,9 +1,11 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, session } = require("electron")
+const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer } = require("electron")
 const path = require("path")
 const { spawn } = require("child_process")
+const os = require("os")
 const stealth = require("./stealth")
 const log = require("electron-log/main")
 const Store = require("electron-store")
+const { autoUpdater } = require("electron-updater")
 const fs = require("fs")
 const crypto = require("crypto")
 
@@ -12,16 +14,17 @@ log.transports.file.level = "info"
 log.transports.console.level = "debug"
 log.transports.file.maxSize = 5 * 1024 * 1024
 
+const PLATFORM = process.platform  // 'win32' | 'darwin' | 'linux'
 const logger = log
 const store = new Store()
 
-const appDataDir = path.join(__dirname, "../electron-data")
+// appData path is cross-platform via Electron API
+const appDataDir = path.join(app.getPath("userData"), "ai-note-taker-data")
 app.setPath("userData", appDataDir)
 app.setPath("sessionData", appDataDir)
 
 const conversationsDir = path.join(appDataDir, "conversations")
 
-// Ensure conversations directory exists
 function ensureConversationsDir() {
   if (!fs.existsSync(conversationsDir)) {
     fs.mkdirSync(conversationsDir, { recursive: true })
@@ -31,7 +34,14 @@ function ensureConversationsDir() {
 let win
 let backendProcess = null
 
-// Global exception handler
+// ======================================
+// AUTO SCREENSHOT STATE
+// ======================================
+let screenshotBuffer = []        // ring buffer of base64 PNGs
+const SCREENSHOT_BUFFER_MAX = 5
+let autoScreenshotEnabled = false
+let autoScreenshotInterval = null
+
 process.on("uncaughtException", (err) => {
   logger.error("Uncaught exception: %s", err.stack || err.message)
 })
@@ -46,12 +56,11 @@ process.on("unhandledRejection", (reason) => {
 const DEFAULT_BOUNDS = { width: 420, height: 320, x: undefined, y: undefined }
 
 function validateBounds(bounds) {
-  // Ensure window has valid dimensions
   if (!bounds.width || bounds.width < 360) bounds.width = DEFAULT_BOUNDS.width
   if (!bounds.height || bounds.height < 280) bounds.height = DEFAULT_BOUNDS.height
 
-  // Ensure window is on a visible screen
-  const displays = require("electron").screen.getAllDisplays()
+  const { screen } = require("electron")
+  const displays = screen.getAllDisplays()
   const windowCenter = {
     x: bounds.x !== undefined ? bounds.x + bounds.width / 2 : bounds.x,
     y: bounds.y !== undefined ? bounds.y + bounds.height / 2 : bounds.y
@@ -67,9 +76,8 @@ function validateBounds(bounds) {
     }
   }
 
-  // If no saved position or not on screen, center on primary display
   if (bounds.x === undefined || bounds.y === undefined || !onScreen) {
-    const primary = require("electron").screen.getPrimaryDisplay()
+    const primary = screen.getPrimaryDisplay()
     const { width: screenWidth, height: screenHeight } = primary.workAreaSize
     bounds.x = Math.round((screenWidth - bounds.width) / 2)
     bounds.y = Math.round((screenHeight - bounds.height) / 2)
@@ -91,7 +99,8 @@ function createWindow() {
   const savedBounds = store.get("windowBounds", DEFAULT_BOUNDS)
   const bounds = validateBounds(savedBounds)
 
-  win = new BrowserWindow({
+  // Platform-specific window options
+  const windowOpts = {
     width: bounds.width,
     height: bounds.height,
     x: bounds.x,
@@ -109,20 +118,70 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false
     }
-  })
+  }
 
-  // Keep on top at appropriate level
-  win.setAlwaysOnTop(true, "screen-saver", 1)
+  // titleBarStyle only works on macOS
+  if (PLATFORM === "darwin") {
+    windowOpts.titleBarStyle = "hidden"
+    windowOpts.trafficLightPosition = { x: 12, y: 12 }
+  }
+
+  // screen-saver level only works on Windows
+  win = new BrowserWindow(windowOpts)
+  if (PLATFORM === "win32") {
+    win.setAlwaysOnTop(true, "screen-saver", 1)
+  }
+
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-  win.loadFile(path.join(__dirname, "../renderer/index.html"))
+  // In production, renderer is in extraResources; in dev, it's alongside electron/
+  const isProd = app.isPackaged
+  const rendererPath = isProd
+    ? path.join(process.resourcesPath, "renderer", "index.html")
+    : path.join(__dirname, "..", "renderer", "index.html")
+  win.loadFile(rendererPath)
 
-  // Save window bounds on move/resize
   win.on("resize", saveBounds)
   win.on("move", saveBounds)
-
-  // Initialize stealth after window loads
   stealth.init(win)
+}
+
+// ======================================
+// AUTO SCREENSHOT
+// ======================================
+async function captureAutoScreenshot() {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: 1280, height: 720 }
+    })
+    if (sources && sources.length > 0) {
+      const b64 = sources[0].thumbnail.toPNG().toString("base64")
+      screenshotBuffer.push(b64)
+      if (screenshotBuffer.length > SCREENSHOT_BUFFER_MAX) {
+        screenshotBuffer.shift()
+      }
+      logger.info("[AutoScreenshot] Captured, buffer size: %d", screenshotBuffer.length)
+    }
+  } catch (e) {
+    logger.warn("[AutoScreenshot] Capture failed:", e.message)
+  }
+}
+
+function startAutoScreenshot(intervalMs) {
+  intervalMs = intervalMs || 5000
+  if (autoScreenshotInterval) clearInterval(autoScreenshotInterval)
+  autoScreenshotInterval = setInterval(captureAutoScreenshot, intervalMs)
+  captureAutoScreenshot()
+  logger.info("[AutoScreenshot] Started with interval %dms", intervalMs)
+}
+
+function stopAutoScreenshot() {
+  if (autoScreenshotInterval) {
+    clearInterval(autoScreenshotInterval)
+    autoScreenshotInterval = null
+    logger.info("[AutoScreenshot] Stopped")
+  }
 }
 
 // ==============================
@@ -139,41 +198,90 @@ async function isBackendRunning() {
   } catch { return false }
 }
 
+function getPythonExecutable() {
+  const isProd = app.isPackaged
+
+  // In dev mode, try common venv paths for current platform
+  if (!isProd) {
+    const devPaths = [
+      // Windows dev
+      path.join(__dirname, "..", "AINT_Venv", "Scripts", "python.exe"),
+      // macOS/Linux dev (relative)
+      path.join(__dirname, "..", "AINT_Venv", "bin", "python"),
+      // Parent-relative Windows
+      path.join(__dirname, "..", "..", "AINT_Venv", "Scripts", "python.exe"),
+      // Parent-relative macOS/Linux
+      path.join(__dirname, "..", "..", "AINT_Venv", "bin", "python"),
+    ]
+    for (const p of devPaths) {
+      try {
+        fs.accessSync(p, fs.constants.X_OK)
+        return p
+      } catch { /* try next */ }
+    }
+  }
+
+  // In production, look in extraResources (process.resourcesPath)
+  if (isProd) {
+    const venvBin = PLATFORM === "win32" ? "Scripts" : "bin"
+    const candidates = [
+      path.join(process.resourcesPath, "AINT_Venv", venvBin, PLATFORM === "win32" ? "python.exe" : "python"),
+    ]
+    for (const p of candidates) {
+      try {
+        fs.accessSync(p, fs.constants.X_OK)
+        return p
+      } catch { /* try next */ }
+    }
+  }
+
+  // Fallback to system python
+  return PLATFORM === "win32" ? "python" : "python3"
+}
+
 async function startBackend() {
-  // Skip if backend already running
   if (await isBackendRunning()) {
     logger.info("[Backend] Already running on port 8000, skipping spawn")
     return
   }
 
-  // Try common venv paths, then fall back to 'python' on PATH
-  const venvPaths = [
-    path.join(__dirname, "../AINT_Venv/Scripts/python.exe"),
-    path.join(__dirname, "../../AINT_Venv/Scripts/python.exe"),
-    "python",
-    "python3"
-  ]
-  const pythonExe = venvPaths.find(p => {
-    try { require("fs").accessSync(p, require("fs").constants.X_OK); return true } catch { return false }
-  }) || "python"
-  const backendDir = path.join(__dirname, "../backend")
+  const pythonExe = getPythonExecutable()
+  const isProd = app.isPackaged
+  const backendDir = isProd
+    ? path.join(process.resourcesPath, "backend")
+    : path.join(__dirname, "..", "backend")
+
+  // Verify backend main.py exists
+  const mainPy = path.join(backendDir, "main.py")
+  if (!fs.existsSync(mainPy)) {
+    logger.error("[Backend] main.py not found at:", mainPy)
+    return
+  }
 
   const env = {
     ...process.env,
     PYTHONPATH: backendDir
   }
 
+  const spawnOpts = {
+    cwd: backendDir,
+    env: env,
+    stdio: ["ignore", "pipe", "pipe"]
+  }
+
+  // windowsHide only works on Windows
+  if (PLATFORM === "win32") {
+    spawnOpts.windowsHide = true
+  }
+
+  logger.info(`[Backend] Starting: ${pythonExe} in ${backendDir}`)
+
   backendProcess = spawn(pythonExe, [
     "-m", "uvicorn", "main:app",
     "--host", "127.0.0.1",
     "--port", "8000",
     "--log-level", "info"
-  ], {
-    cwd: backendDir,
-    env: env,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true
-  })
+  ], spawnOpts)
 
   backendProcess.stdout.on("data", (data) => {
     logger.info("[Backend] %s", data.toString().trim())
@@ -184,11 +292,11 @@ async function startBackend() {
   })
 
   backendProcess.on("close", (code) => {
-    logger.info("Backend process exited with code %s", code)
+    logger.info("[Backend] Process exited with code %s", code)
   })
 
   backendProcess.on("error", (err) => {
-    logger.error("Backend spawn error: %s", err.message)
+    logger.error("[Backend] Spawn error: %s", err.message)
   })
 }
 
@@ -198,7 +306,6 @@ async function startBackend() {
 ipcMain.handle("store:get", (_event, key) => store.get(key))
 ipcMain.handle("store:set", (_event, key, value) => { store.set(key, value) })
 
-// Conversation history handlers
 ipcMain.handle("conversation:save", (_event, conversation) => {
   ensureConversationsDir()
   const id = conversation.id || crypto.randomUUID()
@@ -217,25 +324,24 @@ ipcMain.handle("conversation:save", (_event, conversation) => {
 ipcMain.handle("conversation:load", (_event, id) => {
   const filePath = path.join(conversationsDir, `${id}.json`)
   if (!fs.existsSync(filePath)) return null
-  const data = fs.readFileSync(filePath, "utf-8")
-  return JSON.parse(data)
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"))
 })
 
 ipcMain.handle("conversation:list", () => {
   ensureConversationsDir()
-  const files = fs.readdirSync(conversationsDir).filter(f => f.endsWith(".json"))
-  return files.map(f => {
-    const filePath = path.join(conversationsDir, f)
-    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"))
-    return {
-      id: data.id,
-      title: data.title,
-      pinned: data.pinned || false,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-      messageCount: data.messages ? data.messages.length : 0
-    }
-  })
+  return fs.readdirSync(conversationsDir)
+    .filter(f => f.endsWith(".json"))
+    .map(f => {
+      const data = JSON.parse(fs.readFileSync(path.join(conversationsDir, f), "utf-8"))
+      return {
+        id: data.id,
+        title: data.title,
+        pinned: data.pinned || false,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        messageCount: data.messages ? data.messages.length : 0
+      }
+    })
 })
 
 ipcMain.handle("conversation:delete", (_event, id) => {
@@ -249,9 +355,7 @@ ipcMain.handle("conversation:delete", (_event, id) => {
 
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
-  if (w) {
-    w.hide()
-  }
+  if (w) w.hide()
 })
 
 ipcMain.handle("window:toggle-maximize", () => {
@@ -272,8 +376,8 @@ ipcMain.handle("window:close", () => {
 ipcMain.handle("window:resize", (_event, width, height) => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (w) {
-    const [currentWidth, currentHeight] = w.getSize()
-    w.setSize(width || currentWidth, height || currentHeight)
+    const [cw, ch] = w.getSize()
+    w.setSize(width || cw, height || ch)
   }
 })
 
@@ -292,11 +396,8 @@ ipcMain.handle("window:restore", () => {
 })
 
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
-  if (enabled) {
-    stealth.enable()
-  } else {
-    stealth.disable()
-  }
+  if (enabled) stealth.enable()
+  else stealth.disable()
   return { enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable() }
 })
 
@@ -305,51 +406,71 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   return { undetectable: stealth.isUndetectable() }
 })
 
-// Capture screenshot — returns base64 PNG for multimodal AI
 ipcMain.handle("window:capture-screenshot", async () => {
-  if (!win) return null
   try {
-    const image = await win.webContents.capturePage()
-    return image.toPNG().toString("base64")
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: 1920, height: 1080 }
+    })
+    if (!sources || sources.length === 0) {
+      logger.warn("[Screenshot] No screen sources found")
+      return null
+    }
+    // Get the primary screen (first source)
+    const primarySource = sources[0]
+    if (!primarySource.thumbnail || primarySource.thumbnail.isEmpty()) {
+      logger.warn("[Screenshot] Screen capture returned empty thumbnail")
+      return null
+    }
+    const base64 = primarySource.thumbnail.toPNG().toString("base64")
+    logger.info("[Screenshot] Captured screen, size: %d bytes", base64.length)
+    return base64
   } catch (e) {
-    logger.error("[Screenshot] capturePage error:", e)
+    logger.error("[Screenshot] error:", e)
     return null
   }
 })
 
-// Broadcast stealth state changes to renderer (for shortcut-triggered toggles)
-function broadcastStealthState() {
-  if (win && win.webContents) {
-    win.webContents.send("stealth:state-changed", {
-      enabled: stealth.isEnabled(),
-      undetectable: stealth.isUndetectable()
-    })
-  }
-}
-
-// App-level handlers
 ipcMain.handle("app:open-logs", () => {
   const { shell } = require("electron")
-  shell.openPath(log.transports.file.getFile().path.replace(/[^\/\\]+$/, ""))
+  shell.openPath(path.dirname(log.transports.file.getFile().path))
 })
 
-// Clipboard write
 ipcMain.handle("clipboard:write", async (_event, text) => {
-  const { clipboard } = require("electron")
-  clipboard.writeText(text)
+  require("electron").clipboard.writeText(text)
   return true
+})
+
+// Auto-updater handlers
+ipcMain.handle("updater:check", async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    return { available: !!result?.updateInfo, info: result?.updateInfo || null }
+  } catch (e) {
+    return { available: false, error: e.message }
+  }
+})
+
+ipcMain.handle("updater:download", async () => {
+  try {
+    await autoUpdater.downloadUpdate()
+    return { started: true }
+  } catch (e) {
+    return { started: false, error: e.message }
+  }
+})
+
+ipcMain.handle("updater:install", () => {
+  autoUpdater.quitAndInstall(false, true)
 })
 
 // File save dialog
 ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, content, encryptionKey }) => {
-  const { dialog, BrowserWindow } = require("electron")
-  const fs = require("fs")
-  const crypto = require("crypto")
+  const { dialog, BrowserWindow: BW } = require("electron")
 
   let dataToSave = content
   let actualFilters = filters
 
-  // If encryption requested
   if (encryptionKey) {
     const key = crypto.scryptSync(encryptionKey, "salt", 32)
     const iv = crypto.randomBytes(16)
@@ -357,12 +478,11 @@ ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, conten
     let encrypted = cipher.update(content, "utf8", "hex")
     encrypted += cipher.final("hex")
     dataToSave = JSON.stringify({ iv: iv.toString("hex"), data: encrypted })
-    // Change extension hint
     actualFilters = filters.map(f => ({ ...f, name: f.name + " (Encrypted)" }))
   }
 
-  const win = BrowserWindow.getFocusedWindow()
-  const result = await dialog.showSaveDialog(win, {
+  const winRef = BrowserWindow.getFocusedWindow()
+  const result = await dialog.showSaveDialog(winRef, {
     defaultPath,
     filters: actualFilters,
     properties: ["createDirectory", "showOverwriteConfirmation"]
@@ -379,16 +499,66 @@ ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, conten
   }
 })
 
+// Platform info for renderer
+ipcMain.handle("app:platform", () => PLATFORM)
+
+// ======================================
+// SCREENSHOT IPC HANDLERS
+// ======================================
+ipcMain.handle("overlay:get-latest-screenshot", () => {
+  return screenshotBuffer.length > 0 ? screenshotBuffer[screenshotBuffer.length - 1] : null
+})
+
+ipcMain.handle("auto-screenshot:set-enabled", (_event, enabled, intervalMs) => {
+  autoScreenshotEnabled = enabled
+  if (enabled) {
+    startAutoScreenshot(intervalMs || 5000)
+  } else {
+    stopAutoScreenshot()
+  }
+  store.set("autoScreenshotEnabled", enabled)
+  store.set("autoScreenshotInterval", intervalMs || 5000)
+  return { enabled, intervalMs: enabled ? (intervalMs || 5000) : 0 }
+})
+
+ipcMain.handle("auto-screenshot:get-status", () => {
+  return {
+    enabled: autoScreenshotEnabled,
+    intervalMs: autoScreenshotInterval ? (store.get("autoScreenshotInterval") || 5000) : 0
+  }
+})
+
 // ==============================
 // APP LIFECYCLE
 // ==============================
 app.whenReady().then(async () => {
-  // Request microphone permission
+  // Auto-updater — only enable on win32/mac for now; Linux works too but is less tested
+  autoUpdater.logger = logger
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on("update-available", (info) => {
+    logger.info("[Updater] update available:", info.version)
+    if (win?.webContents) win.webContents.send("updater:available", info)
+  })
+  autoUpdater.on("update-not-available", () => {
+    logger.info("[Updater] no update available")
+  })
+  autoUpdater.on("download-progress", (progress) => {
+    if (win?.webContents) win.webContents.send("updater:progress", progress)
+  })
+  autoUpdater.on("update-downloaded", (info) => {
+    logger.info("[Updater] downloaded:", info.version)
+    if (win?.webContents) win.webContents.send("updater:downloaded", info)
+  })
+  autoUpdater.on("error", (e) => {
+    logger.error("[Updater] error:", e.message)
+  })
+
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(permission === "media")
   })
 
-  // Disable caching for renderer files to ensure latest version is always loaded
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     if (details.url.includes("file://")) {
       details.requestHeaders["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -401,114 +571,77 @@ app.whenReady().then(async () => {
   await startBackend()
   createWindow()
 
-  // Restore stealth state from last session
   const savedStealthState = store.get("stealthState", false)
-  if (savedStealthState) {
-    stealth.enable()
+  if (savedStealthState) stealth.enable()
+
+  // Restore auto-screenshot setting
+  const savedAutoSS = store.get("autoScreenshotEnabled", false)
+  if (savedAutoSS) {
+    const interval = store.get("autoScreenshotInterval", 5000)
+    startAutoScreenshot(interval)
+    autoScreenshotEnabled = true
   }
 
-  // Global shortcuts (logged for debugging)
+  // Global shortcuts — all use CommandOrControl (works on Mac=Cmd, Win/Linux=Ctrl)
   function registerShortcut(accelerator, name, fn) {
-    const success = globalShortcut.register(accelerator, fn)
-    if (success) {
-      logger.info(`[Shortcut] Registered: ${accelerator} -> ${name}`)
-    } else {
-      logger.warn(`[Shortcut] Failed to register: ${accelerator} (may conflict with another app)`)
-    }
+    const ok = globalShortcut.register(accelerator, fn)
+    if (ok) logger.info(`[Shortcut] ${accelerator} -> ${name}`)
+    else logger.warn(`[Shortcut] Failed: ${accelerator} (may conflict)`)
   }
 
-  // Alt+D — toggle stealth mode (capture protection + tray)
+  // Alt+D — toggle stealth
   registerShortcut("Alt+D", "toggle stealth", () => {
-    logger.info("[Shortcut] Alt+D fired")
     if (stealth.isEnabled()) {
       stealth.disable()
       store.set("stealthState", false)
-      if (win) {
-        if (win.isMinimized()) win.restore()
-        win.setResizable(true)
-        win.show()
-        win.focus()
-      }
+      if (win) { win.restore(); win.show(); win.focus() }
     } else {
       stealth.enable()
       store.set("stealthState", true)
     }
-    broadcastStealthState()
+    if (win?.webContents) win.webContents.send("stealth:state-changed", {
+      enabled: stealth.isEnabled(),
+      undetectable: stealth.isUndetectable()
+    })
   })
 
-  // Alt+Space — hide/show window (toggle visibility)
-  registerShortcut("Alt+Space", "hide/show window", () => {
-    logger.info("[Shortcut] Alt+Space fired")
-    if (win) {
-      if (win.isVisible()) {
-        win.hide()
-      } else {
-        if (win.isMinimized()) win.restore()
-        win.setResizable(true)
-        win.show()
-        win.focus()
-      }
-    }
+  // Alt+Space — hide/show
+  registerShortcut("Alt+Space", "hide/show", () => {
+    if (!win) return
+    if (win.isVisible()) win.hide()
+    else { win.restore(); win.show(); win.focus() }
   })
 
-  // Ctrl+Left — move window left
-  registerShortcut("CommandOrControl+Left", "move window left", () => {
-    logger.info("[Shortcut] Ctrl+Left fired")
-    if (win) {
-      const [x, y] = win.getPosition()
-      win.setPosition(x - 50, y)
-    }
-  })
+  // Ctrl+Arrow — move window
+  const moveBy = (dx, dy) => {
+    if (!win) return
+    const [x, y] = win.getPosition()
+    win.setPosition(x + dx, y + dy)
+  }
+  registerShortcut("CommandOrControl+Left",  "move left",  () => moveBy(-50, 0))
+  registerShortcut("CommandOrControl+Right", "move right", () => moveBy(50, 0))
+  registerShortcut("CommandOrControl+Up",    "move up",    () => moveBy(0, -50))
+  registerShortcut("CommandOrControl+Down",   "move down",  () => moveBy(0, 50))
 
-  // Ctrl+Right — move window right
-  registerShortcut("CommandOrControl+Right", "move window right", () => {
-    logger.info("[Shortcut] Ctrl+Right fired")
-    if (win) {
-      const [x, y] = win.getPosition()
-      win.setPosition(x + 50, y)
-    }
-  })
-
-  // Ctrl+Up — move window up
-  registerShortcut("CommandOrControl+Up", "move window up", () => {
-    logger.info("[Shortcut] Ctrl+Up fired")
-    if (win) {
-      const [x, y] = win.getPosition()
-      win.setPosition(x, y - 50)
-    }
-  })
-
-  // Ctrl+Down — move window down
-  registerShortcut("CommandOrControl+Down", "move window down", () => {
-    logger.info("[Shortcut] Ctrl+Down fired")
-    if (win) {
-      const [x, y] = win.getPosition()
-      win.setPosition(x, y + 50)
+  // Ctrl+Enter — trigger AI (works from any app, not just focused window)
+  registerShortcut("CommandOrControl+Enter", "trigger ai", () => {
+    if (win?.webContents) {
+      win.webContents.send("trigger-ai", {})
     }
   })
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    } else {
-      const w = BrowserWindow.getFocusedWindow() || win
-      if (w) {
-        w.show()
-        w.focus()
-      }
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else { win?.show(); win?.focus() }
   })
 })
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll()
-  if (backendProcess) {
-    backendProcess.kill()
-  }
+  if (backendProcess) backendProcess.kill()
 })
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit()
-  }
+  // On macOS, apps typically stay open until explicitly quit (Cmd+Q)
+  if (PLATFORM !== "darwin") app.quit()
 })
