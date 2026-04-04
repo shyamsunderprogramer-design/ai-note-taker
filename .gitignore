@@ -51,3 +51,29 @@ temp_audio_test/
 electron-data/
 *.wav
 .claude/
+
+# =========================
+# Competitive Analysis Docs (local only)
+# =========================
+COMPETITIVE_ANALYSIS.md
+COMPETITOR_*.md
+FEATURE_COMPARISON.md
+UNIQUE_FEATURES_*.md
+START_HERE_UNIQUE_FEATURES.md
+2_MONTH_SPRINT.md
+D:\Rep\ai-note-taker\2_MONTH_SPRINT.md
+D:\Rep\ai-note-taker\COMPETITIVE_ANALYSIS.md
+D:\Rep\ai-note-taker\COMPETITOR_CLUELY.md
+D:\Rep\ai-note-taker\COMPETITOR_FINALROUND_AI.md
+D:\Rep\ai-note-taker\COMPETITOR_GAP_ANALYSIS_MASTER.md
+D:\Rep\ai-note-taker\COMPETITOR_INTERVIEW_CODER.md
+D:\Rep\ai-note-taker\COMPETITOR_LOCKEDIN_AI.md
+D:\Rep\ai-note-taker\COMPETITOR_MEETING_TOOLS.md
+D:\Rep\ai-note-taker\FEATURE_COMPARISON.md
+D:\Rep\ai-note-taker\restart-app.bat
+D:\Rep\ai-note-taker\restart.ps1
+D:\Rep\ai-note-taker\START_HERE_UNIQUE_FEATURES.md
+D:\Rep\ai-note-taker\start-app.bat
+D:\Rep\ai-note-taker\start-app.ps1
+D:\Rep\ai-note-taker\UNIQUE_FEATURES_Q1_PLAN.md
+D:\Rep\ai-note-taker\UNIQUE_FEATURES_ROADMAP.md

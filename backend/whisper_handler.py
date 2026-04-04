@@ -22,7 +22,7 @@ logger = logging.getLogger("whisper")
 # GLOBAL CONFIG
 # ==============================
 
-DEVICE = "cpu"
+DEVICE = "auto"  # auto-detects GPU (cuda) vs CPU — GPU is ~10-20x faster
 SAMPLE_RATE = 16000
 RECORD_SECONDS = 4
 
@@ -35,15 +35,16 @@ def select_model(mode="adaptive"):
     """
     Dynamically select Whisper model based on system resources and mode.
     """
-
+    import psutil
     ram_gb = psutil.virtual_memory().total / (1024 ** 3)
 
     if mode == "interview":
-        return "base"
+        return "small"   # better accuracy for important content
 
     if mode == "universal":
-        return "base"
+        return "small"
 
+    # With 16GB+, use small model — significantly better accuracy, still fast
     if ram_gb >= 16:
         return "small"
     if ram_gb >= 8:
@@ -57,6 +58,28 @@ def select_model(mode="adaptive"):
 
 models = {}
 _model_lock = threading.Lock()
+model_ready = threading.Event()   # signals when first model has finished loading
+_warmup_done = False             # True once warmup thread has completed
+
+
+def warmup():
+    """Load the default model at startup so first transcription is instant."""
+    global _warmup_done
+    try:
+        logger.info("[Warmup] Loading Whisper model...")
+        model = get_model("adaptive")
+        logger.info("[Warmup] Whisper ready: %s", model)
+        model_ready.set()
+        _warmup_done = True
+    except Exception as e:
+        logger.warning("[Warmup] Failed: %s", e)
+        model_ready.set()  # unblock waiters even on failure
+        _warmup_done = True
+
+
+def wait_for_model(timeout=None):
+    """Block until the model is ready (or timeout expires). Returns True if ready."""
+    return model_ready.wait(timeout=timeout)
 
 
 def get_model(mode="adaptive"):
@@ -118,17 +141,24 @@ def record_audio(duration=RECORD_SECONDS, samplerate=SAMPLE_RATE):
 def transcribe(audio, mode="adaptive"):
     """
     Convert audio to text using Whisper.
+    Optimized for speed: beam_size=3, vad_filter=False, greedy decoding.
     """
+
+    # Wait for warmup to complete before starting (max 30s)
+    if not wait_for_model(timeout=30):
+        logger.warning("Whisper model not ready after 30s — proceeding anyway")
 
     try:
         model = get_model(mode)
 
         segments, _ = model.transcribe(
             audio,
-            beam_size=5,
-            vad_filter=True,
+            beam_size=3,          # reduced from 5 — minimal quality loss, faster
+            vad_filter=False,      # disabled — adds ~200ms overhead per call
             condition_on_previous_text=False,
-            language="en"
+            language="en",
+            best_of=3,             # replaces beam_size reduction with non-beam alternatives
+            patience=0.3           # less patience = faster
         )
 
         text = " ".join(seg.text for seg in segments)

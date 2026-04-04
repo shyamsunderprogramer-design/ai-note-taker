@@ -24,6 +24,7 @@ from config import OLLAMA_URL
 from whisper_handler import (
     BrowserTranscriber,
     clean_text,
+    get_model,
     get_streaming_transcriber,
     is_meaningful,
     is_question,
@@ -32,6 +33,7 @@ from whisper_handler import (
     record_audio,
     transcribe,
     transcribe_audio,
+    warmup,
 )
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -51,6 +53,39 @@ uvicorn_logger.addFilter(APIKeyFilter())
 
 UPLOAD_DIR = "temp_audio"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def get_secure_filename(original_filename: str) -> str:
+    """Generate a secure filename to prevent path traversal attacks.
+
+    Returns a UUID-based filename with the same extension.
+    """
+    import uuid
+    # Extract extension safely
+    if "." in original_filename:
+        ext = original_filename.rsplit(".", 1)[1].lower()
+        # Only allow safe extensions
+        allowed_exts = {"webm", "wav", "mp3", "mp4", "m4a", "ogg", "pdf", "txt", "md", "docx", "json"}
+        if ext not in allowed_exts:
+            ext = "bin"  # Default to bin for unknown extensions
+    else:
+        ext = "bin"
+    return f"{uuid.uuid4()}.{ext}"
+
+
+def sanitize_path(filename: str) -> str:
+    """Sanitize filename to prevent directory traversal.
+
+    Rejects paths containing .. or absolute paths.
+    """
+    import re
+    # Reject paths with directory traversal attempts
+    if ".." in filename or "/" in filename or "\\" in filename or filename.startswith((".", "/", "\\", "~")):
+        raise ValueError(f"Invalid filename: {filename}")
+    # Only allow alphanumeric, dots, dashes, underscores
+    if not re.match(r"^[\w\-\.]+$", filename):
+        raise ValueError(f"Invalid filename characters: {filename}")
+    return filename
 
 def cleanup_temp_audio():
     """Remove old temp audio files on startup."""
@@ -120,7 +155,7 @@ always_on_mic_enabled = False
 
 
 def autonomous_listener():
-    global last_query_time, USE_AUTONOMOUS
+    global last_query_time, USE_AUTONOMOUS, always_on_mic_enabled
 
     from whisper_handler import get_streaming_transcriber, clean_text, is_meaningful, is_question, is_small_talk, is_technical, transcribe
 
@@ -146,7 +181,7 @@ def autonomous_listener():
     transcriber.start()
 
     try:
-        while USE_AUTONOMOUS:
+        while USE_AUTONOMOUS and always_on_mic_enabled:
             try:
                 if STATE["is_streaming"]:
                     time.sleep(0.2)
@@ -199,6 +234,10 @@ def start_listener():
     # Clean up stale temp audio files on startup
     cleanup_temp_audio()
 
+    # Start Whisper warmup in background — doesn't block uvicorn startup
+    # Transcription requests will wait for the model via model_ready.wait()
+    threading.Thread(target=warmup, daemon=True).start()
+
     if USE_AUTONOMOUS and listener_thread is None:
         listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
         listener_thread.start()
@@ -215,20 +254,35 @@ def health_check():
 
 @app.get("/providers")
 def list_providers():
-    """Returns which cloud providers have API keys configured"""
-    from dotenv import load_dotenv
-    import os
-    load_dotenv()
+    """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
+    import requests
+
+    def has_key(provider, env_var):
+        # Try secure server first
+        try:
+            resp = requests.post(
+                "http://127.0.0.1:18000/get-key",
+                json={"provider": provider},
+                timeout=1
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("apiKey"):
+                    return True
+        except:
+            pass
+        # Fallback to env
+        return bool(os.getenv(env_var, "").strip())
 
     return {
-        "openai": bool(os.getenv("OPENAI_API_KEY", "").strip()),
-        "anthropic": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
-        "google": bool(os.getenv("GOOGLE_API_KEY", "").strip()),
-        "xai": bool(os.getenv("XAI_API_KEY", "").strip()),
-        "deepseek": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
-        "groq": bool(os.getenv("GROQ_API_KEY", "").strip()),
-        "ollama-cloud": bool(os.getenv("OLLAMA_CLOUD_API_KEY", "").strip()),
-        "perplexity": bool(os.getenv("PERPLEXITY_API_KEY", "").strip()),
+        "openai": has_key("openai", "OPENAI_API_KEY"),
+        "anthropic": has_key("anthropic", "ANTHROPIC_API_KEY"),
+        "google": has_key("google", "GOOGLE_API_KEY"),
+        "xai": has_key("xai", "XAI_API_KEY"),
+        "deepseek": has_key("deepseek", "DEEPSEEK_API_KEY"),
+        "groq": has_key("groq", "GROQ_API_KEY"),
+        "ollama-cloud": has_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
+        "perplexity": has_key("perplexity", "PERPLEXITY_API_KEY"),
         "ollama": True  # Ollama is always available if configured
     }
 
@@ -436,9 +490,10 @@ async def set_always_on_mic(enabled: bool = Form(...)):
     When enabled, the StreamingTranscriber runs continuously and
     transcription events are available via /transcribe-stream SSE.
     """
-    global always_on_mic_enabled
+    global always_on_mic_enabled, USE_AUTONOMOUS
 
     always_on_mic_enabled = enabled
+    USE_AUTONOMOUS = enabled
     transcriber = get_streaming_transcriber()
 
     if enabled:
@@ -453,55 +508,20 @@ async def set_always_on_mic(enabled: bool = Form(...)):
 
 @app.post("/configure")
 async def configure_provider(body: dict):
-    """Save API key for a cloud provider — accepts JSON body (NOT query params)."""
-    from dotenv import load_dotenv
-    import os
-    load_dotenv()
+    """API key configuration endpoint — DISABLED.
 
-    provider = body.get("provider")
-    api_key = body.get("api_key")
+    SECURITY: API keys are no longer accepted over HTTP.
+    Use secure IPC: window.api.saveApiKey(provider, apiKey)
 
-    valid_providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud", "perplexity"]
-    if provider not in valid_providers:
-        return {"error": "Invalid provider"}
-
-    if not api_key:
-        return {"error": "Missing api_key"}
-
-    # Map provider names to env var names
-    env_vars = {
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "google": "GOOGLE_API_KEY",
-        "xai": "XAI_API_KEY",
-        "deepseek": "DEEPSEEK_API_KEY",
-        "groq": "GROQ_API_KEY",
-        "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
-        "perplexity": "PERPLEXITY_API_KEY",
+    This endpoint returns an error to prevent accidental insecure key transmission.
+    """
+    # Reject any attempt to configure API keys over HTTP
+    # Keys must be saved via secure IPC to encrypted storage
+    return {
+        "error": "HTTP configuration disabled for security",
+        "message": "Use window.api.saveApiKey(provider, apiKey) for secure storage",
+        "code": "INSECURE_TRANSPORT"
     }
-
-    # Save to .env file
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
-    existing = {}
-
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-        with open(env_path, "r") as f:
-            for line in f:
-                if "=" in line:
-                    k, v = line.strip().split("=", 1)
-                    existing[k] = v
-
-    existing[env_vars[provider]] = api_key
-
-    with open(env_path, "w") as f:
-        for k, v in existing.items():
-            f.write(f"{k}={v}\n")
-
-    # Reload env
-    load_dotenv()
-
-    return {"status": "configured", "provider": provider}
 
 
 @app.get("/health")
@@ -525,7 +545,9 @@ async def transcribe_api(file: UploadFile = File(...)):
     global USE_AUTONOMOUS
 
     USE_AUTONOMOUS = False
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    # Use secure filename to prevent path traversal
+    secure_name = get_secure_filename(file.filename)
+    file_path = os.path.join(UPLOAD_DIR, secure_name)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -565,7 +587,9 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
     global USE_AUTONOMOUS
 
     USE_AUTONOMOUS = False
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    # Use secure filename to prevent path traversal
+    secure_name = get_secure_filename(file.filename)
+    file_path = os.path.join(UPLOAD_DIR, secure_name)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -697,8 +721,21 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
             logger.warning("Failed to parse context JSON")
             pass
 
-    from dotenv import load_dotenv
-    load_dotenv()
+    # Secure key checking helper
+    def has_secure_key(provider, env_var):
+        try:
+            resp = requests.post(
+                "http://127.0.0.1:18000/get-key",
+                json={"provider": provider},
+                timeout=1
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("apiKey"):
+                    return True
+        except:
+            pass
+        return bool(os.getenv(env_var, "").strip())
 
     # Separate cloud and local providers
     cloud_providers = []
@@ -706,42 +743,42 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
 
     # If enabled_set from frontend is provided, only use those providers
     if enabled_set:
-        if "openai" in enabled_set and os.getenv("OPENAI_API_KEY", "").strip():
+        if "openai" in enabled_set and has_secure_key("openai", "OPENAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-        if "anthropic" in enabled_set and os.getenv("ANTHROPIC_API_KEY", "").strip():
+        if "anthropic" in enabled_set and has_secure_key("anthropic", "ANTHROPIC_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-        if "google" in enabled_set and os.getenv("GOOGLE_API_KEY", "").strip():
+        if "google" in enabled_set and has_secure_key("google", "GOOGLE_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-        if "xai" in enabled_set and os.getenv("XAI_API_KEY", "").strip():
+        if "xai" in enabled_set and has_secure_key("xai", "XAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-        if "deepseek" in enabled_set and os.getenv("DEEPSEEK_API_KEY", "").strip():
+        if "deepseek" in enabled_set and has_secure_key("deepseek", "DEEPSEEK_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-        if "groq" in enabled_set and os.getenv("GROQ_API_KEY", "").strip():
+        if "groq" in enabled_set and has_secure_key("groq", "GROQ_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-        if "ollama-cloud" in enabled_set and os.getenv("OLLAMA_CLOUD_API_KEY", "").strip():
+        if "ollama-cloud" in enabled_set and has_secure_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
             cloud_providers.append("ollama-cloud")
-        if "perplexity" in enabled_set and os.getenv("PERPLEXITY_API_KEY", "").strip():
+        if "perplexity" in enabled_set and has_secure_key("perplexity", "PERPLEXITY_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("perplexity-")])
         # Only add local ollama if explicitly enabled in frontend
         if "ollama" in enabled_set:
             local_providers.append("ollama")
     else:
         # Legacy: use all cloud providers with API keys, plus ollama as fallback
-        if os.getenv("OPENAI_API_KEY", "").strip():
+        if has_secure_key("openai", "OPENAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-        if os.getenv("ANTHROPIC_API_KEY", "").strip():
+        if has_secure_key("anthropic", "ANTHROPIC_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-        if os.getenv("GOOGLE_API_KEY", "").strip():
+        if has_secure_key("google", "GOOGLE_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-        if os.getenv("XAI_API_KEY", "").strip():
+        if has_secure_key("xai", "XAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-        if os.getenv("DEEPSEEK_API_KEY", "").strip():
+        if has_secure_key("deepseek", "DEEPSEEK_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-        if os.getenv("GROQ_API_KEY", "").strip():
+        if has_secure_key("groq", "GROQ_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-        if os.getenv("OLLAMA_CLOUD_API_KEY", "").strip():
+        if has_secure_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
             cloud_providers.append("ollama-cloud")
-        if os.getenv("PERPLEXITY_API_KEY", "").strip():
+        if has_secure_key("perplexity", "PERPLEXITY_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("perplexity-")])
         # Add local ollama as fallback (always available)
         local_providers.append("ollama")
@@ -841,6 +878,156 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
     return StreamingResponse(race_generator(), media_type="text/event-stream")
 
 
+# ==============================
+# DOCUMENT UPLOAD & RAG ENDPOINTS
+# ==============================
+
+@app.post("/documents/upload")
+async def upload_document(file: UploadFile = File(...)):
+    """Upload a document for RAG context retrieval."""
+    from document_store import get_document_store
+
+    # Save uploaded file temporarily
+    temp_path = os.path.join(UPLOAD_DIR, file.filename)
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    try:
+        doc_store = get_document_store()
+        result = doc_store.add_document(temp_path)
+
+        # Clean up temp file
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+        return result
+    except Exception as e:
+        logger.error(f"Document upload failed: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/documents")
+async def list_documents():
+    """List all uploaded documents."""
+    from document_store import get_document_store
+    doc_store = get_document_store()
+    return {"documents": doc_store.list_documents()}
+
+
+@app.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str):
+    """Delete a document from the store."""
+    from document_store import get_document_store
+    doc_store = get_document_store()
+    success = doc_store.delete_document(doc_id)
+    return {"success": success}
+
+
+@app.post("/documents/retrieve")
+async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)):
+    """Retrieve relevant document context for a query."""
+    from document_store import get_document_store
+    doc_store = get_document_store()
+    results = doc_store.retrieve_context(query, top_k)
+    return {"results": results}
+
+
+# ==============================
+# SPEAKER DIARIZATION ENDPOINTS
+# ==============================
+
+@app.post("/transcribe-with-speakers")
+async def transcribe_with_speakers(file: UploadFile = File(...)):
+    """
+    Transcribe audio with speaker diarization.
+    Returns transcription with speaker labels for each segment.
+    """
+    global USE_AUTONOMOUS
+    from speaker_diarization import process_transcription_with_speakers
+    from whisper_handler import get_streaming_transcriber
+
+    USE_AUTONOMOUS = False
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    wav_path = file_path.replace(".webm", ".wav")
+    import subprocess
+    ffmpeg_path = get_ffmpeg_path()
+    result = subprocess.run(
+        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+
+    try:
+        # Get detailed transcription with timestamps from Whisper
+        # Note: faster_whisper returns segments with timestamps
+        model = get_model(CURRENT_MODE)
+        segments, _ = model.transcribe(
+            wav_path,
+            beam_size=3,
+            vad_filter=False,
+            condition_on_previous_text=False,
+            language="en",
+            word_timestamps=True
+        )
+
+        # Convert to dict format expected by diarization
+        whisper_segments = []
+        for seg in segments:
+            whisper_segments.append({
+                "start": seg.start,
+                "end": seg.end,
+                "text": seg.text.strip()
+            })
+
+        # Get full text for AI processing
+        full_text = " ".join(s["text"] for s in whisper_segments)
+
+        # Process with speaker diarization
+        speaker_result = process_transcription_with_speakers(wav_path, whisper_segments)
+
+        # Get AI response
+        ai_response = ""
+        if full_text and is_meaningful(full_text) and is_question(full_text):
+            result = route_ai(full_text, mode=CURRENT_MODE)
+            ai_response = clean_ai_output(result["response"])
+
+        return {
+            "text": full_text,
+            "response": ai_response,
+            "speakers": speaker_result["segments"],
+            "formatted_transcript": speaker_result["formatted"],
+            "speaker_count": speaker_result["speaker_count"]
+        }
+
+    except Exception as e:
+        logger.error(f"Transcription with speakers failed: {e}")
+        return {"error": str(e)}
+
+    finally:
+        # Clean up temp files
+        for path in (file_path, wav_path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+@app.get("/transcribe/{audio_id}/speakers")
+async def get_transcription_speakers(audio_id: str):
+    """
+    Get speaker information for a previously transcribed audio.
+    (Placeholder for future persistent storage)
+    """
+    return {"status": "not_implemented", "audio_id": audio_id}
+
+
 def shutdown_handler(*args):
     global USE_AUTONOMOUS
     USE_AUTONOMOUS = False
@@ -866,26 +1053,42 @@ async def ws_transcribe(ws: WebSocket):
     await ws.accept()
     transcriber = BrowserTranscriber()
     partial_texts = []
-    loop = asyncio.get_event_loop()
+    msg_queue = asyncio.Queue()
+    ws_closed = False
 
     def on_transcript(text):
-        """Called from transcription thread — schedule WS send on event loop."""
+        """Called from transcription thread — put result in queue (non-blocking)."""
+        if ws_closed:
+            return
         partial_texts.append(text)
         combined = " ".join(partial_texts)
-        loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(
-                ws.send_json({"type": "partial", "text": combined})
-            )
-        )
+        try:
+            msg_queue.put_nowait({"type": "partial", "text": combined})
+        except asyncio.QueueFull:
+            pass
 
     transcriber.add_callback(on_transcript)
+
+    async def background_transcriber():
+        """Pump the background thread's queue into the WebSocket."""
+        while not ws_closed:
+            try:
+                msg = await asyncio.wait_for(msg_queue.get(), timeout=0.5)
+                if ws_closed:
+                    break
+                await ws.send_json(msg)
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                break
+
+    transcribe_task = asyncio.create_task(background_transcriber())
 
     try:
         while True:
             try:
                 data = await asyncio.wait_for(ws.receive_bytes(), timeout=60)
             except asyncio.TimeoutError:
-                # Keepalive: no audio data in 60s, send ping
                 continue
 
             chunk = np.frombuffer(data, dtype=np.float32)
@@ -895,14 +1098,293 @@ async def ws_transcribe(ws: WebSocket):
     except Exception:
         pass
     finally:
+        ws_closed = True
+        await transcribe_task
         final_text = transcriber.get_final()
         combined = " ".join(partial_texts).strip() or final_text
         try:
             await ws.send_json({"type": "final", "text": combined})
         except Exception:
             pass
-        finally:
-            await ws.close()
+
+
+# ==============================
+# EXPORT/IMPORT ENDPOINTS
+# ==============================
+
+@app.post("/conversations/export")
+async def export_conversation(body: dict):
+    """
+    Export conversation in various formats.
+
+    body: {
+        "messages": [...],
+        "format": "markdown" | "json" | "txt",
+        "includeMetadata": bool,
+        "includeTimestamps": bool,
+        "metadata": {...}  // optional
+    }
+    """
+    messages = body.get("messages", [])
+    fmt = body.get("format", "markdown")
+    include_meta = body.get("includeMetadata", True)
+    include_timestamps = body.get("includeTimestamps", False)
+    metadata = body.get("metadata", {})
+
+    if not messages:
+        return {"error": "No messages to export"}
+
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    date_str = time.strftime("%Y-%m-%d")
+
+    if fmt == "json":
+        export_data = {
+            "version": "1.0",
+            "exported_at": timestamp,
+            "messages": messages
+        }
+        if include_meta:
+            export_data["metadata"] = metadata
+        return {"content": json.dumps(export_data, indent=2), "filename": f"conversation-{date_str}.json"}
+
+    elif fmt == "markdown":
+        lines = []
+        if include_meta:
+            lines.append(f"# Conversation Export")
+            lines.append(f"**Date:** {timestamp}")
+            if metadata.get("mode"):
+                lines.append(f"**Mode:** {metadata['mode']}")
+            if metadata.get("model"):
+                lines.append(f"**Model:** {metadata['model']}")
+            lines.append("")
+
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            text = msg.get("text", "")
+            ts = msg.get("timestamp", "")
+
+            header = "## You" if role == "user" else "## AI"
+            if include_timestamps and ts:
+                ts_str = time.strftime("%H:%M:%S", time.localtime(ts / 1000)) if isinstance(ts, (int, float)) else str(ts)
+                header += f" ({ts_str})"
+
+            lines.append(header)
+            lines.append("")
+            lines.append(text)
+            lines.append("")
+
+        content = "\n".join(lines)
+        return {"content": content, "filename": f"conversation-{date_str}.md"}
+
+    else:  # txt
+        lines = []
+        if include_meta:
+            lines.append(f"Conversation Export - {timestamp}")
+            lines.append("=" * 50)
+            lines.append("")
+
+        for msg in messages:
+            role = "You" if msg.get("role") == "user" else "AI"
+            text = msg.get("text", "")
+            ts = msg.get("timestamp", "")
+
+            prefix = f"[{role}]"
+            if include_timestamps and ts:
+                ts_str = time.strftime("%H:%M:%S", time.localtime(ts / 1000)) if isinstance(ts, (int, float)) else str(ts)
+                prefix += f" {ts_str}"
+
+            lines.append(f"{prefix}: {text}")
+            lines.append("")
+
+        content = "\n".join(lines)
+        return {"content": content, "filename": f"conversation-{date_str}.txt"}
+
+
+@app.post("/conversations/import")
+async def import_conversations(file: UploadFile = File(...)):
+    """Import conversations from JSON file."""
+    try:
+        content = await file.read()
+        data = json.loads(content.decode("utf-8"))
+
+        if not isinstance(data, dict) or "messages" not in data:
+            return {"error": "Invalid format - expected JSON with 'messages' array"}
+
+        messages = data.get("messages", [])
+        metadata = data.get("metadata", {})
+
+        return {
+            "success": True,
+            "messages": messages,
+            "metadata": metadata,
+            "count": len(messages)
+        }
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid JSON: {str(e)}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ==============================
+# SALES OBJECTION HANDLING
+# ==============================
+
+# Common sales objections and suggested responses
+OBJECTION_KEYWORDS = {
+    "price": {
+        "keywords": ["expensive", "too much", "price", "cost", "budget", "cheap", "cheaper", "afford"],
+        "title": "Price Objection",
+        "suggestions": [
+            "Focus on ROI - our customers see 3x return in 6 months",
+            "We offer flexible payment plans",
+            "Let's discuss the enterprise tier with volume discounts",
+            "Compare total cost of ownership vs alternatives"
+        ]
+    },
+    "competitor": {
+        "keywords": ["competitor", "competition", "alternative", "vs", "versus", "compare", "better than", "cheaper than"],
+        "title": "Competitor Mention",
+        "suggestions": [
+            "Our differentiator is local AI - no data leaves your machine",
+            "We support 8+ AI providers vs their single model",
+            "Open source means no vendor lock-in",
+            "Vision capabilities they don't offer"
+        ]
+    },
+    "timing": {
+        "keywords": ["not now", "later", "next quarter", "next year", "timing", "not ready", "delay", "postpone"],
+        "title": "Timing Objection",
+        "suggestions": [
+            "Start with a pilot - no commitment",
+            "Early adopters get lifetime pricing",
+            "Setup takes 5 minutes - try it today",
+            "We can schedule a follow-up that works for you"
+        ]
+    },
+    "features": {
+        "keywords": ["missing", "need", "feature", "functionality", "doesn't have", "lacks", "require"],
+        "title": "Feature Request",
+        "suggestions": [
+            "We're shipping new features weekly - what's your priority?",
+            "Our open API can bridge any gaps",
+            "Let me check our roadmap for that feature",
+            "Custom development available for enterprise"
+        ]
+    },
+    "security": {
+        "keywords": ["security", "privacy", "data", "confidential", "compliance", "soc2", "gdpr", "hipaa"],
+        "title": "Security Question",
+        "suggestions": [
+            "100% local processing - data never leaves your machine",
+            "No cloud dependencies for core features",
+            "Open source - audit the code yourself",
+            "SOC 2 Type II certified infrastructure"
+        ]
+    }
+}
+
+
+@app.post("/detect-objections")
+async def detect_objections(body: dict):
+    """
+    Detect sales objections in text.
+
+    body: {"text": "..."}
+    Returns: {"objections": [...], "suggestions": [...]}
+    """
+    text = body.get("text", "").lower()
+    if not text:
+        return {"objections": []}
+
+    detected = []
+    for objection_type, config in OBJECTION_KEYWORDS.items():
+        if any(kw in text for kw in config["keywords"]):
+            detected.append({
+                "type": objection_type,
+                "title": config["title"],
+                "suggestions": config["suggestions"]
+            })
+
+    return {"objections": detected}
+
+
+# ==============================
+# ANALYTICS ENDPOINTS
+# ==============================
+
+@app.post("/analytics/record")
+async def record_analytics(body: dict):
+    """Record analytics for a conversation."""
+    from analytics import get_analytics_store
+    store = get_analytics_store()
+
+    metrics = store.record_conversation(
+        conversation_id=body.get("conversation_id"),
+        messages=body.get("messages", []),
+        start_time=body.get("start_time"),
+        end_time=body.get("end_time"),
+        models_used=body.get("models_used", [])
+    )
+
+    return {"status": "recorded", "metrics": {
+        "duration_minutes": metrics.duration_minutes,
+        "message_count": metrics.message_count
+    }}
+
+
+@app.get("/analytics/summary")
+async def get_analytics_summary(days: int = 30):
+    """Get analytics summary for the past N days."""
+    from analytics import get_analytics_store
+    store = get_analytics_store()
+    return store.get_summary(days)
+
+
+@app.post("/analytics/export")
+async def export_analytics(body: dict):
+    """Export analytics data."""
+    from analytics import get_analytics_store
+    store = get_analytics_store()
+    fmt = body.get("format", "json")
+    return store.get_export_data(fmt)
+
+
+# ==============================
+# CRM INTEGRATION ENDPOINTS
+# ==============================
+
+@app.get("/crm/config")
+async def get_crm_config():
+    """Get CRM configuration."""
+    from crm_integration import get_crm
+    crm = get_crm()
+    return crm.get_config()
+
+
+@app.post("/crm/config")
+async def save_crm_config(body: dict):
+    """Save CRM configuration."""
+    from crm_integration import get_crm
+    crm = get_crm()
+    success = crm.configure(body)
+    return {"success": success}
+
+
+@app.post("/crm/webhook/{crm_type}/{event_type}")
+async def send_crm_webhook(crm_type: str, event_type: str, body: dict):
+    """Send webhook to CRM."""
+    from crm_integration import get_crm
+    crm = get_crm()
+    result = crm.log_event(event_type, body)
+    return {"success": result}
+
+
+@app.get("/crm/test")
+async def test_crm_connection():
+    """Test CRM connection."""
+    from crm_integration import get_crm
+    crm = get_crm()
+    return crm.test_connection()
 
 
 @app.websocket("/ws")

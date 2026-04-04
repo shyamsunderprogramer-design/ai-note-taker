@@ -7,6 +7,42 @@ load_dotenv()
 
 logger = logging.getLogger("cloud_providers")
 
+# ==============================
+# SECURE API KEY FETCHER (P1 Privacy)
+# Fetches encrypted keys from Electron secure storage
+# ==============================
+_key_cache = {}
+
+def fetch_key_from_secure_server(provider):
+    """Fetch API key from Electron's secure key server (localhost:18000)"""
+    if provider in _key_cache:
+        return _key_cache[provider]
+    try:
+        response = requests.post(
+            "http://127.0.0.1:18000/get-key",
+            json={"provider": provider},
+            timeout=2
+        )
+        if response.status_code == 200:
+            data = response.json()
+            key = data.get("apiKey")
+            if key:
+                _key_cache[provider] = key
+                return key
+    except Exception as e:
+        logger.debug(f"[SecureKey] Could not fetch from secure server: {e}")
+    return None
+
+def get_key_secure(provider, env_var):
+    """Get API key: first try secure server, fallback to env"""
+    # Try secure server first
+    key = fetch_key_from_secure_server(provider)
+    if key:
+        return key
+    # Fallback to environment variable
+    key = os.getenv(env_var, "").strip()
+    return key
+
 
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
     """Build prompt for cloud providers"""
@@ -72,49 +108,49 @@ def _make_error(msg):
 # ==============================
 
 def get_openai_key():
-    key = os.getenv("OPENAI_API_KEY", "").strip()
+    key = get_key_secure("openai", "OPENAI_API_KEY")
     if not key:
         raise ValueError("OpenAI API key not configured")
     return key
 
 def get_anthropic_key():
-    key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    key = get_key_secure("anthropic", "ANTHROPIC_API_KEY")
     if not key:
         raise ValueError("Anthropic API key not configured")
     return key
 
 def get_google_key():
-    key = os.getenv("GOOGLE_API_KEY", "").strip()
+    key = get_key_secure("google", "GOOGLE_API_KEY")
     if not key:
         raise ValueError("Google API key not configured")
     return key
 
 def get_xai_key():
-    key = os.getenv("XAI_API_KEY", "").strip()
+    key = get_key_secure("xai", "XAI_API_KEY")
     if not key:
         raise ValueError("xAI API key not configured")
     return key
 
 def get_deepseek_key():
-    key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    key = get_key_secure("deepseek", "DEEPSEEK_API_KEY")
     if not key:
         raise ValueError("DeepSeek API key not configured")
     return key
 
 def get_groq_key():
-    key = os.getenv("GROQ_API_KEY", "").strip()
+    key = get_key_secure("groq", "GROQ_API_KEY")
     if not key:
         raise ValueError("Groq API key not configured")
     return key
 
 def get_ollama_cloud_key():
-    key = os.getenv("OLLAMA_CLOUD_API_KEY", "").strip()
+    key = get_key_secure("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
     if not key:
         raise ValueError("Ollama Cloud API key not configured")
     return key
 
 def get_perplexity_key():
-    key = os.getenv("PERPLEXITY_API_KEY", "").strip()
+    key = get_key_secure("perplexity", "PERPLEXITY_API_KEY")
     if not key:
         raise ValueError("Perplexity API key not configured")
     return key

@@ -2,9 +2,34 @@
 <html>
 <head>
   <title>AI Note Taker</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="hljs-github-dark.min.css">
   <link rel="stylesheet" href="style.css?v=25">
   <script src="hljs.min.js"></script>
+  <script>
+    // Register service worker for PWA (skip in Electron - file:// protocol not supported)
+    if ('serviceWorker' in navigator && window.api) {
+      console.log('[PWA] Service Worker disabled in Electron app');
+    } else if ('serviceWorker' in navigator) {
+      // Only register in browser PWA mode (not Electron)
+      if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('[PWA] SW registered:', registration.scope);
+            })
+            .catch((err) => {
+              console.log('[PWA] SW registration failed:', err);
+            });
+        });
+      }
+    }
+  </script>
 </head>
 <body>
   <div class="shell">
@@ -22,6 +47,10 @@
       <div class="header-center">
         <span class="app-subtitle">ANT</span>
         <span class="app-title">AI Note Taker</span>
+        <div id="backendStatusIndicator" class="backend-status" title="Backend Status">
+          <span class="backend-status-dot"></span>
+          <span class="backend-status-text"></span>
+        </div>
       </div>
 
       <!-- Right: Menu + History + Traffic lights -->
@@ -237,6 +266,9 @@
   <!-- Resize handle at bottom (outside shell) -->
   <div class="resize-handle"></div>
 
+  <!-- Panel backdrop overlay -->
+  <div class="panel-backdrop" id="panelBackdrop"></div>
+
   <!-- History panel -->
   <div class="history-panel" id="historyPanel">
     <div class="history-header">
@@ -252,6 +284,14 @@
         <option value="title">A–Z</option>
         <option value="messageCount">Messages</option>
       </select>
+    </div>
+    <div class="history-actions-bar">
+      <button id="exportAllBtn" class="history-action-btn-secondary" type="button" title="Export all conversations">
+        <span>&#129093;</span> Export All
+      </button>
+      <button id="importBtn" class="history-action-btn-secondary" type="button" title="Import conversations">
+        <span>&#129094;</span> Import
+      </button>
     </div>
     <div class="history-list" id="historyList"></div>
     <div class="history-footer">
@@ -532,6 +572,99 @@
         <div class="settings-divider"></div>
 
         <div class="settings-section">
+          <div class="settings-section-label">Document Knowledge Base</div>
+          <div class="document-upload-area" id="documentUploadArea">
+            <div class="document-upload-dropzone" id="documentDropzone">
+              <span class="document-upload-icon">&#128193;</span>
+              <span class="document-upload-text">Drop files here or click to browse</span>
+              <span class="document-upload-hint">PDF, DOCX, TXT, MD supported</span>
+              <input type="file" id="documentFileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" />
+            </div>
+            <div class="document-list" id="documentList">
+              <div class="document-loading">Loading documents...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
+          <div class="settings-section-label">Analytics</div>
+          <div class="analytics-preview" id="analyticsPreview">
+            <div class="analytics-loading">Loading analytics...</div>
+          </div>
+          <div class="analytics-actions">
+            <button id="viewAnalyticsBtn" class="settings-btn">View Full Analytics</button>
+            <button id="exportAnalyticsBtn" class="settings-btn">Export Data</button>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
+          <div class="settings-section-label">CRM Integration</div>
+          <div class="crm-config" id="crmConfig">
+            <div class="crm-provider-select">
+              <label class="crm-label">CRM Provider</label>
+              <select id="crmProviderSelect">
+                <option value="">Disabled</option>
+                <option value="webhook">Webhook (Generic)</option>
+                <option value="salesforce">Salesforce</option>
+                <option value="hubspot">HubSpot</option>
+              </select>
+            </div>
+
+            <div class="crm-fields" id="crmFields">
+              <!-- Webhook fields -->
+              <div class="crm-field-group" data-provider="webhook">
+                <label>Webhook URL</label>
+                <input type="url" id="crmWebhookUrl" class="crm-input" placeholder="https://your-crm.com/webhook" />
+              </div>
+
+              <!-- Salesforce fields -->
+              <div class="crm-field-group" data-provider="salesforce">
+                <label>Instance URL</label>
+                <input type="url" id="crmSalesforceUrl" class="crm-input" placeholder="https://your-instance.salesforce.com" />
+                <label>OAuth Token</label>
+                <input type="password" id="crmSalesforceToken" class="crm-input" placeholder="OAuth access token" />
+              </div>
+
+              <!-- HubSpot fields -->
+              <div class="crm-field-group" data-provider="hubspot">
+                <label>API Key</label>
+                <input type="password" id="crmHubspotKey" class="crm-input" placeholder="HubSpot API key" />
+              </div>
+            </div>
+
+            <div class="crm-options" id="crmOptions" style="display:none">
+              <label class="crm-check">
+                <input type="checkbox" id="crmAutoLog" checked />
+                <span>Auto-log conversations to CRM</span>
+              </label>
+              <label class="crm-check">
+                <input type="checkbox" id="crmContactMatch" checked />
+                <span>Enable contact matching</span>
+              </label>
+              <label class="crm-label">Log Format</label>
+              <select id="crmLogFormat">
+                <option value="summary">Summary</option>
+                <option value="full">Full Summary</option>
+                <option value="transcript">Full Transcript</option>
+              </select>
+            </div>
+
+            <div class="crm-actions">
+              <button id="crmSaveBtn" class="settings-btn">Save Configuration</button>
+              <button id="crmTestBtn" class="settings-btn">Test Connection</button>
+            </div>
+
+            <div class="crm-status" id="crmStatus"></div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
           <div class="settings-section-label">Privacy</div>
           <div class="provider-row">
             <span class="provider-logo" style="font-size:14px">&#128275;</span>
@@ -633,6 +766,113 @@
       </div>
       <div class="modal-actions">
         <button class="settings-btn modal-save-btn" id="closeShortcutsModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export modal -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal-box">
+      <div class="modal-title">Export Conversation</div>
+      <div class="export-options">
+        <label class="export-option">
+          <input type="radio" name="exportFormat" value="markdown" checked />
+          <span class="export-option-label">Markdown (.md)</span>
+          <span class="export-option-desc">Formatted text with headers and metadata</span>
+        </label>
+        <label class="export-option">
+          <input type="radio" name="exportFormat" value="json" />
+          <span class="export-option-label">JSON (.json)</span>
+          <span class="export-option-desc">Full conversation data with timestamps</span>
+        </label>
+        <label class="export-option">
+          <input type="radio" name="exportFormat" value="txt" />
+          <span class="export-option-label">Plain Text (.txt)</span>
+          <span class="export-option-desc">Simple transcript format</span>
+        </label>
+      </div>
+      <div class="export-preview">
+        <label class="export-check">
+          <input type="checkbox" id="includeMetadata" checked />
+          <span>Include metadata (date, mode, model)</span>
+        </label>
+        <label class="export-check">
+          <input type="checkbox" id="includeTimestamps" />
+          <span>Include timestamps</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="cancelExportBtn">Cancel</button>
+        <button class="settings-btn modal-save-btn" id="confirmExportBtn">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal-box">
+      <div class="modal-title">Import Conversations</div>
+      <div class="import-area">
+        <div class="import-dropzone" id="importDropzone">
+          <span class="import-icon">&#128449;</span>
+          <span class="import-text">Drop JSON file here or click to browse</span>
+          <input type="file" id="importFileInput" accept=".json" style="display:none" />
+        </div>
+        <div class="import-warning">
+          <strong>Note:</strong> Importing will merge conversations with existing ones.
+          Duplicate IDs will be overwritten.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="cancelImportBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics modal -->
+  <div class="modal-overlay" id="analyticsModal">
+    <div class="modal-box analytics-modal-box">
+      <div class="modal-title">Conversation Analytics</div>
+      <div class="analytics-content" id="analyticsContent">
+        <div class="analytics-summary">
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsTotalConversations">-</div>
+            <div class="analytics-card-label">Conversations</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsTotalMessages">-</div>
+            <div class="analytics-card-label">Total Messages</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsAvgDuration">-</div>
+            <div class="analytics-card-label">Avg Duration</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsSpeakerRatio">-</div>
+            <div class="analytics-card-label">User/AI Ratio</div>
+          </div>
+        </div>
+
+        <div class="analytics-section">
+          <h3>Daily Activity (Last 7 Days)</h3>
+          <div class="analytics-chart" id="analyticsChart">
+            <div class="analytics-chart-bars"></div>
+          </div>
+        </div>
+
+        <div class="analytics-grid">
+          <div class="analytics-section">
+            <h3>Mode Usage</h3>
+            <div class="analytics-list" id="analyticsModes"></div>
+          </div>
+          <div class="analytics-section">
+            <h3>Model Usage</h3>
+            <div class="analytics-list" id="analyticsModels"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="closeAnalyticsBtn">Close</button>
       </div>
     </div>
   </div>

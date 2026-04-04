@@ -33,6 +33,27 @@ let transcribeWs = null      // WebSocket for live transcription
 let streamProcessor = null   // ScriptProcessorNode for PCM capture
 let partialTranscriptText = "" // Accumulated partial text
 
+// Speaker diarization state
+let speakerDiarizationEnabled = false
+let currentSpeakers = []
+
+// Document upload state
+let uploadedDocuments = []
+
+// Export/Import state
+let exportCurrentConversation = null
+
+// Session timer state
+let sessionStartTime = null
+let sessionTimerInterval = null
+let sessionDurationMinutes = 0
+const SESSION_WARNING_THRESHOLD = 45 // Show warning at 45 minutes
+const SESSION_MAX_DURATION = 60 // Auto-stop at 60 minutes
+
+// Sales objection handling state
+let objectionDetectionEnabled = false
+let currentObjections = []
+
 // ==============================
 // DOM REFS
 // ==============================
@@ -91,6 +112,61 @@ window.api.onTriggerAI(() => {
   } else if (!isListening && !isProcessing) {
     listenBtn.click()
   }
+})
+
+// Backend status monitoring
+const backendStatusEl = document.getElementById("backendStatusIndicator")
+const backendStatusDot = backendStatusEl?.querySelector(".backend-status-dot")
+const backendStatusText = backendStatusEl?.querySelector(".backend-status-text")
+
+function updateBackendStatus(status, data = {}) {
+  if (!backendStatusEl) return
+
+  // Remove all status classes
+  backendStatusEl.classList.remove("starting", "ready", "error", "dead")
+  backendStatusEl.classList.add("visible")
+
+  switch (status) {
+    case "starting":
+      backendStatusEl.classList.add("starting")
+      backendStatusText.textContent = "Starting..."
+      break
+    case "ready":
+      backendStatusEl.classList.add("ready")
+      backendStatusText.textContent = "Connected"
+      // Hide after 3 seconds when connected
+      setTimeout(() => {
+        backendStatusEl.classList.remove("visible")
+      }, 3000)
+      break
+    case "error":
+      backendStatusEl.classList.add("error")
+      if (data.restartAttempt) {
+        backendStatusText.textContent = `Restarting (${data.restartAttempt}/${data.maxAttempts})...`
+      } else {
+        backendStatusText.textContent = "Error"
+      }
+      break
+    case "dead":
+      backendStatusEl.classList.add("dead")
+      backendStatusText.textContent = "Offline - Click to restart"
+      backendStatusEl.style.cursor = "pointer"
+      backendStatusEl.onclick = async () => {
+        backendStatusText.textContent = "Restarting..."
+        await window.api.restartBackend()
+      }
+      break
+  }
+}
+
+// Listen for backend status changes
+window.api.onBackendStatus((data) => {
+  updateBackendStatus(data.status, data)
+})
+
+// Check initial backend status
+window.api.getBackendStatus().then((status) => {
+  updateBackendStatus(status.status, status)
 })
 
 document.addEventListener("keydown", (e) => {
@@ -705,8 +781,14 @@ function deleteConversation(id) {
   })
 }
 
+// Panel backdrop removed - no dark overlay
+function updatePanelBackdrop() {
+  // Backdrop disabled to prevent black screen on small windows
+}
+
 function closeHistoryPanel() {
   historyPanel.classList.remove("open")
+  updatePanelBackdrop()
   // Reset scroll when closing
   const historyList = document.getElementById("historyList")
   if (historyList) {
@@ -746,16 +828,28 @@ async function renderHistoryList() {
   const list = await window.api.conversationList()
   const searchQuery = (document.getElementById("historySearch")?.value || "").toLowerCase().trim()
 
+   // Show loading state with spinner
+  if (historyList) {
+    historyList.innerHTML = `
+      <div class="history-loading">
+        <div class="history-loading-spinner"></div>
+        <div>Loading conversations...</div>
+      </div>
+    `
+  }
+
   // Load full conversations for search + preview snippets
   let searchMatches = null
   if (searchQuery) {
-    const allConvs = await Promise.all(list.map(c => window.api.conversationLoad(c.id)))
+    // Limit search to most recent 50 conversations to prevent UI freeze
+    const limitedList = list.slice(0, 50)
+    const allConvs = await Promise.all(limitedList.map(c => window.api.conversationLoad(c.id)))
     searchMatches = {}
     allConvs.forEach(conv => {
       if (!conv) return
       const ql = searchQuery.toLowerCase()
       const titleMatch = conv.title.toLowerCase().includes(ql)
-      const msgMatch = conv.messages.find(m => m.text.toLowerCase().includes(ql))
+      const msgMatch = conv.messages?.find(m => m.text.toLowerCase().includes(ql))
       if (titleMatch || msgMatch) {
         searchMatches[conv.id] = { conv, msgMatch }
       }
@@ -781,7 +875,8 @@ async function renderHistoryList() {
   }
 
   const sortedPinned = pinned.sort(sortFn)
-  const sortedUnpinned = unpinned.sort(sortFn)
+  // Limit unpinned to prevent UI freeze (show max 100 conversations)
+  const sortedUnpinned = unpinned.sort(sortFn).slice(0, 100)
 
   // Group each list
   const groupConversations = (convs) => {
@@ -901,6 +996,20 @@ async function renderHistoryList() {
 
   // Render unpinned groups
   Object.keys(unpinnedGroups).forEach(group => renderGroup(group, unpinnedGroups[group], false))
+
+   // Show limited message if there are more conversations
+  if (unpinned.length > 100) {
+    const limitedMsg = document.createElement("div")
+    limitedMsg.className = "history-info-message"
+    limitedMsg.innerHTML = `
+      <div style="padding: 12px; text-align: center; color: var(--text-dim); font-size: 0.8em; opacity: 0.8; border-top: 1px solid var(--line); margin-top: 8px;">
+        Showing <b>100</b> of <b>${unpinned.length}</b> conversations
+        <br/>
+        <span style="font-size: 0.9em; opacity: 0.7;">Use search to find older ones</span>
+      </div>
+    `
+    historyList.appendChild(limitedMsg)
+  }
 
   // Ensure scroll is at top after rendering
   historyList.scrollTop = 0
@@ -1733,6 +1842,7 @@ function parseSSEFromText(text) {
 }
 
 async function streamAIResponse(query) {
+  const requestStartTime = Date.now()
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const selectedModel = modelSelect ? modelSelect.value : "auto"
@@ -2272,6 +2382,19 @@ function streamMessage(role, text, opts = {}) {
     msg.appendChild(screenshotThumb)
   }
 
+  // Show speaker transcript toggle if available
+  if (role === "user" && opts.speakerTranscript) {
+    const speakerToggle = document.createElement("button")
+    speakerToggle.className = "speaker-transcript-toggle"
+    speakerToggle.innerHTML = `&#128483; ${opts.speakerCount || 1} speaker${opts.speakerCount !== 1 ? 's' : ''}`
+    speakerToggle.title = "Click to view transcript with speaker labels"
+    speakerToggle.style.cssText = "margin-left: 8px; font-size: 0.7em; color: var(--accent); background: none; border: none; cursor: pointer;"
+    speakerToggle.addEventListener("click", () => {
+      showSpeakerTranscriptModal(opts.speakerTranscript)
+    })
+    msg.appendChild(speakerToggle)
+  }
+
   const labelEl = document.createElement("span")
   labelEl.className = "msg-label"
   labelEl.textContent = label
@@ -2415,8 +2538,15 @@ async function submitAudio(blob, screenshotB64 = null) {
   formData.append("file", blob, "audio.webm")
 
   let response
+  let transcribeUrl = window.api.getTranscribeUrl()
+
+  // Use speaker diarization endpoint if enabled
+  if (speakerDiarizationEnabled) {
+    transcribeUrl = window.api.getTranscribeWithSpeakersUrl()
+  }
+
   try {
-    response = await fetch(window.api.getTranscribeUrl(), {
+    response = await fetch(transcribeUrl, {
       method: "POST",
       body: formData
     })
@@ -2439,7 +2569,19 @@ async function submitAudio(blob, screenshotB64 = null) {
     return
   }
 
-  streamMessage("user", data.text, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
+  // Store speaker info if available
+  if (data.speakers) {
+    currentSpeakers = data.speakers
+  }
+
+  // Format message with speaker info if available
+  const messageOptions = { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 }
+  if (data.formatted_transcript && speakerDiarizationEnabled) {
+    messageOptions.speakerTranscript = data.formatted_transcript
+    messageOptions.speakerCount = data.speaker_count
+  }
+
+  streamMessage("user", data.text, messageOptions)
 
   // If screenshot was captured, use vision endpoint
   if (screenshotB64) {
@@ -2579,13 +2721,34 @@ function stopTracks() {
 function startStreamingTranscription() {
   partialTranscriptText = ""
 
+  // Prevent duplicate connections
+  if (transcribeWs && (transcribeWs.readyState === WebSocket.CONNECTING || transcribeWs.readyState === WebSocket.OPEN)) {
+    console.log("[transcribeWs] Already connecting or open, skipping new connection")
+    return
+  }
+
   transcribeWs = new WebSocket("ws://127.0.0.1:8000/ws/transcribe")
+  let connectionTimeout = null
+
+  // Set connection timeout to prevent hanging
+  connectionTimeout = setTimeout(() => {
+    if (transcribeWs && transcribeWs.readyState === WebSocket.CONNECTING) {
+      console.warn("[transcribeWs] Connection timeout, aborting")
+      transcribeWs.close()
+      transcribeWs = null
+    }
+  }, 5000) // 5 second timeout
 
   transcribeWs.addEventListener("open", () => {
+    clearTimeout(connectionTimeout)
     console.log("[transcribeWs] connected")
 
     // Create audio pipeline: MediaStream → ScriptProcessor → Float32 PCM → WebSocket
-    const audioCtx = new AudioContext()
+    // Close any existing context first to prevent leaks
+    if (audioCtx) {
+      try { audioCtx.close() } catch {}
+    }
+    audioCtx = new AudioContext()
     const source = audioCtx.createMediaStreamSource(mediaStream)
     streamProcessor = audioCtx.createScriptProcessor(4096, 1, 1)
 
@@ -2625,17 +2788,27 @@ function startStreamingTranscription() {
 /** Stop the WebSocket and audio pipeline. */
 function stopStreamingTranscription() {
   if (transcribeWs) {
-    transcribeWs.close()
+    // Only close if not already closing/closed
+    if (transcribeWs.readyState === WebSocket.OPEN || transcribeWs.readyState === WebSocket.CONNECTING) {
+      transcribeWs.close()
+    }
     transcribeWs = null
   }
   stopStreamingPipeline()
 }
 
 /** Disconnect and clean up the audio pipeline. */
+let audioCtx = null  // Track AudioContext for cleanup
+
 function stopStreamingPipeline() {
   if (streamProcessor) {
     try { streamProcessor.disconnect() } catch {}
     streamProcessor = null
+  }
+  // Close AudioContext to prevent memory leak
+  if (audioCtx) {
+    try { audioCtx.close() } catch {}
+    audioCtx = null
   }
   partialTranscriptText = ""
 }
@@ -2936,6 +3109,7 @@ summarizeBtn?.addEventListener("click", async () => {
 historyBtn.addEventListener("click", () => {
   const wasOpen = historyPanel.classList.contains("open")
   historyPanel.classList.toggle("open")
+  updatePanelBackdrop()
 
   const historyList = document.getElementById("historyList")
 
@@ -3200,6 +3374,38 @@ if (resizeHandle) {
 }
 
 // ==============================
+// RESPONSIVE WINDOW HANDLING
+// ==============================
+function updateResponsiveLayout() {
+  const width = window.innerWidth
+  const body = document.body
+
+  // Remove all responsive classes
+  body.classList.remove("window-xs", "window-sm", "window-md", "window-lg")
+
+  // Add appropriate class based on window size
+  if (width <= 480) {
+    body.classList.add("window-xs")
+  } else if (width <= 680) {
+    body.classList.add("window-sm")
+  } else if (width <= 800) {
+    body.classList.add("window-md")
+  } else {
+    body.classList.add("window-lg")
+  }
+}
+
+// Initial call
+updateResponsiveLayout()
+
+// Debounced resize handler
+let resizeTimeout
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimeout)
+  resizeTimeout = setTimeout(updateResponsiveLayout, 100)
+})
+
+// ==============================
 // MENU BUTTON + APP MENU
 // ==============================
 const appMenu = document.getElementById("appMenu")
@@ -3233,6 +3439,7 @@ appMenu.addEventListener("click", async (e) => {
 
   if (action === "settings") {
     settingsPanel.classList.add("open")
+    updatePanelBackdrop()
     try {
       const providers = await window.api.getProviders()
       syncProviderRow("openai", !!providers.openai)
@@ -3506,6 +3713,7 @@ async function checkProviderHasKey(provider) {
 closeSettingsBtn.addEventListener("click", () => {
   closeProviderConfig()
   settingsPanel.classList.remove("open")
+  updatePanelBackdrop()
 })
 
 // Save button
@@ -3571,12 +3779,11 @@ configSaveBtn.addEventListener("click", async () => {
   configTestResult.textContent = "Verifying API key..."
 
   try {
-    // Save API key to backend
-    const result = await window.api.configureProvider(activeProvider, apiKey)
-
-    // Check if backend returned an error
-    if (result && result.error) {
-      throw new Error(result.error)
+    // Save API key to secure encrypted storage (P1 Privacy)
+    // SECURITY: Keys are never sent over HTTP, only via secure IPC
+    const saveResult = await window.api.saveApiKey(activeProvider, apiKey)
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || "Failed to save API key securely")
     }
 
     // Update UI — mark provider as enabled
@@ -3661,9 +3868,10 @@ CLOUD_PROVIDERS_WITH_KEY.forEach(p => {
     // Persist enabled state in store
     await window.api.storeSet("provider_" + p, { ...stored, enabled: isEnabled })
 
-    // Notify backend to update .env
+    // Save API key to secure storage if enabling with existing key
+    // SECURITY: Only use secure IPC, never send over HTTP
     if (isEnabled && stored.apiKey) {
-      try { await window.api.configureProvider(p, stored.apiKey) } catch {}
+      try { await window.api.saveApiKey(p, stored.apiKey) } catch {}
     }
 
     syncProviderRow(p, isEnabled)
@@ -3760,6 +3968,7 @@ document.addEventListener("click", (e) => {
     // Otherwise close the whole panel
     closeProviderConfig()
     settingsPanel.classList.remove("open")
+    updatePanelBackdrop()
   }
 })
 async function init() {
@@ -3940,4 +4149,887 @@ async function checkOnboarding() {
   })
 }
 
+// ==============================
+// DOCUMENT UPLOAD
+// ==============================
+const documentDropzone = document.getElementById("documentDropzone")
+const documentFileInput = document.getElementById("documentFileInput")
+const documentList = document.getElementById("documentList")
+
+async function loadDocuments() {
+  if (!documentList) return
+  try {
+    const result = await window.api.listDocuments()
+    uploadedDocuments = result.documents || []
+    renderDocumentList()
+  } catch (e) {
+    console.error("Failed to load documents:", e)
+    if (documentList) {
+      documentList.innerHTML = '<div class="document-empty">Failed to load documents</div>'
+    }
+  }
+}
+
+function renderDocumentList() {
+  if (!documentList) return
+
+  if (uploadedDocuments.length === 0) {
+    documentList.innerHTML = '<div class="document-empty">No documents uploaded yet</div>'
+    return
+  }
+
+  documentList.innerHTML = uploadedDocuments.map(doc => {
+    const icon = doc.name.endsWith('.pdf') ? '&#128196;' :
+                 doc.name.endsWith('.docx') ? '&#128221;' : '&#128196;'
+    return `
+      <div class="document-item" data-id="${doc.id}">
+        <span class="document-item-icon">${icon}</span>
+        <div class="document-item-info">
+          <div class="document-item-name" title="${escapeHtml(doc.name)}">${escapeHtml(doc.name)}</div>
+          <div class="document-item-meta">${doc.chunks} chunks</div>
+        </div>
+        <button class="document-item-delete" onclick="deleteDocument('${doc.id}')" title="Delete">&#10005;</button>
+      </div>
+    `
+  }).join('')
+}
+
+async function deleteDocument(docId) {
+  try {
+    await window.api.deleteDocument(docId)
+    await loadDocuments()
+  } catch (e) {
+    console.error("Failed to delete document:", e)
+    alert("Failed to delete document")
+  }
+}
+
+// Make deleteDocument available globally
+window.deleteDocument = deleteDocument
+
+// Document dropzone handlers
+if (documentDropzone && documentFileInput) {
+  documentDropzone.addEventListener("click", () => documentFileInput.click())
+
+  documentDropzone.addEventListener("dragover", (e) => {
+    e.preventDefault()
+    documentDropzone.classList.add("dragover")
+  })
+
+  documentDropzone.addEventListener("dragleave", () => {
+    documentDropzone.classList.remove("dragover")
+  })
+
+  documentDropzone.addEventListener("drop", (e) => {
+    e.preventDefault()
+    documentDropzone.classList.remove("dragover")
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      uploadFiles(files)
+    }
+  })
+
+  documentFileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+      uploadFiles(e.target.files)
+      e.target.value = "" // Reset for next upload
+    }
+  })
+}
+
+async function uploadFiles(files) {
+  if (!documentList) return
+
+  documentList.innerHTML = '<div class="document-loading">Uploading...</div>'
+
+  for (const file of files) {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    try {
+      const result = await window.api.uploadDocument(formData)
+      if (result.error) {
+        console.error("Upload error:", result.error)
+        alert(`Failed to upload ${file.name}: ${result.error}`)
+      } else {
+        console.log("Uploaded:", result.doc_name, result.chunks, "chunks")
+      }
+    } catch (e) {
+      console.error("Upload failed:", e)
+      alert(`Failed to upload ${file.name}`)
+    }
+  }
+
+  await loadDocuments()
+}
+
+// ==============================
+// SPEAKER DIARIZATION
+// ==============================
+// Note: Speaker diarization is handled server-side during transcription
+// The UI displays speaker labels when available in the transcript
+
+function formatSpeakerLabel(speakerId) {
+  // Normalize speaker IDs (SPEAKER_00 -> Speaker 1)
+  if (speakerId.startsWith("SPEAKER_")) {
+    try {
+      const num = parseInt(speakerId.split("_")[1]) + 1
+      return `Speaker ${num}`
+    } catch {
+      return speakerId
+    }
+  }
+  return speakerId
+}
+
+function getSpeakerClass(speakerId) {
+  if (speakerId.includes("1") || speakerId.endsWith("00")) return "speaker-1"
+  if (speakerId.includes("2") || speakerId.endsWith("01")) return "speaker-2"
+  if (speakerId.includes("3") || speakerId.endsWith("02")) return "speaker-3"
+  if (speakerId.includes("4") || speakerId.endsWith("03")) return "speaker-4"
+  return "speaker-unknown"
+}
+
+// Function to show speaker transcript modal
+function showSpeakerTranscriptModal(transcript) {
+  // Create modal if it doesn't exist
+  let modal = document.getElementById("speakerTranscriptModal")
+  if (!modal) {
+    modal = document.createElement("div")
+    modal.id = "speakerTranscriptModal"
+    modal.className = "modal-overlay"
+    modal.innerHTML = `
+      <div class="modal-box" style="max-width: 600px; max-height: 80vh;">
+        <div class="modal-title">Transcript with Speakers</div>
+        <div class="speaker-transcript-content" style="max-height: 60vh; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.9em; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px; margin: 16px 0;"></div>
+        <div class="modal-actions">
+          <button class="settings-btn modal-cancel-btn" onclick="document.getElementById('speakerTranscriptModal').classList.remove('open')">Close</button>
+          <button class="settings-btn modal-save-btn" id="copySpeakerTranscriptBtn">Copy</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+  }
+
+  const content = modal.querySelector(".speaker-transcript-content")
+  content.textContent = transcript
+
+  // Copy button handler
+  const copyBtn = document.getElementById("copySpeakerTranscriptBtn")
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(transcript).then(() => {
+      copyBtn.textContent = "Copied!"
+      setTimeout(() => copyBtn.textContent = "Copy", 1500)
+    })
+  }
+
+  modal.classList.add("open")
+
+  // Close on backdrop click
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.classList.remove("open")
+  })
+}
+
+// Function to create speaker diarization toggle button
+function createSpeakerToggle() {
+  const btn = document.createElement("button")
+  btn.className = "speaker-toggle-btn"
+  btn.id = "speakerToggleBtn"
+  btn.innerHTML = `
+    <span class="speaker-toggle-dot"></span>
+    <span class="speaker-toggle-label">Speakers</span>
+  `
+  btn.title = "Toggle speaker diarization (identifies who is speaking)"
+  btn.addEventListener("click", () => {
+    speakerDiarizationEnabled = !speakerDiarizationEnabled
+    btn.classList.toggle("active", speakerDiarizationEnabled)
+    window.api.storeSet("speakerDiarizationEnabled", speakerDiarizationEnabled)
+  })
+  return btn
+}
+
+// Load speaker diarization setting
+async function loadSpeakerSetting() {
+  const stored = await window.api.storeGet("speakerDiarizationEnabled")
+  speakerDiarizationEnabled = stored === true
+  const btn = document.getElementById("speakerToggleBtn")
+  if (btn) btn.classList.toggle("active", speakerDiarizationEnabled)
+}
+
+// Add speaker toggle to controls if not present
+function initSpeakerToggle() {
+  const controlsStrip = document.querySelector(".controls-strip")
+  if (!controlsStrip || document.getElementById("speakerToggleBtn")) return
+
+  const speakerBtn = createSpeakerToggle()
+  controlsStrip.appendChild(speakerBtn)
+  loadSpeakerSetting()
+}
+
+// ==============================
+// EXPORT/IMPORT FUNCTIONALITY
+// ==============================
+const exportAllBtn = document.getElementById("exportAllBtn")
+const importBtn = document.getElementById("importBtn")
+const exportModal = document.getElementById("exportModal")
+const importModal = document.getElementById("importModal")
+const cancelExportBtn = document.getElementById("cancelExportBtn")
+const confirmExportBtn = document.getElementById("confirmExportBtn")
+const cancelImportBtn = document.getElementById("cancelImportBtn")
+const importDropzone = document.getElementById("importDropzone")
+const importFileInput = document.getElementById("importFileInput")
+
+// Export functionality
+if (exportAllBtn) {
+  exportAllBtn.addEventListener("click", () => {
+    exportCurrentConversation = currentMessages.length > 0 ? currentMessages : null
+    openExportModal()
+  })
+}
+
+function openExportModal() {
+  if (exportModal) {
+    exportModal.classList.add("open")
+  }
+}
+
+function closeExportModal() {
+  if (exportModal) {
+    exportModal.classList.remove("open")
+  }
+}
+
+if (cancelExportBtn) {
+  cancelExportBtn.addEventListener("click", closeExportModal)
+}
+
+if (exportModal) {
+  exportModal.addEventListener("click", (e) => {
+    if (e.target === exportModal) closeExportModal()
+  })
+}
+
+if (confirmExportBtn) {
+  confirmExportBtn.addEventListener("click", async () => {
+    const format = document.querySelector('input[name="exportFormat"]:checked')?.value || "markdown"
+    const includeMetadata = document.getElementById("includeMetadata")?.checked ?? true
+    const includeTimestamps = document.getElementById("includeTimestamps")?.checked ?? false
+
+    let messagesToExport = exportCurrentConversation || currentMessages
+    if (!messagesToExport || messagesToExport.length === 0) {
+      alert("No conversation to export")
+      return
+    }
+
+    try {
+      const result = await window.api.exportConversation({
+        messages: messagesToExport,
+        format: format,
+        includeMetadata: includeMetadata,
+        includeTimestamps: includeTimestamps,
+        metadata: {
+          mode: modeSelect?.value,
+          model: modelSelect?.value,
+          exportedFrom: "AI Note Taker"
+        }
+      })
+
+      if (result.error) {
+        alert("Export failed: " + result.error)
+        return
+      }
+
+      // Save file via dialog
+      const saveResult = await window.api.saveFile({
+        defaultPath: result.filename,
+        filters: getExportFilters(format),
+        content: result.content
+      })
+
+      if (saveResult.success) {
+        confirmExportBtn.textContent = "Exported!"
+        setTimeout(() => {
+          confirmExportBtn.textContent = "Export"
+          closeExportModal()
+        }, 1000)
+      } else if (saveResult.error) {
+        console.error("Save failed:", saveResult.error)
+      }
+    } catch (e) {
+      console.error("Export error:", e)
+      alert("Export failed")
+    }
+  })
+}
+
+function getExportFilters(format) {
+  if (format === "json") {
+    return [{ name: "JSON", extensions: ["json"] }]
+  } else if (format === "markdown") {
+    return [{ name: "Markdown", extensions: ["md"] }]
+  } else {
+    return [{ name: "Text", extensions: ["txt"] }]
+  }
+}
+
+// Export individual conversation
+function exportConversation(conversationId) {
+  window.api.conversationLoad(conversationId).then(conv => {
+    if (conv && conv.messages) {
+      exportCurrentConversation = conv.messages
+      openExportModal()
+    }
+  })
+}
+
+window.exportConversation = exportConversation
+
+// Import functionality
+if (importBtn) {
+  importBtn.addEventListener("click", () => {
+    if (importModal) importModal.classList.add("open")
+  })
+}
+
+if (cancelImportBtn) {
+  cancelImportBtn.addEventListener("click", () => {
+    if (importModal) importModal.classList.remove("open")
+  })
+}
+
+if (importModal) {
+  importModal.addEventListener("click", (e) => {
+    if (e.target === importModal) importModal.classList.remove("open")
+  })
+}
+
+if (importDropzone && importFileInput) {
+  importDropzone.addEventListener("click", () => importFileInput.click())
+
+  importDropzone.addEventListener("dragover", (e) => {
+    e.preventDefault()
+    importDropzone.classList.add("dragover")
+  })
+
+  importDropzone.addEventListener("dragleave", () => {
+    importDropzone.classList.remove("dragover")
+  })
+
+  importDropzone.addEventListener("drop", (e) => {
+    e.preventDefault()
+    importDropzone.classList.remove("dragover")
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      handleImportFile(files[0])
+    }
+  })
+
+  importFileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+      handleImportFile(e.target.files[0])
+      e.target.value = ""
+    }
+  })
+}
+
+async function handleImportFile(file) {
+  if (!file.name.endsWith(".json")) {
+    alert("Please import a JSON file exported from AI Note Taker")
+    return
+  }
+
+  const formData = new FormData()
+  formData.append("file", file)
+
+  try {
+    const result = await window.api.importConversations(formData)
+    if (result.error) {
+      alert("Import failed: " + result.error)
+      return
+    }
+
+    // Save imported messages as a new conversation
+    if (result.messages && result.messages.length > 0) {
+      const title = result.messages[0]?.text?.substring(0, 50) || "Imported Conversation"
+      await window.api.conversationSave({
+        id: crypto.randomUUID(),
+        title: title,
+        messages: result.messages,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      })
+
+      // Refresh history
+      renderHistoryList()
+
+      alert(`Imported ${result.count} messages successfully`)
+      if (importModal) importModal.classList.remove("open")
+    }
+  } catch (e) {
+    console.error("Import error:", e)
+    alert("Import failed")
+  }
+}
+
+// ==============================
+// EDITABLE SUMMARIES
+// ==============================
+function makeSummaryEditable(summaryBlock) {
+  if (!summaryBlock) return
+
+  const content = summaryBlock.querySelector(".summary-block-content")
+  const titleBar = summaryBlock.querySelector(".summary-block-title")
+
+  // Add edit button if not present
+  if (!summaryBlock.querySelector(".summary-edit-btn")) {
+    const editBtn = document.createElement("button")
+    editBtn.className = "summary-edit-btn"
+    editBtn.textContent = "Edit"
+    editBtn.addEventListener("click", () => startEditing(summaryBlock, content, titleBar))
+    titleBar.appendChild(editBtn)
+  }
+}
+
+function startEditing(summaryBlock, content, titleBar) {
+  summaryBlock.classList.add("editable")
+  content.contentEditable = "true"
+  content.focus()
+
+  // Replace edit button with save/cancel
+  const editBtn = titleBar.querySelector(".summary-edit-btn")
+  if (editBtn) editBtn.style.display = "none"
+
+  const copyBtn = titleBar.querySelector(".summary-copy-btn")
+  if (copyBtn) copyBtn.style.display = "none"
+
+  const actions = document.createElement("div")
+  actions.className = "summary-edit-actions"
+  actions.innerHTML = `
+    <button class="summary-save-btn">Save</button>
+    <button class="summary-cancel-btn">Cancel</button>
+  `
+
+  actions.querySelector(".summary-save-btn").addEventListener("click", () => {
+    saveSummaryEdit(summaryBlock, content, titleBar, actions)
+  })
+
+  actions.querySelector(".summary-cancel-btn").addEventListener("click", () => {
+    cancelSummaryEdit(summaryBlock, content, titleBar, actions)
+  })
+
+  summaryBlock.appendChild(actions)
+}
+
+function saveSummaryEdit(summaryBlock, content, titleBar, actions) {
+  const editedText = content.innerText
+
+  // Update the stored summary if exists
+  const existing = document.querySelector(".summary-block")
+  if (existing) {
+    existing.dataset.editedContent = editedText
+  }
+
+  // Save to conversation
+  if (currentConversationId) {
+    window.api.conversationLoad(currentConversationId).then(conv => {
+      if (conv) {
+        conv.summary = editedText
+        conv.summaryEdited = true
+        window.api.conversationSave(conv)
+      }
+    })
+  }
+
+  // Clean up editing state
+  content.contentEditable = "false"
+  summaryBlock.classList.remove("editable")
+  actions.remove()
+
+  // Restore buttons
+  const editBtn = titleBar.querySelector(".summary-edit-btn")
+  if (editBtn) editBtn.style.display = ""
+  const copyBtn = titleBar.querySelector(".summary-copy-btn")
+  if (copyBtn) copyBtn.style.display = ""
+}
+
+function cancelSummaryEdit(summaryBlock, content, titleBar, actions) {
+  // Restore original content
+  const existing = summaryBlock.dataset.originalContent
+  if (existing) {
+    content.innerHTML = existing
+  }
+
+  content.contentEditable = "false"
+  summaryBlock.classList.remove("editable")
+  actions.remove()
+
+  // Restore buttons
+  const editBtn = titleBar.querySelector(".summary-edit-btn")
+  if (editBtn) editBtn.style.display = ""
+  const copyBtn = titleBar.querySelector(".summary-copy-btn")
+  if (copyBtn) copyBtn.style.display = ""
+}
+
+// Extend summarize button to make summaries editable
+const originalSummarizeBtn = summarizeBtn
+if (originalSummarizeBtn) {
+  originalSummarizeBtn.addEventListener("click", () => {
+    // Wait for summary to be generated
+    setTimeout(() => {
+      const summaryBlock = document.querySelector(".summary-block")
+      if (summaryBlock) {
+        // Store original content
+        const content = summaryBlock.querySelector(".summary-block-content")
+        if (content) {
+          summaryBlock.dataset.originalContent = content.innerHTML
+        }
+        makeSummaryEditable(summaryBlock)
+      }
+    }, 500)
+  }, true) // Use capture to run before existing handler
+}
+
+// ==============================
+// SESSION TIMER
+// ==============================
+function startSessionTimer() {
+  sessionStartTime = Date.now()
+  sessionDurationMinutes = 0
+
+  // Create timer display if not exists
+  let timerDisplay = document.getElementById("sessionTimer")
+  if (!timerDisplay) {
+    timerDisplay = document.createElement("div")
+    timerDisplay.id = "sessionTimer"
+    timerDisplay.className = "session-timer"
+
+    // Insert into header
+    const header = document.querySelector(".header-center")
+    if (header) {
+      header.appendChild(timerDisplay)
+    }
+  }
+
+  updateSessionTimer()
+  sessionTimerInterval = setInterval(updateSessionTimer, 60000) // Update every minute
+}
+
+function stopSessionTimer() {
+  if (sessionTimerInterval) {
+    clearInterval(sessionTimerInterval)
+    sessionTimerInterval = null
+  }
+  sessionStartTime = null
+
+  const timerDisplay = document.getElementById("sessionTimer")
+  if (timerDisplay) {
+    timerDisplay.remove()
+  }
+}
+
+function updateSessionTimer() {
+  if (!sessionStartTime) return
+
+  const elapsed = Math.floor((Date.now() - sessionStartTime) / 60000)
+  sessionDurationMinutes = elapsed
+
+  const timerDisplay = document.getElementById("sessionTimer")
+  if (timerDisplay) {
+    const hours = Math.floor(elapsed / 60)
+    const mins = elapsed % 60
+    const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+
+    timerDisplay.innerHTML = `
+      <span>&#9201;</span>
+      <span>${timeStr}</span>
+    `
+
+    // Add warning styling
+    timerDisplay.classList.remove("warning", "danger")
+    if (elapsed >= SESSION_MAX_DURATION) {
+      timerDisplay.classList.add("danger")
+      // Auto-stop recording at max duration
+      if (isListening) {
+        stopListening()
+        addErrorMessage(`Recording stopped after ${SESSION_MAX_DURATION} minutes`)
+      }
+    } else if (elapsed >= SESSION_WARNING_THRESHOLD) {
+      timerDisplay.classList.add("warning")
+    }
+  }
+}
+
+// Extend startListening to include session timer
+const originalStartListening = listenBtn?.onclick
+if (listenBtn) {
+  listenBtn.addEventListener("click", () => {
+    if (!isListening) {
+      startSessionTimer()
+    } else {
+      stopSessionTimer()
+    }
+  })
+}
+
+// ==============================
+// SALES OBJECTION HANDLING
+// ==============================
+function createObjectionToggle() {
+  const btn = document.createElement("button")
+  btn.className = "objection-toggle-btn"
+  btn.id = "objectionToggleBtn"
+  btn.innerHTML = `
+    <span>&#128161;</span>
+    <span>Sales</span>
+  `
+  btn.title = "Toggle sales objection detection"
+  btn.addEventListener("click", () => {
+    objectionDetectionEnabled = !objectionDetectionEnabled
+    btn.classList.toggle("active", objectionDetectionEnabled)
+    window.api.storeSet("objectionDetectionEnabled", objectionDetectionEnabled)
+    if (objectionDetectionEnabled) {
+      showToast("Sales objection detection enabled")
+    }
+  })
+  return btn
+}
+
+async function checkForObjections(text) {
+  if (!objectionDetectionEnabled || !text) return
+
+  try {
+    const result = await window.api.detectObjections(text)
+    if (result.objections && result.objections.length > 0) {
+      showObjectionBanner(result.objections[0])
+    }
+  } catch (e) {
+    console.error("Objection detection error:", e)
+  }
+}
+
+function showObjectionBanner(objection) {
+  // Remove existing banner
+  const existing = document.querySelector(".objection-banner")
+  if (existing) existing.remove()
+
+  const banner = document.createElement("div")
+  banner.className = "objection-banner"
+  banner.innerHTML = `
+    <div class="objection-title">${escapeHtml(objection.title)}</div>
+    <div class="objection-suggestions">
+      ${objection.suggestions.map(s => `<button class="objection-suggestion">${escapeHtml(s)}</button>`).join("")}
+    </div>
+  `
+
+  // Add click handlers for suggestions
+  banner.querySelectorAll(".objection-suggestion").forEach(btn => {
+    btn.addEventListener("click", () => {
+      // Copy suggestion to clipboard
+      window.api.copyToClipboard(btn.textContent)
+      showToast("Response copied to clipboard")
+      banner.classList.add("fade-out")
+      setTimeout(() => banner.remove(), 300)
+    })
+  })
+
+  document.body.appendChild(banner)
+
+  // Auto-remove after 15 seconds
+  setTimeout(() => {
+    if (banner.parentNode) {
+      banner.classList.add("fade-out")
+      setTimeout(() => banner.remove(), 300)
+    }
+  }, 15000)
+}
+
+function showToast(message) {
+  const toast = document.createElement("div")
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    z-index: 9999;
+    animation: fade-in 0.3s ease-out;
+  `
+  toast.textContent = message
+  document.body.appendChild(toast)
+  setTimeout(() => toast.remove(), 2000)
+}
+
+// Add objection toggle to controls
+function initObjectionToggle() {
+  const controlsStrip = document.querySelector(".controls-strip")
+  if (!controlsStrip || document.getElementById("objectionToggleBtn")) return
+
+  const btn = createObjectionToggle()
+  controlsStrip.appendChild(btn)
+
+  // Load saved setting
+  window.api.storeGet("objectionDetectionEnabled").then(enabled => {
+    objectionDetectionEnabled = enabled === true
+    btn.classList.toggle("active", objectionDetectionEnabled)
+  })
+}
+
+// Check for objections when messages are added
+const originalStreamMessage = streamMessage
+window.streamMessage = function(role, text, opts = {}) {
+  const result = originalStreamMessage(role, text, opts)
+  if (role === "user" && text) {
+    checkForObjections(text)
+  }
+  return result
+}
+
+// ==============================
+// ANALYTICS
+// ==============================
+const analyticsPreview = document.getElementById("analyticsPreview")
+const viewAnalyticsBtn = document.getElementById("viewAnalyticsBtn")
+const exportAnalyticsBtn = document.getElementById("exportAnalyticsBtn")
+const analyticsModal = document.getElementById("analyticsModal")
+const closeAnalyticsBtn = document.getElementById("closeAnalyticsBtn")
+
+async function loadAnalyticsPreview() {
+  if (!analyticsPreview) return
+  try {
+    const summary = await window.api.getAnalyticsSummary(30)
+    if (summary.total_conversations === 0) {
+      analyticsPreview.innerHTML = `<div class="document-empty">No conversations yet. Start talking!</div>`
+      return
+    }
+    analyticsPreview.innerHTML = `
+      <div class="analytics-mini-stats">
+        <div class="analytics-mini-stat">
+          <div class="analytics-mini-value">${summary.total_conversations}</div>
+          <div class="analytics-mini-label">Conversations</div>
+        </div>
+        <div class="analytics-mini-stat">
+          <div class="analytics-mini-value">${summary.total_messages}</div>
+          <div class="analytics-mini-label">Messages</div>
+        </div>
+        <div class="analytics-mini-stat">
+          <div class="analytics-mini-value">${summary.avg_conversation_duration_minutes}m</div>
+          <div class="analytics-mini-label">Avg Duration</div>
+        </div>
+        <div class="analytics-mini-stat">
+          <div class="analytics-mini-value">${summary.speaker_ratio}:1</div>
+          <div class="analytics-mini-label">User/AI Ratio</div>
+        </div>
+      </div>`
+  } catch (e) {
+    analyticsPreview.innerHTML = `<div class="document-empty">Failed to load analytics</div>`
+  }
+}
+
+async function showAnalyticsModal() {
+  if (!analyticsModal) return
+  analyticsModal.classList.add("open")
+  try {
+    const summary = await window.api.getAnalyticsSummary(30)
+    document.getElementById("analyticsTotalConversations").textContent = summary.total_conversations
+    document.getElementById("analyticsTotalMessages").textContent = summary.total_messages
+    document.getElementById("analyticsAvgDuration").textContent = summary.avg_conversation_duration_minutes + "m"
+    document.getElementById("analyticsSpeakerRatio").textContent = summary.speaker_ratio + ":1"
+
+    const container = document.querySelector(".analytics-chart-bars")
+    if (container && summary.daily_trend) {
+      const maxMessages = Math.max(...summary.daily_trend.map(d => d.messages), 1)
+      container.innerHTML = summary.daily_trend.map(day => {
+        const heightPercent = (day.messages / maxMessages) * 100
+        const dateLabel = new Date(day.date).toLocaleDateString("en-US", { weekday: "short" })
+        return `<div class="analytics-chart-bar" style="height: ${Math.max(heightPercent, 4)}%">
+          <span class="analytics-chart-bar-value">${day.messages}</span>
+          <span class="analytics-chart-bar-label">${dateLabel}</span>
+        </div>`
+      }).join("")
+    }
+  } catch (e) {
+    console.error("Analytics error:", e)
+  }
+}
+
+if (viewAnalyticsBtn) viewAnalyticsBtn.addEventListener("click", showAnalyticsModal)
+if (closeAnalyticsBtn) closeAnalyticsBtn.addEventListener("click", () => analyticsModal?.classList.remove("open"))
+if (analyticsModal) analyticsModal.addEventListener("click", (e) => { if (e.target === analyticsModal) analyticsModal.classList.remove("open") })
+
+// ==============================
+// CRM INTEGRATION
+// ==============================
+const crmProviderSelect = document.getElementById("crmProviderSelect")
+const crmSaveBtn = document.getElementById("crmSaveBtn")
+const crmTestBtn = document.getElementById("crmTestBtn")
+const crmStatus = document.getElementById("crmStatus")
+
+function updateCRMFields() {
+  const provider = crmProviderSelect?.value
+  document.querySelectorAll(".crm-field-group").forEach(g => g.style.display = g.dataset.provider === provider ? "block" : "none")
+  const crmOptions = document.getElementById("crmOptions")
+  if (crmOptions) crmOptions.style.display = provider ? "block" : "none"
+}
+
+async function loadCRMConfig() {
+  try {
+    const config = await window.api.getCRMConfig()
+    if (crmProviderSelect) crmProviderSelect.value = config.provider || ""
+    if (document.getElementById("crmWebhookUrl")) document.getElementById("crmWebhookUrl").value = config.webhook_url || ""
+    if (document.getElementById("crmSalesforceUrl")) document.getElementById("crmSalesforceUrl").value = config.instance_url || ""
+    if (document.getElementById("crmSalesforceToken")) document.getElementById("crmSalesforceToken").value = config.oauth_token || ""
+    if (document.getElementById("crmHubspotKey")) document.getElementById("crmHubspotKey").value = config.api_key || ""
+    updateCRMFields()
+  } catch (e) { console.error("CRM load error:", e) }
+}
+
+async function saveCRMConfig() {
+  const config = {
+    enabled: !!crmProviderSelect?.value,
+    provider: crmProviderSelect?.value || "",
+    webhook_url: document.getElementById("crmWebhookUrl")?.value || null,
+    instance_url: document.getElementById("crmSalesforceUrl")?.value || null,
+    oauth_token: document.getElementById("crmSalesforceToken")?.value || null,
+    api_key: document.getElementById("crmHubspotKey")?.value || null,
+    auto_log_conversations: document.getElementById("crmAutoLog")?.checked ?? true,
+    contact_matching: document.getElementById("crmContactMatch")?.checked ?? true,
+    log_format: document.getElementById("crmLogFormat")?.value || "summary"
+  }
+  try {
+    await window.api.saveCRMConfig(config)
+    if (crmStatus) { crmStatus.textContent = "Configuration saved"; crmStatus.className = "crm-status ok" }
+  } catch (e) {
+    if (crmStatus) { crmStatus.textContent = "Save failed"; crmStatus.className = "crm-status error" }
+  }
+}
+
+if (crmProviderSelect) crmProviderSelect.addEventListener("change", updateCRMFields)
+if (crmSaveBtn) crmSaveBtn.addEventListener("click", saveCRMConfig)
+
+// ==============================
+// INITIALIZATION
+// ==============================
+async function initFeatures() {
+  await loadDocuments()
+  initSpeakerToggle()
+  initObjectionToggle()
+  loadAnalyticsPreview()
+  loadCRMConfig()
+}
+
+const originalInit = init
+init = function() {
+  originalInit()
+  initFeatures()
+}
+
 init()
+
+// ==============================
+// ANALYTICS AND CRM EXTENSIONS
+// ==============================

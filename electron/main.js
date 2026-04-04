@@ -18,6 +18,12 @@ const PLATFORM = process.platform  // 'win32' | 'darwin' | 'linux'
 const logger = log
 const store = new Store()
 
+// Secure API key storage - encrypted using machine-specific key
+const apiKeyStore = new Store({
+  name: "secure-api-keys",
+  encryptionKey: crypto.scryptSync(app.getPath("userData"), "ai-note-taker-salt-v1", 32).slice(0, 16).toString("hex").slice(0, 16)
+})
+
 // appData path is cross-platform via Electron API
 const appDataDir = path.join(app.getPath("userData"), "ai-note-taker-data")
 app.setPath("userData", appDataDir)
@@ -33,6 +39,19 @@ function ensureConversationsDir() {
 
 let win
 let backendProcess = null
+let backendStopped = false  // true if user/App Quit initiated the stop — don't restart
+let backendRestartAttempts = 0
+let backendHealthCheckInterval = null
+let backendStatus = "unknown" // "unknown" | "starting" | "ready" | "error" | "dead"
+const MAX_BACKEND_RESTART_ATTEMPTS = 5
+const BACKEND_RESTART_BASE_DELAY_MS = 1000
+const BACKEND_HEALTH_CHECK_INTERVAL_MS = 5000
+
+// Exponential backoff delay calculation
+function getRestartDelayMs(attempt) {
+  // 1s, 2s, 4s, 8s, 16s
+  return BACKEND_RESTART_BASE_DELAY_MS * Math.pow(2, attempt - 1)
+}
 
 // Keep window above all others by re-applying monitor level after any show operation
 function ensureTopmost(w) {
@@ -122,7 +141,9 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: false,
+      allowRunningInsecureContent: true
     }
   }
 
@@ -206,6 +227,65 @@ async function isBackendRunning() {
   } catch { return false }
 }
 
+// ==============================
+// BACKEND HEALTH CHECK & SUPERVISION
+// ==============================
+
+function notifyRendererBackendStatus(status, data = {}) {
+  backendStatus = status
+  if (win?.webContents) {
+    win.webContents.send("backend:status", { status, ...data })
+  }
+}
+
+function startHealthCheck() {
+  if (backendHealthCheckInterval) return
+  backendHealthCheckInterval = setInterval(async () => {
+    if (backendStopped) return
+    const isHealthy = await isBackendRunning()
+    if (!isHealthy && backendStatus === "ready") {
+      logger.warn("[Backend] Health check failed - backend appears down")
+      notifyRendererBackendStatus("error", { reason: "health_check_failed" })
+      // Trigger restart
+      if (!backendStopped && !backendProcess) {
+        logger.info("[Backend] Triggering restart after health check failure")
+        backendRestartAttempts++
+        if (backendRestartAttempts <= MAX_BACKEND_RESTART_ATTEMPTS) {
+          const delay = getRestartDelayMs(backendRestartAttempts)
+          logger.info(`[Backend] Restarting in ${delay}ms (attempt ${backendRestartAttempts}/${MAX_BACKEND_RESTART_ATTEMPTS})`)
+          setTimeout(() => startBackend(), delay)
+        } else {
+          logger.error("[Backend] Max restart attempts reached")
+          notifyRendererBackendStatus("dead", { reason: "max_restarts" })
+        }
+      }
+    } else if (isHealthy && backendStatus !== "ready") {
+      notifyRendererBackendStatus("ready")
+      backendRestartAttempts = 0 // Reset on successful health check
+    }
+  }, BACKEND_HEALTH_CHECK_INTERVAL_MS)
+  logger.info("[Backend] Health check started (every %dms)", BACKEND_HEALTH_CHECK_INTERVAL_MS)
+}
+
+function stopHealthCheck() {
+  if (backendHealthCheckInterval) {
+    clearInterval(backendHealthCheckInterval)
+    backendHealthCheckInterval = null
+    logger.info("[Backend] Health check stopped")
+  }
+}
+
+async function restartBackend() {
+  logger.info("[Backend] Manual restart requested")
+  backendRestartAttempts = 0 // Reset attempts for manual restart
+  backendStopped = false
+  if (backendProcess) {
+    backendProcess.kill()
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+  await startBackend()
+}
+
 function getPythonExecutable() {
   const isProd = app.isPackaged
 
@@ -248,8 +328,22 @@ function getPythonExecutable() {
 }
 
 async function startBackend() {
+  // If a user-initiated quit was requested, don't restart
+  if (backendStopped) return
+
+  // If a process exists but is actually dead, clear it so we can respawn
+  if (backendProcess && backendProcess.exitCode !== null && backendProcess.exitCode !== undefined) {
+    const pid = backendProcess.pid
+    try { process.kill(pid, 0) } catch {
+      // PID is dead or orphaned — clear the handle
+      logger.info("[Backend] Previous process %d is gone, clearing handle", pid)
+      backendProcess = null
+    }
+  }
+
   if (await isBackendRunning()) {
     logger.info("[Backend] Already running on port 8000, skipping spawn")
+    backendRestartAttempts = 0
     return
   }
 
@@ -282,6 +376,7 @@ async function startBackend() {
     spawnOpts.windowsHide = true
   }
 
+  notifyRendererBackendStatus("starting")
   logger.info(`[Backend] Starting: ${pythonExe} in ${backendDir}`)
 
   backendProcess = spawn(pythonExe, [
@@ -301,11 +396,39 @@ async function startBackend() {
 
   backendProcess.on("close", (code) => {
     logger.info("[Backend] Process exited with code %s", code)
+    backendProcess = null
+
+    // Don't restart if app is quitting or was intentionally stopped
+    if (backendStopped) return
+
+    // Unexpected crash — attempt restart with exponential backoff
+    backendRestartAttempts++
+    if (backendRestartAttempts <= MAX_BACKEND_RESTART_ATTEMPTS) {
+      const delay = getRestartDelayMs(backendRestartAttempts)
+      notifyRendererBackendStatus("error", {
+        reason: "crashed",
+        exitCode: code,
+        restartAttempt: backendRestartAttempts,
+        maxAttempts: MAX_BACKEND_RESTART_ATTEMPTS,
+        retryInMs: delay
+      })
+      logger.info(`[Backend] Restarting in ${delay}ms (attempt ${backendRestartAttempts}/${MAX_BACKEND_RESTART_ATTEMPTS})`)
+      setTimeout(() => {
+        startBackend()
+      }, delay)
+    } else {
+      logger.error("[Backend] Max restart attempts reached — giving up. Restart the app to retry.")
+      notifyRendererBackendStatus("dead", { reason: "max_restarts", exitCode: code })
+    }
   })
 
   backendProcess.on("error", (err) => {
     logger.error("[Backend] Spawn error: %s", err.message)
+    notifyRendererBackendStatus("error", { reason: "spawn_error", message: err.message })
   })
+
+  // Start health check monitoring
+  startHealthCheck()
 }
 
 // ==============================
@@ -389,6 +512,22 @@ ipcMain.handle("window:resize", (_event, width, height) => {
   }
 })
 
+// Backend supervision IPC handlers
+ipcMain.handle("backend:restart", async () => {
+  await restartBackend()
+  return { success: true }
+})
+
+ipcMain.handle("backend:status", async () => {
+  const isHealthy = await isBackendRunning()
+  return {
+    status: isHealthy ? "ready" : backendStatus,
+    processRunning: !!backendProcess,
+    restartAttempts: backendRestartAttempts,
+    maxAttempts: MAX_BACKEND_RESTART_ATTEMPTS
+  }
+})
+
 ipcMain.handle("window:restore", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (!w) return
@@ -407,11 +546,17 @@ ipcMain.handle("window:restore", () => {
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
   if (enabled) stealth.enable()
   else stealth.disable()
+  // Return both stealth mode AND capture protection state so renderer can sync accurately
   return { enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable() }
 })
 
 ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   stealth.setUndetectable(enabled)
+  // Clear screenshot buffer when entering stealth mode (privacy)
+  if (enabled) {
+    screenshotBuffer = []
+    logger.info("[Stealth] Screenshot buffer cleared for privacy")
+  }
   return { undetectable: stealth.isUndetectable() }
 })
 
@@ -481,12 +626,15 @@ ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, conten
   let actualFilters = filters
 
   if (encryptionKey) {
-    const key = crypto.scryptSync(encryptionKey, "salt", 32)
+    // Generate random salt for each encryption (unique per file)
+    const salt = crypto.randomBytes(16).toString("hex")
+    const key = crypto.scryptSync(encryptionKey, salt, 32)
     const iv = crypto.randomBytes(16)
     const cipher = crypto.createCipheriv("aes-256-cbc", key, iv)
     let encrypted = cipher.update(content, "utf8", "hex")
     encrypted += cipher.final("hex")
-    dataToSave = JSON.stringify({ iv: iv.toString("hex"), data: encrypted })
+    // Store salt, iv, and encrypted data - salt is needed for decryption
+    dataToSave = JSON.stringify({ salt: salt, iv: iv.toString("hex"), data: encrypted })
     actualFilters = filters.map(f => ({ ...f, name: f.name + " (Encrypted)" }))
   }
 
@@ -508,8 +656,110 @@ ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, conten
   }
 })
 
+// File import with optional decryption
+ipcMain.handle("dialog:import-file", async (_event, { filePath, encryptionKey }) => {
+  try {
+    const content = fs.readFileSync(filePath, "utf8")
+    const data = JSON.parse(content)
+
+    // Check if file is encrypted
+    if (data.salt && data.iv && data.data) {
+      if (!encryptionKey) {
+        return { error: "File is encrypted - password required" }
+      }
+      // Decrypt using stored salt and IV
+      const salt = data.salt
+      const iv = Buffer.from(data.iv, "hex")
+      const key = crypto.scryptSync(encryptionKey, salt, 32)
+      const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv)
+      let decrypted = decipher.update(data.data, "hex", "utf8")
+      decrypted += decipher.final("utf8")
+      return { content: decrypted }
+    }
+
+    // Not encrypted - return raw content
+    return { content: content }
+  } catch (err) {
+    logger.error("File import error:", err.message)
+    return { error: err.message }
+  }
+})
+
 // Platform info for renderer
 ipcMain.handle("app:platform", () => PLATFORM)
+
+// ======================================
+// SECURE API KEY STORAGE (P1 Privacy)
+// ======================================
+// Store API keys encrypted, never in .env
+ipcMain.handle("apiKey:save", (_event, { provider, apiKey }) => {
+  try {
+    apiKeyStore.set(`apiKey.${provider}`, apiKey)
+    logger.info(`[API Key] Saved encrypted key for provider: ${provider}`)
+    return { success: true }
+  } catch (err) {
+    logger.error("[API Key] Save error:", err.message)
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle("apiKey:get", (_event, provider) => {
+  try {
+    const key = apiKeyStore.get(`apiKey.${provider}`, null)
+    return { apiKey: key }
+  } catch (err) {
+    logger.error("[API Key] Get error:", err.message)
+    return { apiKey: null, error: err.message }
+  }
+})
+
+// HTTP endpoint for backend to request API keys
+const http = require("http")
+const API_KEY_SERVER_PORT = 18000 // Separate port for secure key exchange
+
+function startApiKeyServer() {
+  const server = http.createServer(async (req, res) => {
+    // Enable CORS for localhost only
+    res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:8000")
+    res.setHeader("Access-Control-Allow-Methods", "POST")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(200)
+      res.end()
+      return
+    }
+
+    if (req.method === "POST" && req.url === "/get-key") {
+      let body = ""
+      req.on("data", chunk => body += chunk)
+      req.on("end", () => {
+        try {
+          const { provider } = JSON.parse(body)
+          const apiKey = apiKeyStore.get(`apiKey.${provider}`, null)
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ apiKey }))
+          logger.info(`[API Key Server] Key requested for ${provider}, found: ${!!apiKey}`)
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+    } else {
+      res.writeHead(404)
+      res.end()
+    }
+  })
+
+  server.listen(API_KEY_SERVER_PORT, "127.0.0.1", () => {
+    logger.info(`[API Key Server] Running on port ${API_KEY_SERVER_PORT}`)
+  })
+}
+
+// Start the secure key server when app is ready
+app.whenReady().then(() => {
+  startApiKeyServer()
+})
 
 // ======================================
 // SCREENSHOT IPC HANDLERS
@@ -568,6 +818,19 @@ app.whenReady().then(async () => {
     callback(permission === "media")
   })
 
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    // Apply CSP to file:// protocol (renderer)
+    const headers = { ...details.responseHeaders }
+    headers["Content-Security-Policy"] = [
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src * ws: http:; media-src 'self' mediastream:"
+    ]
+    // Add CORS headers to allow localhost
+    headers["Access-Control-Allow-Origin"] = ["*"]
+    headers["Access-Control-Allow-Methods"] = ["GET, POST, PUT, DELETE, OPTIONS"]
+    headers["Access-Control-Allow-Headers"] = ["Content-Type, Authorization"]
+    callback({ responseHeaders: headers })
+  })
+
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     if (details.url.includes("file://")) {
       details.requestHeaders["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -579,6 +842,25 @@ app.whenReady().then(async () => {
 
   await startBackend()
   createWindow()
+
+  // Machine lock detection - clear sensitive data when screen locks
+  const { systemPreferences } = require("electron")
+  if (PLATFORM === "darwin") {
+    systemPreferences.subscribeNotification("com.apple.screenIsLocked", () => {
+      screenshotBuffer = []
+      logger.info("[Privacy] Screen locked - screenshot buffer cleared")
+    })
+  }
+  // Windows lock detection via power monitor
+  const { powerMonitor } = require("electron")
+  powerMonitor.on("lock-screen", () => {
+    screenshotBuffer = []
+    logger.info("[Privacy] Screen locked - screenshot buffer cleared")
+  })
+  powerMonitor.on("suspend", () => {
+    screenshotBuffer = []
+    logger.info("[Privacy] System suspended - screenshot buffer cleared")
+  })
 
   const savedStealthState = store.get("stealthState", false)
   if (savedStealthState) stealth.enable()
@@ -647,6 +929,8 @@ app.whenReady().then(async () => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll()
+  backendStopped = true  // prevent crash-restart loop during shutdown
+  stopHealthCheck()
   if (backendProcess) backendProcess.kill()
 })
 

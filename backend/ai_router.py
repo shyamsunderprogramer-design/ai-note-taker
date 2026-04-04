@@ -114,7 +114,7 @@ def get_model_candidates(user_input, requested_mode="auto"):
     return resolved_mode, candidates
 
 
-def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
+def build_prompt(user_input, mode="adaptive", style="concise", messages=None, include_rag=True):
     # Style-specific instructions
     if style == "concise":
         style_instruction = "2 sentences max."
@@ -134,6 +134,18 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
         history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
+    # Retrieve relevant document context if RAG is enabled
+    rag_block = ""
+    if include_rag:
+        try:
+            from document_store import get_document_store
+            doc_store = get_document_store()
+            rag_context = doc_store.format_context_for_prompt(user_input)
+            if rag_context:
+                rag_block = rag_context
+        except Exception as e:
+            logger.debug(f"RAG retrieval failed: {e}")
+
     base = f"""Slack message between two senior engineers.
 
 FORBIDDEN:
@@ -147,43 +159,43 @@ FORBIDDEN:
 
 Write like a text message. Plain paragraphs only.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "code":
         return f"""Senior engineer. Code when asked. Plain text only.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "reasoning":
         return f"""Senior engineer thinking. Plain text.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "fast":
         return f"""Senior engineer. Fast answer. Plain text.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "cloud":
         return f"""Senior engineer. Plain text answer.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "interview":
         return f"""Senior engineer. Technical. Plain text.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "universal":
         return f"""Senior engineer. Plain text answer.
 
-{history_block}Question: {user_input}
+{history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "summary":
