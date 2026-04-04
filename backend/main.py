@@ -36,6 +36,26 @@ from whisper_handler import (
     warmup,
 )
 
+# Cognitive Graph - Phase 1 Personal Knowledge Graph
+try:
+    from cognitive_graph import (
+        cognitive_graph,
+        initialize_graph,
+        ingest_conversation,
+        query_graph,
+        InterviewNode,
+        QuestionNode,
+        AnswerNode,
+        CompanyNode,
+        TopicNode,
+        SkillNode
+    )
+    COGNITIVE_GRAPH_AVAILABLE = True
+except ImportError:
+    COGNITIVE_GRAPH_AVAILABLE = False
+    logger = logging.getLogger("main")
+    logger.warning("[CognitiveGraph] Module not available. Run: pip install neo4j spacy")
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 app = FastAPI()
@@ -1395,3 +1415,165 @@ async def websocket_endpoint(ws: WebSocket):
         msg = await ws.receive_text()
         result = route_ai(msg, mode=CURRENT_MODE)
         await ws.send_text(clean_ai_output(result["response"]))
+
+
+# ======================================
+# COGNITIVE GRAPH API - Phase 1
+# Personal Knowledge Graph for Interview History
+# ======================================
+
+@app.get("/cognitive-graph/status")
+async def cognitive_graph_status():
+    """Check if Neo4j cognitive graph is available"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"available": False, "error": "Cognitive graph module not installed"}
+
+    try:
+        from cognitive_graph import get_driver
+        driver = get_driver()
+        if driver:
+            return {"available": True, "connected": True}
+        else:
+            return {"available": True, "connected": False, "error": "Neo4j not connected"}
+    except Exception as e:
+        return {"available": True, "connected": False, "error": str(e)}
+
+
+@app.post("/cognitive-graph/initialize")
+async def cognitive_graph_initialize():
+    """Initialize the cognitive graph schema"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    success = initialize_graph()
+    return {"initialized": success}
+
+
+@app.get("/cognitive-graph/search")
+async def cognitive_graph_search(q: str = Query(...), limit: int = Query(10)):
+    """Semantic search across interview history"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    results = query_graph(q)
+    return {"query": q, "results": results, "count": len(results)}
+
+
+@app.get("/cognitive-graph/history/{user_id}")
+async def cognitive_graph_history(user_id: str, limit: int = Query(100)):
+    """Get user's interview history from graph"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    history = cognitive_graph.get_interview_history(user_id, limit)
+    return {"user_id": user_id, "interviews": history}
+
+
+@app.get("/cognitive-graph/company/{company_name}")
+async def cognitive_graph_company_insights(company_name: str):
+    """Get insights about a company"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    insights = cognitive_graph.get_company_insights(company_name)
+    return {"company": company_name, "insights": insights}
+
+
+@app.get("/cognitive-graph/skill/{user_id}/{skill_name}")
+async def cognitive_graph_skill_progression(user_id: str, skill_name: str):
+    """Track user's progression on a specific skill"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    progression = cognitive_graph.get_skill_progression(user_id, skill_name)
+    return {"user_id": user_id, "skill": skill_name, "progression": progression}
+
+
+@app.post("/cognitive-graph/ingest/{conversation_id}")
+async def cognitive_graph_ingest(conversation_id: str, body: dict):
+    """Ingest a conversation into the cognitive graph"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    success = ingest_conversation(conversation_id, body)
+    return {"ingested": success, "conversation_id": conversation_id}
+
+
+@app.post("/cognitive-graph/interview")
+async def cognitive_graph_add_interview(body: dict):
+    """Add an interview to the cognitive graph"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    from datetime import datetime
+
+    interview = InterviewNode(
+        id=body.get("id", ""),
+        title=body.get("title", "Untitled"),
+        timestamp=datetime.fromisoformat(body.get("timestamp", datetime.now().isoformat())),
+        duration_ms=body.get("duration_ms", 0),
+        user_id=body.get("user_id", "default")
+    )
+
+    success = cognitive_graph.add_interview(interview)
+    return {"added": success, "interview_id": interview.id}
+
+
+# ======================================
+# ENTITY EXTRACTION API - Phase 1
+# NLP entity extraction for interview transcripts
+# ======================================
+
+try:
+    from entity_extraction import extract_entities, process_transcript, entity_extractor
+    ENTITY_EXTRACTION_AVAILABLE = True
+except ImportError:
+    ENTITY_EXTRACTION_AVAILABLE = False
+
+
+@app.post("/extract-entities")
+async def extract_entities_api(body: dict):
+    """Extract entities (companies, topics, skills) from text"""
+    if not ENTITY_EXTRACTION_AVAILABLE:
+        return {"error": "Entity extraction not available"}
+
+    text = body.get("text", "")
+    if not text:
+        return {"error": "No text provided"}
+
+    entities = extract_entities(text)
+    return {"text": text[:100] + "..." if len(text) > 100 else text, "entities": entities}
+
+
+@app.post("/process-transcript")
+async def process_transcript_api(body: dict):
+    """Process a transcript into Q&A pairs with extracted entities"""
+    if not ENTITY_EXTRACTION_AVAILABLE:
+        return {"error": "Entity extraction not available"}
+
+    transcript = body.get("transcript", "")
+    if not transcript:
+        return {"error": "No transcript provided"}
+
+    qa_pairs = process_transcript(transcript)
+    return {
+        "qa_pairs": qa_pairs,
+        "count": len(qa_pairs),
+        "transcript_length": len(transcript)
+    }
+
+
+@app.get("/extract/categorize")
+async def categorize_question_api(q: str = Query(...)):
+    """Categorize a question (technical, behavioral, system_design, knowledge)"""
+    if not ENTITY_EXTRACTION_AVAILABLE:
+        return {"error": "Entity extraction not available"}
+
+    category, confidence = entity_extractor.categorize_question(q)
+    difficulty, diff_conf = entity_extractor.estimate_difficulty(q)
+
+    return {
+        "question": q,
+        "category": {"label": category, "confidence": confidence},
+        "difficulty": {"label": difficulty, "confidence": diff_conf} if difficulty else None
+    }
