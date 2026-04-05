@@ -1,47 +1,69 @@
 # =========================
 # Python
 # =========================
+# Virtual environments
 AINT_Venv/
 venv/
-__pycache__/
-*.pyc
-*.pyo
+env/
+ENV/
+.venv/
 
-# =========================
-# Env files (secrets)
-# =========================
-.env
-backend/.env
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
 
 # =========================
 # Node / Electron
 # =========================
 node_modules/
 electron/node_modules/
+electron/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+package-lock.json
+electron/package-lock.json
 
 # =========================
 # Build / binaries
 # =========================
-dist/
-build/
 *.exe
 *.dll
 *.bin
 *.pak
+*.dmg
+*.AppImage
+*.deb
 
 # =========================
 # Logs
 # =========================
 *.log
+logs/
+server.log
+backend/server.log
+
+# =========================
+# Runtime files
+# =========================
+*.pid
+server.pid
+backend/server.pid
 
 # =========================
 # OS files
 # =========================
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
 
 # =========================
 # Temp files
@@ -50,30 +72,63 @@ temp_audio/
 temp_audio_test/
 electron-data/
 *.wav
+*.tmp
+.cache/
+
+# =========================
+# Neo4j Database (large data files)
+# =========================
+neo4j/neo4j-community/data/
+neo4j/neo4j-community/logs/
+neo4j/neo4j-community/run/
+
+# =========================
+# Backend data (user generated)
+# =========================
+backend/data/
+backend/uploads/
+backend/temp/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# =========================
+# Claude / AI Assistant
+# =========================
 .claude/
 
 # =========================
-# Competitive Analysis Docs (local only)
+# Testing
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# =========================
+# Documentation (local only)
+# =========================
+# Keep docs/ but ignore local planning docs
+*_PLAN.md
+TOMORROW_START.md
+2_MONTH_SPRINT.md
+START_HERE_*.md
+
+# =========================
+# Competitive Analysis (local only)
 # =========================
 COMPETITIVE_ANALYSIS.md
 COMPETITOR_*.md
 FEATURE_COMPARISON.md
 UNIQUE_FEATURES_*.md
-START_HERE_UNIQUE_FEATURES.md
-2_MONTH_SPRINT.md
-D:\Rep\ai-note-taker\2_MONTH_SPRINT.md
-D:\Rep\ai-note-taker\COMPETITIVE_ANALYSIS.md
-D:\Rep\ai-note-taker\COMPETITOR_CLUELY.md
-D:\Rep\ai-note-taker\COMPETITOR_FINALROUND_AI.md
-D:\Rep\ai-note-taker\COMPETITOR_GAP_ANALYSIS_MASTER.md
-D:\Rep\ai-note-taker\COMPETITOR_INTERVIEW_CODER.md
-D:\Rep\ai-note-taker\COMPETITOR_LOCKEDIN_AI.md
-D:\Rep\ai-note-taker\COMPETITOR_MEETING_TOOLS.md
-D:\Rep\ai-note-taker\FEATURE_COMPARISON.md
-D:\Rep\ai-note-taker\restart-app.bat
-D:\Rep\ai-note-taker\restart.ps1
-D:\Rep\ai-note-taker\START_HERE_UNIQUE_FEATURES.md
-D:\Rep\ai-note-taker\start-app.bat
-D:\Rep\ai-note-taker\start-app.ps1
-D:\Rep\ai-note-taker\UNIQUE_FEATURES_Q1_PLAN.md
-D:\Rep\ai-note-taker\UNIQUE_FEATURES_ROADMAP.md
+
+# =========================
+# Empty files
+# =========================
+EOF
