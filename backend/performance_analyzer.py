@@ -276,8 +276,8 @@ class PerformanceAnalyzer:
         code_blocks = 0
         language = None
         issues = []
-        complexity = 0.0
-        best_practices = 0.0
+        complexity_score = 0.0
+        best_practices_score = 0.0
 
         # Detect code blocks
         code_block_matches = re.findall(r'```[\s\S]*?```', text)
@@ -327,16 +327,13 @@ class PerformanceAnalyzer:
             for pattern, message in issue_patterns:
                 if re.search(pattern, text, re.IGNORECASE):
                     issues.append(message)
-        else:
-            complexity_score = 0.0
-            best_practices_score = 0.0
 
         return CodeQualityMetrics(
             has_code=has_code,
             code_blocks=code_blocks,
             language_detected=language,
-            complexity_score=min(complexity, 1.0),
-            best_practices_score=min(best_practices, 1.0),
+            complexity_score=min(complexity_score if has_code else 0.0, 1.0),
+            best_practices_score=min(best_practices_score if has_code else 0.0, 1.0),
             issues=issues
         )
 

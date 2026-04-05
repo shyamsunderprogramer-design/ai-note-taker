@@ -163,16 +163,20 @@ class RealtimeSuggestionEngine:
         if not COGNITIVE_GRAPH_AVAILABLE:
             return None
 
-        # Query cognitive graph for similar questions
-        similar = query_graph(segment.text)
+        try:
+            # Query cognitive graph for similar questions
+            similar = cognitive_graph.semantic_search(segment.text, limit=3)
 
-        if not similar:
-            # Try with extracted keywords
-            keywords = self._extract_keywords(segment.text)
-            if keywords:
-                similar = query_graph(" ".join(keywords))
+            if not similar:
+                # Try with extracted keywords
+                keywords = self._extract_keywords(segment.text)
+                if keywords:
+                    similar = cognitive_graph.semantic_search(" ".join(keywords), limit=3)
 
-        if not similar:
+            if not similar:
+                return None
+        except Exception as e:
+            logger.error(f"[RealtimeSuggestions] Error querying graph: {e}")
             return None
 
         # Get top match
@@ -313,6 +317,9 @@ class VoiceCommandProcessor:
         Returns:
             Dict with action type and data, or None if not a command
         """
+        if not COGNITIVE_GRAPH_AVAILABLE:
+            return None
+
         text_lower = text.lower().strip()
 
         # Check for search commands
@@ -320,12 +327,16 @@ class VoiceCommandProcessor:
             match = re.search(pattern, text_lower)
             if match:
                 query = match.group(1).strip()
-                results = query_graph(query)
-                return {
-                    "action": "search_results",
-                    "query": query,
-                    "results": results
-                }
+                try:
+                    results = cognitive_graph.semantic_search(query, limit=5)
+                    return {
+                        "action": "search_results",
+                        "query": query,
+                        "results": results
+                    }
+                except Exception as e:
+                    logger.error(f"[VoiceCommand] Search error: {e}")
+                    return {"action": "error", "message": "Search failed"}
 
         # Check for suggestion request
         for pattern in self.COMMAND_PATTERNS["suggest"]:
