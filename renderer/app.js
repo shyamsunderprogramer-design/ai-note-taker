@@ -5092,3 +5092,201 @@ init()
 // ==============================
 // ANALYTICS AND CRM EXTENSIONS
 // ==============================
+
+// ==============================
+// REAL-TIME SUGGESTIONS - Phase 2 Task #28
+// ==============================
+
+const suggestionsBtn = document.getElementById("suggestionsBtn")
+const suggestionsPanel = document.getElementById("suggestionsPanel")
+const closeSuggestionsBtn = document.getElementById("closeSuggestionsBtn")
+const suggestionsContent = document.getElementById("suggestionsContent")
+const confidenceSlider = document.getElementById("confidenceSlider")
+const confidenceValue = document.getElementById("confidenceValue")
+const clearSuggestionsBtn = document.getElementById("clearSuggestionsBtn")
+
+let suggestionsEnabled = false
+let suggestionsCooldown = false
+let suggestionHistory = []
+
+// Initialize suggestions feature
+function initSuggestions() {
+  if (!suggestionsBtn) return
+
+  // Show button (hidden by default until Phase 2 is ready)
+  suggestionsBtn.style.display = "inline-flex"
+
+  // Toggle panel
+  suggestionsBtn.addEventListener("click", () => {
+    suggestionsEnabled = !suggestionsEnabled
+    suggestionsBtn.classList.toggle("active", suggestionsEnabled)
+    suggestionsPanel.style.display = suggestionsEnabled ? "flex" : "none"
+
+    if (suggestionsEnabled) {
+      // Clear suggestions when opening
+      clearSuggestionsState()
+      showSuggestionsMessage("Listening for interview questions...")
+    }
+  })
+
+  // Close panel
+  closeSuggestionsBtn?.addEventListener("click", () => {
+    suggestionsEnabled = false
+    suggestionsBtn.classList.remove("active")
+    suggestionsPanel.style.display = "none"
+  })
+
+  // Confidence slider
+  confidenceSlider?.addEventListener("input", (e) => {
+    const value = e.target.value
+    confidenceValue.textContent = value + "%"
+    updateSuggestionConfig(value / 100)
+  })
+
+  // Clear history
+  clearSuggestionsBtn?.addEventListener("click", () => {
+    clearSuggestionsState()
+    showSuggestionsMessage("History cleared. Listening for questions...")
+  })
+}
+
+// Process transcript for suggestions (called from transcription handler)
+async function processTranscriptForSuggestions(text, speaker) {
+  if (!suggestionsEnabled || !text || text.length < 10) return
+
+  // Don't process during cooldown
+  if (suggestionsCooldown) return
+
+  try {
+    const response = await fetch(`${API_BASE}/realtime/process?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(speaker)}`)
+    const data = await response.json()
+
+    if (data.has_suggestion && data.suggestion) {
+      displaySuggestion(data.suggestion)
+      suggestionHistory.push(data.suggestion)
+
+      // Set cooldown
+      suggestionsCooldown = true
+      setTimeout(() => {
+        suggestionsCooldown = false
+      }, 10000) // 10 second cooldown
+    }
+  } catch (error) {
+    console.error("[Suggestions] Error processing transcript:", error)
+  }
+}
+
+// Display a suggestion card
+function displaySuggestion(suggestion) {
+  if (!suggestionsContent) return
+
+  const card = document.createElement("div")
+  card.className = `suggestion-card ${suggestion.confidence >= 0.8 ? 'high-confidence' : ''}`
+  card.innerHTML = `
+    <div class="suggestion-header">
+      <span class="suggestion-type">${suggestion.type.replace('_', ' ')}</span>
+      <span class="suggestion-confidence">${Math.round(suggestion.confidence * 100)}%</span>
+    </div>
+    <div class="suggestion-content">${formatSuggestionContent(suggestion.content)}</div>
+    ${suggestion.context?.company ? `
+      <div class="suggestion-meta">
+        From: ${suggestion.context.company} interview
+        ${suggestion.context.topics ? `• Topics: ${suggestion.context.topics.slice(0, 3).join(', ')}` : ''}
+      </div>
+    ` : ''}
+  `
+
+  // Insert at top
+  suggestionsContent.insertBefore(card, suggestionsContent.firstChild)
+
+  // Remove empty state if present
+  const emptyState = suggestionsContent.querySelector('.suggestions-empty')
+  if (emptyState) {
+    emptyState.remove()
+  }
+
+  // Limit to 10 suggestions
+  const cards = suggestionsContent.querySelectorAll('.suggestion-card')
+  if (cards.length > 10) {
+    cards[cards.length - 1].remove()
+  }
+
+  // Show notification dot on button
+  const dot = document.getElementById("suggestionsDot")
+  if (dot) {
+    dot.style.display = "block"
+    setTimeout(() => { dot.style.display = "none" }, 3000)
+  }
+}
+
+// Format suggestion content for display
+function formatSuggestionContent(content) {
+  // Convert markdown-style bold to HTML
+  return content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+}
+
+// Show message in suggestions panel
+function showSuggestionsMessage(message) {
+  if (!suggestionsContent) return
+  suggestionsContent.innerHTML = `<div class="suggestions-empty">${message}</div>`
+}
+
+// Clear suggestions state
+function clearSuggestionsState() {
+  suggestionHistory = []
+  if (suggestionsContent) {
+    suggestionsContent.innerHTML = ''
+  }
+  // Call API to clear server state
+  fetch(`${API_BASE}/realtime/clear`, { method: 'POST' }).catch(console.error)
+}
+
+// Update suggestion config on server
+async function updateSuggestionConfig(confidence) {
+  try {
+    await fetch(`${API_BASE}/realtime/configure?min_confidence=${confidence}`, {
+      method: 'POST'
+    })
+  } catch (error) {
+    console.error("[Suggestions] Error updating config:", error)
+  }
+}
+
+// Voice command handler
+async function processVoiceCommand(text) {
+  if (!text.toLowerCase().startsWith("hey ant") && !text.toLowerCase().startsWith("okay ant")) {
+    return null
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/realtime/command?text=${encodeURIComponent(text)}`)
+    const data = await response.json()
+
+    if (data.is_command) {
+      // Open suggestions panel if command found something
+      if (!suggestionsEnabled) {
+        suggestionsEnabled = true
+        suggestionsBtn?.classList.add("active")
+        suggestionsPanel.style.display = "flex"
+      }
+
+      // Display results
+      if (data.action === "search_results") {
+        showSuggestionsMessage(`Found ${data.data.results?.length || 0} results for "${data.data.query}"`)
+        // Could display results here
+      } else if (data.action === "suggestion") {
+        displaySuggestion(data.data.suggestion)
+      }
+
+      return data
+    }
+  } catch (error) {
+    console.error("[Suggestions] Voice command error:", error)
+  }
+
+  return null
+}
+
+// Initialize
+initSuggestions()
+console.log("[Suggestions] Phase 2 feature initialized")

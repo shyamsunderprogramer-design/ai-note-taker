@@ -228,6 +228,12 @@
         <span class="always-on-icon">&#127908;</span>
       </button>
 
+      <!-- Real-time suggestions toggle (Phase 2) -->
+      <button id="suggestionsBtn" class="suggestions-btn" type="button" title="Toggle interview suggestions" style="display:none;">
+        <span class="suggestions-dot" id="suggestionsDot" style="display:none"></span>
+        <span class="suggestions-icon">&#128161;</span>
+      </button>
+
     </div>
 
     <!-- ===== ROW 3: INPUT + ACTION ===== -->
@@ -252,6 +258,28 @@
           <span class="summarize-btn-label">Summarize</span>
         </button>
       </div>
+
+      <!-- Suggestions Panel (Phase 2) -->
+      <div id="suggestionsPanel" class="suggestions-panel" style="display:none;">
+        <div class="suggestions-header">
+          <span class="suggestions-title">&#128161; Suggestions</span>
+          <button id="closeSuggestionsBtn" class="close-suggestions-btn" type="button">&#10005;</button>
+        </div>
+        <div id="suggestionsContent" class="suggestions-content">
+          <div class="suggestions-empty">
+            Listening for interview questions...
+          </div>
+        </div>
+
+        <div class="suggestions-controls">
+          <div class="suggestions-confidence">
+            <label>Min Confidence: <span id="confidenceValue">60%</span></label>
+            <input type="range" id="confidenceSlider" min="0" max="100" value="60" class="confidence-slider">
+          </div>
+          <button id="clearSuggestionsBtn" class="clear-suggestions-btn">Clear History</button>
+        </div>
+      </div>
+
       <div class="chat-area" id="chatArea">
         <div class="chat-welcome" id="chatWelcome">
           <div class="welcome-icon">&#10022;</div>

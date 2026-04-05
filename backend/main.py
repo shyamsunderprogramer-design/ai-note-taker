@@ -1763,3 +1763,145 @@ async def get_cognitive_graph_stats():
         return {"stats": stats, "connected": bool(cognitive_graph.driver)}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ======================================
+# REAL-TIME SUGGESTIONS API - Phase 2 Task #28
+# Live interview assistance with contextual hints
+# ======================================
+
+try:
+    from realtime_suggestions import (
+        realtime_engine,
+        voice_processor,
+        process_transcript_segment,
+        process_voice_command
+    )
+    REALTIME_AVAILABLE = True
+except ImportError as e:
+    REALTIME_AVAILABLE = False
+    logger.warning(f"[Realtime] Module not available: {e}")
+
+
+@app.post("/realtime/process")
+async def process_realtime_segment(
+    text: str = Query(...),
+    speaker: str = Query(...),  # "user" or "interviewer"
+    conversation_id: Optional[str] = Query(None)
+):
+    """
+    Process a transcript segment and return suggestion if relevant.
+    Called every 3-5 seconds during live interview.
+    """
+    if not REALTIME_AVAILABLE:
+        return {"error": "Realtime suggestion engine not available"}
+
+    try:
+        suggestion = process_transcript_segment(text, speaker)
+
+        if suggestion:
+            return {
+                "has_suggestion": True,
+                "suggestion": {
+                    "id": suggestion.id,
+                    "type": suggestion.type,
+                    "content": suggestion.content,
+                    "confidence": suggestion.confidence,
+                    "relevance_score": suggestion.relevance_score,
+                    "context": suggestion.context
+                }
+            }
+
+        return {"has_suggestion": False}
+    except Exception as e:
+        logger.error(f"[Realtime] Error processing segment: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/realtime/command")
+async def process_voice_command_api(
+    text: str = Query(...),
+    conversation_id: Optional[str] = Query(None)
+):
+    """
+    Process a voice command from the user.
+    Commands like "What did I say about React?"
+    """
+    if not REALTIME_AVAILABLE:
+        return {"error": "Realtime suggestion engine not available"}
+
+    try:
+        result = process_voice_command(text)
+
+        if result:
+            return {
+                "is_command": True,
+                "action": result.get("action"),
+                "data": result
+            }
+
+        return {"is_command": False}
+    except Exception as e:
+        logger.error(f"[Realtime] Error processing command: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/realtime/suggestion-history")
+async def get_suggestion_history(
+    limit: int = Query(50)
+):
+    """Get history of suggestions shown during current session"""
+    if not REALTIME_AVAILABLE:
+        return {"error": "Realtime suggestion engine not available"}
+
+    try:
+        history = realtime_engine.get_suggestion_history(limit)
+        return {
+            "suggestions": [
+                {
+                    "id": s.id,
+                    "type": s.type,
+                    "content": s.content[:200],  # Truncate
+                    "confidence": s.confidence,
+                    "timestamp": s.timestamp.isoformat()
+                }
+                for s in history
+            ],
+            "count": len(history)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/realtime/configure")
+async def configure_suggestions(
+    min_confidence: float = Query(0.6),
+    cooldown_seconds: float = Query(10.0)
+):
+    """Configure realtime suggestion parameters"""
+    if not REALTIME_AVAILABLE:
+        return {"error": "Realtime suggestion engine not available"}
+
+    try:
+        realtime_engine.set_min_confidence(min_confidence)
+        realtime_engine.cooldown_seconds = cooldown_seconds
+        return {
+            "configured": True,
+            "min_confidence": min_confidence,
+            "cooldown_seconds": cooldown_seconds
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/realtime/clear")
+async def clear_suggestion_state():
+    """Clear buffer and suggestion history (call when starting new interview)"""
+    if not REALTIME_AVAILABLE:
+        return {"error": "Realtime suggestion engine not available"}
+
+    try:
+        realtime_engine.clear_buffer()
+        return {"cleared": True}
+    except Exception as e:
+        return {"error": str(e)}
