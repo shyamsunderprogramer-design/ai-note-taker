@@ -1905,3 +1905,89 @@ async def clear_suggestion_state():
         return {"cleared": True}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ======================================
+# CONVERSATION ANALYZER API - Phase 2 Task #30
+# Auto-categorization and quality analysis
+# ======================================
+
+try:
+    from conversation_analyzer import analyzer, analyze_conversation
+    ANALYZER_AVAILABLE = True
+except ImportError as e:
+    ANALYZER_AVAILABLE = False
+    logger.warning(f"[Analyzer] Module not available: {e}")
+
+
+@app.post("/analyze/conversation")
+async def analyze_conversation_api(
+    conversation: Dict
+):
+    """
+    Analyze a conversation for auto-tagging and quality metrics.
+    Returns conversation type, focus areas, quality scores, and recommendations.
+    """
+    if not ANALYZER_AVAILABLE:
+        return {"error": "Conversation analyzer not available"}
+
+    try:
+        analysis = analyze_conversation(conversation)
+        return analysis
+    except Exception as e:
+        logger.error(f"[Analyzer] Error analyzing conversation: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/analyze/batch")
+async def analyze_conversations_batch(
+    conversations: List[Dict]
+):
+    """Analyze multiple conversations in batch"""
+    if not ANALYZER_AVAILABLE:
+        return {"error": "Conversation analyzer not available"}
+
+    try:
+        results = []
+        for conv in conversations:
+            analysis = analyze_conversation(conv)
+            results.append({
+                "id": conv.get("id", "unknown"),
+                "title": conv.get("title", ""),
+                "tags": analysis["tags"],
+                "quality_tier": analysis["tags"]["quality_tier"],
+                "overall_score": analysis["quality_metrics"]["overall_score"]
+            })
+
+        return {
+            "analyzed": len(results),
+            "results": results
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/analyze/types")
+async def get_conversation_types():
+    """Get list of supported conversation types"""
+    if not ANALYZER_AVAILABLE:
+        return {"error": "Conversation analyzer not available"}
+
+    try:
+        return {
+            "types": [
+                {"id": "practice_session", "label": "Practice Session", "description": "Self-study or preparation"},
+                {"id": "mock_interview", "label": "Mock Interview", "description": "Simulated interview with feedback"},
+                {"id": "real_interview", "label": "Real Interview", "description": "Actual company interview"}
+            ],
+            "focus_areas": [
+                {"id": "system_design_focus", "label": "System Design"},
+                {"id": "algorithm_heavy", "label": "Algorithms"},
+                {"id": "behavioral_only", "label": "Behavioral"},
+                {"id": "frontend_focus", "label": "Frontend"},
+                {"id": "backend_focus", "label": "Backend"},
+                {"id": "fullstack_focus", "label": "Fullstack"}
+            ]
+        }
+    except Exception as e:
+        return {"error": str(e)}
