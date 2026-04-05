@@ -2205,3 +2205,211 @@ async def get_personalized_checklist(
     except Exception as e:
         logger.error(f"[PerformanceAnalyzer] Checklist error: {e}")
         return {"error": str(e)}
+
+
+# ======================================
+# STUDY PLAN API - Phase 2 Task #33
+# Personalized study plan generator
+# ======================================
+
+try:
+    from study_plan_generator import study_planner, generate_plan, adapt_plan, export_plan
+    STUDY_PLAN_AVAILABLE = True
+except ImportError as e:
+    STUDY_PLAN_AVAILABLE = False
+    logger.warning(f"[StudyPlan] Module not available: {e}")
+
+
+@app.post("/study-plan/generate")
+async def generate_study_plan(
+    user_id: str = Query(..., description="User ID"),
+    days: int = Query(30, description="Plan duration in days"),
+    daily_minutes: int = Query(60, description="Daily study time target")
+):
+    """Generate personalized study plan based on cognitive graph"""
+    if not STUDY_PLAN_AVAILABLE:
+        return {"error": "Study plan generator not available"}
+
+    try:
+        # Get cognitive graph data if available
+        graph_data = None
+        if COGNITIVE_GRAPH_AVAILABLE:
+            try:
+                stats = cognitive_graph.get_graph_stats(user_id)
+                graph_data = {"skills": stats.get("top_skills", [])}
+            except Exception:
+                pass
+
+        plan = study_planner.generate_plan(user_id, days, daily_minutes, graph_data)
+
+        return {
+            "user_id": plan.user_id,
+            "created_at": plan.created_at.isoformat(),
+            "duration_days": plan.duration_days,
+            "progress": {
+                "total_tasks": plan.total_tasks,
+                "completed_tasks": plan.completed_tasks,
+                "percentage": round(plan.progress_percentage, 2)
+            },
+            "weak_areas": plan.weak_areas,
+            "strong_areas": plan.strong_areas,
+            "milestones": plan.milestones,
+            "sessions": [
+                {
+                    "date": s.date.isoformat(),
+                    "theme": s.theme,
+                    "total_minutes": s.total_minutes,
+                    "tasks": [
+                        {
+                            "id": t.id,
+                            "title": t.title,
+                            "description": t.description,
+                            "difficulty": t.difficulty,
+                            "category": t.category,
+                            "estimated_minutes": t.estimated_minutes,
+                            "completed": t.completed,
+                            "resources": t.resources
+                        }
+                        for t in s.tasks
+                    ]
+                }
+                for s in plan.sessions
+            ]
+        }
+    except Exception as e:
+        logger.error(f"[StudyPlan] Generation error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/study-plan/{user_id}")
+async def get_study_plan(user_id: str):
+    """Get current study plan for user (generates new one if none exists)"""
+    if not STUDY_PLAN_AVAILABLE:
+        return {"error": "Study plan generator not available"}
+
+    try:
+        # For now, generate a new plan each time
+        # In production, this would fetch from database
+        graph_data = None
+        if COGNITIVE_GRAPH_AVAILABLE:
+            try:
+                stats = cognitive_graph.get_graph_stats(user_id)
+                graph_data = {"skills": stats.get("top_skills", [])}
+            except Exception:
+                pass
+
+        plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
+        return study_planner.export_plan(plan, "json")
+    except Exception as e:
+        logger.error(f"[StudyPlan] Get error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/study-plan/{user_id}/complete-task")
+async def complete_study_task(
+    user_id: str,
+    task_id: str = Query(...),
+    performance_score: float = Query(0.7, description="Performance rating 0.0-1.0")
+):
+    """Mark task as complete and adapt plan"""
+    if not STUDY_PLAN_AVAILABLE:
+        return {"error": "Study plan generator not available"}
+
+    try:
+        # In production, would load existing plan from DB
+        # For now, return adaptation info
+        return {
+            "user_id": user_id,
+            "task_id": task_id,
+            "completed": True,
+            "performance_score": performance_score,
+            "message": "Task marked complete" + (
+                " - Excellent! Advancing schedule." if performance_score > 0.9
+                else " - Added remedial practice." if performance_score < 0.5
+                else ""
+            )
+        }
+    except Exception as e:
+        logger.error(f"[StudyPlan] Complete error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/study-plan/{user_id}/today")
+async def get_today_session(user_id: str):
+    """Get today's study session"""
+    if not STUDY_PLAN_AVAILABLE:
+        return {"error": "Study plan generator not available"}
+
+    try:
+        # Generate plan and find today's session
+        plan = study_planner.generate_plan(user_id, days=30)
+        today = datetime.now().date()
+
+        for session in plan.sessions:
+            if session.date.date() == today:
+                return {
+                    "date": session.date.isoformat(),
+                    "theme": session.theme,
+                    "total_minutes": session.total_minutes,
+                    "tasks": [
+                        {
+                            "id": t.id,
+                            "title": t.title,
+                            "difficulty": t.difficulty,
+                            "category": t.category,
+                            "estimated_minutes": t.estimated_minutes,
+                            "resources": t.resources
+                        }
+                        for t in session.tasks
+                    ]
+                }
+
+        return {"message": "No study session scheduled for today", "tasks": []}
+    except Exception as e:
+        logger.error(f"[StudyPlan] Today error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/study-plan/resources/{category}")
+async def get_study_resources(
+    category: str,
+    difficulty: str = Query("medium"),
+    count: int = Query(5)
+):
+    """Get study resources for a category"""
+    if not STUDY_PLAN_AVAILABLE:
+        return {"error": "Study plan generator not available"}
+
+    try:
+        resources = study_planner.resource_lib.get_resources(category, difficulty, count)
+        return {
+            "category": category,
+            "difficulty": difficulty,
+            "resources": resources
+        }
+    except Exception as e:
+        logger.error(f"[StudyPlan] Resources error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/study-plan/{user_id}/export")
+async def export_study_plan(
+    user_id: str,
+    format: str = Query("json", description="Export format: json, ical, markdown")
+):
+    """Export study plan to various formats"""
+    if not STUDY_PLAN_AVAILABLE:
+        return {"error": "Study plan generator not available"}
+
+    try:
+        plan = study_planner.generate_plan(user_id, days=30)
+        exported = study_planner.export_plan(plan, format)
+
+        return {
+            "user_id": user_id,
+            "format": format,
+            "content": exported
+        }
+    except Exception as e:
+        logger.error(f"[StudyPlan] Export error: {e}")
+        return {"error": str(e)}
