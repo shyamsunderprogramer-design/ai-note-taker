@@ -2299,7 +2299,9 @@ async def get_study_plan(user_id: str):
                 pass
 
         plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
-        return study_planner.export_plan(plan, "json")
+        # export_plan returns JSON string, parse it to return as dict
+        import json
+        return json.loads(study_planner.export_plan(plan, "json"))
     except Exception as e:
         logger.error(f"[StudyPlan] Get error: {e}")
         return {"error": str(e)}

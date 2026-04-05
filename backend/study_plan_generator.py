@@ -787,12 +787,25 @@ class StudyPlanGenerator:
         }
         return json.dumps(data, indent=2)
 
+    def _escape_ical_text(self, text: str) -> str:
+        """Escape special characters for iCal format"""
+        # Escape backslash, newline, comma, semicolon, colon
+        return (text
+                .replace("\\", "\\\\")
+                .replace("\n", "\\n")
+                .replace("\r", "")
+                .replace(",", "\\,")
+                .replace(";", "\\;")
+                .replace(":", "\\:"))
+
     def _to_ical(self, plan: StudyPlan) -> str:
         """Convert plan to iCal format for calendar import"""
         lines = [
             "BEGIN:VCALENDAR",
             "VERSION:2.0",
-            "PRODID:-//AI Note Taker//Study Plan//EN"
+            "PRODID:-//AI Note Taker//Study Plan//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH"
         ]
 
         for session in plan.sessions:
@@ -802,9 +815,11 @@ class StudyPlanGenerator:
                     "BEGIN:VEVENT",
                     f"UID:{task.id}@ainotetaker.local",
                     f"DTSTART;VALUE=DATE:{date_str}",
-                    f"SUMMARY:{task.title}",
-                    f"DESCRIPTION:{task.description}",
+                    f"DTEND;VALUE=DATE:{date_str}",
+                    f"SUMMARY:{self._escape_ical_text(task.title)}",
+                    f"DESCRIPTION:{self._escape_ical_text(task.description)}",
                     f"CATEGORIES:{task.category}",
+                    f"DTSTAMP:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}",
                     "END:VEVENT"
                 ])
 

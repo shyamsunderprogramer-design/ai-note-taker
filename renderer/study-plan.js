@@ -30,7 +30,7 @@ class StudyPlanManager {
   async loadPlan() {
     try {
       const response = await fetch(`${API_BASE}/study-plan/${DEFAULT_USER_ID}`);
-      const data = JSON.parse(await response.json());
+      const data = await response.json();
 
       if (data.error || !data.sessions || data.sessions.length === 0) {
         this.showEmptyState();
