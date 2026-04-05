@@ -3521,6 +3521,9 @@ appMenu.addEventListener("click", async (e) => {
   else if (action === "pre-interview") {
     window.location.href = 'pre-interview.html'
   }
+  else if (action === "analytics") {
+    window.location.href = 'analytics-dashboard.html'
+  }
   else if (action === "logs") {
     window.api.openLogs()
   }

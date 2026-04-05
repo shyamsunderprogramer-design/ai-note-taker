@@ -1991,3 +1991,110 @@ async def get_conversation_types():
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+# ======================================
+# ANALYTICS API - Phase 2 Task #31
+# Graph analytics dashboard data
+# ======================================
+
+try:
+    from analytics_engine import analytics, get_skill_progression, get_dashboard_data
+    ANALYTICS_AVAILABLE = True
+except ImportError as e:
+    ANALYTICS_AVAILABLE = False
+    logger.warning(f"[Analytics] Module not available: {e}")
+
+
+@app.get("/analytics/skill-progression/{user_id}")
+async def get_skill_progression_api(
+    user_id: str,
+    skill: str = Query(...),
+    months: int = Query(6)
+):
+    """Get skill progression over time for charting"""
+    if not ANALYTICS_AVAILABLE:
+        return {"error": "Analytics engine not available"}
+
+    try:
+        data = analytics.get_skill_progression(user_id, skill, months)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/analytics/company-comparison")
+async def compare_companies(
+    companies: List[str] = Query(...)
+):
+    """Compare interview patterns across companies (heatmap data)"""
+    if not ANALYTICS_AVAILABLE:
+        return {"error": "Analytics engine not available"}
+
+    try:
+        data = analytics.get_company_comparison(companies)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/analytics/topic-network/{user_id}")
+async def get_topic_network_api(
+    user_id: str,
+    min_connections: int = Query(2)
+):
+    """Get topic co-occurrence network for D3.js visualization"""
+    if not ANALYTICS_AVAILABLE:
+        return {"error": "Analytics engine not available"}
+
+    try:
+        data = analytics.get_topic_network(user_id, min_connections)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/analytics/interview-calendar/{user_id}")
+async def get_interview_calendar_api(
+    user_id: str,
+    months: int = Query(6)
+):
+    """Get interview frequency data for calendar heatmap"""
+    if not ANALYTICS_AVAILABLE:
+        return {"error": "Analytics engine not available"}
+
+    try:
+        data = analytics.get_interview_calendar(user_id, months)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/analytics/performance-trends/{user_id}")
+async def get_performance_trends_api(
+    user_id: str
+):
+    """Get overall performance trends (improving/declining/stable skills)"""
+    if not ANALYTICS_AVAILABLE:
+        return {"error": "Analytics engine not available"}
+
+    try:
+        data = analytics.get_performance_trends(user_id)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/analytics/dashboard/{user_id}")
+async def get_dashboard_summary_api(
+    user_id: str
+):
+    """Get dashboard summary with key metrics"""
+    if not ANALYTICS_AVAILABLE:
+        return {"error": "Analytics engine not available"}
+
+    try:
+        data = analytics.get_dashboard_summary(user_id)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
