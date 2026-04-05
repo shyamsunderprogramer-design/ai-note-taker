@@ -2005,6 +2005,14 @@ except ImportError as e:
     ANALYTICS_AVAILABLE = False
     logger.warning(f"[Analytics] Module not available: {e}")
 
+# Performance Analyzer - Phase 2 Task #32
+try:
+    from performance_analyzer import analyzer as performance_analyzer
+    PERFORMANCE_ANALYZER_AVAILABLE = True
+except ImportError as e:
+    PERFORMANCE_ANALYZER_AVAILABLE = False
+    logger.warning(f"[PerformanceAnalyzer] Module not available: {e}")
+
 
 @app.get("/analytics/skill-progression/{user_id}")
 async def get_skill_progression_api(
@@ -2097,4 +2105,103 @@ async def get_dashboard_summary_api(
         data = analytics.get_dashboard_summary(user_id)
         return data
     except Exception as e:
+        return {"error": str(e)}
+
+
+# ======================================
+# PERFORMANCE ANALYZER API - Phase 2 Task #32
+# Interview answer analysis and insights
+# ======================================
+
+@app.post("/performance/analyze")
+async def analyze_answer_performance(
+    answer_text: str = Query(..., description="The answer text to analyze"),
+    question_type: str = Query("behavioral", description="Type: behavioral, technical, system_design")
+):
+    """Analyze an interview answer for STAR method, code quality, speaking patterns"""
+    if not PERFORMANCE_ANALYZER_AVAILABLE:
+        return {"error": "Performance analyzer not available"}
+
+    try:
+        result = performance_analyzer.analyze_answer(answer_text, question_type)
+        return result
+    except Exception as e:
+        logger.error(f"[PerformanceAnalyzer] Error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/performance/analyze-batch")
+async def analyze_batch_answers(
+    answers: List[dict]
+):
+    """Analyze multiple answers in batch"""
+    if not PERFORMANCE_ANALYZER_AVAILABLE:
+        return {"error": "Performance analyzer not available"}
+
+    try:
+        results = [
+            performance_analyzer.analyze_answer(
+                a.get("text", ""),
+                a.get("type", "behavioral")
+            )
+            for a in answers
+        ]
+        return {"results": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"[PerformanceAnalyzer] Batch error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/performance/tiers")
+async def get_quality_tiers():
+    """Get quality tier thresholds and descriptions"""
+    return {
+        "excellent": {"min_score": 80, "description": "Excellent answer quality"},
+        "good": {"min_score": 65, "description": "Good with minor improvements needed"},
+        "average": {"min_score": 50, "description": "Average, significant improvements possible"},
+        "needs_improvement": {"min_score": 0, "description": "Needs substantial improvement"}
+    }
+
+
+@app.get("/performance/checklist/{user_id}")
+async def get_personalized_checklist(
+    user_id: str = Query(...),
+    question_type: str = Query("behavioral")
+):
+    """Get personalized interview performance checklist based on cognitive graph"""
+    if not PERFORMANCE_ANALYZER_AVAILABLE or not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Performance analyzer or cognitive graph not available"}
+
+    try:
+        # Get user's skill data from cognitive graph
+        skill_data = cognitive_graph.get_user_skills(user_id)
+
+        checklist = {
+            "star_method": {
+                "situation": "Set the context - describe the scenario clearly",
+                "task": "Define your specific responsibility or challenge",
+                "action": "Detail what YOU did (use 'I' not 'we')",
+                "result": "Quantify outcomes (e.g., 'reduced latency by 40%')"
+            },
+            "speaking": {
+                "pace": "Aim for 15-25 words per sentence",
+                "fillers": "Minimize um, uh, like, you know",
+                "clarity": "Pause between key points"
+            },
+            "technical": {
+                "examples": "Provide concrete code examples",
+                "complexity": "Discuss time/space complexity",
+                "edge_cases": "Mention error handling and edge cases",
+                "best_practices": "Reference testing, documentation"
+            }
+        }
+
+        # Customize based on user's common weaknesses from graph
+        if skill_data:
+            weak_areas = [s for s in skill_data if s.get("confidence", 1.0) < 0.5]
+            checklist["focus_areas"] = [s.get("name") for s in weak_areas[:3]]
+
+        return {"checklist": checklist, "user_id": user_id}
+    except Exception as e:
+        logger.error(f"[PerformanceAnalyzer] Checklist error: {e}")
         return {"error": str(e)}
