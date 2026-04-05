@@ -2165,7 +2165,7 @@ async def get_quality_tiers():
 
 @app.get("/performance/checklist/{user_id}")
 async def get_personalized_checklist(
-    user_id: str = Query(...),
+    user_id: str,
     question_type: str = Query("behavioral")
 ):
     """Get personalized interview performance checklist based on cognitive graph"""
