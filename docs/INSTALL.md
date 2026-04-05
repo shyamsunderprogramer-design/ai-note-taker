@@ -1,6 +1,6 @@
 # Installation Guide
 
-Complete installation guide for AI Note Taker.
+Complete installation guide for ANT (AI Note Taker).
 
 ---
 

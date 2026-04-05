@@ -80,7 +80,7 @@ function createTray() {
 
   const icon = createTrayIcon()
   _tray = new Tray(icon)
-  _tray.setToolTip("AI Note Taker — Click to restore")
+  _tray.setToolTip("ANT (AI Note Taker) — Click to restore")
 
   const contextMenu = Menu.buildFromTemplate([
     {

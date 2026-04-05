@@ -1,4 +1,4 @@
-# AI Note Taker (ANT)
+# ANT (AI Note Taker)
 
 **A privacy-first AI notepad that runs entirely on your machine.**
 

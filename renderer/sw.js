@@ -1,5 +1,5 @@
 /**
- * Service Worker for AI Note Taker PWA
+ * Service Worker for ANT (AI Note Taker) PWA
  * Provides offline capability and caching
  */
 

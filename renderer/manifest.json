@@ -1,5 +1,5 @@
 {
-  "name": "AI Note Taker",
+  "name": "ANT (AI Note Taker)",
   "short_name": "ANT",
   "description": "AI-powered voice note taker with local transcription",
   "start_url": "/",
