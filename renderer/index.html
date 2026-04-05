@@ -740,41 +740,85 @@
     </div>
   </div>
 
-  <!-- App menu (triggered by menuBtn) -->
+  <!-- Enhanced App Menu -->
   <div class="app-menu" id="appMenu">
-    <div class="app-menu-item" data-action="settings">
-      <span class="app-menu-icon">&#9881;</span>
-      <span>Settings</span>
+    <!-- Section: Conversation -->
+    <div class="app-menu-section">
+      <div class="app-menu-section-title">Conversation</div>
+      <div class="app-menu-item" data-action="new-chat">
+        <span class="app-menu-icon">&#9997;</span>
+        <span>New Chat</span>
+        <kbd class="app-menu-shortcut">Ctrl+N</kbd>
+      </div>
+      <div class="app-menu-item" data-action="history">
+        <span class="app-menu-icon">&#8634;</span>
+        <span>History</span>
+      </div>
+      <div class="app-menu-item" data-action="export">
+        <span class="app-menu-icon">&#129093;</span>
+        <span>Export</span>
+      </div>
+      <div class="app-menu-item" data-action="clear">
+        <span class="app-menu-icon">&#10005;</span>
+        <span>Clear Chat</span>
+      </div>
     </div>
-    <div class="app-menu-item" data-action="shortcuts">
-      <span class="app-menu-icon">&#9003;</span>
-      <span>Keyboard Shortcuts</span>
+
+    <!-- Section: Features -->
+    <div class="app-menu-section">
+      <div class="app-menu-section-title">Features</div>
+      <div class="app-menu-item" data-action="cognitive-graph">
+        <span class="app-menu-icon">&#129504;</span>
+        <span>Cognitive Graph</span>
+      </div>
+      <div class="app-menu-item" data-action="pre-interview">
+        <span class="app-menu-icon">&#128302;</span>
+        <span>Pre-Interview Prep</span>
+      </div>
+      <div class="app-menu-item" data-action="analytics">
+        <span class="app-menu-icon">&#128200;</span>
+        <span>Analytics Dashboard</span>
+      </div>
+      <div class="app-menu-item" data-action="study-plan">
+        <span class="app-menu-icon">&#127891;</span>
+        <span>Study Plan</span>
+      </div>
     </div>
-    <div class="app-menu-item" data-action="about">
-      <span class="app-menu-icon">&#9432;</span>
-      <span>About</span>
+
+    <!-- Section: Tools -->
+    <div class="app-menu-section">
+      <div class="app-menu-section-title">Tools</div>
+      <div class="app-menu-item" data-action="settings">
+        <span class="app-menu-icon">&#9881;</span>
+        <span>Settings</span>
+      </div>
+      <div class="app-menu-item" data-action="shortcuts">
+        <span class="app-menu-icon">&#9003;</span>
+        <span>Keyboard Shortcuts</span>
+      </div>
+      <div class="app-menu-item" data-action="logs">
+        <span class="app-menu-icon">&#128196;</span>
+        <span>Open Logs</span>
+      </div>
     </div>
-    <div class="app-menu-item" data-action="cognitive-graph">
-      <span class="app-menu-icon">&#129504;</span>
-      <span>Cognitive Graph</span>
+
+    <!-- Section: About -->
+    <div class="app-menu-section">
+      <div class="app-menu-item" data-action="about">
+        <span class="app-menu-icon">&#9432;</span>
+        <span>About ANT</span>
+      </div>
+      <div class="app-menu-item danger" data-action="quit">
+        <span class="app-menu-icon">&#10006;</span>
+        <span>Quit</span>
+        <kbd class="app-menu-shortcut">Alt+F4</kbd>
+      </div>
     </div>
-    <div class="app-menu-item" data-action="pre-interview">
-      <span class="app-menu-icon">&#128302;</span>
-      <span>Pre-Interview Prep</span>
-    </div>
-    <div class="app-menu-item" data-action="analytics">
-      <span class="app-menu-icon">&#128200;</span>
-      <span>Analytics Dashboard</span>
-    </div>
-    <div class="app-menu-separator"></div>
-    <div class="app-menu-item" data-action="logs">
-      <span class="app-menu-icon">&#128196;</span>
-      <span>Open Logs</span>
-    </div>
-    <div class="app-menu-separator"></div>
-    <div class="app-menu-item danger" data-action="quit">
-      <span class="app-menu-icon">&#10006;</span>
-      <span>Quit</span>
+
+    <!-- Recent Conversations (populated dynamically) -->
+    <div class="app-menu-section" id="recentConversationsSection" style="display: none;">
+      <div class="app-menu-section-title">Recent</div>
+      <div id="recentConversationsList"></div>
     </div>
   </div>
 

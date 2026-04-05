@@ -2945,7 +2945,7 @@ select option {
 .msg-read-btn:hover { border-color: var(--line-bright); color: var(--text-main); background: var(--surface-hover); }
 
 /* ==============================
-   APP MENU (gear menu)
+   APP MENU (Enhanced)
    ============================== */
 .app-menu {
   position: absolute;
@@ -2954,36 +2954,117 @@ select option {
   background: rgba(22, 27, 44, 0.98);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 6px;
+  padding: 8px;
   z-index: 900;
   display: none;
-  min-width: 190px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 220px;
+  max-width: 280px;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
-.app-menu.open { display: block; }
+.app-menu.open { display: block; animation: menu-in 0.15s ease; }
 
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Menu Section */
+.app-menu-section {
+  margin-bottom: 4px;
+}
+.app-menu-section:last-child {
+  margin-bottom: 0;
+}
+
+.app-menu-section-title {
+  padding: 8px 12px 4px;
+  font-size: 0.714em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+/* Menu Item */
 .app-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.929em;
+  font-size: 0.857em;
   color: var(--text-main);
-  transition: background 0.12s;
+  transition: all 0.12s ease;
+  position: relative;
 }
-.app-menu-item:hover { background: var(--surface-hover); }
-.app-menu-item.danger { color: var(--danger); }
-.app-menu-item.danger:hover { background: var(--danger-dim); }
+.app-menu-item:hover {
+  background: var(--surface-hover);
+}
+.app-menu-item:active {
+  transform: scale(0.98);
+}
+.app-menu-item.danger {
+  color: var(--danger);
+}
+.app-menu-item.danger:hover {
+  background: var(--danger-dim);
+}
 
 .app-menu-icon {
   font-size: clamp(10px, 1em, 16px);
-  opacity: 0.7;
-  width: 18px;
+  opacity: 0.8;
+  width: 20px;
   text-align: center;
+  flex-shrink: 0;
 }
 
+/* Keyboard Shortcut */
+.app-menu-shortcut {
+  margin-left: auto;
+  padding: 2px 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.714em;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-weight: 500;
+}
+
+/* Recent Conversation Item */
+.app-menu-conversation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.786em;
+  color: var(--text-main);
+  transition: all 0.12s ease;
+}
+.app-menu-conversation:hover {
+  background: var(--surface-hover);
+}
+.app-menu-conversation-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-menu-conversation-time {
+  font-size: 0.786em;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+/* Legacy separator (for backward compatibility) */
 .app-menu-separator {
   height: 1px;
   background: var(--line);
