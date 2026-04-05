@@ -11,6 +11,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import uuid
 
 logger = logging.getLogger("cognitive_graph")
 
@@ -29,8 +30,14 @@ def get_driver():
             uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
             user = os.getenv("NEO4J_USER", "neo4j")
             password = os.getenv("NEO4J_PASSWORD", "password")
+            auth_enabled = os.getenv("NEO4J_AUTH_ENABLED", "false").lower() == "true"
 
-            _driver = GraphDatabase.driver(uri, auth=(user, password))
+            if auth_enabled:
+                _driver = GraphDatabase.driver(uri, auth=(user, password))
+            else:
+                # Auth disabled mode - no credentials needed
+                _driver = GraphDatabase.driver(uri)
+
             logger.info(f"[CognitiveGraph] Connected to Neo4j at {uri}")
         except ImportError:
             logger.error("[CognitiveGraph] neo4j Python package not installed. Run: pip install neo4j")
@@ -319,32 +326,169 @@ class CognitiveGraph:
             return False
 
     def semantic_search(self, query: str, limit: int = 10) -> List[Dict]:
-        """Search for related questions/answers by concept"""
+        """Search for related questions/answers by concept with fuzzy matching"""
         if not self.driver:
             return []
 
-        # Simple keyword-based search (can be enhanced with embeddings)
+        # Enhanced search with multiple strategies
+        # Strategy 1: Exact match on text content
+        # Strategy 2: Match on related topics
+        # Strategy 3: Match on skills demonstrated
+        # Strategy 4: Match on company name
+
         cypher = """
-        MATCH (q:Question)-[:ANSWERED_WITH]->(a:Answer)
-        WHERE q.text CONTAINS $keyword
-           OR a.text CONTAINS $keyword
-           OR a.transcript CONTAINS $keyword
+        // Search across multiple fields with scoring
+        CALL {
+            // Search in question text
+            MATCH (q:Question)-[:ANSWERED_WITH]->(a:Answer)
+            WHERE q.text CONTAINS $keyword
+            WITH q, a, 10 as score
+            RETURN q, a, score
+            UNION
+            // Search in answer text
+            MATCH (q:Question)-[:ANSWERED_WITH]->(a:Answer)
+            WHERE a.text CONTAINS $keyword
+            WITH q, a, 8 as score
+            RETURN q, a, score
+            UNION
+            // Search in transcript
+            MATCH (q:Question)-[:ANSWERED_WITH]->(a:Answer)
+            WHERE a.transcript CONTAINS $keyword
+            WITH q, a, 6 as score
+            RETURN q, a, score
+            UNION
+            // Search by topic
+            MATCH (t:Topic)
+            WHERE t.name CONTAINS $keyword
+            MATCH (t)<-[:RELATED_TO]-(q:Question)-[:ANSWERED_WITH]->(a:Answer)
+            WITH q, a, 9 as score
+            RETURN q, a, score
+            UNION
+            // Search by company
+            MATCH (c:Company)
+            WHERE c.name CONTAINS $keyword
+            MATCH (c)<-[:ASKED_BY]-(q:Question)-[:ANSWERED_WITH]->(a:Answer)
+            WITH q, a, 7 as score
+            RETURN q, a, score
+            UNION
+            // Search by skill
+            MATCH (s:Skill)
+            WHERE s.name CONTAINS $keyword
+            MATCH (s)<-[:DEMONSTRATES]-(a:Answer)<-[:ANSWERED_WITH]-(q:Question)
+            WITH q, a, 8 as score
+            RETURN q, a, score
+        }
+        WITH q, a, max(score) as relevance
+        ORDER BY relevance DESC
+        LIMIT $limit
         OPTIONAL MATCH (q)-[:RELATED_TO]->(t:Topic)
         OPTIONAL MATCH (q)-[:ASKED_BY]->(c:Company)
+        OPTIONAL MATCH (i:Interview)-[:CONTAINS]->(q)
+        RETURN DISTINCT q.id as question_id,
+               q.text as question,
+               a.text as answer,
+               q.category as category,
+               q.difficulty as difficulty,
+               collect(DISTINCT t.name) as topics,
+               c.name as company,
+               i.timestamp as date,
+               relevance
+        ORDER BY relevance DESC
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(cypher, keyword=query.lower(), limit=limit)
+                return [dict(record) for record in result]
+        except Exception as e:
+            logger.error(f"[CognitiveGraph] Search failed: {e}")
+            return []
+
+    def advanced_search(
+        self,
+        query: str = None,
+        company: str = None,
+        topic: str = None,
+        category: str = None,
+        difficulty: str = None,
+        date_from: str = None,
+        date_to: str = None,
+        limit: int = 50
+    ) -> List[Dict]:
+        """
+        Advanced search with multiple filters.
+
+        Args:
+            query: Text to search for
+            company: Filter by company name
+            topic: Filter by topic
+            category: Filter by question category
+            difficulty: Filter by difficulty (easy/medium/hard)
+            date_from: Filter from date (ISO format)
+            date_to: Filter to date (ISO format)
+            limit: Max results
+        """
+        if not self.driver:
+            return []
+
+        # Build dynamic query
+        conditions = []
+        params = {"limit": limit}
+
+        if query:
+            conditions.append("(q.text CONTAINS $query OR a.text CONTAINS $query)")
+            params["query"] = query.lower()
+
+        if company:
+            conditions.append("c.name = $company")
+            params["company"] = company
+
+        if topic:
+            conditions.append("t.name = $topic")
+            params["topic"] = topic
+
+        if category:
+            conditions.append("q.category = $category")
+            params["category"] = category
+
+        if difficulty:
+            conditions.append("q.difficulty = $difficulty")
+            params["difficulty"] = difficulty
+
+        if date_from:
+            conditions.append("i.timestamp >= datetime($date_from)")
+            params["date_from"] = date_from
+
+        if date_to:
+            conditions.append("i.timestamp <= datetime($date_to)")
+            params["date_to"] = date_to
+
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        cypher = f"""
+        MATCH (q:Question)-[:ANSWERED_WITH]->(a:Answer)
+        OPTIONAL MATCH (q)-[:ASKED_BY]->(c:Company)
+        OPTIONAL MATCH (q)-[:RELATED_TO]->(t:Topic)
+        OPTIONAL MATCH (i:Interview)-[:CONTAINS]->(q)
+        {where_clause}
         RETURN q.id as question_id,
                q.text as question,
                a.text as answer,
+               q.category as category,
+               q.difficulty as difficulty,
                collect(DISTINCT t.name) as topics,
-               c.name as company
+               c.name as company,
+               i.timestamp as date
+        ORDER BY i.timestamp DESC
         LIMIT $limit
         """
 
         try:
             with self.driver.session() as session:
-                result = session.run(cypher, keyword=query, limit=limit)
+                result = session.run(cypher, **params)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Search failed: {e}")
+            logger.error(f"[CognitiveGraph] Advanced search failed: {e}")
             return []
 
     def get_interview_history(self, user_id: str, limit: int = 100) -> List[Dict]:
@@ -437,8 +581,11 @@ def initialize_graph() -> bool:
     return cognitive_graph.initialize_schema()
 
 def ingest_conversation(conversation_id: str, conversation_data: Dict) -> bool:
-    """Ingest a conversation into the graph"""
+    """Ingest a conversation into the graph with full Q&A parsing"""
     try:
+        from entity_extraction import entity_extractor
+        import uuid
+
         # Create interview node
         interview = InterviewNode(
             id=conversation_id,
@@ -451,12 +598,102 @@ def ingest_conversation(conversation_id: str, conversation_data: Dict) -> bool:
 
         # Process messages for Q&A pairs
         messages = conversation_data.get("messages", [])
-        # Simple extraction - can be enhanced with NLP
+        qa_pairs = []
+        current_question = None
 
-        logger.info(f"[CognitiveGraph] Ingested conversation {conversation_id}")
+        for msg in messages:
+            content = msg.get('content', msg.get('text', ''))
+            role = msg.get('role', '').lower()
+
+            # Detect questions (interviewer or ends with ?)
+            if role == 'interviewer' or '?' in content:
+                # Save previous Q&A pair
+                if current_question and qa_pairs:
+                    qa_pairs[-1]['answer'] = current_question.get('answer', '')
+
+                # Start new question
+                current_question = {
+                    'question': content,
+                    'answer': ''
+                }
+                qa_pairs.append(current_question)
+            elif current_question:
+                # This is an answer
+                current_question['answer'] += ' ' + content
+
+        # Process each Q&A pair
+        for idx, qa in enumerate(qa_pairs):
+            if not qa.get('question'):
+                continue
+
+            # Extract entities
+            full_text = qa['question'] + ' ' + qa.get('answer', '')
+            entities = entity_extractor.extract_all(full_text)
+
+            # Create question node
+            q_id = f"{conversation_id}-q{idx}"
+            question = QuestionNode(
+                id=q_id,
+                text=qa['question'],
+                category=entities.get('category', {}).get('label', 'general'),
+                difficulty=entities.get('difficulty', {}).get('label') if entities.get('difficulty') else None
+            )
+
+            # Create answer node
+            a_id = f"{conversation_id}-a{idx}"
+            answer = AnswerNode(
+                id=a_id,
+                text=qa.get('answer', ''),
+                transcript=qa.get('answer', ''),
+                confidence=0.7  # Default confidence
+            )
+
+            # Add to graph
+            cognitive_graph.add_question_answer(
+                conversation_id,
+                question,
+                answer,
+                None  # Company extracted below
+            )
+
+            # Add topics
+            if entities.get('topics'):
+                topics = [
+                    TopicNode(id=f"{q_id}-t{tid}", name=t['text'], category='technical')
+                    for tid, t in enumerate(entities['topics'])
+                ]
+                cognitive_graph.add_topics_to_question(q_id, topics)
+
+            # Add skills
+            if entities.get('skills'):
+                skills = [
+                    SkillNode(id=f"{a_id}-s{sid}", name=s['text'])
+                    for sid, s in enumerate(entities['skills'])
+                ]
+                cognitive_graph.add_skills_to_answer(a_id, skills)
+
+            # Add companies
+            if entities.get('companies'):
+                for comp in entities['companies']:
+                    company = CompanyNode(
+                        id=f"comp-{comp['text']}",
+                        name=comp['text'].capitalize()
+                    )
+                    # Re-link question to company
+                    if cognitive_graph.driver:
+                        with cognitive_graph.driver.session() as session:
+                            session.run("""
+                                MATCH (q:Question {id: $q_id})
+                                MERGE (c:Company {id: $c_id, name: $c_name})
+                                MERGE (q)-[:ASKED_BY]->(c)
+                            """, q_id=q_id, c_id=company.id, c_name=company.name)
+
+        logger.info(f"[CognitiveGraph] Ingested conversation {conversation_id} with {len(qa_pairs)} Q&A pairs")
         return True
     except Exception as e:
         logger.error(f"[CognitiveGraph] Ingestion failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 def query_graph(query: str) -> List[Dict]:

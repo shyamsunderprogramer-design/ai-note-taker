@@ -413,8 +413,61 @@ async function saveCurrentConversation() {
   try {
     const saved = await window.api.conversationSave(conversation)
     currentConversationId = saved.id
+
+    // Auto-ingest into cognitive graph
+    ingestConversationToGraph(saved)
   } catch (err) {
     console.error("[Conversation] Save error:", err)
+  }
+}
+
+// Auto-ingest conversation into cognitive graph
+async function ingestConversationToGraph(conversation) {
+  try {
+    const API_BASE = 'http://127.0.0.1:8000'
+
+    // Check if cognitive graph is available
+    const statusRes = await fetch(`${API_BASE}/cognitive-graph/status`)
+    const status = await statusRes.json()
+
+    if (!status.connected) {
+      console.log('[CognitiveGraph] Neo4j not connected, skipping ingestion')
+      return
+    }
+
+    // Prepare data for ingestion
+    const ingestData = {
+      title: conversation.title || 'Untitled Interview',
+      user_id: 'default',
+      updatedAt: conversation.savedAt || Date.now(),
+      duration_ms: 0, // Could calculate from timestamps
+      messages: conversation.messages || []
+    }
+
+    // Ingest the conversation
+    const response = await fetch(`${API_BASE}/cognitive-graph/ingest/${conversation.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ingestData)
+    })
+
+    const result = await response.json()
+    console.log('[CognitiveGraph] Auto-ingested conversation:', result)
+
+    // Also extract entities from the conversation content
+    const fullText = conversation.messages?.map(m => m.content || m.text || '').join(' ') || ''
+    if (fullText.length > 50) {
+      const extractRes = await fetch(`${API_BASE}/extract-entities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: fullText })
+      })
+      const extractData = await extractRes.json()
+      console.log('[CognitiveGraph] Extracted entities:', extractData.entities)
+    }
+  } catch (err) {
+    console.error('[CognitiveGraph] Auto-ingestion failed:', err)
+    // Don't throw - this is background enrichment, shouldn't block saving
   }
 }
 
@@ -3461,6 +3514,12 @@ appMenu.addEventListener("click", async (e) => {
   else if (action === "about") {
     aboutModal.classList.add("open")
     loadAboutStatus()
+  }
+  else if (action === "cognitive-graph") {
+    window.location.href = 'cognitive-graph.html'
+  }
+  else if (action === "pre-interview") {
+    window.location.href = 'pre-interview.html'
   }
   else if (action === "logs") {
     window.api.openLogs()

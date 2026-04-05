@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pre-Interview Preparation - AI Note Taker</title>
+  <link rel="stylesheet" href="style.css?v=25">
+  <style>
+    /* Pre-Interview Prep specific styles */
+    .prep-container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .prep-header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-color, #333);
+    }
+
+    .prep-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .prep-subtitle {
+      color: var(--text-secondary, #888);
+      font-size: 16px;
+    }
+
+    /* Input Section */
+    .prep-input-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+    }
+
+    .prep-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 15px;
+      align-items: end;
+    }
+
+    @media (max-width: 768px) {
+      .prep-form {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .prep-field {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .prep-field label {
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-primary, #fff);
+    }
+
+    .prep-field input, .prep-field select {
+      padding: 12px 16px;
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      background: var(--bg-primary, #0a0a0a);
+      color: var(--text-primary, #fff);
+      font-size: 15px;
+    }
+
+    .prep-field input:focus, .prep-field select:focus {
+      outline: none;
+      border-color: var(--accent-color, #3b82f6);
+    }
+
+    .prep-generate-btn {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .prep-generate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+
+    .prep-generate-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Results Section */
+    .prep-results {
+      display: none;
+    }
+
+    .prep-results.active {
+      display: block;
+    }
+
+    /* Stats Cards */
+    .prep-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    .prep-stat-card {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .prep-stat-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent-color, #3b82f6);
+    }
+
+    .prep-stat-label {
+      font-size: 14px;
+      color: var(--text-secondary, #888);
+      margin-top: 5px;
+    }
+
+    .prep-confidence {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .prep-confidence.high {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .prep-confidence.medium {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+
+    .prep-confidence.low {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    /* Questions Section */
+    .prep-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 25px;
+      margin-bottom: 20px;
+    }
+
+    .prep-section-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .prep-section-title .icon {
+      font-size: 24px;
+    }
+
+    /* Question Cards */
+    .prep-question-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .prep-question-card {
+      background: var(--bg-tertiary, #2a2a2a);
+      border-radius: 10px;
+      padding: 18px;
+      border-left: 4px solid var(--accent-color, #3b82f6);
+      transition: transform 0.2s;
+      cursor: pointer;
+    }
+
+    .prep-question-card:hover {
+      transform: translateX(5px);
+    }
+
+    .prep-question-text {
+      font-weight: 500;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .prep-question-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .prep-tag {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .prep-tag.category-technical {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .prep-tag.category-system_design {
+      background: rgba(139, 92, 246, 0.2);
+      color: #a78bfa;
+    }
+
+    .prep-tag.category-behavioral {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .prep-tag.difficulty-easy {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .prep-tag.difficulty-medium {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+
+    .prep-tag.difficulty-hard {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .prep-tag.likelihood {
+      background: var(--bg-primary, #0a0a0a);
+      color: var(--text-secondary, #888);
+    }
+
+    /* Checklist */
+    .prep-checklist {
+      list-style: none;
+      padding: 0;
+    }
+
+    .prep-checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color, #333);
+    }
+
+    .prep-checklist-item:last-child {
+      border-bottom: none;
+    }
+
+    .prep-checklist-checkbox {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border-color, #333);
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .prep-checklist-checkbox.checked {
+      background: var(--accent-color, #3b82f6);
+      border-color: var(--accent-color, #3b82f6);
+    }
+
+    .prep-checklist-checkbox.checked::after {
+      content: '✓';
+      color: white;
+      font-size: 14px;
+    }
+
+    .prep-checklist-text {
+      flex: 1;
+      line-height: 1.5;
+    }
+
+    .prep-checklist-text.completed {
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+
+    /* Category Sections */
+    .prep-categories {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .prep-category-card {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .prep-category-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-color, #333);
+    }
+
+    .prep-category-items {
+      list-style: none;
+      padding: 0;
+    }
+
+    .prep-category-item {
+      padding: 8px 0;
+      font-size: 14px;
+      color: var(--text-secondary, #aaa);
+    }
+
+    /* Loading State */
+    .prep-loading {
+      text-align: center;
+      padding: 60px;
+    }
+
+    .prep-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid var(--border-color, #333);
+      border-top-color: var(--accent-color, #3b82f6);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Back Button */
+    .prep-back-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      background: var(--bg-secondary, #1a1a1a);
+      color: var(--text-primary, #fff);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .prep-back-btn:hover {
+      background: var(--bg-tertiary, #2a2a2a);
+    }
+
+    /* Empty State */
+    .prep-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary, #888);
+    }
+
+    .prep-empty-icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+
+    /* Company Info */
+    .prep-company-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: var(--bg-tertiary, #2a2a2a);
+      border-radius: 10px;
+    }
+
+    .prep-company-logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 10px;
+      background: var(--accent-color, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .prep-company-details h3 {
+      margin: 0 0 5px 0;
+      font-size: 18px;
+    }
+
+    .prep-company-details p {
+      margin: 0;
+      font-size: 14px;
+      color: var(--text-secondary, #888);
+    }
+  </style>
+</head>
+<body>
+  <button class="prep-back-btn" onclick="window.location.href='index.html'">< Back to App</button>
+
+  <div class="prep-container">
+    <!-- Header -->
+    <div class="prep-header">
+      <h1 class="prep-title">🔮 Interview Predictor</h1>
+      <p class="prep-subtitle">AI-powered interview preparation based on company patterns</p>
+    </div>
+
+    <!-- Input Section -->
+    <div class="prep-input-section">
+      <form class="prep-form" id="prepForm">
+        <div class="prep-field">
+          <label for="companyInput">Company * </small>(e.g., Google, Meta, Amazon)</small></label>
+          <input type="text" id="companyInput" placeholder="Enter company name" required>
+        </div>
+
+        <div class="prep-field">
+          <label for="roleInput">Role <small>(e.g., Senior Software Engineer)</small></label>
+          <input type="text" id="roleInput" placeholder="Enter role (optional)">
+        </div>
+
+        <button type="submit" class="prep-generate-btn" id="generateBtn">
+          Generate Predictions
+        </button>
+      </form>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="prep-loading" style="display: none;">
+      <div class="prep-spinner"></div>
+      <p>Analyzing interview patterns...</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="prep-results">
+      <!-- Company Info -->
+      <div class="prep-company-info" id="companyInfo">
+        <div class="prep-company-logo">🏢</div>
+        <div class="prep-company-details">
+          <h3 id="resultCompany">Company</h3>
+          <p id="resultRole">Role</p>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="prep-stats">
+        <div class="prep-stat-card">
+          <div class="prep-stat-value" id="statPredictions">10</div>
+          <div class="prep-stat-label">Predicted Questions</div>
+        </div>
+        <div class="prep-stat-card">
+          <div class="prep-stat-value" id="statConfidence">75%</div>
+          <div class="prep-stat-label">Confidence Score</div>
+        </div>
+        <div class="prep-stat-card">
+          <div class="prep-stat-value" id="statCategories">3</div>
+          <div class="prep-stat-label">Question Categories</div>
+        </div>
+        <div class="prep-stat-card">
+          <div class="prep-stat-label">Prediction Confidence</div>
+          <div class="prep-confidence high" id="confidenceBadge">
+            <span>●</span> High Confidence
+          </div>
+        </div>
+      </div>
+
+      <!-- Predicted Questions -->
+      <div class="prep-section">
+        <h2 class="prep-section-title">
+          <span class="icon">🎯</span>
+          Likely Interview Questions
+        </h2>
+        <div id="questionsList" class="prep-question-list">
+          <!-- Questions will be inserted here -->
+        </div>
+      </div>
+
+      <!-- Preparation Checklist -->
+      <div class="prep-section">
+        <h2 class="prep-section-title">
+          <span class="icon">✅</span>
+          Preparation Checklist
+        </h2>
+
+        <div id="checklistContainer">
+          <!-- Checklists will be inserted here -->
+        </div>
+      </div>
+
+      <!-- Preparation Guide -->
+      <div class="prep-section">
+        <h2 class="prep-section-title">
+          <span class="icon">📚</span>
+          Preparation Guide
+        </h2>
+
+        <div class="prep-categories" id="prepGuide">
+          <!-- Preparation guide cards will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="pre-interview.js"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 
 import numpy as np
 
@@ -1577,3 +1578,188 @@ async def categorize_question_api(q: str = Query(...)):
         "category": {"label": category, "confidence": confidence},
         "difficulty": {"label": difficulty, "confidence": diff_conf} if difficulty else None
     }
+
+
+# ======================================
+# PREDICTIVE INTERVIEW API - Phase 1 Task #18
+# Predict interview questions based on company/role
+# ======================================
+
+try:
+    from predictive_interview import (
+        predictive_interview,
+        get_predictions,
+        get_checklist
+    )
+    PREDICTIVE_AVAILABLE = True
+except ImportError:
+    PREDICTIVE_AVAILABLE = False
+    logger.warning("[Predictive] Module not available")
+
+
+@app.get("/predict/questions")
+async def predict_questions(
+    company: str = Query(...),
+    role: Optional[str] = Query(None),
+    limit: int = Query(10)
+):
+    """Get predicted interview questions for a company/role"""
+    if not PREDICTIVE_AVAILABLE:
+        return {"error": "Predictive interview module not available"}
+
+    predictions = get_predictions(company, role, limit)
+    return predictions
+
+
+@app.get("/predict/checklist")
+async def get_preparation_checklist(
+    company: str = Query(...),
+    role: Optional[str] = Query(None)
+):
+    """Get preparation checklist for an interview"""
+    if not PREDICTIVE_AVAILABLE:
+        return {"error": "Predictive interview module not available"}
+
+    checklist = get_checklist(company, role)
+    return checklist
+
+
+# ======================================
+# ADVANCED SEARCH API - Enhanced search functionality
+# ======================================
+
+@app.get("/cognitive-graph/search/advanced")
+async def cognitive_graph_advanced_search(
+    query: Optional[str] = Query(None),
+    company: Optional[str] = Query(None),
+    topic: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    difficulty: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    limit: int = Query(50)
+):
+    """
+    Advanced search with multiple filters.
+
+    Args:
+        query: Text to search for
+        company: Filter by company name
+        topic: Filter by topic
+        category: technical/behavioral/system_design/knowledge
+        difficulty: easy/medium/hard
+        date_from: ISO date string
+        date_to: ISO date string
+        limit: Max results
+    """
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    results = cognitive_graph.advanced_search(
+        query=query,
+        company=company,
+        topic=topic,
+        category=category,
+        difficulty=difficulty,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit
+    )
+
+    return {
+        "filters": {
+            "query": query,
+            "company": company,
+            "topic": topic,
+            "category": category,
+            "difficulty": difficulty,
+            "date_from": date_from,
+            "date_to": date_to
+        },
+        "results": results,
+        "count": len(results)
+    }
+
+
+@app.get("/predict/companies")
+async def get_supported_companies():
+    """Get list of companies with prediction data"""
+    if not PREDICTIVE_AVAILABLE:
+        return {"error": "Predictive interview module not available"}
+
+    companies = list(predictive_interview.question_db.keys())
+    return {
+        "companies": companies,
+        "total": len(companies)
+    }
+
+
+# ======================================
+# BACKFILL API - Backfill historical conversations
+# ======================================
+
+@app.post("/cognitive-graph/backfill")
+async def backfill_historical_conversations():
+    """
+    Backfill all historical conversations into cognitive graph.
+    This reads saved conversation files and ingests them.
+    """
+    try:
+        import subprocess
+        import sys
+
+        # Run backfill script
+        result = subprocess.run(
+            [sys.executable, "backfill_cognitive_graph.py"],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        return {
+            "backfill_triggered": True,
+            "return_code": result.returncode,
+            "output": result.stdout[-1000:] if result.stdout else "",  # Last 1000 chars
+            "errors": result.stderr[-500:] if result.stderr else ""
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/cognitive-graph/stats")
+async def get_cognitive_graph_stats():
+    """Get statistics about the cognitive graph"""
+    if not COGNITIVE_GRAPH_AVAILABLE:
+        return {"error": "Cognitive graph not available"}
+
+    try:
+        from cognitive_graph import cognitive_graph
+
+        # Get counts from Neo4j
+        stats = {}
+
+        if cognitive_graph.driver:
+            with cognitive_graph.driver.session() as session:
+                # Count interviews
+                result = session.run("MATCH (i:Interview) RETURN count(i) as count")
+                stats['interviews'] = result.single()['count']
+
+                # Count questions
+                result = session.run("MATCH (q:Question) RETURN count(q) as count")
+                stats['questions'] = result.single()['count']
+
+                # Count companies
+                result = session.run("MATCH (c:Company) RETURN count(c) as count")
+                stats['companies'] = result.single()['count']
+
+                # Count topics
+                result = session.run("MATCH (t:Topic) RETURN count(t) as count")
+                stats['topics'] = result.single()['count']
+
+                # Count skills
+                result = session.run("MATCH (s:Skill) RETURN count(s) as count")
+                stats['skills'] = result.single()['count']
+
+        return {"stats": stats, "connected": bool(cognitive_graph.driver)}
+    except Exception as e:
+        return {"error": str(e)}

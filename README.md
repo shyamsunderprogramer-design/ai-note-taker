@@ -16,6 +16,7 @@ Local speech-to-text, local and cloud AI models, floating overlay UI, screen cap
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Privacy](#privacy)
 - [Tech Stack](#tech-stack)
+- [Cognitive Graph](#cognitive-graph-new-in-phase-1)
 - [Building](#building)
 
 ---
@@ -90,6 +91,25 @@ Local speech-to-text, local and cloud AI models, floating overlay UI, screen cap
 | **System tray** | Minimizes to tray when stealth is active |
 | **Hide/show** | `Alt+Space` toggles window visibility without disabling stealth |
 | **No cloud STT** | All transcription is local — nothing sent to external servers |
+
+### Cognitive Graph (New in Phase 1)
+
+Personal knowledge graph powered by Neo4j to store and analyze your interview history.
+
+| Feature | Description |
+|---|---|
+| **Semantic Search** | Search your interview history by topic, company, or skill |
+| **Entity Extraction** | Automatically extracts companies, skills, and topics from transcripts |
+| **Company Insights** | See what questions companies typically ask |
+| **Skill Progression** | Track your confidence across different skills over time |
+| **Auto-Ingest** | Conversations automatically added to graph on save |
+| **Q&A Extraction** | Parses transcripts into question-answer pairs |
+| **Interview Predictions** | Predict likely questions for companies like Google, Meta, Amazon |
+| **Pre-Interview Prep** | Generated preparation checklists based on company patterns |
+
+**Access:** Open app menu (☰) → "Cognitive Graph" or "Pre-Interview Prep"
+
+**Setup:** See [docs/SETUP_COGNITIVE_GRAPH.md](docs/SETUP_COGNITIVE_GRAPH.md)
 
 ### Keyboard Shortcuts
 

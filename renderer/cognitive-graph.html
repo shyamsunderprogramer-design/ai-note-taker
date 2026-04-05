@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognitive Graph - AI Note Taker</title>
+  <link rel="stylesheet" href="style.css?v=25">
+  <style>
+    /* Cognitive Graph specific styles */
+    .cg-container {
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .cg-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--border-color, #333);
+    }
+
+    .cg-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+    }
+
+    .cg-nav {
+      display: flex;
+      gap: 10px;
+    }
+
+    .cg-nav-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      background: var(--bg-secondary, #2a2a2a);
+      color: var(--text-primary, #fff);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .cg-nav-btn:hover {
+      background: var(--bg-tertiary, #3a3a3a);
+    }
+
+    .cg-nav-btn.active {
+      background: var(--accent-color, #3b82f6);
+    }
+
+    /* Search Section */
+    .cg-search-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .cg-search-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .cg-search-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      background: var(--bg-primary, #0a0a0a);
+      color: var(--text-primary, #fff);
+      font-size: 16px;
+    }
+
+    .cg-search-btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent-color, #3b82f6);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .cg-search-btn:hover {
+      background: var(--accent-hover, #2563eb);
+    }
+
+    /* Stats Grid */
+    .cg-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .cg-stat-card {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .cg-stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent-color, #3b82f6);
+    }
+
+    .cg-stat-label {
+      font-size: 14px;
+      color: var(--text-secondary, #888);
+      margin-top: 5px;
+    }
+
+    /* Content Grid */
+    .cg-content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .cg-content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .cg-panel {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .cg-panel-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      color: var(--text-primary, #fff);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cg-panel-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: var(--accent-color, #3b82f6);
+      border-radius: 2px;
+    }
+
+    /* Entity Tags */
+    .cg-entity-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .cg-entity-tag {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .cg-entity-tag:hover {
+      transform: scale(1.05);
+    }
+
+    .cg-tag-company {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .cg-tag-topic {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .cg-tag-skill {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+
+    .cg-tag-role {
+      background: rgba(139, 92, 246, 0.2);
+      color: #a78bfa;
+    }
+
+    /* Results List */
+    .cg-results-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .cg-result-item {
+      padding: 15px;
+      border-bottom: 1px solid var(--border-color, #333);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .cg-result-item:hover {
+      background: var(--bg-tertiary, #2a2a2a);
+    }
+
+    .cg-result-item:last-child {
+      border-bottom: none;
+    }
+
+    .cg-result-question {
+      font-weight: 500;
+      color: var(--text-primary, #fff);
+      margin-bottom: 8px;
+    }
+
+    .cg-result-answer {
+      font-size: 14px;
+      color: var(--text-secondary, #aaa);
+      line-height: 1.5;
+    }
+
+    .cg-result-meta {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted, #666);
+    }
+
+    .cg-result-tag {
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--bg-tertiary, #2a2a2a);
+    }
+
+    /* Company Insights */
+    .cg-company-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .cg-company-card {
+      padding: 15px;
+      border-radius: 8px;
+      background: var(--bg-tertiary, #2a2a2a);
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .cg-company-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .cg-company-name {
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+      margin-bottom: 5px;
+    }
+
+    .cg-company-count {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent-color, #3b82f6);
+    }
+
+    .cg-company-label {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+    }
+
+    /* Loading State */
+    .cg-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary, #888);
+    }
+
+    .cg-spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border-color, #333);
+      border-top-color: var(--accent-color, #3b82f6);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 10px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Empty State */
+    .cg-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary, #888);
+    }
+
+    .cg-empty-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+      opacity: 0.5;
+    }
+
+    /* Skill Progression */
+    .cg-skill-item {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color, #333);
+    }
+
+    .cg-skill-name {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .cg-skill-bar {
+      flex: 2;
+      height: 8px;
+      background: var(--bg-tertiary, #2a2a2a);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0 15px;
+    }
+
+    .cg-skill-progress {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-color, #3b82f6), #60a5fa);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .cg-skill-count {
+      font-size: 14px;
+      color: var(--text-secondary, #888);
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* Extract Section */
+    .cg-extract-section {
+      margin-top: 20px;
+    }
+
+    .cg-textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 12px;
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      background: var(--bg-primary, #0a0a0a);
+      color: var(--text-primary, #fff);
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+    }
+
+    .cg-extract-btn {
+      margin-top: 10px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent-color, #3b82f6);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .cg-extract-result {
+      margin-top: 15px;
+      padding: 15px;
+      border-radius: 8px;
+      background: var(--bg-tertiary, #2a2a2a);
+    }
+
+    /* Status Indicator */
+    .cg-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+    }
+
+    .cg-status.connected {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .cg-status.disconnected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .cg-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .cg-status.connected .cg-status-dot {
+      background: #34d399;
+    }
+
+    .cg-status.disconnected .cg-status-dot {
+      background: #ef4444;
+    }
+
+    /* Chart Styles */
+    .cg-chart-container {
+      position: relative;
+      height: 100%;
+      padding: 10px;
+    }
+
+    .cg-bar-chart {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-around;
+      height: 100%;
+      padding: 20px 0;
+    }
+
+    .cg-bar {
+      flex: 1;
+      max-width: 40px;
+      background: linear-gradient(180deg, var(--accent-color, #3b82f6), #60a5fa);
+      border-radius: 4px 4px 0 0;
+      margin: 0 4px;
+      position: relative;
+      transition: all 0.3s ease;
+      min-height: 4px;
+    }
+
+    .cg-bar:hover {
+      opacity: 0.8;
+      transform: scaleY(1.05);
+    }
+
+    .cg-bar-label {
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--text-secondary, #888);
+      white-space: nowrap;
+    }
+
+    .cg-bar-value {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--text-primary, #fff);
+      font-weight: 600;
+    }
+
+    .cg-pie-chart {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+      height: 100%;
+    }
+
+    .cg-pie {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--accent-color, #3b82f6) 0deg 120deg,
+        #10b981 120deg 240deg,
+        #f59e0b 240deg 360deg
+      );
+      position: relative;
+    }
+
+    .cg-pie-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .cg-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary, #aaa);
+    }
+
+    .cg-legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    /* Timeline Chart */
+    .cg-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .cg-timeline-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .cg-timeline-date {
+      width: 60px;
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      text-align: right;
+    }
+
+    .cg-timeline-bar {
+      flex: 1;
+      height: 20px;
+      background: var(--bg-tertiary, #2a2a2a);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .cg-timeline-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-color, #3b82f6), #60a5fa);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .cg-timeline-count {
+      width: 30px;
+      font-size: 12px;
+      color: var(--text-primary, #fff);
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="cg-container">
+    <!-- Header -->
+    <div class="cg-header">
+      <div>
+        <h1 class="cg-title">🧠 Cognitive Graph</h1>
+        <div id="connectionStatus" class="cg-status disconnected">
+          <span class="cg-status-dot"></span>
+          <span id="statusText">Disconnected</span>
+        </div>
+      </div>
+      <div class="cg-nav">
+        <button class="cg-nav-btn active" data-tab="overview">Overview</button>
+        <button class="cg-nav-btn" data-tab="search">Search</button>
+        <button class="cg-nav-btn" data-tab="companies">Companies</button>
+        <button class="cg-nav-btn" data-tab="skills">Skills</button>
+        <button class="cg-nav-btn" data-tab="extract">Extract</button>
+        <button class="cg-nav-btn" onclick="window.location.href='index.html'">Back to App</button>
+      </div>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="tab-overview" class="cg-tab">
+      <div class="cg-stats-grid">
+        <div class="cg-stat-card">
+          <div class="cg-stat-value" id="statInterviews">0</div>
+          <div class="cg-stat-label">Total Interviews</div>
+        </div>
+        <div class="cg-stat-card">
+          <div class="cg-stat-value" id="statQuestions">0</div>
+          <div class="cg-stat-label">Questions Asked</div>
+        </div>
+        <div class="cg-stat-card">
+          <div class="cg-stat-value" id="statCompanies">0</div>
+          <div class="cg-stat-label">Companies</div>
+        </div>
+        <div class="cg-stat-card">
+          <div class="cg-stat-value" id="statTopics">0</div>
+          <div class="cg-stat-label">Topics</div>
+        </div>
+      </div>
+
+      <div class="cg-content-grid">
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">📊 Interview Activity</h3>
+          <div id="interviewChart" style="height: 200px; position: relative;">
+            <div class="cg-empty" style="padding: 40px;">
+              <div class="cg-empty-icon">📈</div>
+              <p>Interview activity will appear here.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">🏢 Question Categories</h3>
+          <div id="categoryChart" style="height: 200px; position: relative;">
+            <div class="cg-empty" style="padding: 40px;">
+              <div class="cg-empty-icon">🥧</div>
+              <p>Category breakdown will appear here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cg-content-grid" style="margin-top: 20px;">
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">📋 Recent Interviews</h3>
+          <div id="recentInterviews" class="cg-results-list">
+            <div class="cg-empty">
+              <div class="cg-empty-icon">📋</div>
+              <p>No interviews yet. Start recording to build your graph.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">🏢 Top Companies</h3>
+          <div id="topCompanies" class="cg-company-grid">
+            <div class="cg-empty">
+              <div class="cg-empty-icon">🏢</div>
+              <p>No company data yet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Tab -->
+    <div id="tab-search" class="cg-tab" style="display: none;">
+      <div class="cg-search-section">
+        <!-- Basic Search -->
+        <div class="cg-search-box">
+          <input type="text" id="searchInput" class="cg-search-input" placeholder="Search your interview history (e.g., 'React hooks', 'system design')...">
+          <button id="searchBtn" class="cg-search-btn">Search</button>
+        </div>
+
+        <!-- Advanced Filters -->
+        <div class="cg-advanced-filters" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px; flex-wrap: wrap;">
+          <select id="filterCompany" class="cg-filter-select" style="padding: 8px 12px; border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color);">
+            <option value="">All Companies</option>
+          </select>
+          <select id="filterCategory" class="cg-filter-select" style="padding: 8px 12px; border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color);">
+            <option value="">All Categories</option>
+            <option value="technical">Technical</option>
+            <option value="system_design">System Design</option>
+            <option value="behavioral">Behavioral</option>
+            <option value="knowledge">Knowledge</option>
+          </select>
+          <select id="filterDifficulty" class="cg-filter-select" style="padding: 8px 12px; border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color);">
+            <option value="">All Difficulties</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button id="advancedSearchBtn" class="cg-search-btn" style="padding: 8px 16px; font-size: 14px;">Advanced Search</button>
+          <button id="clearFiltersBtn" class="cg-search-btn" style="padding: 8px 16px; font-size: 14px; background: var(--bg-tertiary);">Clear</button>
+        </div>
+
+        <!-- Search Stats -->
+        <div id="searchStats" style="margin-top: 15px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; display: none;">
+          <span id="searchStatsText"></span>
+        </div>
+
+        <div id="searchResults" class="cg-results-list">
+          <div class="cg-empty">
+            <div class="cg-empty-icon">🔍</div>
+            <p>Enter a search term to find relevant questions and answers.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Companies Tab -->
+    <div id="tab-companies" class="cg-tab" style="display: none;">
+      <div class="cg-panel">
+        <h3 class="cg-panel-title">Company Insights</h3>
+        <div id="companyInsights">
+          <div class="cg-empty">
+            <div class="cg-empty-icon">🏢</div>
+            <p>Select a company to view interview patterns and insights.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skills Tab -->
+    <div id="tab-skills" class="cg-tab" style="display: none;">
+      <div class="cg-panel">
+        <h3 class="cg-panel-title">Skills Progression</h3>
+        <div id="skillsList">
+          <div class="cg-empty">
+            <div class="cg-empty-icon">📈</div>
+            <p>Your skill progression will appear here as you conduct more interviews.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extract Tab -->
+    <div id="tab-extract" class="cg-tab" style="display: none;">
+      <div class="cg-panel">
+        <h3 class="cg-panel-title">Entity Extraction</h3>
+        <p style="margin-bottom: 15px; color: var(--text-secondary);">Paste interview text to extract companies, skills, topics, and categorize questions.</p>
+        <textarea id="extractText" class="cg-textarea" placeholder="Paste interview transcript here..."></textarea>
+        <button id="extractBtn" class="cg-extract-btn">Extract Entities</button>
+        <div id="extractResult"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="cognitive-graph.js"></script>
+</body>
+</html>
