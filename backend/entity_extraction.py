@@ -335,3 +335,14 @@ def extract_entities(text: str) -> Dict:
 def process_transcript(transcript: str) -> List[Dict]:
     """Process transcript into Q&A pairs with entities - convenience function"""
     return entity_extractor.process_transcript(transcript)
+
+
+# Phase 2: Try to use hybrid extractor if available
+def extract_entities_hybrid(text: str) -> Dict:
+    """Extract entities using hybrid ML + rule approach (Phase 2)"""
+    try:
+        from hybrid_entity_extraction import hybrid_extractor
+        return hybrid_extractor.extract_all(text)
+    except ImportError:
+        # Fall back to rule-based
+        return entity_extractor.extract_all(text)
