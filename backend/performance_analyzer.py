@@ -94,8 +94,8 @@ class PerformanceAnalyzer:
 
     # Filler words to track
     FILLER_WORDS = [
-        "um", "uh", "ah", "er", "like", "you\s+know",
-        "sort\s+of", "kind\s+of", "basically", "literally",
+        "um", "uh", "ah", "er", "like", r"you\s+know",
+        r"sort\s+of", r"kind\s+of", "basically", "literally",
         "actually", "honestly", "so", "well", "right"
     ]
 
@@ -308,7 +308,7 @@ class PerformanceAnalyzer:
             # Check for best practices
             best_practice_indicators = [
                 (r'\b(error\s+handling|try\s+catch|exception)\b', "error handling"),
-                (r'\b(unit\s+test|test\s+case|assert)\b", "testing"),
+                (r'\b(unit\s+test|test\s+case|assert)\b', "testing"),
                 (r'\b(documentation|comment|docstring)\b', "documentation"),
                 (r'\b(edge\s+case|corner\s+case|boundary)\b', "edge cases"),
             ]
