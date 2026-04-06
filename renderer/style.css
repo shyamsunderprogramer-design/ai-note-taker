@@ -1943,14 +1943,14 @@ select option {
 .settings-panel {
   position: fixed;
   top: 46px;
-  right: -180px;
+  right: 0;
   width: 180px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 60px);
   height: auto;
   background: rgba(18, 21, 36, 0.98);
   border: 1px solid rgba(255,255,255,0.1);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 10000;
   display: flex;
   flex-direction: column;
@@ -1959,18 +1959,17 @@ select option {
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  transform: translateX(110%);
 }
 
 @media (min-width: 400px) {
   .settings-panel {
-    right: -200px;
     width: 200px;
   }
 }
 
 @media (min-width: 480px) {
   .settings-panel {
-    right: -220px;
     width: 220px;
     border-radius: 12px 0 0 12px;
   }
@@ -1978,20 +1977,17 @@ select option {
 
 @media (min-width: 600px) {
   .settings-panel {
-    right: -260px;
     width: 260px;
   }
 }
 
 @media (min-width: 800px) {
   .settings-panel {
-    right: -300px;
     width: 300px;
     max-width: 80vw;
   }
 }
 .settings-panel.open {
-  right: 0;
   transform: translateX(0);
 }
 
