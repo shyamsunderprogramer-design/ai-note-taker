@@ -3493,6 +3493,13 @@ appMenu.addEventListener("click", async (e) => {
   if (action === "settings") {
     settingsPanel.classList.add("open")
     updatePanelBackdrop()
+
+    // Reset to General tab
+    settingsTabs.forEach(t => t.classList.remove('active'))
+    settingsTabContents.forEach(c => c.classList.remove('active'))
+    document.querySelector('.settings-tab[data-tab="general"]').classList.add('active')
+    document.querySelector('.settings-tab-content[data-content="general"]').classList.add('active')
+
     try {
       const providers = await window.api.getProviders()
       syncProviderRow("openai", !!providers.openai)
@@ -3612,12 +3619,40 @@ const configProviderIcon = document.getElementById("configProviderIcon")
 const configApiKeyInput = document.getElementById("configApiKeyInput")
 const configSaveBtn = document.getElementById("configSaveBtn")
 const configTestResult = document.getElementById("configTestResult")
-const settingsBackBtn = document.getElementById("settingsBackBtn")
-const settingsTitle = document.getElementById("settingsTitle")
+// ==============================
+// SETTINGS TABS
+// ==============================
+const settingsTabs = document.querySelectorAll('.settings-tab')
+const settingsTabContents = document.querySelectorAll('.settings-tab-content')
 
-// Back button — return to provider list from config view
-settingsBackBtn.addEventListener("click", () => {
-  closeProviderConfig()
+settingsTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const targetTab = tab.dataset.tab
+
+    // Deactivate all tabs
+    settingsTabs.forEach(t => t.classList.remove('active'))
+    settingsTabContents.forEach(c => c.classList.remove('active'))
+
+    // Activate clicked tab
+    tab.classList.add('active')
+    document.querySelector(`.settings-tab-content[data-content="${targetTab}"]`).classList.add('active')
+  })
+})
+
+// ==============================
+// COLLAPSIBLE CARDS
+// ==============================
+document.querySelectorAll('.settings-card-header[data-collapsible]').forEach(header => {
+  header.addEventListener('click', () => {
+    const targetId = header.dataset.collapsible
+    const body = document.getElementById(targetId)
+    const arrow = header.querySelector('.settings-card-arrow')
+
+    if (body) {
+      body.classList.toggle('collapsed')
+      header.classList.toggle('collapsed')
+    }
+  })
 })
 
 // Provider metadata — full model catalog
@@ -3722,10 +3757,7 @@ function openProviderConfig(provider) {
   settingsProvidersView.style.display = "none"
   providerConfigPanel.classList.add("open")
 
-  // Update header for config mode
-  settingsBackBtn.style.display = "flex"
-  settingsTitle.textContent = meta.name
-
+  // Focus input
   configApiKeyInput.focus()
 }
 
@@ -3736,9 +3768,11 @@ function closeProviderConfig() {
   configTestResult.className = "config-inline-result"
   configTestResult.textContent = ""
 
-  // Restore header to Settings
-  settingsBackBtn.style.display = "none"
-  settingsTitle.textContent = "Settings"
+  // Switch back to providers tab
+  settingsTabs.forEach(t => t.classList.remove('active'))
+  settingsTabContents.forEach(c => c.classList.remove('active'))
+  document.querySelector('.settings-tab[data-tab="providers"]').classList.add('active')
+  document.querySelector('.settings-tab-content[data-content="providers"]').classList.add('active')
 }
 
 // Load provider config from store
@@ -3790,9 +3824,9 @@ async function checkProviderHasKey(provider) {
   }
 }
 
-// Close settings panel — reset to provider list first
+// Close settings panel
 closeSettingsBtn.addEventListener("click", () => {
-  closeProviderConfig()
+  providerConfigPanel.classList.remove("open")
   settingsPanel.classList.remove("open")
   updatePanelBackdrop()
 })

@@ -2015,12 +2015,293 @@ select option {
 
 @media (min-width: 600px) {
   .settings-header {
-    padding: 16px 20px;
-    font-size: 0.929em;
+    padding: 12px 16px;
+    font-size: 0.9em;
   }
 }
 
 .settings-title { flex: 1; }
+
+/* ==============================
+   SETTINGS TABS (MINIMAL)
+   ============================== */
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px;
+  background: rgba(18, 21, 36, 0.5);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tab {
+  flex: 1;
+  min-width: 60px;
+  padding: 8px 4px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.75em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.settings-tab:hover {
+  color: var(--text-main);
+  background: rgba(255,255,255,0.03);
+}
+
+.settings-tab.active {
+  color: var(--primary);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* ==============================
+   SETTINGS TAB CONTENT
+   ============================== */
+.settings-tab-content {
+  display: none;
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.settings-tab-content.active {
+  display: block;
+}
+
+/* ==============================
+   SETTINGS CARDS (COLLAPSIBLE)
+   ============================== */
+.settings-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.settings-card-header:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.settings-card-title {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.settings-card-arrow {
+  font-size: 0.7em;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+
+.settings-card-header.collapsed .settings-card-arrow {
+  transform: rotate(-90deg);
+}
+
+.settings-card-body {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-card-body.collapsed {
+  display: none;
+}
+
+/* ==============================
+   COMPACT SETTINGS ELEMENTS
+   ============================== */
+.provider-row.compact {
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.provider-row.compact .provider-logo {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.provider-row.compact .provider-name {
+  font-size: 0.78em;
+}
+
+.provider-row.compact .provider-status {
+  font-size: 0.65em;
+}
+
+.provider-config-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.provider-config-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--primary);
+}
+
+/* ==============================
+   SETTINGS INPUTS
+   ============================== */
+.settings-select,
+.settings-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 0.8em;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.settings-select:focus,
+.settings-input:focus {
+  border-color: var(--primary);
+}
+
+.settings-select optgroup {
+  background: rgba(18, 21, 36, 1);
+  color: var(--text-dim);
+  font-size: 0.9em;
+}
+
+.settings-select option {
+  background: rgba(18, 21, 36, 1);
+  color: var(--text-main);
+  padding: 4px;
+}
+
+/* ==============================
+   SETTINGS BUTTONS
+   ============================== */
+.settings-btn-small {
+  padding: 6px 12px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.8), rgba(37,99,235,0.8));
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.75em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-btn-small:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.settings-btn-small.secondary {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-dim);
+}
+
+.settings-btn-small.secondary:hover {
+  background: rgba(255,255,255,0.12);
+  color: var(--text-main);
+}
+
+.settings-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-action-btn:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: var(--line-bright);
+}
+
+.settings-action-btn span {
+  font-size: 1.1em;
+}
+
+/* ==============================
+   COMPACT OLLAMA & DOCUMENTS
+   ============================== */
+.ollama-pull-row.compact {
+  display: flex;
+  gap: 6px;
+}
+
+.ollama-pull-row.compact .ollama-pull-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 0.75em;
+}
+
+.ollama-pull-row.compact .ollama-pull-btn {
+  padding: 6px 12px;
+  font-size: 0.75em;
+}
+
+.document-upload-area.compact .document-upload-dropzone {
+  padding: 16px 12px;
+}
+
+.document-upload-area.compact .document-upload-icon {
+  font-size: 24px;
+}
+
+.document-upload-area.compact .document-upload-text {
+  font-size: 0.75em;
+}
+
+.document-upload-area.compact .document-upload-hint {
+  font-size: 0.65em;
+}
+
+/* ==============================
+   COMPACT ANALYTICS
+   ============================== */
+.analytics-preview.compact {
+  padding: 12px;
+}
+
+.analytics-preview.compact .analytics-loading {
+  font-size: 0.75em;
+}
 
 .settings-back-btn {
   width: 28px;

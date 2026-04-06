@@ -333,13 +333,21 @@
   <!-- Settings panel -->
   <div class="settings-panel" id="settingsPanel">
     <div class="settings-header">
-      <button class="settings-back-btn" id="settingsBackBtn" type="button" title="Back" style="display:none">&#8592;</button>
-      <span class="settings-title" id="settingsTitle">Settings</span>
+      <span class="settings-title">Settings</span>
       <button class="settings-close-btn" id="closeSettingsBtn" type="button" title="Close">&#10005;</button>
     </div>
+
+    <!-- Settings Tabs -->
+    <div class="settings-tabs" id="settingsTabs">
+      <button class="settings-tab active" data-tab="general">General</button>
+      <button class="settings-tab" data-tab="providers">Providers</button>
+      <button class="settings-tab" data-tab="models">Models</button>
+      <button class="settings-tab" data-tab="data">Data</button>
+    </div>
+
     <div class="settings-body">
 
-      <!-- Provider config panel (inline, slides in) -->
+      <!-- Provider config panel (inline) -->
       <div class="provider-config-panel" id="providerConfigPanel">
         <div class="config-inline">
           <div class="config-inline-header">
@@ -348,18 +356,291 @@
             <span class="config-status-badge" id="configStatusBadge">Not configured</span>
           </div>
           <div class="config-inline-body">
-            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key (sk-...)" autocomplete="off" spellcheck="false" />
+            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" />
             <button id="configSaveBtn" class="config-inline-save" type="button">Save</button>
           </div>
           <div class="config-inline-result" id="configTestResult"></div>
         </div>
       </div>
 
-      <!-- Provider list -->
-      <div class="settings-providers-view" id="settingsProvidersView">
-        <div class="settings-section">
-          <div class="settings-section-label">AI Providers</div>
-          <div class="provider-list">
+      <!-- Tab: General -->
+      <div class="settings-tab-content active" data-content="general">
+
+        <!-- Quick Actions Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="quick-actions">
+            <span class="settings-card-title">Quick Actions</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="quick-actions">
+            <button class="settings-action-btn" id="viewAnalyticsBtn"><span>&#128200;</span> Analytics</button>
+            <button class="settings-action-btn" id="exportAnalyticsBtn"><span>&#129093;</span> Export Data</button>
+          </div>
+        </div>
+
+        <!-- Privacy Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="privacy">
+            <span class="settings-card-title">Privacy</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="privacy">
+            <div class="provider-row compact">
+              <span class="provider-logo">&#128275;</span>
+              <div class="provider-info">
+                <span class="provider-name">Screen Capture</span>
+                <span class="provider-status dimmed">Auto-screenshots</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="toggle-screenshot" checked />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- CRM Integration Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="crm">
+            <span class="settings-card-title">CRM Integration</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="crm">
+            <select id="crmProviderSelect" class="settings-select">
+              <option value="">Disabled</option>
+              <option value="webhook">Webhook</option>
+              <option value="salesforce">Salesforce</option>
+              <option value="hubspot">HubSpot</option>
+            </select>
+            <div class="crm-fields" id="crmFields">
+              <input type="url" id="crmWebhookUrl" class="settings-input" placeholder="Webhook URL" style="display:none" />
+              <input type="url" id="crmSalesforceUrl" class="settings-input" placeholder="Instance URL" style="display:none" />
+              <input type="password" id="crmSalesforceToken" class="settings-input" placeholder="OAuth Token" style="display:none" />
+              <input type="password" id="crmHubspotKey" class="settings-input" placeholder="API Key" style="display:none" />
+            </div>
+            <div class="crm-actions-compact">
+              <button id="crmSaveBtn" class="settings-btn-small">Save</button>
+              <button id="crmTestBtn" class="settings-btn-small secondary">Test</button>
+            </div>
+            <div class="crm-status" id="crmStatus"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Providers -->
+      <div class="settings-tab-content" data-content="providers">
+
+        <!-- AI Providers Card -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <span class="settings-card-title">AI Providers</span>
+          </div>
+          <div class="settings-card-body">
+            <div class="provider-list compact">
+
+              <!-- Ollama Local -->
+              <div class="provider-row compact" id="card-ollama">
+                <span class="provider-logo provider-logo-ollama">O</span>
+                <div class="provider-info">
+                  <span class="provider-name">Ollama Local</span>
+                  <span class="provider-badge">Local</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-ollama" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+
+              <!-- Cloud Providers -->
+              <div class="provider-row compact" id="card-ollama-cloud">
+                <span class="provider-logo provider-logo-ollama">O</span>
+                <div class="provider-info">
+                  <span class="provider-name">Ollama Cloud</span>
+                  <span class="provider-enabled-dot" id="dot-ollama-cloud"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-ollama-cloud" data-provider="ollama-cloud">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-openai">
+                <span class="provider-logo provider-logo-openai">O</span>
+                <div class="provider-info">
+                  <span class="provider-name">OpenAI</span>
+                  <span class="provider-enabled-dot" id="dot-openai"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-openai" data-provider="openai">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-anthropic">
+                <span class="provider-logo provider-logo-anthropic">A</span>
+                <div class="provider-info">
+                  <span class="provider-name">Anthropic</span>
+                  <span class="provider-enabled-dot" id="dot-anthropic"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-anthropic" data-provider="anthropic">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-google">
+                <span class="provider-logo provider-logo-google">G</span>
+                <div class="provider-info">
+                  <span class="provider-name">Google</span>
+                  <span class="provider-enabled-dot" id="dot-google"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-google" data-provider="google">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-xai">
+                <span class="provider-logo provider-logo-xai">x</span>
+                <div class="provider-info">
+                  <span class="provider-name">xAI</span>
+                  <span class="provider-enabled-dot" id="dot-xai"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-xai" data-provider="xai">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-deepseek">
+                <span class="provider-logo provider-logo-deepseek">D</span>
+                <div class="provider-info">
+                  <span class="provider-name">DeepSeek</span>
+                  <span class="provider-enabled-dot" id="dot-deepseek"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-deepseek" data-provider="deepseek">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-groq">
+                <span class="provider-logo provider-logo-groq">G</span>
+                <div class="provider-info">
+                  <span class="provider-name">Groq</span>
+                  <span class="provider-enabled-dot" id="dot-groq"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-groq" data-provider="groq">&#9881;</button>
+              </div>
+
+              <div class="provider-row compact" id="card-perplexity">
+                <span class="provider-logo provider-logo-perplexity">P</span>
+                <div class="provider-info">
+                  <span class="provider-name">Perplexity</span>
+                  <span class="provider-enabled-dot" id="dot-perplexity"></span>
+                </div>
+                <button class="provider-config-btn" id="cfg-perplexity" data-provider="perplexity">&#9881;</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Models -->
+      <div class="settings-tab-content" data-content="models">
+
+        <!-- Cloud Model Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="cloud-model">
+            <span class="settings-card-title">Cloud Model</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="cloud-model">
+            <select id="cloudModelSelect" class="settings-select">
+              <option value="auto" selected>Auto (best available)</option>
+              <optgroup label="OpenAI">
+                <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
+                <option value="openai-gpt-4o">GPT-4o</option>
+                <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="openai-o3-mini">o3 Mini</option>
+              </optgroup>
+              <optgroup label="Anthropic">
+                <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
+                <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
+              </optgroup>
+              <optgroup label="Google">
+                <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
+                <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
+              </optgroup>
+              <optgroup label="xAI">
+                <option value="xai-grok-2-mini">Grok 2 Mini</option>
+                <option value="xai-grok-2">Grok 2</option>
+              </optgroup>
+              <optgroup label="DeepSeek">
+                <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
+                <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
+              </optgroup>
+              <optgroup label="Groq">
+                <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
+                <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
+              </optgroup>
+              <optgroup label="Perplexity">
+                <option value="perplexity-sonar">Sonar</option>
+                <option value="perplexity-sonar-pro">Sonar Pro</option>
+              </optgroup>
+              <optgroup label="Ollama Cloud">
+                <option value="qwen3.5:397b-cloud">Qwen 3.5</option>
+                <option value="kimi-k2.5:cloud">Kimi K2.5</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+        <!-- Ollama Models Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="ollama-models">
+            <span class="settings-card-title">Ollama Models</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="ollama-models">
+            <div class="ollama-models-list compact" id="ollamaModelsList">
+              <div class="ollama-models-loading">Loading...</div>
+            </div>
+            <div class="ollama-pull-row compact">
+              <input type="text" id="ollamaPullInput" class="ollama-pull-input" placeholder="llama3:latest" />
+              <button id="ollamaPullBtn" class="ollama-pull-btn">Pull</button>
+            </div>
+            <div class="ollama-pull-status" id="ollamaPullStatus"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Data -->
+      <div class="settings-tab-content" data-content="data">
+
+        <!-- Documents Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="documents">
+            <span class="settings-card-title">Knowledge Base</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="documents">
+            <div class="document-upload-area compact" id="documentUploadArea">
+              <div class="document-upload-dropzone" id="documentDropzone">
+                <span class="document-upload-icon">&#128193;</span>
+                <span class="document-upload-text">Drop files or click</span>
+                <span class="document-upload-hint">PDF, DOCX, TXT, MD</span>
+                <input type="file" id="documentFileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" />
+              </div>
+              <div class="document-list" id="documentList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytics Preview Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="analytics">
+            <span class="settings-card-title">Analytics</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="analytics">
+            <div class="analytics-preview compact" id="analyticsPreview">
+              <div class="analytics-loading">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
 
             <!-- Ollama Local -->
             <div class="provider-row" id="card-ollama">
