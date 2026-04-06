@@ -3159,7 +3159,7 @@ summarizeBtn?.addEventListener("click", async () => {
 // ==============================
 // HISTORY PANEL
 // ==============================
-historyBtn.addEventListener("click", () => {
+function toggleHistoryPanel() {
   const wasOpen = historyPanel.classList.contains("open")
   historyPanel.classList.toggle("open")
   updatePanelBackdrop()
@@ -3490,47 +3490,7 @@ appMenu.addEventListener("click", async (e) => {
 
   const action = item.getAttribute("data-action")
 
-  // Conversation Actions
-  if (action === "new-chat") {
-    startNewConversation()
-    showToast("New conversation started")
-  }
-  else if (action === "history") {
-    historyPanel.classList.toggle("open")
-    if (historyPanel.classList.contains("open")) {
-      renderHistoryList()
-    }
-  }
-  else if (action === "export") {
-    if (currentMessages.length === 0) {
-      showToast("No conversation to export", "error")
-      return
-    }
-    exportCurrentConversation = { id: currentConversationId, messages: currentMessages }
-    exportModal.classList.add("open")
-  }
-  else if (action === "clear") {
-    if (currentMessages.length === 0) return
-    if (confirm("Clear current conversation? This cannot be undone.")) {
-      startNewConversation()
-      showToast("Conversation cleared")
-    }
-  }
-  // Feature Actions
-  else if (action === "study-plan") {
-    window.location.href = 'study-plan.html'
-  }
-  else if (action === "cognitive-graph") {
-    window.location.href = 'cognitive-graph.html'
-  }
-  else if (action === "pre-interview") {
-    window.location.href = 'pre-interview.html'
-  }
-  else if (action === "analytics") {
-    window.location.href = 'analytics-dashboard.html'
-  }
-  // Tool Actions
-  else if (action === "settings") {
+  if (action === "settings") {
     settingsPanel.classList.add("open")
     updatePanelBackdrop()
     try {
@@ -3551,15 +3511,43 @@ appMenu.addEventListener("click", async (e) => {
   else if (action === "shortcuts") {
     shortcutsModal.classList.add("open")
   }
-  else if (action === "logs") {
-    window.api.openLogs()
-  }
   else if (action === "about") {
     aboutModal.classList.add("open")
     loadAboutStatus()
   }
+  else if (action === "cognitive-graph") {
+    window.location.href = 'cognitive-graph.html'
+  }
+  else if (action === "pre-interview") {
+    window.location.href = 'pre-interview.html'
+  }
+  else if (action === "analytics") {
+    window.location.href = 'analytics-dashboard.html'
+  }
+  else if (action === "logs") {
+    window.api.openLogs()
+  }
   else if (action === "quit") {
     window.api.closeWindow()
+  }
+  else if (action === "new-chat") {
+    startNewConversation()
+    showToast("New conversation started")
+  }
+  else if (action === "history") {
+    toggleHistoryPanel()
+  }
+  else if (action === "export") {
+    exportCurrentConversation = currentMessages.length > 0 ? currentMessages : null
+    if (exportModal) exportModal.classList.add("open")
+  }
+  else if (action === "clear") {
+    if (confirm("Clear current conversation?")) {
+      startNewConversation()
+    }
+  }
+  else if (action === "study-plan") {
+    window.location.href = 'study-plan.html'
   }
 })
 
