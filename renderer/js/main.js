@@ -204,11 +204,6 @@ class ANTApp {
       window.api?.closeWindow?.();
     });
 
-    // History button
-    document.getElementById('historyBtn')?.addEventListener('click', () => {
-      this.togglePanel('history');
-    });
-
     // Close history panel
     document.getElementById('closeHistoryBtn')?.addEventListener('click', () => {
       this.closePanel('history');
