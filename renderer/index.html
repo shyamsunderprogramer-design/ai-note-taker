@@ -1,49 +1,37 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>ANT (AI Note Taker)</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#3b82f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <title>ANT (AI Note Taker)</title>
+
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="hljs-github-dark.min.css">
+  <!-- Modular CSS Architecture -->
+  <link rel="stylesheet" href="css/main.css">
+  <!-- Fallback: Original styles while transitioning -->
   <link rel="stylesheet" href="style.css?v=25">
+
   <script src="hljs.min.js"></script>
-  <script>
-    // Register service worker for PWA (skip in Electron - file:// protocol not supported)
-    if ('serviceWorker' in navigator && window.api) {
-      console.log('[PWA] Service Worker disabled in Electron app');
-    } else if ('serviceWorker' in navigator) {
-      // Only register in browser PWA mode (not Electron)
-      if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('[PWA] SW registered:', registration.scope);
-            })
-            .catch((err) => {
-              console.log('[PWA] SW registration failed:', err);
-            });
-        });
-      }
-    }
-  </script>
 </head>
 <body>
-  <div class="shell">
+  <div class="shell" id="app">
 
-    <!-- ===== ROW 1: HEADER ===== -->
-    <div class="header-strip">
+    <!-- Header -->
+    <header class="header-strip">
+      <!-- Left: Stealth Button -->
+      <div class="header-left">
+        <button id="stealthBtn" class="stealth-btn" type="button">
+          <span class="stealth-dot" id="stealthDot"></span>
+          <span id="stealthLabel">Detectable</span>
+        </button>
+      </div>
 
-      <!-- Left: Stealth button -->
-      <button id="stealthBtn" class="stealth-btn" type="button">
-        <span class="stealth-dot" id="stealthDot"></span>
-        <span id="stealthLabel">Detectable</span>
-      </button>
-
-      <!-- Center: Title -->
+      <!-- Center: Title + Status -->
       <div class="header-center">
         <span class="app-subtitle">ANT</span>
         <span class="app-title">AI Note Taker</span>
@@ -53,292 +41,70 @@
         </div>
       </div>
 
-      <!-- Right: Menu + Traffic lights -->
+      <!-- Right: Menu + Window Controls -->
       <div class="header-right">
-        <button id="menuBtn" class="win-btn" type="button" title="Menu">&#9776;</button>
+        <button id="menuBtn" class="win-btn" type="button" title="Settings">☰</button>
         <div class="traffic-lights">
-          <button id="minBtn" class="traffic-btn traffic-min" type="button" title="Minimize"><span class="traffic-icon">&#567;</span></button>
-          <button id="maxBtn" class="traffic-btn traffic-max" type="button" title="Maximize"><span class="traffic-icon">&#9633;</span></button>
-          <button id="closeBtn" class="traffic-btn traffic-close" type="button" title="Close"><span class="traffic-icon">&#215;</span></button>
+          <button id="minBtn" class="traffic-btn traffic-min" title="Minimize">
+            <span class="traffic-icon">&#567;</span>
+          </button>
+          <button id="maxBtn" class="traffic-btn traffic-max" title="Maximize">
+            <span class="traffic-icon">&#9633;</span>
+          </button>
+          <button id="closeBtn" class="traffic-btn traffic-close" title="Close">
+            <span class="traffic-icon">&#215;</span>
+          </button>
         </div>
       </div>
+    </header>
 
-    </div>
-
-    <!-- ===== ROW 2: CONTROLS ===== -->
+    <!-- Controls Strip -->
     <div class="controls-strip">
-
-      <!-- Mode: dropdown -->
       <div class="ctrl-group">
         <label>Mode</label>
         <select id="modeSelect">
           <option value="instant">Instant ⚡</option>
-          <option value="auto">Auto</option>
-          <option value="fast">Fast</option>
-          <option value="turbo">Turbo</option>
           <option value="adaptive">Adaptive</option>
-          <option value="universal">Universal</option>
           <option value="interview">Interview</option>
-          <option value="reasoning">Reasoning</option>
-          <option value="cloud">Cloud</option>
           <option value="code">Code</option>
         </select>
       </div>
-
-      <!-- Model: dropdown -->
       <div class="ctrl-group">
         <label>Model</label>
         <select id="modelSelect">
-          <option value="auto" selected>Auto</option>
-          <optgroup label="OpenAI">
-            <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
-            <option value="openai-gpt-4o">GPT-4o</option>
-            <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
-            <option value="openai-o1-mini">o1 Mini</option>
-            <option value="openai-o3-mini">o3 Mini</option>
-            <option value="openai-gpt-3.5-turbo">GPT-3.5 Turbo</option>
-          </optgroup>
-          <optgroup label="Anthropic">
-            <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
-            <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-            <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
-            <option value="anthropic-claude-opus-4-20250514">Claude Opus 4</option>
-          </optgroup>
-          <optgroup label="Google">
-            <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
-            <option value="google-gemini-2-0-flash-exp">Gemini 2.0 Flash Exp</option>
-            <option value="google-gemini-1-5-flash">Gemini 1.5 Flash</option>
-            <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
-            <option value="google-gemini-pro">Gemini Pro</option>
-          </optgroup>
-          <optgroup label="xAI">
-            <option value="xai-grok-2-mini">Grok 2 Mini</option>
-            <option value="xai-grok-2">Grok 2</option>
-            <option value="xai-grok-beta">Grok Beta</option>
-          </optgroup>
-          <optgroup label="DeepSeek">
-            <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
-            <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
-            <option value="deepseek-deepseek-math">DeepSeek Math</option>
-          </optgroup>
-          <optgroup label="Groq">
-            <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
-            <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
-            <option value="groq-llama-3-2-1b">Llama 3.2 1B</option>
-            <option value="groq-llama-3-2-3b">Llama 3.2 3B</option>
-            <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
-            <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
-          </optgroup>
-          <optgroup label="Ollama (Local)">
-            <option value="qwen2.5:1.5b">Qwen 2.5 1.5B</option>
-            <option value="deepseek-r1:8b">DeepSeek R1 8B</option>
-            <option value="deepseek-r1:latest">DeepSeek R1 Latest</option>
-            <option value="qwen3.5:latest">Qwen 3.5 Latest</option>
-          </optgroup>
-          <optgroup label="Ollama Cloud">
-            <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
-            <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
-            <option value="glm-4.7:cloud">GLM 4.7</option>
-            <option value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</option>
-            <option value="rnj-1:8b-cloud">RNJ-1 8B</option>
-            <option value="nemotron-3-super:cloud">Nemotron 3 Super</option>
-            <option value="kimi-k2.5:cloud">Kimi K2.5</option>
-            <option value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</option>
-          </optgroup>
+          <option value="auto">Auto</option>
         </select>
       </div>
-
-      <!-- Font: dropdown -->
-      <div class="ctrl-group">
-        <label>Font</label>
-        <select id="fontSizeSelect">
-          <option value="10">10px</option>
-          <option value="12">12px</option>
-          <option value="14" selected>14px</option>
-          <option value="16">16px</option>
-          <option value="18">18px</option>
-          <option value="20">20px</option>
-          <option value="24">24px</option>
-          <option value="28">28px</option>
-          <option value="32">32px</option>
-          <option value="40">40px</option>
-          <option value="48">48px</option>
-          <option value="64">64px</option>
-          <option value="80">80px</option>
-          <option value="96">96px</option>
-          <option value="128">128px</option>
-          <option value="160">160px</option>
-          <option value="192">192px</option>
-        </select>
-      </div>
-
-      <!-- Response: dropdown -->
-      <div class="ctrl-group">
-        <label>Response</label>
-        <select id="responseStyleSelect">
-          <option value="concise" selected>Concise</option>
-          <option value="detailed">Detailed</option>
-          <option value="bulletpoint">Bullet</option>
-        </select>
-      </div>
-
-      <!-- Context: dropdown -->
-      <div class="ctrl-group">
-        <label>Context</label>
-        <select id="contextLengthSelect">
-          <option value="0">Off</option>
-          <option value="1">1 msg</option>
-          <option value="3" selected>3 msg</option>
-          <option value="5">5 msg</option>
-          <option value="10">10 msg</option>
-        </select>
-      </div>
-
-      <!-- Tokens: dropdown -->
-      <div class="ctrl-group">
-        <label>Tokens</label>
-        <select id="tokenLimitSelect">
-          <option value="8000">8K</option>
-          <option value="32000">32K</option>
-          <option value="128000" selected>128K</option>
-          <option value="256000">256K</option>
-          <option value="512000">512K</option>
-          <option value="1024000">1024K</option>
-        </select>
-      </div>
-
-      <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
-
-      <!-- Smart mode — code-focused AI toggle -->
-      <button id="smartModeBtn" class="smart-mode-btn" type="button" title="Smart mode: enhanced code assistance">
-        <span class="smart-mode-icon">&#9889;</span>
-        <span class="smart-mode-label">Smart</span>
-      </button>
-
-      <!-- Auto-screenshot indicator -->
-      <button id="autoSSBtn" class="auto-ss-btn" type="button" title="Auto screenshot (background)">
-        <span class="auto-ss-dot" id="autoSSDot" style="display:none"></span>
-        <span class="auto-ss-icon">&#128247;</span>
-      </button>
-
-      <!-- Always-on mic indicator -->
-      <button id="alwaysOnBtn" class="always-on-btn" type="button" title="Always-on microphone">
-        <span class="always-on-dot" id="alwaysOnDot" style="display:none"></span>
-        <span class="always-on-icon">&#127908;</span>
-      </button>
-
-      <!-- Real-time suggestions toggle (Phase 2) -->
-      <button id="suggestionsBtn" class="suggestions-btn" type="button" title="Toggle interview suggestions" style="display:none;">
-        <span class="suggestions-dot" id="suggestionsDot" style="display:none"></span>
-        <span class="suggestions-icon">&#128161;</span>
-      </button>
-
     </div>
 
-    <!-- ===== ROW 3: INPUT + ACTION ===== -->
-    <div class="input-row">
-      <div class="text-input-wrap">
-        <input type="text" id="textInput" placeholder="Type here..." />
-      </div>
-
-      <button id="listenBtn" class="action-btn" type="button">
-        <span class="mic-icon">&#127908;</span>
-        <span id="listenLabel">Start</span>
-      </button>
-
-      <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
+    <!-- Chat Container -->
+    <div class="chat-container" id="chatContainer">
+      <!-- Messages will be rendered here -->
     </div>
 
-    <!-- ===== ROW 4: AI RESPONSE ===== -->
-    <div class="response-area">
-      <div class="response-area-header">
-        <button id="summarizeBtn" class="summarize-btn" type="button" title="Generate structured summary">
-          <span class="summarize-btn-icon">&#10022;</span>
-          <span class="summarize-btn-label">Summarize</span>
-        </button>
+    <!-- Input Strip -->
+    <div class="input-strip">
+      <button id="voiceBtn" class="voice-btn" title="Voice input">
+        <span class="voice-icon">🎤</span>
+      </button>
+      <div class="input-wrapper">
+        <textarea id="messageInput" placeholder="Type a message..." rows="1"></textarea>
       </div>
-
-      <!-- Suggestions Panel (Phase 2) -->
-      <div id="suggestionsPanel" class="suggestions-panel" style="display:none;">
-        <div class="suggestions-header">
-          <span class="suggestions-title">&#128161; Suggestions</span>
-          <button id="closeSuggestionsBtn" class="close-suggestions-btn" type="button">&#10005;</button>
-        </div>
-        <div id="suggestionsContent" class="suggestions-content">
-          <div class="suggestions-empty">
-            Listening for interview questions...
-          </div>
-        </div>
-
-        <div class="suggestions-controls">
-          <div class="suggestions-confidence">
-            <label>Min Confidence: <span id="confidenceValue">60%</span></label>
-            <input type="range" id="confidenceSlider" min="0" max="100" value="60" class="confidence-slider">
-          </div>
-          <button id="clearSuggestionsBtn" class="clear-suggestions-btn">Clear History</button>
-        </div>
-      </div>
-
-      <div class="chat-area" id="chatArea">
-        <div class="chat-welcome" id="chatWelcome">
-          <div class="welcome-icon">&#10022;</div>
-          <div class="welcome-text">Ready to assist</div>
-          <div class="welcome-sub">Press <kbd>Enter</kbd> to start</div>
-        </div>
-      </div>
+      <button id="sendBtn" class="send-btn" title="Send">
+        <span>➤</span>
+      </button>
     </div>
 
   </div>
 
-  <!-- Resize handle at bottom (outside shell) -->
-  <div class="resize-handle"></div>
-
-  <!-- Panel backdrop overlay -->
-  <div class="panel-backdrop" id="panelBackdrop"></div>
-
-  <!-- History panel -->
-  <div class="history-panel" id="historyPanel">
-    <div class="history-header">
-      <button id="historyBackBtn" class="history-back-btn" type="button" title="Back">&#8592;</button>
-      <span>Conversations <span class="history-conversation-count" id="historyCount"></span></span>
-      <button id="newChatBtn" class="history-action-btn" type="button">+ New</button>
-    </div>
-    <div class="history-toolbar">
-      <input type="text" id="historySearch" class="history-search" placeholder="Search conversations..." />
-      <select id="historySort" class="history-sort">
-        <option value="updatedAt">Recent</option>
-        <option value="createdAt">Oldest</option>
-        <option value="title">A–Z</option>
-        <option value="messageCount">Messages</option>
-      </select>
-    </div>
-    <div class="history-actions-bar">
-      <button id="exportAllBtn" class="history-action-btn-secondary" type="button" title="Export all conversations">
-        <span>&#129093;</span> Export All
-      </button>
-      <button id="importBtn" class="history-action-btn-secondary" type="button" title="Import conversations">
-        <span>&#129094;</span> Import
-      </button>
-    </div>
-    <div class="history-list" id="historyList"></div>
-    <div class="history-footer">
-      <span class="shortcut-hint">Alt+D stealth</span>
-      <span class="history-footer-divider">·</span>
-      <span class="shortcut-hint">Esc close</span>
-      <span class="history-footer-divider">·</span>
-      <span class="shortcut-hint">Enter talk</span>
-    </div>
-  </div>
-
-  <!-- Settings panel -->
+  <!-- Settings Panel (Tabbed) -->
   <div class="settings-panel" id="settingsPanel">
     <div class="settings-header">
       <span class="settings-title">Settings</span>
-      <button class="settings-close-btn" id="closeSettingsBtn" type="button" title="Close">&#10005;</button>
+      <button class="settings-close-btn" id="closeSettingsBtn">×</button>
     </div>
 
-    <!-- Settings Tabs -->
-    <div class="settings-tabs" id="settingsTabs">
+    <div class="settings-tabs">
       <button class="settings-tab active" data-tab="general">General</button>
       <button class="settings-tab" data-tab="providers">Providers</button>
       <button class="settings-tab" data-tab="models">Models</button>
@@ -346,930 +112,47 @@
     </div>
 
     <div class="settings-body">
-
-      <!-- Provider config panel (inline) -->
-      <div class="provider-config-panel" id="providerConfigPanel">
-        <div class="config-inline">
-          <div class="config-inline-header">
-            <span class="config-provider-icon" id="configProviderIcon">&#9679;</span>
-            <span class="config-provider-name" id="configProviderName">Provider</span>
-            <span class="config-status-badge" id="configStatusBadge">Not configured</span>
-          </div>
-          <div class="config-inline-body">
-            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" />
-            <button id="configSaveBtn" class="config-inline-save" type="button">Save</button>
-          </div>
-          <div class="config-inline-result" id="configTestResult"></div>
-        </div>
-      </div>
-
-      <!-- Tab: General -->
+      <!-- Tab content loaded dynamically -->
       <div class="settings-tab-content active" data-content="general">
-
-        <!-- Quick Actions Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="quick-actions">
-            <span class="settings-card-title">Quick Actions</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body" id="quick-actions">
-            <button class="settings-action-btn" id="viewAnalyticsBtn"><span>&#128200;</span> Analytics</button>
-            <button class="settings-action-btn" id="exportAnalyticsBtn"><span>&#129093;</span> Export Data</button>
-          </div>
-        </div>
-
-        <!-- Privacy Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="privacy">
-            <span class="settings-card-title">Privacy</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body" id="privacy">
-            <div class="provider-row compact">
-              <span class="provider-logo">&#128275;</span>
-              <div class="provider-info">
-                <span class="provider-name">Screen Capture</span>
-                <span class="provider-status dimmed">Auto-screenshots</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-screenshot" checked />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- CRM Integration Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="crm">
-            <span class="settings-card-title">CRM Integration</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body collapsed" id="crm">
-            <select id="crmProviderSelect" class="settings-select">
-              <option value="">Disabled</option>
-              <option value="webhook">Webhook</option>
-              <option value="salesforce">Salesforce</option>
-              <option value="hubspot">HubSpot</option>
-            </select>
-            <div class="crm-fields" id="crmFields">
-              <input type="url" id="crmWebhookUrl" class="settings-input" placeholder="Webhook URL" style="display:none" />
-              <input type="url" id="crmSalesforceUrl" class="settings-input" placeholder="Instance URL" style="display:none" />
-              <input type="password" id="crmSalesforceToken" class="settings-input" placeholder="OAuth Token" style="display:none" />
-              <input type="password" id="crmHubspotKey" class="settings-input" placeholder="API Key" style="display:none" />
-            </div>
-            <div class="crm-actions-compact">
-              <button id="crmSaveBtn" class="settings-btn-small">Save</button>
-              <button id="crmTestBtn" class="settings-btn-small secondary">Test</button>
-            </div>
-            <div class="crm-status" id="crmStatus"></div>
-          </div>
-        </div>
-
+        <p class="settings-placeholder">General settings...</p>
       </div>
-
-      <!-- Tab: Providers -->
       <div class="settings-tab-content" data-content="providers">
-
-        <!-- AI Providers Card -->
-        <div class="settings-card">
-          <div class="settings-card-header">
-            <span class="settings-card-title">AI Providers</span>
-          </div>
-          <div class="settings-card-body">
-            <div class="provider-list compact">
-
-              <!-- Ollama Local -->
-              <div class="provider-row compact" id="card-ollama">
-                <span class="provider-logo provider-logo-ollama">O</span>
-                <div class="provider-info">
-                  <span class="provider-name">Ollama Local</span>
-                  <span class="provider-badge">Local</span>
-                </div>
-                <label class="provider-toggle">
-                  <input type="checkbox" id="toggle-ollama" checked />
-                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </label>
-              </div>
-
-              <!-- Cloud Providers -->
-              <div class="provider-row compact" id="card-ollama-cloud">
-                <span class="provider-logo provider-logo-ollama">O</span>
-                <div class="provider-info">
-                  <span class="provider-name">Ollama Cloud</span>
-                  <span class="provider-enabled-dot" id="dot-ollama-cloud"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-ollama-cloud" data-provider="ollama-cloud">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-openai">
-                <span class="provider-logo provider-logo-openai">O</span>
-                <div class="provider-info">
-                  <span class="provider-name">OpenAI</span>
-                  <span class="provider-enabled-dot" id="dot-openai"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-openai" data-provider="openai">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-anthropic">
-                <span class="provider-logo provider-logo-anthropic">A</span>
-                <div class="provider-info">
-                  <span class="provider-name">Anthropic</span>
-                  <span class="provider-enabled-dot" id="dot-anthropic"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-anthropic" data-provider="anthropic">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-google">
-                <span class="provider-logo provider-logo-google">G</span>
-                <div class="provider-info">
-                  <span class="provider-name">Google</span>
-                  <span class="provider-enabled-dot" id="dot-google"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-google" data-provider="google">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-xai">
-                <span class="provider-logo provider-logo-xai">x</span>
-                <div class="provider-info">
-                  <span class="provider-name">xAI</span>
-                  <span class="provider-enabled-dot" id="dot-xai"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-xai" data-provider="xai">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-deepseek">
-                <span class="provider-logo provider-logo-deepseek">D</span>
-                <div class="provider-info">
-                  <span class="provider-name">DeepSeek</span>
-                  <span class="provider-enabled-dot" id="dot-deepseek"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-deepseek" data-provider="deepseek">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-groq">
-                <span class="provider-logo provider-logo-groq">G</span>
-                <div class="provider-info">
-                  <span class="provider-name">Groq</span>
-                  <span class="provider-enabled-dot" id="dot-groq"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-groq" data-provider="groq">&#9881;</button>
-              </div>
-
-              <div class="provider-row compact" id="card-perplexity">
-                <span class="provider-logo provider-logo-perplexity">P</span>
-                <div class="provider-info">
-                  <span class="provider-name">Perplexity</span>
-                  <span class="provider-enabled-dot" id="dot-perplexity"></span>
-                </div>
-                <button class="provider-config-btn" id="cfg-perplexity" data-provider="perplexity">&#9881;</button>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
+        <p class="settings-placeholder">Provider settings...</p>
       </div>
-
-      <!-- Tab: Models -->
       <div class="settings-tab-content" data-content="models">
-
-        <!-- Cloud Model Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="cloud-model">
-            <span class="settings-card-title">Cloud Model</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body" id="cloud-model">
-            <select id="cloudModelSelect" class="settings-select">
-              <option value="auto" selected>Auto (best available)</option>
-              <optgroup label="OpenAI">
-                <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
-                <option value="openai-gpt-4o">GPT-4o</option>
-                <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="openai-o3-mini">o3 Mini</option>
-              </optgroup>
-              <optgroup label="Anthropic">
-                <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
-                <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
-              </optgroup>
-              <optgroup label="Google">
-                <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
-                <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
-              </optgroup>
-              <optgroup label="xAI">
-                <option value="xai-grok-2-mini">Grok 2 Mini</option>
-                <option value="xai-grok-2">Grok 2</option>
-              </optgroup>
-              <optgroup label="DeepSeek">
-                <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
-                <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
-              </optgroup>
-              <optgroup label="Groq">
-                <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
-                <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
-              </optgroup>
-              <optgroup label="Perplexity">
-                <option value="perplexity-sonar">Sonar</option>
-                <option value="perplexity-sonar-pro">Sonar Pro</option>
-              </optgroup>
-              <optgroup label="Ollama Cloud">
-                <option value="qwen3.5:397b-cloud">Qwen 3.5</option>
-                <option value="kimi-k2.5:cloud">Kimi K2.5</option>
-              </optgroup>
-            </select>
-          </div>
-        </div>
-
-        <!-- Ollama Models Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="ollama-models">
-            <span class="settings-card-title">Ollama Models</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body collapsed" id="ollama-models">
-            <div class="ollama-models-list compact" id="ollamaModelsList">
-              <div class="ollama-models-loading">Loading...</div>
-            </div>
-            <div class="ollama-pull-row compact">
-              <input type="text" id="ollamaPullInput" class="ollama-pull-input" placeholder="llama3:latest" />
-              <button id="ollamaPullBtn" class="ollama-pull-btn">Pull</button>
-            </div>
-            <div class="ollama-pull-status" id="ollamaPullStatus"></div>
-          </div>
-        </div>
-
+        <p class="settings-placeholder">Model settings...</p>
       </div>
-
-      <!-- Tab: Data -->
       <div class="settings-tab-content" data-content="data">
-
-        <!-- Documents Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="documents">
-            <span class="settings-card-title">Knowledge Base</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body collapsed" id="documents">
-            <div class="document-upload-area compact" id="documentUploadArea">
-              <div class="document-upload-dropzone" id="documentDropzone">
-                <span class="document-upload-icon">&#128193;</span>
-                <span class="document-upload-text">Drop files or click</span>
-                <span class="document-upload-hint">PDF, DOCX, TXT, MD</span>
-                <input type="file" id="documentFileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" />
-              </div>
-              <div class="document-list" id="documentList"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Analytics Preview Card -->
-        <div class="settings-card">
-          <div class="settings-card-header" data-collapsible="analytics">
-            <span class="settings-card-title">Analytics</span>
-            <span class="settings-card-arrow">&#9662;</span>
-          </div>
-          <div class="settings-card-body collapsed" id="analytics">
-            <div class="analytics-preview compact" id="analyticsPreview">
-              <div class="analytics-loading">Loading...</div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-    </div>
-  </div>
-
-            <!-- Ollama Local -->
-            <div class="provider-row" id="card-ollama">
-              <span class="provider-logo provider-logo-ollama">O</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">Ollama Local</span>
-                  <span class="provider-badge">Local</span>
-                </div>
-                <span class="provider-status" id="status-ollama">No API key needed</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-ollama" checked />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-            </div>
-
-            <!-- Ollama Cloud -->
-            <div class="provider-row" id="card-ollama-cloud">
-              <span class="provider-logo provider-logo-ollama">O</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">Ollama Cloud</span>
-                  <span class="provider-enabled-dot" id="dot-ollama-cloud"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-ollama-cloud">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-ollama-cloud" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-ollama-cloud" data-provider="ollama-cloud">Configure</button>
-            </div>
-
-            <!-- OpenAI -->
-            <div class="provider-row" id="card-openai">
-              <span class="provider-logo provider-logo-openai">O</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">OpenAI</span>
-                  <span class="provider-enabled-dot" id="dot-openai"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-openai">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-openai" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-openai" data-provider="openai">Configure</button>
-            </div>
-
-            <!-- Anthropic -->
-            <div class="provider-row" id="card-anthropic">
-              <span class="provider-logo provider-logo-anthropic">A</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">Anthropic</span>
-                  <span class="provider-enabled-dot" id="dot-anthropic"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-anthropic">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-anthropic" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-anthropic" data-provider="anthropic">Configure</button>
-            </div>
-
-            <!-- Google -->
-            <div class="provider-row" id="card-google">
-              <span class="provider-logo provider-logo-google">G</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">Google</span>
-                  <span class="provider-enabled-dot" id="dot-google"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-google">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-google" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-google" data-provider="google">Configure</button>
-            </div>
-
-            <!-- xAI -->
-            <div class="provider-row" id="card-xai">
-              <span class="provider-logo provider-logo-xai">x</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">xAI</span>
-                  <span class="provider-enabled-dot" id="dot-xai"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-xai">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-xai" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-xai" data-provider="xai">Configure</button>
-            </div>
-
-            <!-- DeepSeek -->
-            <div class="provider-row" id="card-deepseek">
-              <span class="provider-logo provider-logo-deepseek">D</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">DeepSeek</span>
-                  <span class="provider-enabled-dot" id="dot-deepseek"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-deepseek">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-deepseek" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-deepseek" data-provider="deepseek">Configure</button>
-            </div>
-
-            <!-- Groq -->
-            <div class="provider-row" id="card-groq">
-              <span class="provider-logo provider-logo-groq">G</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">Groq</span>
-                  <span class="provider-enabled-dot" id="dot-groq"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-groq">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-groq" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-groq" data-provider="groq">Configure</button>
-            </div>
-
-            <!-- Perplexity -->
-            <div class="provider-row" id="card-perplexity">
-              <span class="provider-logo provider-logo-perplexity">P</span>
-              <div class="provider-info">
-                <div class="provider-name-row">
-                  <span class="provider-name">Perplexity</span>
-                  <span class="provider-enabled-dot" id="dot-perplexity"></span>
-                </div>
-                <span class="provider-status dimmed" id="status-perplexity">Add API key to enable</span>
-              </div>
-              <label class="provider-toggle">
-                <input type="checkbox" id="toggle-perplexity" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-              <button class="provider-config-btn" id="cfg-perplexity" data-provider="perplexity">Configure</button>
-            </div>
-
-          </div>
-        </div>
-
-        <div class="settings-divider"></div>
-
-        <div class="settings-section">
-          <div class="settings-section-label">Cloud Model</div>
-          <div class="cloud-select-wrap">
-            <select id="cloudModelSelect" class="cloud-select">
-              <option value="auto" selected>Auto (best available)</option>
-              <optgroup label="OpenAI">
-                <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
-                <option value="openai-gpt-4o">GPT-4o</option>
-                <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="openai-o1-mini">o1 Mini</option>
-                <option value="openai-o3-mini">o3 Mini</option>
-                <option value="openai-gpt-3.5-turbo">GPT-3.5 Turbo</option>
-              </optgroup>
-              <optgroup label="Anthropic">
-                <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
-                <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                <option value="anthropic-claude-opus-4-20250514">Claude Opus 4</option>
-              </optgroup>
-              <optgroup label="Google">
-                <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
-                <option value="google-gemini-2-0-flash-exp">Gemini 2.0 Flash Exp</option>
-                <option value="google-gemini-1-5-flash">Gemini 1.5 Flash</option>
-                <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
-                <option value="google-gemini-pro">Gemini Pro</option>
-              </optgroup>
-              <optgroup label="xAI">
-                <option value="xai-grok-2-mini">Grok 2 Mini</option>
-                <option value="xai-grok-2">Grok 2</option>
-                <option value="xai-grok-beta">Grok Beta</option>
-              </optgroup>
-              <optgroup label="DeepSeek">
-                <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
-                <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
-                <option value="deepseek-deepseek-math">DeepSeek Math</option>
-              </optgroup>
-              <optgroup label="Groq">
-                <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
-                <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
-                <option value="groq-llama-3-2-1b">Llama 3.2 1B</option>
-                <option value="groq-llama-3-2-3b">Llama 3.2 3B</option>
-                <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
-                <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
-              </optgroup>
-              <optgroup label="Perplexity">
-                <option value="perplexity-sonar">Sonar</option>
-                <option value="perplexity-sonar-pro">Sonar Pro</option>
-                <option value="perplexity-sonar-reasoning">Sonar Reasoning</option>
-                <option value="perplexity-sonar-reasoning-plus">Sonar Reasoning+</option>
-              </optgroup>
-              <optgroup label="Ollama Cloud">
-                <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
-                <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
-                <option value="glm-4.7:cloud">GLM 4.7</option>
-                <option value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</option>
-                <option value="rnj-1:8b-cloud">RNJ-1 8B</option>
-                <option value="nemotron-3-super:cloud">Nemotron 3 Super</option>
-                <option value="kimi-k2.5:cloud">Kimi K2.5</option>
-                <option value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</option>
-              </optgroup>
-            </select>
-          </div>
-        </div>
-
-        <div class="settings-divider"></div>
-
-        <div class="settings-section">
-          <div class="settings-section-label">Ollama Models</div>
-          <div class="ollama-models-list" id="ollamaModelsList">
-            <div class="ollama-models-loading">Loading models...</div>
-          </div>
-          <div class="ollama-pull-row">
-            <input type="text" id="ollamaPullInput" class="ollama-pull-input" placeholder="e.g. llama3:latest" />
-            <button id="ollamaPullBtn" class="ollama-pull-btn">Pull</button>
-          </div>
-          <div class="ollama-pull-status" id="ollamaPullStatus"></div>
-        </div>
-
-        <div class="settings-divider"></div>
-
-        <div class="settings-section">
-          <div class="settings-section-label">Document Knowledge Base</div>
-          <div class="document-upload-area" id="documentUploadArea">
-            <div class="document-upload-dropzone" id="documentDropzone">
-              <span class="document-upload-icon">&#128193;</span>
-              <span class="document-upload-text">Drop files here or click to browse</span>
-              <span class="document-upload-hint">PDF, DOCX, TXT, MD supported</span>
-              <input type="file" id="documentFileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" />
-            </div>
-            <div class="document-list" id="documentList">
-              <div class="document-loading">Loading documents...</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-divider"></div>
-
-        <div class="settings-section">
-          <div class="settings-section-label">Analytics</div>
-          <div class="analytics-preview" id="analyticsPreview">
-            <div class="analytics-loading">Loading analytics...</div>
-          </div>
-          <div class="analytics-actions">
-            <button id="viewAnalyticsBtn" class="settings-btn">View Full Analytics</button>
-            <button id="exportAnalyticsBtn" class="settings-btn">Export Data</button>
-          </div>
-        </div>
-
-        <div class="settings-divider"></div>
-
-        <div class="settings-section">
-          <div class="settings-section-label">CRM Integration</div>
-          <div class="crm-config" id="crmConfig">
-            <div class="crm-provider-select">
-              <label class="crm-label">CRM Provider</label>
-              <select id="crmProviderSelect">
-                <option value="">Disabled</option>
-                <option value="webhook">Webhook (Generic)</option>
-                <option value="salesforce">Salesforce</option>
-                <option value="hubspot">HubSpot</option>
-              </select>
-            </div>
-
-            <div class="crm-fields" id="crmFields">
-              <!-- Webhook fields -->
-              <div class="crm-field-group" data-provider="webhook">
-                <label>Webhook URL</label>
-                <input type="url" id="crmWebhookUrl" class="crm-input" placeholder="https://your-crm.com/webhook" />
-              </div>
-
-              <!-- Salesforce fields -->
-              <div class="crm-field-group" data-provider="salesforce">
-                <label>Instance URL</label>
-                <input type="url" id="crmSalesforceUrl" class="crm-input" placeholder="https://your-instance.salesforce.com" />
-                <label>OAuth Token</label>
-                <input type="password" id="crmSalesforceToken" class="crm-input" placeholder="OAuth access token" />
-              </div>
-
-              <!-- HubSpot fields -->
-              <div class="crm-field-group" data-provider="hubspot">
-                <label>API Key</label>
-                <input type="password" id="crmHubspotKey" class="crm-input" placeholder="HubSpot API key" />
-              </div>
-            </div>
-
-            <div class="crm-options" id="crmOptions" style="display:none">
-              <label class="crm-check">
-                <input type="checkbox" id="crmAutoLog" checked />
-                <span>Auto-log conversations to CRM</span>
-              </label>
-              <label class="crm-check">
-                <input type="checkbox" id="crmContactMatch" checked />
-                <span>Enable contact matching</span>
-              </label>
-              <label class="crm-label">Log Format</label>
-              <select id="crmLogFormat">
-                <option value="summary">Summary</option>
-                <option value="full">Full Summary</option>
-                <option value="transcript">Full Transcript</option>
-              </select>
-            </div>
-
-            <div class="crm-actions">
-              <button id="crmSaveBtn" class="settings-btn">Save Configuration</button>
-              <button id="crmTestBtn" class="settings-btn">Test Connection</button>
-            </div>
-
-            <div class="crm-status" id="crmStatus"></div>
-          </div>
-        </div>
-
-        <div class="settings-divider"></div>
-
-        <div class="settings-section">
-          <div class="settings-section-label">Privacy</div>
-          <div class="provider-row">
-            <span class="provider-logo" style="font-size:14px">&#128275;</span>
-            <div class="provider-info">
-              <div class="provider-name-row">
-                <span class="provider-name">Screen Capture</span>
-              </div>
-              <span class="provider-status dimmed" id="screenshotStatusText">Screenshots enabled</span>
-            </div>
-            <label class="provider-toggle">
-              <input type="checkbox" id="toggle-screenshot" checked />
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
-          </div>
-        </div>
+        <p class="settings-placeholder">Data settings...</p>
       </div>
     </div>
   </div>
 
-  <!-- Onboarding modal -->
-  <div class="modal-overlay" id="onboardingModal">
-    <div class="modal-box onboarding-box">
-      <div class="modal-title">Welcome to AI Note Taker</div>
-      <p class="onboarding-desc">Let's get you set up. We checked a few things:</p>
-      <ul class="onboarding-checklist" id="onboardingChecklist">
-        <li data-step="mic" class="checking">Checking microphone...</li>
-        <li data-step="ollama" class="checking">Checking Ollama...</li>
-        <li data-step="vision" class="checking">Checking vision model...</li>
-      </ul>
-      <p class="onboarding-note" id="onboardingNote"></p>
-      <button class="settings-btn modal-save-btn" id="onboardingClose">Get Started</button>
-    </div>
-  </div>
-
-  <!-- API Key modal -->
-  <div class="modal-overlay" id="apiKeyModal">
-    <div class="modal-box">
-      <div class="modal-title">Configure API Key</div>
-      <div class="modal-provider-name" id="modalProviderName"></div>
-      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." />
-      <div class="modal-actions">
-        <button class="settings-btn modal-cancel-btn" id="modalCancel">Cancel</button>
-        <button class="settings-btn modal-save-btn" id="modalSave">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- App menu (triggered by menuBtn) -->
+  <!-- App Menu -->
   <div class="app-menu" id="appMenu">
-    <!-- Section: Conversation -->
     <div class="app-menu-section">
-      <div class="app-menu-section-title">Conversation</div>
-      <div class="app-menu-item" data-action="new-chat">
-        <span class="app-menu-icon">&#9997;</span>
-        <span>New Chat</span>
-        <kbd class="app-menu-shortcut">Ctrl+N</kbd>
-      </div>
-      <div class="app-menu-item" data-action="history">
-        <span class="app-menu-icon">&#8634;</span>
-        <span>History</span>
-      </div>
-      <div class="app-menu-item" data-action="export">
-        <span class="app-menu-icon">&#129093;</span>
-        <span>Export</span>
-      </div>
-      <div class="app-menu-item" data-action="clear">
-        <span class="app-menu-icon">&#10005;</span>
-        <span>Clear Chat</span>
-      </div>
+      <div class="app-menu-item" data-action="new-chat">New Chat</div>
+      <div class="app-menu-item" data-action="history">History</div>
+      <div class="app-menu-item" data-action="export">Export</div>
+      <div class="app-menu-item" data-action="clear">Clear</div>
     </div>
-
-    <!-- Section: Features -->
     <div class="app-menu-section">
-      <div class="app-menu-section-title">Features</div>
-      <div class="app-menu-item" data-action="cognitive-graph">
-        <span class="app-menu-icon">&#129504;</span>
-        <span>Cognitive Graph</span>
-      </div>
-      <div class="app-menu-item" data-action="pre-interview">
-        <span class="app-menu-icon">&#128302;</span>
-        <span>Pre-Interview Prep</span>
-      </div>
-      <div class="app-menu-item" data-action="analytics">
-        <span class="app-menu-icon">&#128200;</span>
-        <span>Analytics Dashboard</span>
-      </div>
-      <div class="app-menu-item" data-action="study-plan">
-        <span class="app-menu-icon">&#127891;</span>
-        <span>Study Plan</span>
-      </div>
+      <div class="app-menu-item" data-action="cognitive-graph">Cognitive Graph</div>
+      <div class="app-menu-item" data-action="pre-interview">Pre-Interview</div>
+      <div class="app-menu-item" data-action="analytics">Analytics</div>
+      <div class="app-menu-item" data-action="study-plan">Study Plan</div>
     </div>
-
-    <!-- Section: Tools -->
     <div class="app-menu-section">
-      <div class="app-menu-section-title">Tools</div>
-      <div class="app-menu-item" data-action="settings">
-        <span class="app-menu-icon">&#9881;</span>
-        <span>Settings</span>
-      </div>
-      <div class="app-menu-item" data-action="shortcuts">
-        <span class="app-menu-icon">&#9003;</span>
-        <span>Keyboard Shortcuts</span>
-      </div>
-      <div class="app-menu-item" data-action="logs">
-        <span class="app-menu-icon">&#128196;</span>
-        <span>Open Logs</span>
-      </div>
-    </div>
-
-    <!-- Section: About -->
-    <div class="app-menu-section">
-      <div class="app-menu-item" data-action="about">
-        <span class="app-menu-icon">&#9432;</span>
-        <span>About ANT</span>
-      </div>
-      <div class="app-menu-item danger" data-action="quit">
-        <span class="app-menu-icon">&#10006;</span>
-        <span>Quit</span>
-        <kbd class="app-menu-shortcut">Alt+F4</kbd>
-      </div>
-    </div>
-
-    <!-- Recent Conversations (populated dynamically) -->
-    <div class="app-menu-section" id="recentConversationsSection" style="display: none;">
-      <div class="app-menu-section-title">Recent</div>
-      <div id="recentConversationsList"></div>
+      <div class="app-menu-item" data-action="quit">Quit</div>
     </div>
   </div>
 
-  <!-- Keyboard Shortcuts modal -->
-  <div class="modal-overlay" id="shortcutsModal">
-    <div class="modal-box shortcuts-modal-box">
-      <div class="modal-title">Keyboard Shortcuts</div>
-      <div class="shortcuts-list">
-        <div class="shortcut-row">
-          <span class="shortcut-key">Enter</span>
-          <span class="shortcut-desc">Toggle voice recording / Submit text</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-key">F</span>
-          <span class="shortcut-desc">Toggle maximize</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-key">Alt+D</span>
-          <span class="shortcut-desc">Toggle stealth mode (capture protection + show/hide)</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-key">Alt+Space</span>
-          <span class="shortcut-desc">Hide / show window</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-key">Ctrl+←→↑↓</span>
-          <span class="shortcut-desc">Move window in any direction</span>
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="settings-btn modal-save-btn" id="closeShortcutsModal">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Export modal -->
-  <div class="modal-overlay" id="exportModal">
-    <div class="modal-box">
-      <div class="modal-title">Export Conversation</div>
-      <div class="export-options">
-        <label class="export-option">
-          <input type="radio" name="exportFormat" value="markdown" checked />
-          <span class="export-option-label">Markdown (.md)</span>
-          <span class="export-option-desc">Formatted text with headers and metadata</span>
-        </label>
-        <label class="export-option">
-          <input type="radio" name="exportFormat" value="json" />
-          <span class="export-option-label">JSON (.json)</span>
-          <span class="export-option-desc">Full conversation data with timestamps</span>
-        </label>
-        <label class="export-option">
-          <input type="radio" name="exportFormat" value="txt" />
-          <span class="export-option-label">Plain Text (.txt)</span>
-          <span class="export-option-desc">Simple transcript format</span>
-        </label>
-      </div>
-      <div class="export-preview">
-        <label class="export-check">
-          <input type="checkbox" id="includeMetadata" checked />
-          <span>Include metadata (date, mode, model)</span>
-        </label>
-        <label class="export-check">
-          <input type="checkbox" id="includeTimestamps" />
-          <span>Include timestamps</span>
-        </label>
-      </div>
-      <div class="modal-actions">
-        <button class="settings-btn modal-cancel-btn" id="cancelExportBtn">Cancel</button>
-        <button class="settings-btn modal-save-btn" id="confirmExportBtn">Export</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Import modal -->
-  <div class="modal-overlay" id="importModal">
-    <div class="modal-box">
-      <div class="modal-title">Import Conversations</div>
-      <div class="import-area">
-        <div class="import-dropzone" id="importDropzone">
-          <span class="import-icon">&#128449;</span>
-          <span class="import-text">Drop JSON file here or click to browse</span>
-          <input type="file" id="importFileInput" accept=".json" style="display:none" />
-        </div>
-        <div class="import-warning">
-          <strong>Note:</strong> Importing will merge conversations with existing ones.
-          Duplicate IDs will be overwritten.
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="settings-btn modal-cancel-btn" id="cancelImportBtn">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Analytics modal -->
-  <div class="modal-overlay" id="analyticsModal">
-    <div class="modal-box analytics-modal-box">
-      <div class="modal-title">Conversation Analytics</div>
-      <div class="analytics-content" id="analyticsContent">
-        <div class="analytics-summary">
-          <div class="analytics-card">
-            <div class="analytics-card-value" id="analyticsTotalConversations">-</div>
-            <div class="analytics-card-label">Conversations</div>
-          </div>
-          <div class="analytics-card">
-            <div class="analytics-card-value" id="analyticsTotalMessages">-</div>
-            <div class="analytics-card-label">Total Messages</div>
-          </div>
-          <div class="analytics-card">
-            <div class="analytics-card-value" id="analyticsAvgDuration">-</div>
-            <div class="analytics-card-label">Avg Duration</div>
-          </div>
-          <div class="analytics-card">
-            <div class="analytics-card-value" id="analyticsSpeakerRatio">-</div>
-            <div class="analytics-card-label">User/AI Ratio</div>
-          </div>
-        </div>
-
-        <div class="analytics-section">
-          <h3>Daily Activity (Last 7 Days)</h3>
-          <div class="analytics-chart" id="analyticsChart">
-            <div class="analytics-chart-bars"></div>
-          </div>
-        </div>
-
-        <div class="analytics-grid">
-          <div class="analytics-section">
-            <h3>Mode Usage</h3>
-            <div class="analytics-list" id="analyticsModes"></div>
-          </div>
-          <div class="analytics-section">
-            <h3>Model Usage</h3>
-            <div class="analytics-list" id="analyticsModels"></div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="settings-btn modal-cancel-btn" id="closeAnalyticsBtn">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- About modal -->
-  <div class="modal-overlay" id="aboutModal">
-    <div class="modal-box shortcuts-modal-box">
-      <div class="modal-title">About AI Note Taker</div>
-      <div class="about-content">
-        <div class="about-logo">&#10022;</div>
-        <div class="about-version">Version <span id="aboutVersion">1.0.0</span></div>
-        <div class="about-desc">AI-powered voice note taker with local transcription and intelligent routing.</div>
-        <div class="about-status">
-          <div class="about-status-row">
-            <span class="about-status-label">Backend</span>
-            <span class="about-status-value" id="aboutBackend">Checking...</span>
-          </div>
-          <div class="about-status-row">
-            <span class="about-status-label">Ollama</span>
-            <span class="about-status-value" id="aboutOllama">Checking...</span>
-          </div>
-          <div class="about-status-row">
-            <span class="about-status-label">Whisper Model</span>
-            <span class="about-status-value" id="aboutWhisper">Checking...</span>
-          </div>
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="settings-btn modal-save-btn" id="closeAboutModal">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="app.js?v=96"></script>
+  <!-- Scripts -->
+  <!-- During transition, use original app.js -->
+  <script src="app.js?v=25"></script>
+  <!--
+    Future: Use modular JS
+    <script type="module" src="js/main.js"></script>
+  -->
 </body>
 </html>

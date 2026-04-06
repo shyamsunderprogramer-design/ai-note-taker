@@ -1,0 +1,46 @@
+/* ==============================
+   SHELL - Main Application Container
+   ============================== */
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 14px 16px;
+  padding-bottom: 24px;
+  background: transparent;
+  position: relative;
+  min-height: 360px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Resize handle at bottom-right */
+.shell::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  opacity: 0.3;
+  background: linear-gradient(135deg, transparent 50%, var(--text-dim) 50%);
+  border-radius: var(--radius-sm);
+  transition: opacity var(--duration-normal);
+}
+
+.shell::after:hover {
+  opacity: 0.6;
+}
+
+/* Prevent dragging on interactive elements */
+.no-drag {
+  -webkit-app-region: no-drag !important;
+}
+
+/* Drag region for window movement */
+.drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
