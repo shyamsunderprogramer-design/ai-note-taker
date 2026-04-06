@@ -3180,7 +3180,7 @@ function toggleHistoryPanel() {
     // Closing - reset scroll
     historyList.scrollTop = 0
   }
-})
+}
 
 // Back button — close history panel
 const historyBackBtn = document.getElementById("historyBackBtn")
