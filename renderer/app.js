@@ -3167,7 +3167,9 @@ function toggleHistoryPanel() {
   const historyList = document.getElementById("historyList")
 
   if (historyPanel.classList.contains("open")) {
-    // Opening - render and force scroll to top
+    // Opening - close settings first, then render
+    closeProviderConfig()
+    settingsPanel.classList.remove("open")
     renderHistoryList()
     // Force reflow and scroll to top
     if (historyList) {
@@ -3491,6 +3493,7 @@ appMenu.addEventListener("click", async (e) => {
   const action = item.getAttribute("data-action")
 
   if (action === "settings") {
+    closeHistoryPanel() // Close history if open
     settingsPanel.classList.add("open")
     updatePanelBackdrop()
 
