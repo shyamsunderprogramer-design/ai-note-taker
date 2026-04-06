@@ -3167,9 +3167,10 @@ function toggleHistoryPanel() {
   const historyList = document.getElementById("historyList")
 
   if (historyPanel.classList.contains("open")) {
-    // Opening - close settings first, then render
+    // Opening - close other panels first, then render
     closeProviderConfig()
     settingsPanel.classList.remove("open")
+    appMenu.classList.remove("open")
     renderHistoryList()
     // Force reflow and scroll to top
     if (historyList) {
@@ -3471,6 +3472,7 @@ const closeAboutBtn = document.getElementById("closeAboutModal")
 
 menuBtn.addEventListener("click", (e) => {
   e.stopPropagation()
+  closeHistoryPanel() // Close history if open
   appMenu.classList.toggle("open")
   shortcutsModal.classList.remove("open")
   aboutModal.classList.remove("open")
