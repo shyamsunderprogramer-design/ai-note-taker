@@ -138,21 +138,26 @@ body {
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;
+  position: relative;
 }
 
-/* Left: Traffic lights + stealth button */
+/* Left: Traffic lights + stealth button - Fixed width to lock ANT title */
 .header-left {
   display: flex;
   align-items: center;
   gap: 10px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
+  /* Fixed width to prevent ANT title from shifting */
+  width: 180px;
+  min-width: 180px;
 }
 
-/* Stealth button */
+/* Stealth button - Fixed width to prevent layout shift */
 .stealth-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 6px 14px;
   border: 1px solid rgba(255, 68, 68, 0.2);
@@ -165,6 +170,9 @@ body {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(255, 68, 68, 0.1);
+  /* Fixed width to prevent ANT title from moving */
+  min-width: 120px;
+  width: 120px;
 }
 .stealth-btn:hover {
   border-color: rgba(255, 100, 100, 0.35);
@@ -208,7 +216,7 @@ body {
   50% { opacity: 0.5; transform: scale(0.85); box-shadow: 0 0 4px rgba(34, 197, 94, 0.3); }
 }
 
-/* Center: title */
+/* Center: title - Locked in center position */
 .header-center {
   flex: 1;
   display: flex;
@@ -218,6 +226,12 @@ body {
   cursor: default;
   gap: 0;
   padding: 2px 0;
+  /* Center absolutely to prevent shifting */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  pointer-events: none;
 }
 .app-title {
   font-size: 0.714em;
@@ -226,6 +240,8 @@ body {
   text-transform: uppercase;
   color: var(--text-dim);
   opacity: 0.7;
+  pointer-events: auto;
+  white-space: nowrap;
 }
 .app-subtitle {
   font-size: 1em;
@@ -234,6 +250,8 @@ body {
   text-transform: uppercase;
   color: var(--text-main);
   opacity: 0.95;
+  pointer-events: auto;
+  white-space: nowrap;
 }
 
 /* Backend status indicator */
@@ -289,9 +307,13 @@ body {
 .header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
+  /* Fixed width to match header-left and keep center locked */
+  width: 180px;
+  min-width: 180px;
 }
 
 .win-btn {
@@ -1669,6 +1691,45 @@ select option {
   position: relative;
   overflow: hidden;
   display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (min-width: 600px) {
+  .history-item {
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    border-radius: 14px;
+    gap: 12px;
+  }
+}
+
+/* Selection checkbox */
+.history-item-checkbox {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.history-item-checkbox .checkbox-box {
+  font-size: 18px;
+  color: var(--text-dim);
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.history-item.selected {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.history-item.selected .history-item-checkbox .checkbox-box {
+  color: var(--primary);
+}
   align-items: flex-start;
   gap: 10px;
 }
@@ -1884,13 +1945,31 @@ select option {
   z-index: 11000;
   display: none;
   min-width: 130px;
+  max-width: min(200px, calc(100vw - 40px));
+  max-height: min(60vh, 300px);
+  overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   backdrop-filter: blur(8px);
+  scroll-behavior: smooth;
 }
-.history-dropdown.open { display: block; animation: dropdown-in 0.15s ease; }
+.history-dropdown.open {
+  display: flex;
+  flex-direction: column;
+  animation: dropdown-in 0.15s ease;
+}
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-4px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Scrollbar for history dropdown */
+.history-dropdown::-webkit-scrollbar {
+  width: 5px;
+}
+.history-dropdown::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
 }
 
 .history-dropdown-item {
@@ -1907,6 +1986,7 @@ select option {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 .history-dropdown-item:hover { background: rgba(255,255,255,0.06); }
 .history-dropdown-item.danger { color: var(--danger); }
@@ -3306,10 +3386,10 @@ select option {
 .msg-read-btn:hover { border-color: var(--line-bright); color: var(--text-main); background: var(--surface-hover); }
 
 /* ==============================
-   APP MENU (gear menu)
+   APP MENU (gear menu) - Scrollable & Responsive
    ============================== */
 .app-menu {
-  position: absolute;
+  position: fixed;
   top: 48px;
   right: 80px;
   background: rgba(22, 27, 44, 0.98);
@@ -3318,10 +3398,53 @@ select option {
   padding: 6px;
   z-index: 900;
   display: none;
-  min-width: 190px;
+  min-width: 160px;
+  max-width: min(240px, calc(100vw - 100px));
+  max-height: min(70vh, calc(100vh - 80px));
+  overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  /* Force block layout for proper scrolling of all items */
+  box-sizing: border-box;
 }
-.app-menu.open { display: block; }
+.app-menu.open {
+  display: block;
+}
+
+/* Scrollbar styling */
+.app-menu::-webkit-scrollbar {
+  width: 6px;
+}
+.app-menu::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.app-menu::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+.app-menu::-webkit-scrollbar-thumb:hover {
+  background: var(--line-bright);
+}
+
+/* Responsive positioning */
+@media (max-height: 500px) {
+  .app-menu {
+    top: 48px;
+    max-height: calc(100vh - 60px);
+    right: 10px;
+  }
+}
+@media (max-width: 480px) {
+  .app-menu {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+    width: auto;
+  }
+}
 
 .app-menu-item {
   display: flex;
@@ -3343,6 +3466,7 @@ select option {
   opacity: 0.7;
   width: 18px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .app-menu-separator {
@@ -3379,6 +3503,31 @@ select option {
   color: var(--text-dim);
   font-family: inherit;
   font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Compact mode for small windows */
+@media (max-height: 400px), (max-width: 360px) {
+  .app-menu {
+    padding: 4px;
+  }
+  .app-menu-item {
+    padding: 6px 8px;
+    font-size: 0.85em;
+    gap: 6px;
+  }
+  .app-menu-section-title {
+    padding: 6px 8px 2px;
+    font-size: 0.65em;
+  }
+  .app-menu-icon {
+    width: 16px;
+    font-size: 12px;
+  }
+  .app-menu-shortcut {
+    font-size: 0.65em;
+    padding: 1px 4px;
+  }
 }
 
 .app-menu-conversation {
@@ -3391,6 +3540,7 @@ select option {
   font-size: 0.786em;
   color: var(--text-main);
   transition: all 0.12s ease;
+  flex-shrink: 0;
 }
 
 .app-menu-conversation:hover {
@@ -3399,15 +3549,33 @@ select option {
 
 .app-menu-conversation-title {
   flex: 1;
-  white-space: nowrap;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-menu-conversation-time {
   font-size: 0.786em;
   color: var(--text-dim);
   opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* Recent conversations list - scrollable container */
+#recentConversationsList {
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#recentConversationsList::-webkit-scrollbar {
+  width: 4px;
+}
+
+#recentConversationsList::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
 }
 
 /* ==============================
@@ -3596,15 +3764,22 @@ select option {
   .welcome-icon { font-size: 24px; }
   .welcome-text { font-size: 0.929em; }
 
-  /* Smaller stealth button */
+  /* Smaller stealth button - maintain fixed width */
   .stealth-btn {
     padding: 4px 10px;
     gap: 6px;
     font-size: 0.714em;
+    min-width: 100px;
+    width: 100px;
   }
   .stealth-dot {
     width: 6px;
     height: 6px;
+  }
+  /* Adjust header sections for small screens */
+  .header-left, .header-right {
+    width: 140px;
+    min-width: 140px;
   }
 
   /* Smaller window controls */
@@ -4430,6 +4605,37 @@ select option {
 .history-action-btn-secondary:hover {
   border-color: var(--accent);
   background: rgba(59, 130, 246, 0.1);
+}
+
+.history-action-btn-secondary.danger {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: rgba(255, 150, 150, 0.9);
+}
+
+.history-action-btn-secondary.danger:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.history-action-btn-secondary.active {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+/* Responsive history actions bar */
+@media (max-width: 480px) {
+  .history-actions-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 12px;
+  }
+  .history-action-btn-secondary {
+    padding: 5px 10px;
+    font-size: 0.75em;
+    flex: 1;
+    min-width: 70px;
+    justify-content: center;
+  }
 }
 
 .export-options {

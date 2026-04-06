@@ -313,8 +313,14 @@
       </select>
     </div>
     <div class="history-actions-bar">
+      <button id="selectBtn" class="history-action-btn-secondary" type="button" title="Select conversations">
+        <span>&#9744;</span> Select
+      </button>
+      <button id="clearChatBtn" class="history-action-btn-secondary danger" type="button" title="Clear current chat">
+        <span>&#128465;</span> Clear Chat
+      </button>
       <button id="exportAllBtn" class="history-action-btn-secondary" type="button" title="Export all conversations">
-        <span>&#129093;</span> Export All
+        <span>&#129093;</span> Export
       </button>
       <button id="importBtn" class="history-action-btn-secondary" type="button" title="Import conversations">
         <span>&#129094;</span> Import
@@ -1037,10 +1043,6 @@
       <div class="app-menu-item" data-action="export">
         <span class="app-menu-icon">&#129093;</span>
         <span>Export</span>
-      </div>
-      <div class="app-menu-item" data-action="clear">
-        <span class="app-menu-icon">&#10005;</span>
-        <span>Clear Chat</span>
       </div>
     </div>
 

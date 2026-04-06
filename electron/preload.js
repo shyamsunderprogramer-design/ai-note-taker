@@ -120,6 +120,7 @@ contextBridge.exposeInMainWorld("api", {
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggle-maximize"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
   resizeWindow: (width, height) => ipcRenderer.invoke("window:resize", width, height),
+  forceTop: () => ipcRenderer.invoke("window:force-top"),
 
   // Stealth mode
   setStealthMode: (enabled) => ipcRenderer.invoke("window:set-stealth-mode", enabled),

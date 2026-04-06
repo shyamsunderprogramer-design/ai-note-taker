@@ -8,19 +8,98 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
+    /* Fixed Header Layout */
+    .analytics-page {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .analytics-header-fixed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary, #1a1a1a);
+      border-bottom: 1px solid var(--border-color, #333);
+      z-index: 100;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .analytics-back-arrow {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-primary, #fff);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    .analytics-back-arrow:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .analytics-header-content {
+      flex: 1;
+    }
+
+    .analytics-header-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .analytics-header-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin: 2px 0 0 0;
+    }
+
+    /* Scrollable Content */
+    .analytics-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 80px 20px 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Scrollbar styling */
+    .analytics-content::-webkit-scrollbar {
+      width: 8px;
+    }
+    .analytics-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .analytics-content::-webkit-scrollbar-thumb {
+      background: var(--border-color, #333);
+      border-radius: 4px;
+    }
+
     .analytics-container {
       padding: 20px;
       max-width: 1400px;
       margin: 0 auto;
-    }
-
-    .analytics-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 30px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border-color, #333);
     }
 
     .analytics-title {
@@ -30,20 +109,6 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-    }
-
-    .analytics-back-btn {
-      padding: 10px 20px;
-      border: 1px solid var(--border-color, #333);
-      border-radius: 8px;
-      background: var(--bg-secondary, #1a1a1a);
-      color: var(--text-primary, #fff);
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .analytics-back-btn:hover {
-      background: var(--bg-tertiary, #2a2a2a);
     }
 
     /* Summary Cards */
@@ -250,15 +315,19 @@
   </style>
 </head>
 <body>
-  <div class="analytics-container">
-    <!-- Header -->
-    <div class="analytics-header">
-      <div>
-        <h1 class="analytics-title">📊 Analytics Dashboard</h1>
-        <p style="color: var(--text-secondary); margin-top: 5px;">Insights from your interview history</p>
+  <div class="analytics-page">
+    <!-- Fixed Header -->
+    <header class="analytics-header-fixed">
+      <button class="analytics-back-arrow" onclick="window.location.href='index.html'" title="Back to App">←</button>
+      <div class="analytics-header-content">
+        <h1 class="analytics-header-title">📊 Analytics Dashboard</h1>
+        <p class="analytics-header-subtitle">Insights from your interview history</p>
       </div>
-      <button class="analytics-back-btn" onclick="window.location.href='index.html'">← Back to App</button>
-    </div>
+    </header>
+
+    <!-- Scrollable Content -->
+    <main class="analytics-content">
+      <div class="analytics-container">
 
     <!-- Loading State -->
     <div id="loadingState" class="analytics-loading">
@@ -349,7 +418,8 @@
           <div id="companyComparison"></div>
         </div>
       </div>
-    </div>
+      </div>
+    </main>
   </div>
 
   <script src="analytics-dashboard.js"></script>

@@ -1019,6 +1019,9 @@ async function renderHistoryList() {
       item.setAttribute("data-id", conv.id)
 
       item.innerHTML = `
+        <div class="history-item-checkbox" style="display: none;" title="Select">
+          <div class="checkbox-box">☐</div>
+        </div>
         <div class="history-item-icon">${icon}</div>
         <div class="history-item-content">
           <div class="history-item-top">
@@ -1206,14 +1209,32 @@ document.addEventListener("click", (e) => {
     return
   }
 
-  // Click on history item body (not a button) — resume conversation
+  // Click on history item body — resume conversation OR toggle selection
   const historyItem = e.target.closest(".history-item")
   if (historyItem && !e.target.closest("button")) {
-    const id = historyItem.getAttribute("data-id")
-    if (id) {
-      window.api.conversationLoad(id).then(full => {
-        if (full) { loadConversationIntoUI(full); closeHistoryPanel() }
-      })
+    // Check if in selection mode
+    if (selectionMode) {
+      // Toggle selection
+      historyItem.classList.toggle("selected")
+      const checkbox = historyItem.querySelector('.history-item-checkbox .checkbox-box')
+      if (checkbox) {
+        checkbox.textContent = historyItem.classList.contains('selected') ? '☑' : '☐'
+      }
+      // Update clear chat button text based on selection
+      const selectedCount = document.querySelectorAll('.history-item.selected').length
+      if (clearChatBtn) {
+        clearChatBtn.innerHTML = selectedCount > 0
+          ? `<span>&#128465;</span> Delete (${selectedCount})`
+          : '<span>&#128465;</span> Clear Chat'
+      }
+    } else {
+      // Normal mode - load conversation
+      const id = historyItem.getAttribute("data-id")
+      if (id) {
+        window.api.conversationLoad(id).then(full => {
+          if (full) { loadConversationIntoUI(full); closeHistoryPanel() }
+        })
+      }
     }
     return
   }
@@ -3470,12 +3491,54 @@ const aboutModal = document.getElementById("aboutModal")
 const closeShortcutsBtn = document.getElementById("closeShortcutsModal")
 const closeAboutBtn = document.getElementById("closeAboutModal")
 
+// Adjust menu position to keep it within window bounds
+function adjustMenuPosition() {
+  if (!appMenu.classList.contains("open")) return
+
+  const menuRect = appMenu.getBoundingClientRect()
+  const windowWidth = window.innerWidth
+  const windowHeight = window.innerHeight
+
+  // Check if menu extends beyond right edge
+  if (menuRect.right > windowWidth - 10) {
+    appMenu.style.right = '10px'
+    appMenu.style.left = 'auto'
+  }
+
+  // Check if menu extends beyond bottom edge
+  if (menuRect.bottom > windowHeight - 10) {
+    const newTop = Math.max(10, windowHeight - menuRect.height - 10)
+    appMenu.style.top = newTop + 'px'
+    appMenu.style.maxHeight = (windowHeight - newTop - 10) + 'px'
+  } else {
+    appMenu.style.top = '48px'
+    appMenu.style.maxHeight = ''
+  }
+}
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  adjustMenuPosition()
+})
+
 menuBtn.addEventListener("click", (e) => {
   e.stopPropagation()
   closeHistoryPanel() // Close history if open
+
+  // Reset menu styles before opening
+  appMenu.style.top = '48px'
+  appMenu.style.right = '80px'
+  appMenu.style.left = 'auto'
+  appMenu.style.maxHeight = ''
+
   appMenu.classList.toggle("open")
   shortcutsModal.classList.remove("open")
   aboutModal.classList.remove("open")
+
+  // Adjust position after opening
+  if (appMenu.classList.contains("open")) {
+    setTimeout(adjustMenuPosition, 0)
+  }
 })
 
 // Close menu when clicking outside
@@ -3552,11 +3615,6 @@ appMenu.addEventListener("click", async (e) => {
   else if (action === "export") {
     exportCurrentConversation = currentMessages.length > 0 ? currentMessages : null
     if (exportModal) exportModal.classList.add("open")
-  }
-  else if (action === "clear") {
-    if (confirm("Clear current conversation?")) {
-      startNewConversation()
-    }
   }
   else if (action === "study-plan") {
     window.location.href = 'study-plan.html'
@@ -4609,6 +4667,82 @@ window.exportConversation = exportConversation
 if (importBtn) {
   importBtn.addEventListener("click", () => {
     if (importModal) importModal.classList.add("open")
+  })
+}
+
+// ==============================
+// CLEAR CHAT & SELECT BUTTONS
+// ==============================
+const clearChatBtn = document.getElementById("clearChatBtn")
+const selectBtn = document.getElementById("selectBtn")
+
+// Clear Chat button - context aware behavior
+if (clearChatBtn) {
+  clearChatBtn.addEventListener("click", async () => {
+    // Get selected conversations when in selection mode
+    const selectedItems = document.querySelectorAll('.history-item.selected')
+    const selectedIds = Array.from(selectedItems).map(item => item.dataset.id)
+
+    if (selectionMode && selectedIds.length > 0) {
+      // Delete selected conversations from history
+      if (confirm(`Delete ${selectedIds.length} selected conversation(s)?`)) {
+        let deletedCount = 0
+        for (const id of selectedIds) {
+          try {
+            await window.api.conversationDelete(id)
+            deletedCount++
+          } catch (e) {
+            console.error('Failed to delete conversation:', e)
+          }
+        }
+        showToast(`${deletedCount} conversation(s) deleted`, "info")
+        renderHistoryList() // Refresh the list
+        // Exit selection mode
+        if (selectBtn) selectBtn.click()
+      }
+    } else {
+      // Clear current active chat
+      if (confirm("Clear current chat? This will remove all messages.")) {
+        clearConversation()
+        showToast("Chat cleared", "info")
+      }
+    }
+  })
+}
+
+// Select button - toggle selection mode for conversations
+let selectionMode = false
+if (selectBtn) {
+  selectBtn.addEventListener("click", () => {
+    selectionMode = !selectionMode
+    selectBtn.classList.toggle("active", selectionMode)
+    selectBtn.innerHTML = selectionMode
+      ? '<span>&#9745;</span> Done'
+      : '<span>&#9744;</span> Select'
+
+    // Toggle checkboxes in history list
+    const historyItems = document.querySelectorAll('.history-item')
+    historyItems.forEach(item => {
+      const checkbox = item.querySelector('.history-item-checkbox')
+      if (checkbox) {
+        checkbox.style.display = selectionMode ? 'flex' : 'none'
+      }
+      // Reset selection when exiting mode
+      if (!selectionMode) {
+        item.classList.remove('selected')
+        const checkboxBox = item.querySelector('.history-item-checkbox .checkbox-box')
+        if (checkboxBox) checkboxBox.textContent = '☐'
+      }
+    })
+
+    // Reset clear chat button text
+    if (clearChatBtn) {
+      clearChatBtn.innerHTML = '<span>&#128465;</span> Clear Chat'
+    }
+
+    if (selectionMode) {
+      showToast("Select conversations to delete", "info")
+    }
   })
 }
 

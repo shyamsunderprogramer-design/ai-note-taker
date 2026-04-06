@@ -7,6 +7,97 @@
   <link rel="stylesheet" href="style.css?v=25">
   <style>
     /* Pre-Interview Prep specific styles */
+    /* Fixed Header Layout */
+    .prep-page {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .prep-header-fixed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary, #1a1a1a);
+      border-bottom: 1px solid var(--border-color, #333);
+      z-index: 100;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      -webkit-app-region: drag; /* Make header draggable */
+      user-select: none;
+    }
+
+    .prep-back-arrow {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: var(--surface, rgba(255,255,255,0.05));
+      color: var(--text-primary, #fff);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      -webkit-app-region: no-drag; /* Don't drag on button */
+      flex-shrink: 0;
+    }
+
+    .prep-back-arrow:hover {
+      background: var(--surface-hover, rgba(255,255,255,0.1));
+    }
+
+    .prep-header-content {
+      flex: 1;
+    }
+
+    .prep-header-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .prep-header-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin: 2px 0 0 0;
+    }
+
+    /* Scrollable Content Area */
+    .prep-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 80px 20px 20px; /* Top padding for fixed header */
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Scrollbar styling */
+    .prep-content::-webkit-scrollbar {
+      width: 8px;
+    }
+    .prep-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .prep-content::-webkit-scrollbar-thumb {
+      background: var(--border-color, #333);
+      border-radius: 4px;
+    }
+    .prep-content::-webkit-scrollbar-thumb:hover {
+      background: var(--text-secondary, #666);
+    }
+
     .prep-container {
       padding: 20px;
       max-width: 1200px;
@@ -431,14 +522,19 @@
   </style>
 </head>
 <body>
-  <button class="prep-back-btn" onclick="window.location.href='index.html'">< Back to App</button>
+  <div class="prep-page">
+    <!-- Fixed Header -->
+    <header class="prep-header-fixed">
+      <button class="prep-back-arrow" onclick="window.location.href='index.html'" title="Back to App">←</button>
+      <div class="prep-header-content">
+        <h1 class="prep-header-title">🔮 Interview Predictor</h1>
+        <p class="prep-header-subtitle">AI-powered interview preparation</p>
+      </div>
+    </header>
 
-  <div class="prep-container">
-    <!-- Header -->
-    <div class="prep-header">
-      <h1 class="prep-title">🔮 Interview Predictor</h1>
-      <p class="prep-subtitle">AI-powered interview preparation based on company patterns</p>
-    </div>
+    <!-- Scrollable Content -->
+    <main class="prep-content">
+      <div class="prep-container">
 
     <!-- Input Section -->
     <div class="prep-input-section">
@@ -533,6 +629,8 @@
         </div>
       </div>
     </div>
+      </div>
+    </main>
   </div>
 
   <script src="pre-interview.js"></script>

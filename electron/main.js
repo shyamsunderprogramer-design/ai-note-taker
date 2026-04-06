@@ -53,10 +53,27 @@ function getRestartDelayMs(attempt) {
   return BACKEND_RESTART_BASE_DELAY_MS * Math.pow(2, attempt - 1)
 }
 
-// Keep window above all others by re-applying monitor level after any show operation
+// Keep window above all others - Windows-specific aggressive approach
 function ensureTopmost(w) {
-  if (!w || PLATFORM !== "win32") return
-  w.setAlwaysOnTop(true, "monitor", 2147483647)
+  if (!w || w.isDestroyed()) return
+
+  if (PLATFORM === "win32") {
+    // Windows: use "normal" level which is actually the most reliable
+    // "screen-saver" and other levels can behave unexpectedly
+    // The key is to call it frequently and use moveTop()
+    w.setAlwaysOnTop(true, "normal")
+  } else if (PLATFORM === "darwin") {
+    w.setAlwaysOnTop(true, "floating", 999)
+  } else {
+    w.setAlwaysOnTop(true)
+  }
+
+  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  // On Windows, also try to focus and raise
+  if (PLATFORM === "win32" && !w.isFocused()) {
+    w.focus()
+  }
 }
 
 // ======================================
@@ -135,7 +152,7 @@ function createWindow() {
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
-    alwaysOnTop: true,
+    // Note: alwaysOnTop is applied manually after window creation for more control
     skipTaskbar: true,
     resizable: true,
     webPreferences: {
@@ -153,11 +170,14 @@ function createWindow() {
     windowOpts.trafficLightPosition = { x: 12, y: 12 }
   }
 
-  // Windows: use "monitor" level — above all normal windows, PIP, fullscreen apps
-  // This is the highest normal window level, only below system notifications
   win = new BrowserWindow(windowOpts)
+
+  // Set always on top - "normal" level is most reliable on Windows
+  // even though it sounds counter-intuitive
   if (PLATFORM === "win32") {
-    win.setAlwaysOnTop(true, "monitor", 2147483647)
+    win.setAlwaysOnTop(true, "normal")
+  } else if (PLATFORM === "darwin") {
+    win.setAlwaysOnTop(true, "floating", 999)
   }
 
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
@@ -171,6 +191,20 @@ function createWindow() {
 
   win.on("resize", saveBounds)
   win.on("move", saveBounds)
+
+  // Re-assert always-on-top aggressively to stay above PiP windows and other apps
+  // This works together with stealth mode - both features are independent
+  const topmostInterval = setInterval(() => {
+    if (win && !win.isDestroyed() && !win.isMinimized()) {
+      // Aggressive approach: always bring to top
+      win.moveTop()
+      // Use "normal" level which is most reliable on Windows
+      win.setAlwaysOnTop(true, "normal")
+    } else {
+      clearInterval(topmostInterval)
+    }
+  }, 500) // Check every 500ms to aggressively stay on top
+
   stealth.init(win)
   ensureTopmost(win)
 }
@@ -540,7 +574,17 @@ ipcMain.handle("window:restore", () => {
   }
   w.show()
   w.focus()
-  ensureTopmost(w)
+  w.moveTop()
+  w.setAlwaysOnTop(true, "normal")
+})
+
+ipcMain.handle("window:force-top", () => {
+  const w = BrowserWindow.getFocusedWindow() || win
+  if (!w) return
+  w.moveTop()
+  w.focus()
+  w.setAlwaysOnTop(true, "normal")
+  return true
 })
 
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
@@ -885,10 +929,20 @@ app.whenReady().then(async () => {
     if (stealth.isEnabled()) {
       stealth.disable()
       store.set("stealthState", false)
-      if (win) { win.restore(); win.show(); win.focus(); ensureTopmost(win) }
+      if (win) {
+        win.restore()
+        win.show()
+        win.focus()
+        win.moveTop()
+        win.setAlwaysOnTop(true, "normal")
+      }
     } else {
       stealth.enable()
       store.set("stealthState", true)
+      // Re-assert always on top after stealth enable
+      if (win) {
+        win.setAlwaysOnTop(true, "normal")
+      }
     }
     if (win?.webContents) win.webContents.send("stealth:state-changed", {
       enabled: stealth.isEnabled(),
@@ -899,8 +953,15 @@ app.whenReady().then(async () => {
   // Alt+Space — hide/show
   registerShortcut("Alt+Space", "hide/show", () => {
     if (!win) return
-    if (win.isVisible()) win.hide()
-    else { win.restore(); win.show(); win.focus(); ensureTopmost(win) }
+    if (win.isVisible()) {
+      win.hide()
+    } else {
+      win.restore()
+      win.show()
+      win.focus()
+      win.moveTop()
+      win.setAlwaysOnTop(true, "normal")
+    }
   })
 
   // Ctrl+Arrow — move window
@@ -922,8 +983,15 @@ app.whenReady().then(async () => {
   })
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    else { win?.show(); win?.focus(); ensureTopmost(win) }
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    } else if (win) {
+      win.show()
+      win.focus()
+      // Aggressively bring to absolute front
+      win.moveTop()
+      win.setAlwaysOnTop(true, "normal")
+    }
   })
 })
 
