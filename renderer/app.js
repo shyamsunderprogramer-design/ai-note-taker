@@ -3619,6 +3619,15 @@ appMenu.addEventListener("click", async (e) => {
   else if (action === "study-plan") {
     window.location.href = 'study-plan.html'
   }
+  else if (action === "interview-simulator") {
+    window.location.href = 'interview-simulator.html'
+  }
+  else if (action === "job-tracker") {
+    window.location.href = 'job-tracker.html'
+  }
+  else if (action === "resume-review") {
+    window.location.href = 'resume-review.html'
+  }
 })
 
 // Shortcuts modal

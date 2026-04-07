@@ -57,9 +57,52 @@ except ImportError:
     logger = logging.getLogger("main")
     logger.warning("[CognitiveGraph] Module not available. Run: pip install neo4j spacy")
 
+# Interview Simulator - Phase 3
+try:
+    from interview_simulator import (
+        interview_simulator,
+        create_interview,
+        get_question,
+        submit_response,
+        finish_interview
+    )
+    INTERVIEW_SIMULATOR_AVAILABLE = True
+except ImportError:
+    INTERVIEW_SIMULATOR_AVAILABLE = False
+    logger = logging.getLogger("main")
+    logger.warning("[InterviewSimulator] Module not available")
+
+# Job Application Tracker - Phase 3
+try:
+    from job_tracker import job_tracker, track_application, get_applications
+    JOB_TRACKER_AVAILABLE = True
+except ImportError:
+    JOB_TRACKER_AVAILABLE = False
+    logger = logging.getLogger("main")
+    logger.warning("[JobTracker] Module not available")
+
+# Resume Review - Phase 3
+try:
+    from resume_review import resume_reviewer, analyze_resume
+    RESUME_REVIEW_AVAILABLE = True
+except ImportError:
+    RESUME_REVIEW_AVAILABLE = False
+    logger = logging.getLogger("main")
+    logger.warning("[ResumeReview] Module not available")
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 app = FastAPI()
+
+# Add CORS middleware for frontend access
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 logger = logging.getLogger("main")
 
@@ -2415,3 +2458,668 @@ async def export_study_plan(
     except Exception as e:
         logger.error(f"[StudyPlan] Export error: {e}")
         return {"error": str(e)}
+
+
+# ============================================================================
+# Interview Simulator - Phase 3
+# ============================================================================
+
+@app.post("/interview-simulator/create")
+async def interview_simulator_create(
+    company: str = Query(..., description="Target company name"),
+    role: str = Query(None, description="Job role"),
+    num_questions: int = Query(5, description="Number of questions"),
+    difficulty: str = Query(None, description="Filter by difficulty (easy/medium/hard)"),
+    user_id: str = Query("default", description="User ID")
+):
+    """
+    Create a new interview simulation session.
+    """
+    if not INTERVIEW_SIMULATOR_AVAILABLE:
+        return {"error": "Interview simulator not available"}
+
+    try:
+        result = interview_simulator.create_session(company, role, num_questions, user_id, difficulty)
+        return result
+    except Exception as e:
+        logger.error(f"[InterviewSimulator] Create error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/interview-simulator/{session_id}/question")
+async def interview_simulator_get_question(session_id: str):
+    """
+    Get the next question in the interview session.
+    """
+    if not INTERVIEW_SIMULATOR_AVAILABLE:
+        return {"error": "Interview simulator not available"}
+
+    try:
+        question = interview_simulator.get_next_question(session_id)
+        if question is None:
+            return {"status": "complete", "message": "Interview complete"}
+        return question
+    except Exception as e:
+        logger.error(f"[InterviewSimulator] Get question error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/interview-simulator/{session_id}/answer")
+async def interview_simulator_submit_answer(
+    session_id: str,
+    transcript: str = Query(..., description="User's answer transcript"),
+    duration_ms: int = Query(0, description="Answer duration in milliseconds")
+):
+    """
+    Submit an answer and get AI evaluation.
+    """
+    if not INTERVIEW_SIMULATOR_AVAILABLE:
+        return {"error": "Interview simulator not available"}
+
+    try:
+        result = interview_simulator.submit_answer(session_id, transcript, duration_ms)
+        return result
+    except Exception as e:
+        logger.error(f"[InterviewSimulator] Submit answer error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/interview-simulator/{session_id}/status")
+async def interview_simulator_status(session_id: str):
+    """
+    Get current session status.
+    """
+    if not INTERVIEW_SIMULATOR_AVAILABLE:
+        return {"error": "Interview simulator not available"}
+
+    try:
+        status = interview_simulator.get_session_status(session_id)
+        if status is None:
+            return {"error": "Session not found"}
+        return status
+    except Exception as e:
+        logger.error(f"[InterviewSimulator] Status error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/interview-simulator/{session_id}/finish")
+async def interview_simulator_finish(session_id: str):
+    """
+    Complete the interview and save to cognitive graph.
+    """
+    if not INTERVIEW_SIMULATOR_AVAILABLE:
+        return {"error": "Interview simulator not available"}
+
+    try:
+        result = finish_interview(session_id)
+        return result
+    except Exception as e:
+        logger.error(f"[InterviewSimulator] Finish error: {e}")
+        return {"error": str(e)}
+
+
+# ============================================================================
+# Job Application Tracker - Phase 3
+# ============================================================================
+
+@app.post("/job-tracker/application")
+async def create_job_application(
+    user_id: str = Query("default", description="User ID"),
+    company: str = Query(..., description="Company name"),
+    role: str = Query(..., description="Job role"),
+    location: str = Query(None, description="Job location"),
+    salary_range: str = Query(None, description="Salary range"),
+    job_url: str = Query(None, description="Job posting URL"),
+    status: str = Query("saved", description="Application status"),
+    priority: str = Query("medium", description="Priority level")
+):
+    """
+    Create a new job application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.create_application(
+            user_id=user_id,
+            company=company,
+            role=role,
+            location=location,
+            salary_range=salary_range,
+            job_url=job_url,
+            status=status,
+            priority=priority
+        )
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Create error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/applications")
+async def get_job_applications(
+    user_id: str = Query("default", description="User ID"),
+    status: str = Query(None, description="Filter by status"),
+    tags: str = Query(None, description="Filter by tags (comma-separated)")
+):
+    """
+    Get all job applications for a user with optional filters.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        tag_list = tags.split(",") if tags else None
+        applications = job_tracker.get_user_applications(user_id, status, tag_list)
+        return {
+            "user_id": user_id,
+            "count": len(applications),
+            "applications": applications
+        }
+    except Exception as e:
+        logger.error(f"[JobTracker] Get applications error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/application/{app_id}")
+async def get_job_application(app_id: str):
+    """
+    Get a single job application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        application = job_tracker.get_application(app_id)
+        if not application:
+            return {"error": "Application not found"}
+        return application
+    except Exception as e:
+        logger.error(f"[JobTracker] Get application error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/status")
+async def update_job_status(
+    app_id: str,
+    status: str = Query(..., description="New status"),
+    notes: str = Query(None, description="Status change notes")
+):
+    """
+    Update application status.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.update_status(app_id, status, notes)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Update status error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/interview")
+async def add_job_interview(
+    app_id: str,
+    interview_type: str = Query(..., description="Interview type"),
+    scheduled_date: str = Query(..., description="ISO datetime"),
+    duration_minutes: int = Query(60, description="Duration in minutes"),
+    notes: str = Query(None, description="Notes")
+):
+    """
+    Add an interview to a job application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.add_interview(
+            app_id, interview_type, scheduled_date, duration_minutes, notes=notes
+        )
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Add interview error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/offer")
+async def add_job_offer(
+    app_id: str,
+    salary: str = Query(..., description="Salary offer"),
+    benefits: str = Query(..., description="Benefits (comma-separated)"),
+    deadline: str = Query(None, description="Offer deadline")
+):
+    """
+    Add offer details to a job application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        benefits_list = benefits.split(",") if benefits else []
+        result = job_tracker.add_offer(app_id, salary, benefits_list, deadline)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Add offer error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/stats")
+async def get_job_tracker_stats(user_id: str = Query("default", description="User ID")):
+    """
+    Get job application pipeline statistics.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        stats = job_tracker.get_pipeline_stats(user_id)
+        return stats
+    except Exception as e:
+        logger.error(f"[JobTracker] Stats error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/upcoming-interviews")
+async def get_upcoming_job_interviews(
+    user_id: str = Query("default", description="User ID"),
+    days: int = Query(7, description="Number of days to look ahead")
+):
+    """
+    Get upcoming interviews within specified days.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        interviews = job_tracker.get_upcoming_interviews(user_id, days)
+        return {
+            "user_id": user_id,
+            "count": len(interviews),
+            "interviews": interviews
+        }
+    except Exception as e:
+        logger.error(f"[JobTracker] Upcoming interviews error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/company/{company}")
+async def get_company_job_insights(company: str):
+    """
+    Get insights about a specific company from applications.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        insights = job_tracker.get_company_insights(company)
+        return insights
+    except Exception as e:
+        logger.error(f"[JobTracker] Company insights error: {e}")
+        return {"error": str(e)}
+
+
+@app.delete("/job-tracker/application/{app_id}")
+async def delete_job_application(app_id: str):
+    """
+    Delete a job application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.delete_application(app_id)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Delete error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/duplicates")
+async def find_job_duplicates(user_id: str = Query("default", description="User ID")):
+    """
+    Find duplicate applications (same company + role) for a user.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        duplicates = job_tracker.find_duplicates(user_id)
+        return duplicates
+    except Exception as e:
+        logger.error(f"[JobTracker] Find duplicates error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/duplicates/remove")
+async def remove_job_duplicates(
+    user_id: str = Query("default", description="User ID"),
+    keep: str = Query("latest", description="Which to keep: 'latest' or 'oldest'")
+):
+    """
+    Remove duplicate applications, keeping either the latest or oldest.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    if keep not in ["latest", "oldest"]:
+        return {"error": "keep must be 'latest' or 'oldest'"}
+
+    try:
+        result = job_tracker.remove_duplicates(user_id, keep)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Remove duplicates error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/application/{app_id}/details")
+async def get_job_application_details(app_id: str):
+    """
+    Get detailed information about a specific application.
+    Includes computed fields like days_in_pipeline, interview_count, etc.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        details = job_tracker.get_application_details(app_id)
+        if not details:
+            return {"error": "Application not found"}
+        return details
+    except Exception as e:
+        logger.error(f"[JobTracker] Get details error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/recruiter")
+async def add_recruiter_contact(
+    app_id: str,
+    name: str = Query(..., description="Recruiter name"),
+    email: Optional[str] = Query(None, description="Recruiter email"),
+    phone: Optional[str] = Query(None, description="Recruiter phone"),
+    is_primary: bool = Query(True, description="Set as primary recruiter")
+):
+    """
+    Add recruiter contact to an application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.add_recruiter(app_id, name, email, phone, is_primary)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Add recruiter error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/communication")
+async def add_communication_log(
+    app_id: str,
+    comm_type: str = Query(..., description="Communication type: email, phone, message"),
+    sender: str = Query(..., description="Sender name/email"),
+    content: str = Query(..., description="Message content/summary"),
+    direction: str = Query("inbound", description="inbound or outbound"),
+    notes: Optional[str] = Query(None, description="Additional notes")
+):
+    """
+    Log a communication (email, phone call, message) for an application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.add_communication(app_id, comm_type, sender, content, direction, notes)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Add communication error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/background-check")
+async def update_background_check_status(
+    app_id: str,
+    status: str = Query(..., description="Status: initiated, in_progress, completed, failed"),
+    provider: Optional[str] = Query(None, description="Background check provider"),
+    notes: Optional[str] = Query(None, description="Notes")
+):
+    """
+    Update background check status for an application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.update_background_check(app_id, status, provider, notes)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Background check error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/drug-test")
+async def update_drug_test_status(
+    app_id: str,
+    status: str = Query(..., description="Status: scheduled, completed, passed, failed"),
+    test_date: Optional[str] = Query(None, description="Test date (YYYY-MM-DD)"),
+    location: Optional[str] = Query(None, description="Test location"),
+    notes: Optional[str] = Query(None, description="Notes")
+):
+    """
+    Update drug test status for an application.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        result = job_tracker.update_drug_test(app_id, status, test_date, location, notes)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Drug test error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/job-tracker/application/{app_id}/onboarding")
+async def add_onboarding_info(
+    app_id: str,
+    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    documents: Optional[str] = Query(None, description="Comma-separated document names"),
+    notes: Optional[str] = Query(None, description="Notes")
+):
+    """
+    Add onboarding details for accepted offer.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        docs_list = [d.strip() for d in documents.split(",")] if documents else []
+        result = job_tracker.add_onboarding_details(app_id, start_date, docs_list, notes)
+        return result
+    except Exception as e:
+        logger.error(f"[JobTracker] Onboarding error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/job-tracker/search")
+async def search_job_applications(
+    user_id: str = Query("default", description="User ID"),
+    query: str = Query(..., description="Search query")
+):
+    """
+    Search applications by company, role, or notes.
+    """
+    if not JOB_TRACKER_AVAILABLE:
+        return {"error": "Job tracker not available"}
+
+    try:
+        results = job_tracker.search_applications(user_id, query)
+        return {"results": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"[JobTracker] Search error: {e}")
+        return {"error": str(e)}
+
+
+# ============================================================================
+# Resume Review - Phase 3
+# ============================================================================
+
+@app.post("/resume/analyze")
+async def analyze_resume_endpoint(
+    resume_text: str = Query(..., description="Resume text content"),
+    job_description: str = Query(None, description="Job description for comparison"),
+    role_type: str = Query("software_engineer", description="Role type")
+):
+    """
+    Analyze resume and provide feedback.
+    """
+    if not RESUME_REVIEW_AVAILABLE:
+        return {"error": "Resume review not available"}
+
+    try:
+        result = resume_reviewer.analyze_resume(resume_text, job_description, role_type)
+        return result
+    except Exception as e:
+        logger.error(f"[ResumeReview] Analyze error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/resume/compare")
+async def compare_resume_to_job(
+    resume_text: str = Query(..., description="Resume text content"),
+    job_description: str = Query(..., description="Job description"),
+    company: str = Query(None, description="Company name"),
+    role: str = Query(None, description="Role title")
+):
+    """
+    Compare resume against a specific job posting.
+    """
+    if not RESUME_REVIEW_AVAILABLE:
+        return {"error": "Resume review not available"}
+
+    try:
+        analysis = resume_reviewer.analyze_resume(resume_text, job_description)
+
+        # Get company insights if available
+        company_insights = None
+        if company and JOB_TRACKER_AVAILABLE:
+            company_insights = job_tracker.get_company_insights(company)
+
+        return {
+            "analysis": analysis.get("analysis", {}),
+            "company_insights": company_insights,
+            "recommendations": analysis.get("analysis", {}).get("tailored_suggestions", []),
+            "match_score": analysis.get("analysis", {}).get("overall_score", 0)
+        }
+    except Exception as e:
+        logger.error(f"[ResumeReview] Compare error: {e}")
+        return {"error": str(e)}
+    except Exception as e:
+        logger.error(f"[ResumeReview] Compare error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/resume/upload")
+async def upload_resume_file(
+    file: UploadFile = File(...),
+    job_description: Optional[str] = Form(None),
+    role_type: str = Form("software_engineer")
+):
+    """
+    Upload and analyze a resume file (PDF, DOCX, TXT, MD).
+    """
+    if not RESUME_REVIEW_AVAILABLE:
+        return {"error": "Resume review not available"}
+
+    try:
+        # Validate file type
+        filename = file.filename.lower()
+        allowed_extensions = {'.pdf', '.docx', '.doc', '.txt', '.md', '.rtf'}
+
+        if not any(filename.endswith(ext) for ext in allowed_extensions):
+            return {"error": f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"}
+
+        # Read file content
+        content = await file.read()
+
+        # Extract text based on file type
+        if filename.endswith('.pdf'):
+            resume_text = extract_text_from_pdf(content)
+        elif filename.endswith('.docx') or filename.endswith('.doc'):
+            resume_text = extract_text_from_docx(content)
+        else:
+            # Plain text files
+            try:
+                resume_text = content.decode('utf-8')
+            except UnicodeDecodeError:
+                resume_text = content.decode('latin-1', errors='ignore')
+
+        if not resume_text or len(resume_text.strip()) < 50:
+            return {"error": "Could not extract meaningful text from file. Please paste text manually."}
+
+        # Analyze the resume
+        result = resume_reviewer.analyze_resume(resume_text, job_description, role_type)
+
+        # Include file info in result
+        result['file_info'] = {
+            'filename': file.filename,
+            'size': len(content),
+            'extracted_length': len(resume_text)
+        }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[ResumeReview] Upload error: {e}")
+        return {"error": str(e)}
+
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes"""
+    text = []
+
+    # Try PyPDF2
+    try:
+        import io
+        from PyPDF2 import PdfReader
+
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        for page in reader.pages:
+            text.append(page.extract_text() or '')
+        return '\n'.join(text)
+    except Exception:
+        pass
+
+    # Fallback: try pdfplumber
+    try:
+        import io
+        import pdfplumber
+
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                text.append(page.extract_text() or '')
+        return '\n'.join(text)
+    except Exception:
+        pass
+
+    # Last resort: try basic extraction
+    text = pdf_bytes.decode('latin-1', errors='ignore')
+    # Remove non-printable characters
+    text = ''.join(c if c.isprintable() or c in '\n\t' else ' ' for c in text)
+    return text[:10000]  # Limit to first 10K characters
+
+
+def extract_text_from_docx(docx_bytes: bytes) -> str:
+    """Extract text from DOCX bytes"""
+    try:
+        import io
+        from docx import Document
+
+        doc = Document(io.BytesIO(docx_bytes))
+        paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+        return '\n'.join(paragraphs)
+    except Exception as e:
+        logger.warning(f"[ResumeReview] DOCX extraction error: {e}")
+        return ""

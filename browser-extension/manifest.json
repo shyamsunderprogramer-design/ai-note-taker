@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "ANT Job Capture",
+  "version": "1.0.1",
+  "description": "Quickly capture job postings from LinkedIn and other job boards to ANT Job Tracker",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.linkedin.com/*",
+    "*://*.indeed.com/*",
+    "*://*.glassdoor.com/*",
+    "*://*.greenhouse.io/*",
+    "*://*.lever.co/*",
+    "*://*.icims.com/*",
+    "*://*.workday.com/*",
+    "*://*.myworkday.com/*",
+    "*://*.jobs.net/*",
+    "*://*.careers.net/*",
+    "*://*.bamboohr.com/*",
+    "*://*.ashbyhq.com/*",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.linkedin.com/*",
+        "*://*.indeed.com/*",
+        "*://*.glassdoor.com/*",
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.icims.com/*",
+        "*://*.workday.com/*",
+        "*://*.myworkday.com/*",
+        "*://*.ashbyhq.com/*",
+        "*://*/*job*",
+        "*://*/*career*",
+        "*://*/*apply*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["popup.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
