@@ -519,11 +519,23 @@ function loadConversationIntoUI(conversation) {
   renderHistoryList()
 }
 
+function clearConversation() {
+  // Clear current chat
+  currentMessages = []
+  if (chatArea) {
+    chatArea.innerHTML = ""
+    if (chatWelcome) {
+      chatArea.appendChild(chatWelcome)
+    }
+  }
+  hideSummarizeButton()
+}
+
 function startNewConversation() {
   currentConversationId = null
   currentMessages = []
-  chatArea.innerHTML = ""
-  if (chatWelcome) {
+  if (chatArea) chatArea.innerHTML = ""
+  if (chatWelcome && chatArea) {
     chatArea.appendChild(chatWelcome)
   }
   // Remove active state from history list
@@ -3238,9 +3250,9 @@ newChatBtn.addEventListener("click", () => {
 // Close history panel when clicking outside
 document.addEventListener("click", (e) => {
   if (
-    historyPanel.classList.contains("open") &&
-    !historyPanel.contains(e.target) &&
-    !historyBtn.contains(e.target)
+    historyPanel?.classList.contains("open") &&
+    !historyPanel?.contains(e.target) &&
+    !historyBtn?.contains(e.target)
   ) {
     closeHistoryPanel()
   }
@@ -3543,7 +3555,7 @@ menuBtn.addEventListener("click", (e) => {
 
 // Close menu when clicking outside
 document.addEventListener("click", (e) => {
-  if (appMenu.classList.contains("open") && !appMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+  if (appMenu?.classList.contains("open") && !appMenu?.contains(e.target) && !menuBtn?.contains(e.target)) {
     appMenu.classList.remove("open")
   }
 })
@@ -3834,17 +3846,22 @@ function openProviderConfig(provider) {
 }
 
 function closeProviderConfig() {
+  if (!providerConfigPanel) return
   activeProvider = null
   providerConfigPanel.classList.remove("open")
-  settingsProvidersView.style.display = ""
-  configTestResult.className = "config-inline-result"
-  configTestResult.textContent = ""
+  if (settingsProvidersView) settingsProvidersView.style.display = ""
+  if (configTestResult) {
+    configTestResult.className = "config-inline-result"
+    configTestResult.textContent = ""
+  }
 
   // Switch back to providers tab
   settingsTabs.forEach(t => t.classList.remove('active'))
   settingsTabContents.forEach(c => c.classList.remove('active'))
-  document.querySelector('.settings-tab[data-tab="providers"]').classList.add('active')
-  document.querySelector('.settings-tab-content[data-content="providers"]').classList.add('active')
+  const providersTab = document.querySelector('.settings-tab[data-tab="providers"]')
+  const providersContent = document.querySelector('.settings-tab-content[data-content="providers"]')
+  if (providersTab) providersTab.classList.add('active')
+  if (providersContent) providersContent.classList.add('active')
 }
 
 // Load provider config from store
@@ -4140,15 +4157,15 @@ document.querySelectorAll(".provider-config-btn").forEach(btn => {
 
 // Close settings when clicking outside
 document.addEventListener("click", (e) => {
-  if (!settingsPanel.classList.contains("open")) return
+  if (!settingsPanel?.classList.contains("open")) return
 
-  const clickedAppMenu = appMenu.contains(e.target)
+  const clickedAppMenu = appMenu?.contains(e.target)
 
   if (clickedAppMenu) return
 
-  if (!settingsPanel.contains(e.target) && !menuBtn.contains(e.target)) {
+  if (!settingsPanel?.contains(e.target) && !menuBtn?.contains(e.target)) {
     // If config panel is open, just go back to provider list
-    if (providerConfigPanel.classList.contains("open")) {
+    if (providerConfigPanel?.classList.contains("open")) {
       closeProviderConfig()
       return
     }
