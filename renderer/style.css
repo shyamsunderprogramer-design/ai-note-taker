@@ -3002,14 +3002,15 @@ select option {
 .config-back-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text-main);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 16px;
   cursor: pointer;
   transition: all 0.2s;
 }
