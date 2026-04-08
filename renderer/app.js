@@ -93,7 +93,13 @@ const apiKeyInput = document.getElementById("apiKeyInput")
 const modalProviderName = document.getElementById("modalProviderName")
 const modalSave = document.getElementById("modalSave")
 const modalCancel = document.getElementById("modalCancel")
+const backApiKeyModal = document.getElementById("backApiKeyModal")
 const cloudModelSelect = document.getElementById("cloudModelSelect")
+
+// API Key modal handlers
+if (modalCancel) modalCancel.addEventListener("click", () => apiKeyModal?.classList.remove("open"))
+if (backApiKeyModal) backApiKeyModal.addEventListener("click", () => apiKeyModal?.classList.remove("open"))
+if (apiKeyModal) apiKeyModal.addEventListener("click", (e) => { if (e.target === apiKeyModal) apiKeyModal.classList.remove("open") })
 
 // ==============================
 // GLOBAL ENTER KEY + F KEY LISTENERS
@@ -4164,6 +4170,14 @@ document.querySelectorAll(".provider-config-btn").forEach(btn => {
   })
 })
 
+// Config panel back button
+const configBackBtn = document.getElementById("configBackBtn")
+if (configBackBtn) {
+  configBackBtn.addEventListener("click", () => {
+    closeProviderConfig()
+  })
+}
+
 // Close settings when clicking outside
 document.addEventListener("click", (e) => {
   if (!settingsPanel?.classList.contains("open")) return
@@ -5280,6 +5294,19 @@ async function showAnalyticsModal() {
 if (viewAnalyticsBtn) viewAnalyticsBtn.addEventListener("click", showAnalyticsModal)
 if (closeAnalyticsBtn) closeAnalyticsBtn.addEventListener("click", () => analyticsModal?.classList.remove("open"))
 if (analyticsModal) analyticsModal.addEventListener("click", (e) => { if (e.target === analyticsModal) analyticsModal.classList.remove("open") })
+
+// Back buttons for modals
+const backShortcutsModal = document.getElementById("backShortcutsModal")
+const backAnalyticsModal = document.getElementById("backAnalyticsModal")
+const backAboutModal = document.getElementById("backAboutModal")
+const backExportModal = document.getElementById("backExportModal")
+const backImportModal = document.getElementById("backImportModal")
+
+if (backShortcutsModal) backShortcutsModal.addEventListener("click", () => shortcutsModal?.classList.remove("open"))
+if (backAnalyticsModal) backAnalyticsModal.addEventListener("click", () => analyticsModal?.classList.remove("open"))
+if (backAboutModal) backAboutModal.addEventListener("click", () => aboutModal?.classList.remove("open"))
+if (backExportModal) backExportModal.addEventListener("click", closeExportModal)
+if (backImportModal) backImportModal.addEventListener("click", () => importModal?.classList.remove("open"))
 
 // ==============================
 // CUSTOM DROPDOWNS HELPERS

@@ -365,6 +365,11 @@
       <!-- Provider config panel (inline) -->
       <div class="provider-config-panel" id="providerConfigPanel">
         <div class="config-inline">
+          <div class="config-back-bar">
+            <button class="config-back-btn" id="configBackBtn" type="button" title="Back to providers">
+              <span>&#8592;</span> Back
+            </button>
+          </div>
           <div class="config-inline-header">
             <span class="config-provider-icon" id="configProviderIcon">&#9679;</span>
             <span class="config-provider-name" id="configProviderName">Provider</span>
@@ -1084,7 +1089,10 @@
   <!-- API Key modal -->
   <div class="modal-overlay" id="apiKeyModal">
     <div class="modal-box">
-      <div class="modal-title">Configure API Key</div>
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backApiKeyModal" type="button" title="Back">&#8592;</button>
+        <div class="modal-title">Configure API Key</div>
+      </div>
       <div class="modal-provider-name" id="modalProviderName"></div>
       <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." />
       <div class="modal-actions">
@@ -1187,7 +1195,10 @@
   <!-- Keyboard Shortcuts modal -->
   <div class="modal-overlay" id="shortcutsModal">
     <div class="modal-box shortcuts-modal-box">
-      <div class="modal-title">Keyboard Shortcuts</div>
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backShortcutsModal" type="button" title="Back">&#8592;</button>
+        <div class="modal-title">Keyboard Shortcuts</div>
+      </div>
       <div class="shortcuts-list">
         <div class="shortcut-row">
           <span class="shortcut-key">Enter</span>
@@ -1219,7 +1230,10 @@
   <!-- Export modal -->
   <div class="modal-overlay" id="exportModal">
     <div class="modal-box">
-      <div class="modal-title">Export Conversation</div>
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backExportModal" type="button" title="Back">&#8592;</button>
+        <div class="modal-title">Export Conversation</div>
+      </div>
       <div class="export-options">
         <label class="export-option">
           <input type="radio" name="exportFormat" value="markdown" checked />
@@ -1257,7 +1271,10 @@
   <!-- Import modal -->
   <div class="modal-overlay" id="importModal">
     <div class="modal-box">
-      <div class="modal-title">Import Conversations</div>
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backImportModal" type="button" title="Back">&#8592;</button>
+        <div class="modal-title">Import Conversations</div>
+      </div>
       <div class="import-area">
         <div class="import-dropzone" id="importDropzone">
           <span class="import-icon">&#128449;</span>
@@ -1278,7 +1295,10 @@
   <!-- Analytics modal -->
   <div class="modal-overlay" id="analyticsModal">
     <div class="modal-box analytics-modal-box">
-      <div class="modal-title">Conversation Analytics</div>
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backAnalyticsModal" type="button" title="Back">&#8592;</button>
+        <div class="modal-title">Conversation Analytics</div>
+      </div>
       <div class="analytics-content" id="analyticsContent">
         <div class="analytics-summary">
           <div class="analytics-card">
@@ -1326,7 +1346,10 @@
   <!-- About modal -->
   <div class="modal-overlay" id="aboutModal">
     <div class="modal-box shortcuts-modal-box">
-      <div class="modal-title">About AI Note Taker</div>
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backAboutModal" type="button" title="Back">&#8592;</button>
+        <div class="modal-title">About AI Note Taker</div>
+      </div>
       <div class="about-content">
         <div class="about-logo">&#10022;</div>
         <div class="about-version">Version <span id="aboutVersion">1.0.0</span></div>
