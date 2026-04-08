@@ -356,5 +356,6 @@ module.exports = {
   isEnabled,
   isUndetectable,
   setUndetectable,
-  toggleUndetectable
+  toggleUndetectable,
+  destroyTray
 }
