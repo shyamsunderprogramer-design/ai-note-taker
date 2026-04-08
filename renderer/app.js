@@ -5025,7 +5025,7 @@ function updateSessionTimer() {
       <span>${timeStr}</span>
     `
 
-    // Add warning styling
+    // Add warning styling and extension button
     timerDisplay.classList.remove("warning", "danger")
     if (elapsed >= SESSION_MAX_DURATION) {
       timerDisplay.classList.add("danger")
@@ -5036,7 +5036,38 @@ function updateSessionTimer() {
       }
     } else if (elapsed >= SESSION_WARNING_THRESHOLD) {
       timerDisplay.classList.add("warning")
+      // Show extend button if not already shown
+      if (!document.getElementById("sessionExtendBtn")) {
+        const extendBtn = document.createElement("button")
+        extendBtn.id = "sessionExtendBtn"
+        extendBtn.className = "session-extend-btn"
+        extendBtn.innerHTML = "+30m"
+        extendBtn.title = "Extend session by 30 minutes"
+        extendBtn.onclick = () => {
+          extendSessionTimer(30)
+        }
+        timerDisplay.appendChild(extendBtn)
+      }
     }
+  }
+}
+
+function extendSessionTimer(additionalMinutes) {
+  // Adjust thresholds to extend session
+  SESSION_MAX_DURATION += additionalMinutes
+  SESSION_WARNING_THRESHOLD += additionalMinutes
+  showToast(`Session extended by ${additionalMinutes} minutes`)
+
+  // Remove the extend button after clicking
+  const extendBtn = document.getElementById("sessionExtendBtn")
+  if (extendBtn) {
+    extendBtn.remove()
+  }
+
+  // Reset timer display styling
+  const timerDisplay = document.getElementById("sessionTimer")
+  if (timerDisplay) {
+    timerDisplay.classList.remove("warning")
   }
 }
 
@@ -5511,3 +5542,394 @@ async function processVoiceCommand(text) {
 // Initialize
 initSuggestions()
 console.log("[Suggestions] Phase 2 feature initialized")
+
+// ==============================
+// COMPLEXITY ANALYSIS BADGE
+// ==============================
+
+const complexityPatterns = {
+  'O(1)': { pattern: /constant time|O\(1\)/i, badge: '🟢 O(1)', color: '#22c55e', desc: 'Constant time' },
+  'O(log n)': { pattern: /logarithmic|binary search|O\(log n\)/i, badge: '🟢 O(log n)', color: '#22c55e', desc: 'Logarithmic time' },
+  'O(n)': { pattern: /linear time|single pass|O\(n\)(?!\^|\w)/i, badge: '🟢 O(n)', color: '#22c55e', desc: 'Linear time' },
+  'O(n log n)': { pattern: /n log n|O\(n log n\)|merge sort|heap sort|quick sort.*average/i, badge: '🟡 O(n log n)', color: '#eab308', desc: 'Linearithmic time' },
+  'O(n²)': { pattern: /quadratic|nested loop|bubble sort|O\(n\^2\)|O\(n²\)/i, badge: '🟡 O(n²)', color: '#eab308', desc: 'Quadratic time' },
+  'O(2^n)': { pattern: /exponential|recursive.*tree|fibonacci recursive|O\(2\^n\)/i, badge: '🔴 O(2ⁿ)', color: '#ef4444', desc: 'Exponential time' },
+  'O(n!)': { pattern: /factorial|permutations|O\(n!\)/i, badge: '🔴 O(n!)', color: '#ef4444', desc: 'Factorial time' }
+}
+
+function analyzeComplexity(text) {
+  if (!text) return null
+
+  const found = []
+  for (const [complexity, config] of Object.entries(complexityPatterns)) {
+    if (config.pattern.test(text)) {
+      found.push({ complexity, ...config })
+    }
+  }
+
+  // Return the worst complexity found (highest order)
+  if (found.length > 0) {
+    const order = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(2^n)', 'O(n!)']
+    const worst = found.sort((a, b) => order.indexOf(b.complexity) - order.indexOf(a.complexity))[0]
+    return worst
+  }
+
+  return null
+}
+
+function showComplexityBadge(analysis, targetElement) {
+  if (!analysis || !targetElement) return
+
+  // Remove existing badge
+  const existing = targetElement.querySelector('.complexity-badge')
+  if (existing) existing.remove()
+
+  const badge = document.createElement('div')
+  badge.className = 'complexity-badge'
+  badge.innerHTML = `
+    <span class="complexity-icon">${analysis.badge.split(' ')[0]}</span>
+    <span class="complexity-label">${analysis.badge.split(' ')[1]}</span>
+    <span class="complexity-desc">${analysis.desc}</span>
+  `
+  badge.style.cssText = `
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: ${analysis.color}20;
+    border: 1px solid ${analysis.color};
+    border-radius: 6px;
+    font-size: 0.75em;
+    font-family: monospace;
+    color: ${analysis.color};
+    margin-top: 8px;
+    animation: fade-in 0.3s ease-out;
+  `
+
+  targetElement.appendChild(badge)
+
+  // Auto-remove after 30 seconds
+  setTimeout(() => {
+    if (badge.parentNode) {
+      badge.classList.add('fade-out')
+      setTimeout(() => badge.remove(), 300)
+    }
+  }, 30000)
+}
+
+// Hook into streamMessage to analyze AI responses
+const originalStreamMessageComplexity = streamMessage
+window.streamMessage = function(role, text, opts = {}) {
+  const element = originalStreamMessageComplexity(role, text, opts)
+
+  // Analyze assistant messages for complexity
+  if (role === 'assistant' && text) {
+    const analysis = analyzeComplexity(text)
+    if (analysis && element) {
+      const bubble = element.querySelector('.msg-bubble')
+      if (bubble) {
+        showComplexityBadge(analysis, bubble)
+      }
+    }
+  }
+
+  return element
+}
+
+console.log("[Complexity] Analysis badge feature initialized")
+
+// ==============================
+// SCROLL TO BOTTOM BUTTON
+// ==============================
+const scrollToBottomBtn = document.getElementById("scrollToBottomBtn")
+
+if (scrollToBottomBtn && chatArea) {
+  // Show/hide scroll button based on scroll position
+  chatArea.addEventListener("scroll", () => {
+    const isNearBottom = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 100
+    scrollToBottomBtn.classList.toggle("visible", !isNearBottom)
+  })
+
+  // Scroll to bottom when clicked
+  scrollToBottomBtn.addEventListener("click", () => {
+    scrollChat()
+  })
+}
+
+// ==============================
+// WELCOME SUGGESTION CHIPS
+// ==============================
+const welcomeSuggestionBtns = document.querySelectorAll(".welcome-suggestion-btn")
+
+welcomeSuggestionBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const prompt = btn.dataset.prompt
+    if (prompt && textInput) {
+      textInput.value = prompt
+      textInput.focus()
+      // Trigger input event to resize textarea
+      textInput.dispatchEvent(new Event("input"))
+    }
+  })
+})
+
+// ==============================
+// VOICE SETTINGS
+// ==============================
+
+// Voice configuration
+let selectedVoice = null
+let voiceRate = 1.2
+let voicePitch = 1.0
+
+// DOM elements
+const voiceSelect = document.getElementById("voiceSelect")
+const voiceRateSlider = document.getElementById("voiceRateSlider")
+const voiceRateValue = document.getElementById("voiceRateValue")
+const voicePitchSlider = document.getElementById("voicePitchSlider")
+const voicePitchValue = document.getElementById("voicePitchValue")
+const voiceTestBtn = document.getElementById("voiceTestBtn")
+const voiceStatus = document.getElementById("voiceStatus")
+
+// Load available voices
+function loadVoices() {
+  const voices = window.speechSynthesis.getVoices()
+
+  if (voiceSelect) {
+    // Clear existing options
+    voiceSelect.innerHTML = ""
+
+    // Group voices by language
+    const voicesByLang = {}
+    voices.forEach(voice => {
+      const lang = voice.lang.split("-")[0]
+      if (!voicesByLang[lang]) voicesByLang[lang] = []
+      voicesByLang[lang].push(voice)
+    })
+
+    // Add voices to select
+    const defaultOption = document.createElement("option")
+    defaultOption.value = ""
+    defaultOption.textContent = "System Default"
+    voiceSelect.appendChild(defaultOption)
+
+    // English voices first
+    if (voicesByLang["en"]) {
+      const englishGroup = document.createElement("optgroup")
+      englishGroup.label = "English"
+      voicesByLang["en"].forEach(voice => {
+        const option = document.createElement("option")
+        option.value = voice.voiceURI
+        option.textContent = voice.name + (voice.default ? " (Default)" : "")
+        option.dataset.voiceUri = voice.voiceURI
+        englishGroup.appendChild(option)
+      })
+      voiceSelect.appendChild(englishGroup)
+    }
+
+    // Other languages
+    Object.keys(voicesByLang).sort().forEach(lang => {
+      if (lang === "en") return
+      const group = document.createElement("optgroup")
+      const langNames = { "es": "Spanish", "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese", "ko": "Korean", "zh": "Chinese" }
+      group.label = langNames[lang] || lang.toUpperCase()
+
+      voicesByLang[lang].forEach(voice => {
+        const option = document.createElement("option")
+        option.value = voice.voiceURI
+        option.textContent = voice.name
+        option.dataset.voiceUri = voice.voiceURI
+        group.appendChild(option)
+      })
+
+      voiceSelect.appendChild(group)
+    })
+
+    // Load saved preference
+    loadVoicePreference()
+  }
+}
+
+// Load saved voice preference from storage
+async function loadVoicePreference() {
+  try {
+    const saved = await window.api.storeGet("voiceSettings")
+    if (saved) {
+      if (saved.voiceURI && voiceSelect) {
+        // Try to find the saved voice
+        const option = voiceSelect.querySelector(`option[data-voice-uri="${saved.voiceURI}"]`)
+        if (option) {
+          voiceSelect.value = saved.voiceURI
+          selectedVoice = window.speechSynthesis.getVoices().find(v => v.voiceURI === saved.voiceURI)
+        }
+      }
+      if (saved.rate !== undefined && voiceRateSlider) {
+        voiceRate = saved.rate
+        voiceRateSlider.value = saved.rate
+        if (voiceRateValue) voiceRateValue.textContent = saved.rate.toFixed(1) + "x"
+      }
+      if (saved.pitch !== undefined && voicePitchSlider) {
+        voicePitch = saved.pitch
+        voicePitchSlider.value = saved.pitch
+        if (voicePitchValue) voicePitchValue.textContent = saved.pitch.toFixed(1)
+      }
+    }
+  } catch (e) {
+    console.error("[Voice] Failed to load preferences:", e)
+  }
+}
+
+// Save voice preference
+async function saveVoicePreference() {
+  try {
+    const settings = {
+      voiceURI: selectedVoice ? selectedVoice.voiceURI : null,
+      rate: voiceRate,
+      pitch: voicePitch
+    }
+    await window.api.storeSet("voiceSettings", settings)
+  } catch (e) {
+    console.error("[Voice] Failed to save preferences:", e)
+  }
+}
+
+// Get selected voice for TTS
+function getSelectedVoice() {
+  if (selectedVoice) return selectedVoice
+
+  if (voiceSelect && voiceSelect.value) {
+    const voices = window.speechSynthesis.getVoices()
+    selectedVoice = voices.find(v => v.voiceURI === voiceSelect.value)
+    return selectedVoice
+  }
+
+  return null
+}
+
+// Initialize voice settings
+if (voiceSelect) {
+  // Load voices when available
+  if (window.speechSynthesis) {
+    // Chrome loads voices asynchronously
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices
+    }
+    // Load immediately in case voices are already available
+    loadVoices()
+  }
+
+  // Handle voice selection change
+  voiceSelect.addEventListener("change", () => {
+    const voices = window.speechSynthesis.getVoices()
+    selectedVoice = voices.find(v => v.voiceURI === voiceSelect.value)
+    saveVoicePreference()
+  })
+}
+
+// Handle rate slider
+if (voiceRateSlider && voiceRateValue) {
+  voiceRateSlider.addEventListener("input", () => {
+    voiceRate = parseFloat(voiceRateSlider.value)
+    voiceRateValue.textContent = voiceRate.toFixed(1) + "x"
+  })
+
+  voiceRateSlider.addEventListener("change", () => {
+    saveVoicePreference()
+  })
+}
+
+// Handle pitch slider
+if (voicePitchSlider && voicePitchValue) {
+  voicePitchSlider.addEventListener("input", () => {
+    voicePitch = parseFloat(voicePitchSlider.value)
+    voicePitchValue.textContent = voicePitch.toFixed(1)
+  })
+
+  voicePitchSlider.addEventListener("change", () => {
+    saveVoicePreference()
+  })
+}
+
+// Test voice button
+if (voiceTestBtn && voiceStatus) {
+  voiceTestBtn.addEventListener("click", () => {
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel()
+      voiceStatus.textContent = ""
+      voiceTestBtn.innerHTML = "<span>&#127908;</span> Test Voice"
+      return
+    }
+
+    const testText = "This is a test of the selected voice. The quick brown fox jumps over the lazy dog."
+    const utterance = new SpeechSynthesisUtterance(testText)
+
+    const voice = getSelectedVoice()
+    if (voice) utterance.voice = voice
+    utterance.rate = voiceRate
+    utterance.pitch = voicePitch
+
+    utterance.onstart = () => {
+      voiceStatus.textContent = "Speaking..."
+      voiceTestBtn.innerHTML = "<span>&#9208;</span> Stop"
+    }
+
+    utterance.onend = () => {
+      voiceStatus.textContent = ""
+      voiceTestBtn.innerHTML = "<span>&#127908;</span> Test Voice"
+    }
+
+    utterance.onerror = (e) => {
+      voiceStatus.textContent = "Error: " + e.error
+      voiceTestBtn.innerHTML = "<span>&#127908;</span> Test Voice"
+    }
+
+    window.speechSynthesis.speak(utterance)
+  })
+}
+
+// Override the read button functionality to use selected voice
+// This modifies the existing read buttons in addMessage
+const originalAddMessageForVoice = addMessage
+window.addMessage = function(role, text) {
+  const msg = originalAddMessageForVoice(role, text)
+
+  // Find and enhance the read button if this is an assistant message
+  if (role === "assistant" && msg) {
+    const readBtn = msg.querySelector(".msg-read-btn")
+    if (readBtn) {
+      // Replace the click handler
+      readBtn.replaceWith(readBtn.cloneNode(true))
+      const newReadBtn = msg.querySelector(".msg-read-btn")
+
+      newReadBtn.addEventListener("click", () => {
+        const bubble = msg.querySelector(".msg-bubble")
+        const textToSpeak = bubble?.dataset.fullText || bubble?.innerText || text || ""
+        if (!textToSpeak.trim()) return
+
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel()
+          newReadBtn.textContent = "Read"
+          return
+        }
+
+        const utterance = new SpeechSynthesisUtterance(textToSpeak)
+
+        // Apply selected voice settings
+        const voice = getSelectedVoice()
+        if (voice) utterance.voice = voice
+        utterance.rate = voiceRate
+        utterance.pitch = voicePitch
+
+        utterance.onend = () => { newReadBtn.textContent = "Read" }
+        utterance.onerror = () => { newReadBtn.textContent = "Read" }
+
+        window.speechSynthesis.speak(utterance)
+        newReadBtn.textContent = "Pause"
+      })
+    }
+  }
+
+  return msg
+}
+
+console.log("[AI Response] Enhanced chat functionality initialized")

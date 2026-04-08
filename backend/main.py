@@ -17,10 +17,20 @@ from typing import Optional, Dict, List
 
 import numpy as np
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile, WebSocket
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile, WebSocket, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
+
+# SECURITY: Import security modules
+from security import (
+    create_access_token, verify_token, get_current_user, require_auth,
+    rate_limiter, rate_limit,
+    SecurityHeaders, sanitize_input, validate_file_upload, InputValidator
+)
+from security.auth import user_manager, User
+from generate_ssl import generate_self_signed_cert, get_ssl_context
 from config import OLLAMA_URL
 from whisper_handler import (
     BrowserTranscriber,
@@ -103,6 +113,85 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# SECURITY: Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+
+    # Add security headers
+    headers = SecurityHeaders.get_security_headers()
+    for key, value in headers.items():
+        response.headers[key] = value
+
+    # Add rate limit headers if available
+    if hasattr(request.state, 'rate_limit_headers'):
+        for key, value in request.state.rate_limit_headers.items():
+            response.headers[key] = value
+
+    return response
+
+
+# SECURITY: Request size limit middleware
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length:
+        max_size = 10 * 1024 * 1024  # 10MB
+        if int(content_length) > max_size:
+            return JSONResponse(
+                status_code=413,
+                content={"error": "Request too large", "max_size_mb": 10}
+            )
+    return await call_next(request)
+
+
+# SECURITY: HTTP Bearer for authentication
+security_bearer = HTTPBearer(auto_error=False)
+
+
+async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Depends(security_bearer)) -> str:
+    """Extract token from Authorization header"""
+    if credentials:
+        return credentials.credentials
+    return None
+
+
+async def optional_auth(request: Request, token: str = Depends(get_token_from_request)):
+    """Optional authentication - adds user to request state if valid"""
+    if token:
+        user = get_current_user(token)
+        if user:
+            request.state.current_user = user
+    return request
+
+
+async def require_authentication(token: str = Depends(get_token_from_request)):
+    """Require authentication for protected endpoints"""
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+async def require_admin(user: User = Depends(require_authentication)):
+    """Require admin privileges"""
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return user
 
 logger = logging.getLogger("main")
 
@@ -312,12 +401,18 @@ def health_check():
     return {
         "status": "ok",
         "service": "ai-backend",
-        "mode": CURRENT_MODE
+        "mode": CURRENT_MODE,
+        "security": {
+            "authentication": "enabled",
+            "rate_limiting": "enabled",
+            "https_required": False  # Set to True when SSL is configured
+        }
     }
 
 
 @app.get("/providers")
-def list_providers():
+@rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
+async def list_providers(request: Request):
     """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
     import requests
 
@@ -405,7 +500,9 @@ def delete_ollama_model(model_name: str):
 
 
 @app.post("/ask-with-image")
+@rate_limit(requests_per_minute=20)  # Rate limit: 20 per minute (expensive operation)
 async def ask_with_image(
+    request: Request,
     query: str = Form(...),
     mode: str = Form("adaptive"),
     style: str = Form("concise"),
@@ -414,7 +511,10 @@ async def ask_with_image(
     image_b64: str = Form(None)
 ):
     """Accept text + optional base64 screenshot, stream AI response via SSE."""
-    logger.info("[ask-with-image] received: query=%s, mode=%s, style=%s, image_b64 present=%s", query, mode, style, "Yes" if image_b64 else "No")
+    # SECURITY: Sanitize query input
+    query = sanitize_input(query, max_length=10000)
+
+    logger.info("[ask-with-image] received: query=%s, mode=%s, style=%s, image_b64 present=%s", query[:100], mode, style, "Yes" if image_b64 else "No")
     if image_b64:
         logger.info("[ask-with-image] image_b64 length=%d, first 50 chars=%s", len(image_b64), image_b64[:50])
     messages = None
@@ -504,11 +604,14 @@ async def transcribe_stream(request: Request):
 
 
 @app.post("/overlay-ask")
+@rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def overlay_ask(
     request: Request,
     query: str = Form(...),
     screenshot_b64: str = Form(None)
 ):
+    # SECURITY: Sanitize query input
+    query = sanitize_input(query, max_length=5000)
     """Quick Q&A from overlay window with optional screenshot context.
 
     Uses fast/concise settings for quick responses.
@@ -591,6 +694,253 @@ async def configure_provider(body: dict):
 @app.get("/health")
 def health():
     return health_check()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SECURITY: AUTHENTICATION ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/auth/register")
+async def register_user(
+    username: str = Form(..., min_length=3, max_length=30),
+    email: str = Form(...),
+    password: str = Form(..., min_length=8)
+):
+    """Register a new user account"""
+    # Validate inputs
+    if not InputValidator.validate_username(username):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid username. Use 3-30 alphanumeric characters, underscores, or hyphens."
+        )
+
+    if not InputValidator.validate_email(email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+
+    try:
+        user = user_manager.create_user(username=username, email=email, password=password)
+        return {
+            "status": "success",
+            "message": "User registered successfully",
+            "user_id": user.id,
+            "username": user.username
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/auth/login")
+async def login_user(username: str = Form(...), password: str = Form(...)):
+    """Login and get JWT token"""
+    user = user_manager.authenticate_user(username, password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password"
+        )
+
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": user.id, "username": user.username},
+        expires_delta=__import__('datetime').timedelta(hours=24)
+    )
+
+    return {
+        "status": "success",
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": 86400,  # 24 hours in seconds
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_admin": user.is_admin
+        }
+    }
+
+
+@app.get("/auth/me")
+async def get_current_user_info(user: User = Depends(require_authentication)):
+    """Get current authenticated user info"""
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "is_active": user.is_active,
+        "last_login": user.last_login,
+        "api_quota": user.api_quota
+    }
+
+
+@app.post("/auth/logout")
+async def logout_user(user: User = Depends(require_authentication)):
+    """Logout (client should delete token)"""
+    # Note: JWT tokens are stateless, actual logout is client-side
+    return {"status": "success", "message": "Logged out successfully"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# RATE LIMIT STATUS
+# ═══════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════
+# USER API KEY MANAGEMENT - BYOK (Bring Your Own Key)
+# ═══════════════════════════════════════════════════════════════════
+
+# Import user key management
+from user_api_keys import (
+    user_key_manager,
+    get_available_providers,
+    has_premium_access,
+    get_provider_cost_info,
+    PROVIDER_COSTS,
+)
+
+
+@app.get("/providers/byok/status")
+async def get_byok_status(user: User = Depends(require_authentication)):
+    """Get user's BYOK status - which providers they have configured"""
+    providers = get_available_providers(user.id)
+    has_premium = has_premium_access(user.id)
+
+    # Get cost info for each provider
+    provider_info = {}
+    for provider, has_key in providers.items():
+        cost_info = get_provider_cost_info(provider)
+        provider_info[provider] = {
+            "configured": has_key,
+            "name": cost_info["name"],
+            "cost_per_1k_input": cost_info["input"],
+            "cost_per_1k_output": cost_info["output"],
+        }
+
+    return {
+        "has_premium_access": has_premium,
+        "providers": provider_info,
+        "ollama_available": True,  # Always available
+        "message": "Free tier uses Ollama. Add your own API keys for premium providers."
+    }
+
+
+@app.post("/providers/byok/configure")
+async def configure_provider_key(
+    user: User = Depends(require_authentication),
+    provider: str = Form(...),
+    api_key: str = Form(...)
+):
+    """Configure user's own API key for a premium provider"""
+    # Validate provider
+    valid_providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "perplexity", "ollama_cloud"]
+    if provider not in valid_providers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid provider. Must be one of: {', '.join(valid_providers)}"
+        )
+
+    # Validate key format
+    is_valid, message = user_key_manager.validate_key(provider, api_key)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid API key: {message}")
+
+    # Save the key
+    try:
+        key_field = f"{provider}_key"
+        user_key_manager.update_keys(user.id, **{key_field: api_key})
+
+        return {
+            "status": "success",
+            "message": f"{provider.title()} API key configured successfully",
+            "provider": provider,
+            "note": "Your key is stored securely and will be used for AI requests."
+        }
+    except Exception as e:
+        logger.error(f"[BYOK] Failed to save key: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save API key")
+
+
+@app.delete("/providers/byok/{provider}")
+async def delete_provider_key(
+    provider: str,
+    user: User = Depends(require_authentication)
+):
+    """Delete a user's API key for a specific provider"""
+    user_key_manager.delete_keys(user.id, provider=provider)
+
+    return {
+        "status": "success",
+        "message": f"{provider.title()} API key removed"
+    }
+
+
+@app.get("/providers/byok/costs")
+async def get_provider_costs():
+    """Get cost information for all providers (public endpoint)"""
+    costs = {}
+    for provider, info in PROVIDER_COSTS.items():
+        costs[provider] = {
+            "name": info["name"],
+            "input_cost_per_1k": info["input"],
+            "output_cost_per_1k": info["output"],
+            "is_free": info["input"] == 0 and info["output"] == 0,
+        }
+    return {
+        "providers": costs,
+        "note": "Free tier uses Ollama (local). Add your own keys for premium providers.",
+        "cost_example": "A typical interview response (~500 tokens) costs $0.001-0.003 with most providers."
+    }
+
+
+@app.get("/providers/byok/test/{provider}")
+async def test_provider_key(
+    provider: str,
+    user: User = Depends(require_authentication)
+):
+    """Test if a user's API key is working for a provider"""
+    key = user_key_manager.get_provider_key(user.id, provider)
+
+    if not key:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No API key configured for {provider}"
+        )
+
+    # TODO: Implement actual API test
+    # For now, just validate format
+    is_valid, message = user_key_manager.validate_key(provider, key)
+
+    if not is_valid:
+        return {
+            "status": "error",
+            "provider": provider,
+            "message": f"Key validation failed: {message}",
+            "suggestion": "Please check your API key and try again."
+        }
+
+    return {
+        "status": "success",
+        "provider": provider,
+        "message": "API key format is valid",
+        "note": "Actual API test will be implemented in production"
+    }
+
+
+@app.get("/rate-limit/status")
+async def get_rate_limit_status(request: Request):
+    """Get current rate limit status for the client"""
+    client_id = request.client.host if request.client else "unknown"
+
+    # Check current rate limit
+    allowed, headers = await rate_limiter.is_allowed(client_id)
+
+    return {
+        "client_id": client_id,
+        "limit": int(headers.get("X-RateLimit-Limit", 100)),
+        "remaining": int(headers.get("X-RateLimit-Remaining", 0)),
+        "reset": int(headers.get("X-RateLimit-Reset", 0)),
+        "window_seconds": int(headers.get("X-RateLimit-Window", 60)),
+        "allowed": allowed
+    }
 
 
 @app.post("/set-mode")
@@ -2963,6 +3313,128 @@ async def search_job_applications(
 
 
 # ============================================================================
+# Complexity Analysis - Phase 3 Enhancement
+# ============================================================================
+
+def extract_complexity_from_text(text: str) -> Dict:
+    """Extract Big-O complexity notation from text"""
+    import re
+
+    text_lower = text.lower()
+
+    # Patterns for Big-O notation
+    patterns = {
+        'time_complexity': [
+            r'o\(1\)',
+            r'o\(log\s*n\)',
+            r'o\(n\)',
+            r'o\(n\s*log\s*n\)',
+            r'o\(n\^2\)',
+            r'o\(n\^3\)',
+            r'o\(2\^n\)',
+            r'o\(n!\)',
+            r'constant\s*time',
+            r'linear\s*time',
+            r'quadratic\s*time',
+            r'exponential\s*time',
+        ],
+        'space_complexity': [
+            r'o\(1\)\s*space',
+            r'o\(n\)\s*space',
+            r'o\(log\s*n\)\s*space',
+            r'constant\s*space',
+            r'linear\s*space',
+        ],
+        'algorithm_patterns': [
+            r'dynamic\s*programming',
+            r'divide\s*and\s*conquer',
+            r'greedy\s*algorithm',
+            r'brute\s*force',
+            r'binary\s*search',
+            r'depth\s*first\s*search',
+            r'breadth\s*first\s*search',
+            r'recursion',
+            r'iteration',
+        ]
+    }
+
+    results = {
+        'time_complexity': [],
+        'space_complexity': [],
+        'algorithm_types': [],
+        'detected': False
+    }
+
+    # Check time complexity
+    for pattern in patterns['time_complexity']:
+        matches = re.findall(pattern, text_lower)
+        if matches:
+            results['time_complexity'].extend(matches)
+
+    # Check space complexity
+    for pattern in patterns['space_complexity']:
+        matches = re.findall(pattern, text_lower)
+        if matches:
+            results['space_complexity'].extend(matches)
+
+    # Check algorithm patterns
+    for pattern in patterns['algorithm_patterns']:
+        matches = re.findall(pattern, text_lower)
+        if matches:
+            results['algorithm_types'].extend(matches)
+
+    results['detected'] = bool(
+        results['time_complexity'] or
+        results['space_complexity'] or
+        results['algorithm_types']
+    )
+
+    return results
+
+
+@app.post("/analysis/complexity")
+async def analyze_complexity(
+    text: str = Query(..., description="Text to analyze for complexity")
+):
+    """
+    Analyze text for Big-O complexity notation and algorithm patterns.
+    Returns detected complexity badges for display.
+    """
+    try:
+        result = extract_complexity_from_text(text)
+
+        # Determine badge level
+        badge = None
+        if result['detected']:
+            complexities = result['time_complexity']
+            if any('n!' in c or '2^n' in c for c in complexities):
+                badge = {"type": "exponential", "color": "#ef4444", "label": "O(n!)"}
+            elif any('n^2' in c or 'n^3' in c for c in complexities):
+                badge = {"type": "polynomial", "color": "#f59e0b", "label": "O(n²)"}
+            elif any('n log' in c for c in complexities):
+                badge = {"type": "linearithmic", "color": "#3b82f6", "label": "O(n log n)"}
+            elif any('n)' in c and 'log' not in c for c in complexities):
+                badge = {"type": "linear", "color": "#10b981", "label": "O(n)"}
+            elif any('log' in c for c in complexities):
+                badge = {"type": "logarithmic", "color": "#8b5cf6", "label": "O(log n)"}
+            elif any('constant' in c or 'o(1)' in c for c in complexities):
+                badge = {"type": "constant", "color": "#10b981", "label": "O(1)"}
+
+        return {
+            "success": True,
+            "analysis": result,
+            "badge": badge,
+            "suggestions": [
+                "Consider time/space tradeoffs" if result['time_complexity'] and not result['space_complexity'] else None,
+                "Space complexity not analyzed" if not result['space_complexity'] and result['time_complexity'] else None,
+            ]
+        }
+    except Exception as e:
+        logger.error(f"[Complexity] Analysis error: {e}")
+        return {"error": str(e)}
+
+
+# ============================================================================
 # Resume Review - Phase 3
 # ============================================================================
 
@@ -3123,3 +3595,749 @@ def extract_text_from_docx(docx_bytes: bytes) -> str:
     except Exception as e:
         logger.warning(f"[ResumeReview] DOCX extraction error: {e}")
         return ""
+
+
+# ==============================
+# WEB SEARCH INTEGRATION
+# ==============================
+
+@app.get("/search/web")
+async def web_search(
+    query: str = Query(..., description="Search query"),
+    limit: int = Query(5, description="Number of results"),
+    include_citations: bool = Query(True, description="Include source citations")
+):
+    """
+    Search the web using Perplexity API for real-time information.
+    Falls back to Brave Search if Perplexity is not configured.
+    """
+    import os
+
+    # Try Perplexity first (better for interview questions)
+    perplexity_key = os.getenv("PERPLEXITY_API_KEY")
+    if perplexity_key:
+        try:
+            headers = {
+                "Authorization": f"Bearer {perplexity_key}",
+                "Content-Type": "application/json"
+            }
+
+            payload = {
+                "model": "sonar-pro",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Be precise and concise. Return factual information with sources."
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    }
+                ],
+                "max_tokens": 500
+            }
+
+            response = requests.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=15
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                result = {
+                    "source": "perplexity",
+                    "query": query,
+                    "answer": data["choices"][0]["message"]["content"],
+                    "citations": data.get("citations", []),
+                    "timestamp": time.time()
+                }
+                return result
+
+        except Exception as e:
+            logger.warning(f"[WebSearch] Perplexity error: {e}")
+
+    # Fallback: Try Brave Search API
+    brave_key = os.getenv("BRAVE_API_KEY")
+    if brave_key:
+        try:
+            headers = {
+                "X-Subscription-Token": brave_key
+            }
+
+            response = requests.get(
+                f"https://api.search.brave.com/res/v1/web/search?q={requests.utils.quote(query)}&count={limit}",
+                headers=headers,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                results = []
+                for item in data.get("web", {}).get("results", [])[:limit]:
+                    results.append({
+                        "title": item.get("title"),
+                        "url": item.get("url"),
+                        "description": item.get("description")
+                    })
+
+                return {
+                    "source": "brave",
+                    "query": query,
+                    "results": results,
+                    "timestamp": time.time()
+                }
+
+        except Exception as e:
+            logger.warning(f"[WebSearch] Brave error: {e}")
+
+    # Final fallback: Return helpful message
+    return {
+        "source": "none",
+        "query": query,
+        "error": "Web search not configured. Set PERPLEXITY_API_KEY or BRAVE_API_KEY environment variable.",
+        "timestamp": time.time()
+    }
+
+
+@app.get("/search/status")
+async def search_status():
+    """Check if web search is configured and available."""
+    import os
+
+    perplexity_key = os.getenv("PERPLEXITY_API_KEY")
+    brave_key = os.getenv("BRAVE_API_KEY")
+
+    return {
+        "configured": bool(perplexity_key or brave_key),
+        "perplexity_available": bool(perplexity_key),
+        "brave_available": bool(brave_key),
+        "message": "Web search is ready" if (perplexity_key or brave_key) else "Add PERPLEXITY_API_KEY or BRAVE_API_KEY to enable web search"
+    }
+
+
+logger.info("[WebSearch] Web search integration loaded")
+
+
+# ==============================
+# MOCK INTERVIEW LIBRARY
+# ==============================
+
+try:
+    from mock_interview_library import (
+        mock_library,
+        get_all_questions,
+        get_questions_by_role,
+        get_questions_by_company,
+        get_random_question,
+        get_practice_set,
+        get_library_stats,
+        search_questions
+    )
+    MOCK_LIBRARY_AVAILABLE = True
+    logger.info("[MockLibrary] Mock interview library loaded")
+except ImportError as e:
+    MOCK_LIBRARY_AVAILABLE = False
+    logger.warning(f"[MockLibrary] Library not available: {e}")
+
+
+@app.get("/mock-interview/questions")
+async def get_mock_questions(
+    role: str = Query(None, description="Filter by role (software_engineer, frontend_engineer, data_engineer)"),
+    category: str = Query(None, description="Filter by category (technical, coding, system_design, behavioral)"),
+    difficulty: str = Query(None, description="Filter by difficulty (easy, medium, hard)"),
+    company: str = Query(None, description="Filter by company"),
+    limit: int = Query(50, description="Maximum questions to return")
+):
+    """
+    Get mock interview questions with optional filtering.
+    """
+    if not MOCK_LIBRARY_AVAILABLE:
+        return {"error": "Mock interview library not available"}
+
+    try:
+        questions = mock_library.get_all_questions()
+
+        # Apply filters
+        if role:
+            questions = [q for q in questions if q.role == role]
+        if category:
+            questions = [q for q in questions if q.category == category]
+        if difficulty:
+            questions = [q for q in questions if q.difficulty == difficulty]
+        if company:
+            questions = [q for q in questions if q.company and q.company.lower() == company.lower()]
+
+        # Convert to dicts and limit
+        result = [vars(q) for q in questions[:limit]]
+
+        return {
+            "questions": result,
+            "total": len(questions),
+            "filters": {
+                "role": role,
+                "category": category,
+                "difficulty": difficulty,
+                "company": company
+            }
+        }
+    except Exception as e:
+        logger.error(f"[MockLibrary] Error getting questions: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/mock-interview/question/random")
+async def get_random_mock_question(
+    role: str = Query(None, description="Filter by role"),
+    category: str = Query(None, description="Filter by category"),
+    difficulty: str = Query(None, description="Filter by difficulty")
+):
+    """Get a random question matching criteria."""
+    if not MOCK_LIBRARY_AVAILABLE:
+        return {"error": "Mock interview library not available"}
+
+    try:
+        question = mock_library.get_random_question(role, category, difficulty)
+        if question:
+            return {"question": vars(question)}
+        return {"error": "No questions found matching criteria"}
+    except Exception as e:
+        logger.error(f"[MockLibrary] Error getting random question: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/mock-interview/practice-set")
+async def get_practice_question_set(
+    role: str = Query("software_engineer", description="Role for practice set"),
+    num_questions: int = Query(5, description="Number of questions", ge=1, le=10)
+):
+    """
+    Get a balanced practice set with mix of categories and difficulties.
+    """
+    if not MOCK_LIBRARY_AVAILABLE:
+        return {"error": "Mock interview library not available"}
+
+    try:
+        questions = mock_library.get_practice_set(role, num_questions)
+        return {
+            "questions": [vars(q) for q in questions],
+            "role": role,
+            "total_time_estimate": sum(q.time_estimate_minutes for q in questions)
+        }
+    except Exception as e:
+        logger.error(f"[MockLibrary] Error getting practice set: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/mock-interview/search")
+async def search_mock_questions(
+    query: str = Query(..., description="Search query"),
+    limit: int = Query(20, description="Maximum results")
+):
+    """Search questions by text."""
+    if not MOCK_LIBRARY_AVAILABLE:
+        return {"error": "Mock interview library not available"}
+
+    try:
+        questions = mock_library.search_questions(query)
+        return {
+            "questions": [vars(q) for q in questions[:limit]],
+            "query": query,
+            "total": len(questions)
+        }
+    except Exception as e:
+        logger.error(f"[MockLibrary] Error searching questions: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/mock-interview/stats")
+async def get_mock_library_stats():
+    """Get library statistics."""
+    if not MOCK_LIBRARY_AVAILABLE:
+        return {"error": "Mock interview library not available"}
+
+    try:
+        return mock_library.get_stats()
+    except Exception as e:
+        logger.error(f"[MockLibrary] Error getting stats: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/mock-interview/companies")
+async def get_companies_with_questions():
+    """Get list of companies that have specific questions."""
+    if not MOCK_LIBRARY_AVAILABLE:
+        return {"error": "Mock interview library not available"}
+
+    try:
+        companies = set()
+        for q in mock_library.questions:
+            if q.company:
+                companies.add(q.company)
+        return {"companies": sorted(list(companies))}
+    except Exception as e:
+        logger.error(f"[MockLibrary] Error getting companies: {e}")
+        return {"error": str(e)}
+
+
+logger.info("[MockLibrary] Mock interview endpoints loaded")
+
+
+# ==============================
+# VOICE CLONE AGENT
+# ==============================
+
+try:
+    from voice_clone_agent import (
+        voice_manager,
+        create_voice_model,
+        get_voice_status,
+        synthesize_voice,
+        list_voice_models
+    )
+    VOICE_CLONE_AVAILABLE = True
+    logger.info("[VoiceClone] Voice clone agent loaded")
+except ImportError as e:
+    VOICE_CLONE_AVAILABLE = False
+    logger.warning(f"[VoiceClone] Voice clone not available: {e}")
+
+
+@app.post("/voice-clone/create")
+async def create_voice_clone(
+    name: str = Query(..., description="Name for this voice model"),
+    audio_samples: List[str] = Query(default=[], description="Base64 audio samples")
+):
+    """Create a new voice clone model."""
+    if not VOICE_CLONE_AVAILABLE:
+        return {"error": "Voice clone not available"}
+
+    try:
+        result = create_voice_model(name, audio_samples)
+        return result
+    except Exception as e:
+        logger.error(f"[VoiceClone] Create error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/voice-clone/{model_id}/status")
+async def get_voice_clone_status(model_id: str):
+    """Get voice model training status."""
+    if not VOICE_CLONE_AVAILABLE:
+        return {"error": "Voice clone not available"}
+
+    try:
+        return get_voice_status(model_id)
+    except Exception as e:
+        logger.error(f"[VoiceClone] Status error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/voice-clone/{model_id}/synthesize")
+async def synthesize_voice_clone(
+    model_id: str,
+    text: str = Query(..., description="Text to synthesize")
+):
+    """Synthesize speech using voice model."""
+    if not VOICE_CLONE_AVAILABLE:
+        return {"error": "Voice clone not available"}
+
+    try:
+        return synthesize_voice(model_id, text)
+    except Exception as e:
+        logger.error(f"[VoiceClone] Synthesis error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/voice-clone/models")
+async def list_voice_clones():
+    """List all voice models."""
+    if not VOICE_CLONE_AVAILABLE:
+        return {"error": "Voice clone not available"}
+
+    try:
+        return {"models": list_voice_models()}
+    except Exception as e:
+        logger.error(f"[VoiceClone] List error: {e}")
+        return {"error": str(e)}
+
+
+logger.info("[VoiceClone] Voice clone endpoints loaded")
+
+
+# ==============================
+# SHADOW INTERVIEW AGENT
+# ==============================
+
+try:
+    from shadow_agent import (
+        shadow_agent,
+        start_shadow_session,
+        process_transcript_segment,
+        get_shadow_suggestions,
+        accept_suggestion_by_id,
+        end_shadow_session,
+        get_shadow_stats
+    )
+    SHADOW_AGENT_AVAILABLE = True
+    logger.info("[ShadowAgent] Shadow agent loaded")
+except ImportError as e:
+    SHADOW_AGENT_AVAILABLE = False
+    logger.warning(f"[ShadowAgent] Shadow agent not available: {e}")
+
+
+@app.post("/shadow/start")
+async def start_shadow_interview(
+    company: str = Query(..., description="Company name"),
+    role: str = Query(..., description="Role being interviewed for"),
+    stage: str = Query("", description="Interview stage")
+):
+    """Start a shadow interview session."""
+    if not SHADOW_AGENT_AVAILABLE:
+        return {"error": "Shadow agent not available"}
+
+    try:
+        return start_shadow_session(company, role, stage)
+    except Exception as e:
+        logger.error(f"[ShadowAgent] Start error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/shadow/process")
+async def process_shadow_transcript(
+    text: str = Query(..., description="Transcript text"),
+    speaker: str = Query(..., description="Speaker (user/interviewer/other)")
+):
+    """Process transcript and generate suggestions."""
+    if not SHADOW_AGENT_AVAILABLE:
+        return {"error": "Shadow agent not available"}
+
+    try:
+        result = process_transcript_segment(text, speaker)
+        return result or {"detected": False}
+    except Exception as e:
+        logger.error(f"[ShadowAgent] Process error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/shadow/suggestions")
+async def get_shadow_suggestions_list():
+    """Get current shadow agent suggestions."""
+    if not SHADOW_AGENT_AVAILABLE:
+        return {"error": "Shadow agent not available"}
+
+    try:
+        return {"suggestions": get_shadow_suggestions()}
+    except Exception as e:
+        logger.error(f"[ShadowAgent] Suggestions error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/shadow/accept")
+async def accept_shadow_suggestion(suggestion_id: str = Query(...)):
+    """Accept a suggestion."""
+    if not SHADOW_AGENT_AVAILABLE:
+        return {"error": "Shadow agent not available"}
+
+    try:
+        text = accept_suggestion_by_id(suggestion_id)
+        return {"text": text} if text else {"error": "Suggestion not found"}
+    except Exception as e:
+        logger.error(f"[ShadowAgent] Accept error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/shadow/end")
+async def end_shadow_interview():
+    """End shadow interview session."""
+    if not SHADOW_AGENT_AVAILABLE:
+        return {"error": "Shadow agent not available"}
+
+    try:
+        return end_shadow_session()
+    except Exception as e:
+        logger.error(f"[ShadowAgent] End error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/shadow/stats")
+async def get_shadow_statistics():
+    """Get shadow session statistics."""
+    if not SHADOW_AGENT_AVAILABLE:
+        return {"error": "Shadow agent not available"}
+
+    try:
+        return get_shadow_stats()
+    except Exception as e:
+        logger.error(f"[ShadowAgent] Stats error: {e}")
+        return {"error": str(e)}
+
+
+logger.info("[ShadowAgent] Shadow agent endpoints loaded")
+
+
+# ==============================
+# COLLABORATION MODE (DUO)
+# ==============================
+
+try:
+    from collaboration_mode import (
+        collaboration_manager,
+        create_collaboration_session,
+        join_collaboration,
+        send_collaboration_message,
+        get_collaboration_messages,
+        get_collaboration_status,
+        end_collaboration
+    )
+    COLLABORATION_AVAILABLE = True
+    logger.info("[Collaboration] Collaboration mode loaded")
+except ImportError as e:
+    COLLABORATION_AVAILABLE = False
+    logger.warning(f"[Collaboration] Collaboration mode not available: {e}")
+
+
+@app.post("/collaboration/create")
+async def create_collaboration(
+    host_name: str = Query(..., description="Host name"),
+    context: Optional[dict] = None
+):
+    """Create a new collaboration session."""
+    if not COLLABORATION_AVAILABLE:
+        return {"error": "Collaboration mode not available"}
+
+    try:
+        return create_collaboration_session(host_name, context)
+    except Exception as e:
+        logger.error(f"[Collaboration] Create error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/collaboration/join")
+async def join_collaboration_session(
+    join_code: str = Query(..., description="6-digit join code"),
+    name: str = Query(..., description="Your name")
+):
+    """Join a collaboration session."""
+    if not COLLABORATION_AVAILABLE:
+        return {"error": "Collaboration mode not available"}
+
+    try:
+        return join_collaboration(join_code, name)
+    except Exception as e:
+        logger.error(f"[Collaboration] Join error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/collaboration/message")
+async def send_collaboration_msg(
+    session_id: str = Query(...),
+    participant_id: str = Query(...),
+    text: str = Query(...),
+    msg_type: str = Query("suggestion"),
+    is_private: bool = Query(False)
+):
+    """Send a message in collaboration session."""
+    if not COLLABORATION_AVAILABLE:
+        return {"error": "Collaboration mode not available"}
+
+    try:
+        return send_collaboration_message(session_id, participant_id, text, msg_type, is_private)
+    except Exception as e:
+        logger.error(f"[Collaboration] Message error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/collaboration/messages")
+async def get_collaboration_msgs(
+    session_id: str = Query(...),
+    participant_id: str = Query(...),
+    since: float = Query(0)
+):
+    """Get messages for a session."""
+    if not COLLABORATION_AVAILABLE:
+        return {"error": "Collaboration mode not available"}
+
+    try:
+        return {"messages": get_collaboration_messages(session_id, participant_id, since)}
+    except Exception as e:
+        logger.error(f"[Collaboration] Messages error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/collaboration/status")
+async def get_collaboration_session_status(session_id: str = Query(...)):
+    """Get collaboration session status."""
+    if not COLLABORATION_AVAILABLE:
+        return {"error": "Collaboration mode not available"}
+
+    try:
+        status = get_collaboration_status(session_id)
+        return status or {"error": "Session not found"}
+    except Exception as e:
+        logger.error(f"[Collaboration] Status error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/collaboration/end")
+async def end_collaboration_session(
+    session_id: str = Query(...),
+    participant_id: str = Query(...)
+):
+    """End collaboration session."""
+    if not COLLABORATION_AVAILABLE:
+        return {"error": "Collaboration mode not available"}
+
+    try:
+        return end_collaboration(session_id, participant_id)
+    except Exception as e:
+        logger.error(f"[Collaboration] End error: {e}")
+        return {"error": str(e)}
+
+
+logger.info("[Collaboration] Collaboration endpoints loaded")
+
+
+# ==============================
+# MEETING TEMPLATES
+# ==============================
+
+try:
+    from meeting_templates import (
+        templates_manager,
+        get_all_templates,
+        get_template,
+        get_categories,
+        create_template,
+        update_template,
+        delete_template,
+        search_templates,
+        generate_notes
+    )
+    MEETING_TEMPLATES_AVAILABLE = True
+    logger.info("[MeetingTemplates] Meeting templates loaded")
+except ImportError as e:
+    MEETING_TEMPLATES_AVAILABLE = False
+    logger.warning(f"[MeetingTemplates] Meeting templates not available: {e}")
+
+
+@app.get("/meeting-templates")
+async def list_meeting_templates():
+    """Get all meeting templates."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        templates = get_all_templates()
+        return {"templates": templates}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] List error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/meeting-templates/categories")
+async def list_template_categories():
+    """Get all template categories."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        categories = get_categories()
+        return {"categories": categories}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Categories error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/meeting-templates")
+async def create_meeting_template(body: dict):
+    """Create a custom meeting template."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        template = create_template(body)
+        return template
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Create error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/meeting-templates/{template_id}")
+async def get_meeting_template(template_id: str):
+    """Get a specific meeting template."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        template = get_template(template_id)
+        if template:
+            return template
+        return {"error": "Template not found"}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Get error: {e}")
+        return {"error": str(e)}
+
+
+@app.put("/meeting-templates/{template_id}")
+async def update_meeting_template(template_id: str, body: dict):
+    """Update a custom meeting template."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        template = update_template(template_id, body)
+        if template:
+            return template
+        return {"error": "Template not found or cannot update default templates"}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Update error: {e}")
+        return {"error": str(e)}
+
+
+@app.delete("/meeting-templates/{template_id}")
+async def delete_meeting_template(template_id: str):
+    """Delete a custom meeting template."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        success = delete_template(template_id)
+        if success:
+            return {"success": True}
+        return {"error": "Template not found or cannot delete default templates"}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Delete error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/meeting-templates/search")
+async def search_meeting_templates(query: str = Query(...)):
+    """Search meeting templates."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        results = search_templates(query)
+        return {"templates": results}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Search error: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/meeting-templates/{template_id}/generate")
+async def generate_meeting_notes(template_id: str, body: dict):
+    """Generate meeting notes from template."""
+    if not MEETING_TEMPLATES_AVAILABLE:
+        return {"error": "Meeting templates not available"}
+
+    try:
+        notes = generate_notes(template_id, body)
+        return {"notes": notes}
+    except Exception as e:
+        logger.error(f"[MeetingTemplates] Generate error: {e}")
+        return {"error": str(e)}
+
+
+logger.info("[MeetingTemplates] Meeting templates endpoints loaded")
+

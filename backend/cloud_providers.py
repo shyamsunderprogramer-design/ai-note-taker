@@ -104,55 +104,104 @@ def _make_error(msg):
 
 
 # ==============================
-# API KEYS & CONFIGS
+# API KEYS & CONFIGS (BYOK)
 # ==============================
 
-def get_openai_key():
+def get_openai_key(user_id: str = None):
+    """Get OpenAI key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "openai")
+        if key:
+            return key
+    # Fallback to environment
     key = get_key_secure("openai", "OPENAI_API_KEY")
     if not key:
-        raise ValueError("OpenAI API key not configured")
+        raise ValueError("OpenAI API key not configured. Add your key in Settings.")
     return key
 
-def get_anthropic_key():
+def get_anthropic_key(user_id: str = None):
+    """Get Anthropic key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "anthropic")
+        if key:
+            return key
     key = get_key_secure("anthropic", "ANTHROPIC_API_KEY")
     if not key:
-        raise ValueError("Anthropic API key not configured")
+        raise ValueError("Anthropic API key not configured. Add your key in Settings.")
     return key
 
-def get_google_key():
+def get_google_key(user_id: str = None):
+    """Get Google key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "google")
+        if key:
+            return key
     key = get_key_secure("google", "GOOGLE_API_KEY")
     if not key:
-        raise ValueError("Google API key not configured")
+        raise ValueError("Google API key not configured. Add your key in Settings.")
     return key
 
-def get_xai_key():
+def get_xai_key(user_id: str = None):
+    """Get xAI key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "xai")
+        if key:
+            return key
     key = get_key_secure("xai", "XAI_API_KEY")
     if not key:
-        raise ValueError("xAI API key not configured")
+        raise ValueError("xAI API key not configured. Add your key in Settings.")
     return key
 
-def get_deepseek_key():
+def get_deepseek_key(user_id: str = None):
+    """Get DeepSeek key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "deepseek")
+        if key:
+            return key
     key = get_key_secure("deepseek", "DEEPSEEK_API_KEY")
     if not key:
-        raise ValueError("DeepSeek API key not configured")
+        raise ValueError("DeepSeek API key not configured. Add your key in Settings.")
     return key
 
-def get_groq_key():
+def get_groq_key(user_id: str = None):
+    """Get Groq key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "groq")
+        if key:
+            return key
     key = get_key_secure("groq", "GROQ_API_KEY")
     if not key:
-        raise ValueError("Groq API key not configured")
+        raise ValueError("Groq API key not configured. Add your key in Settings.")
     return key
 
-def get_ollama_cloud_key():
+def get_ollama_cloud_key(user_id: str = None):
+    """Get Ollama Cloud key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "ollama_cloud")
+        if key:
+            return key
     key = get_key_secure("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
     if not key:
-        raise ValueError("Ollama Cloud API key not configured")
+        raise ValueError("Ollama Cloud API key not configured. Add your key in Settings.")
     return key
 
-def get_perplexity_key():
+def get_perplexity_key(user_id: str = None):
+    """Get Perplexity key - first try user's key, then env"""
+    if user_id:
+        from user_api_keys import get_user_api_key
+        key = get_user_api_key(user_id, "perplexity")
+        if key:
+            return key
     key = get_key_secure("perplexity", "PERPLEXITY_API_KEY")
     if not key:
-        raise ValueError("Perplexity API key not configured")
+        raise ValueError("Perplexity API key not configured. Add your key in Settings.")
     return key
 
 

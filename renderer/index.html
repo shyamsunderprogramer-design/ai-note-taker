@@ -284,8 +284,16 @@
           <div class="welcome-icon">&#10022;</div>
           <div class="welcome-text">Ready to assist</div>
           <div class="welcome-sub">Press <kbd>Enter</kbd> to start</div>
+          <div class="welcome-suggestion">
+            <button class="welcome-suggestion-btn" data-prompt="Help me prepare for a software engineering interview">&#128187; Prepare for interview</button>
+            <button class="welcome-suggestion-btn" data-prompt="Explain time complexity of quicksort">&#128161; Explain algorithm</button>
+            <button class="welcome-suggestion-btn" data-prompt="Review my resume for a PM role">&#128221; Review resume</button>
+          </div>
         </div>
       </div>
+
+      <!-- Scroll to bottom button -->
+      <button id="scrollToBottomBtn" class="scroll-to-bottom" title="Scroll to bottom">&#8595;</button>
     </div>
 
   </div>
@@ -348,6 +356,7 @@
       <button class="settings-tab active" data-tab="general">General</button>
       <button class="settings-tab" data-tab="providers">Providers</button>
       <button class="settings-tab" data-tab="models">Models</button>
+      <button class="settings-tab" data-tab="voice">Voice</button>
       <button class="settings-tab" data-tab="data">Data</button>
     </div>
 
@@ -639,6 +648,54 @@
           <div class="settings-card-body collapsed" id="analytics">
             <div class="analytics-preview compact" id="analyticsPreview">
               <div class="analytics-loading">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Voice -->
+      <div class="settings-tab-content" data-content="voice">
+
+        <!-- Voice Selection Card -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <span class="settings-card-title">Text-to-Speech Voice</span>
+          </div>
+          <div class="settings-card-body">
+            <p class="voice-description">Choose a voice for the AI to use when reading responses aloud.</p>
+
+            <div class="voice-controls">
+              <div class="voice-select-row">
+                <label class="voice-label">Voice</label>
+                <select id="voiceSelect" class="voice-select">
+                  <option value="">Loading voices...</option>
+                </select>
+              </div>
+
+              <div class="voice-rate-row">
+                <label class="voice-label">Speed</label>
+                <input type="range" id="voiceRateSlider" min="0.5" max="2" step="0.1" value="1.2" class="voice-slider">
+                <span id="voiceRateValue" class="voice-rate-value">1.2x</span>
+              </div>
+
+              <div class="voice-pitch-row">
+                <label class="voice-label">Pitch</label>
+                <input type="range" id="voicePitchSlider" min="0.5" max="2" step="0.1" value="1" class="voice-slider">
+                <span id="voicePitchValue" class="voice-pitch-value">1.0</span>
+              </div>
+            </div>
+
+            <div class="voice-preview">
+              <button id="voiceTestBtn" class="voice-test-btn">
+                <span>&#127908;</span> Test Voice
+              </button>
+              <span class="voice-status" id="voiceStatus"></span>
+            </div>
+
+            <div class="voice-info">
+              <strong>Note:</strong> Voice availability depends on your operating system.
+              Windows, macOS, and Linux each have different system voices installed.
             </div>
           </div>
         </div>
