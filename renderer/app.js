@@ -5398,7 +5398,6 @@ if (crmSaveBtn) crmSaveBtn.addEventListener("click", saveCRMConfig)
 // ==============================
 // CLOUD MODEL CUSTOM DROPDOWN
 // ==============================
-const cloudModelSelect = document.getElementById("cloudModelSelect")
 const cloudModelText = document.getElementById("cloudModelText")
 const cloudModelMenu = document.getElementById("cloudModelMenu")
 
