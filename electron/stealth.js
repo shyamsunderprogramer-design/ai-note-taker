@@ -231,16 +231,7 @@ function enable() {
     // Apply all protection methods
     applyBulletproofProtection()
 
-    // Start periodic re-application of protection (some apps try to bypass)
-    if (_protectionInterval) clearInterval(_protectionInterval)
-    _protectionInterval = setInterval(() => {
-      if (_enabled && _window && !_window.isDestroyed()) {
-        // Only re-apply if window is not focused (prevents closing dropdowns)
-        if (!_window.isFocused()) {
-          applyBulletproofProtection()
-        }
-      }
-    }, 2000) // Re-apply every 2 seconds
+    // Note: Protection is applied once - no interval to prevent blinking
 
     // Re-assert always-on-top
     if (IS_WINDOWS) {

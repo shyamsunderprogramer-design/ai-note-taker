@@ -217,21 +217,8 @@ function createWindow() {
     }
   })
 
-  // Re-assert always-on-top aggressively to stay above PiP windows and other apps
-  // This works together with stealth mode - both features are independent
-  const topmostInterval = setInterval(() => {
-    if (win && !win.isDestroyed() && !win.isMinimized()) {
-      // Only bring to top if window doesn't have focus (prevents closing dropdowns)
-      if (!win.isFocused()) {
-        win.moveTop()
-      }
-      // Use "normal" level which is most reliable on Windows
-      win.setAlwaysOnTop(true, "normal")
-    } else {
-      clearInterval(topmostInterval)
-    }
-  }, 500) // Check every 500ms to aggressively stay on top
-
+  // Set up window state tracking
+  // Note: Window is already set to always-on-top, no need for aggressive re-assertion
   stealth.init(win)
   ensureTopmost(win)
 }
