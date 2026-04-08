@@ -2028,17 +2028,15 @@ select option {
   max-width: calc(100vw - 32px);
   height: calc(100vh - 60px);
   max-height: calc(100vh - 60px);
-  background: rgba(18, 21, 36, 0.98);
+  background: rgba(25, 28, 45, 0.98);
   border: 1px solid rgba(255,255,255,0.1);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 10000;
   display: flex;
   flex-direction: column;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   transform: translateX(110%);
 }
 
@@ -2168,7 +2166,7 @@ select option {
   display: none;
   padding: 8px;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: visible;
   flex: 1;
   min-height: 0;
   scrollbar-width: thin;
@@ -2205,7 +2203,7 @@ select option {
   border: 1px solid var(--line);
   border-radius: 8px;
   margin-bottom: 6px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .settings-card-header {
@@ -5514,11 +5512,14 @@ select option {
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: rgba(30, 30, 40, 0.95);
   color: var(--text-main);
   font-size: 14px;
   cursor: pointer;
   transition: border-color 0.2s;
+  position: relative;
+  z-index: 10001;
+  min-height: 40px;
 }
 
 .voice-select:focus {
@@ -5527,9 +5528,17 @@ select option {
 }
 
 .voice-select option {
-  background: rgba(30, 30, 40, 0.95);
+  background: rgba(30, 30, 40, 0.98);
   color: var(--text-main);
-  padding: 8px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+.voice-select optgroup {
+  background: rgba(20, 20, 30, 0.98);
+  color: var(--text-dim);
+  font-weight: 600;
+  padding: 8px 4px;
 }
 
 .voice-slider {
