@@ -5681,6 +5681,7 @@ welcomeSuggestionBtns.forEach(btn => {
 let selectedVoice = null
 let voiceRate = 1.2
 let voicePitch = 1.0
+let voicesLoaded = false
 
 // DOM elements
 const voiceSelect = document.getElementById("voiceSelect")
@@ -5695,7 +5696,13 @@ const voiceStatus = document.getElementById("voiceStatus")
 function loadVoices() {
   const voices = window.speechSynthesis.getVoices()
 
-  if (voiceSelect) {
+  // Don't reload if already populated with voices (prevents closing dropdown)
+  if (voiceSelect && voicesLoaded && voiceSelect.options.length > 1) {
+    return
+  }
+
+  if (voiceSelect && voices.length > 0) {
+    voicesLoaded = true
     // Clear existing options
     voiceSelect.innerHTML = ""
 

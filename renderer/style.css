@@ -4568,6 +4568,14 @@ select option {
   -webkit-user-select: none;
 }
 
+/* Re-enable user-select for form elements to fix dropdown issues */
+.settings-panel select,
+.settings-panel input,
+.settings-panel textarea {
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
 /* Safe area for notched phones */
 @supports (padding-top: env(safe-area-inset-top)) {
   .shell {
