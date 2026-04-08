@@ -196,8 +196,10 @@ function createWindow() {
   // This works together with stealth mode - both features are independent
   const topmostInterval = setInterval(() => {
     if (win && !win.isDestroyed() && !win.isMinimized()) {
-      // Aggressive approach: always bring to top
-      win.moveTop()
+      // Only bring to top if window doesn't have focus (prevents closing dropdowns)
+      if (!win.isFocused()) {
+        win.moveTop()
+      }
       // Use "normal" level which is most reliable on Windows
       win.setAlwaysOnTop(true, "normal")
     } else {
