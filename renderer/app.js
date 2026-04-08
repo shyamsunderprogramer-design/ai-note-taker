@@ -3592,7 +3592,16 @@ appMenu.addEventListener("click", async (e) => {
       syncProviderRow("perplexity", !!providers.perplexity)
     } catch (e) { console.error(e) }
     const savedCloudModel = await window.api.storeGet("cloudModel")
-    if (savedCloudModel && cloudModelSelect) cloudModelSelect.value = savedCloudModel
+    if (savedCloudModel && cloudModelSelect) {
+      cloudModelSelect.value = savedCloudModel
+      // Update custom dropdown
+      const selectedItem = cloudModelMenu?.querySelector(`.custom-dropdown-item[data-value="${savedCloudModel}"]`)
+      if (selectedItem && cloudModelText) {
+        cloudModelText.textContent = selectedItem.textContent
+        cloudModelMenu.querySelectorAll(".custom-dropdown-item").forEach(i => i.classList.remove("selected"))
+        selectedItem.classList.add("selected")
+      }
+    }
     updateActiveProviders()
   }
   else if (action === "shortcuts") {
@@ -5273,12 +5282,67 @@ if (closeAnalyticsBtn) closeAnalyticsBtn.addEventListener("click", () => analyti
 if (analyticsModal) analyticsModal.addEventListener("click", (e) => { if (e.target === analyticsModal) analyticsModal.classList.remove("open") })
 
 // ==============================
+// CUSTOM DROPDOWNS HELPERS
+// ==============================
+function initCustomDropdown(triggerId, menuId, textId, hiddenInputId, onChange) {
+  const trigger = document.getElementById(triggerId)
+  const menu = document.getElementById(menuId)
+  const text = document.getElementById(textId)
+  const hidden = document.getElementById(hiddenInputId)
+  if (!trigger || !menu) return
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation()
+    const isOpen = menu.classList.contains("open")
+    // Close all other custom dropdowns
+    document.querySelectorAll(".custom-dropdown-menu.open").forEach(m => {
+      if (m !== menu) m.classList.remove("open")
+    })
+    document.querySelectorAll(".custom-dropdown-trigger.active").forEach(t => {
+      if (t !== trigger) t.classList.remove("active")
+    })
+    if (isOpen) {
+      menu.classList.remove("open")
+      trigger.classList.remove("active")
+    } else {
+      menu.classList.add("open")
+      trigger.classList.add("active")
+    }
+  })
+
+  menu.querySelectorAll(".custom-dropdown-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const value = item.dataset.value
+      const label = item.textContent
+      if (hidden) hidden.value = value
+      if (text) text.textContent = label
+      menu.classList.remove("open")
+      trigger.classList.remove("active")
+      // Update selected styling
+      menu.querySelectorAll(".custom-dropdown-item").forEach(i => i.classList.remove("selected"))
+      item.classList.add("selected")
+      if (onChange) onChange(value, label)
+    })
+  })
+}
+
+// Close custom dropdowns when clicking outside
+document.addEventListener("click", () => {
+  document.querySelectorAll(".custom-dropdown-menu.open").forEach(m => m.classList.remove("open"))
+  document.querySelectorAll(".custom-dropdown-trigger.active").forEach(t => t.classList.remove("active"))
+})
+
+// ==============================
 // CRM INTEGRATION
 // ==============================
 const crmProviderSelect = document.getElementById("crmProviderSelect")
+const crmProviderText = document.getElementById("crmProviderText")
+const crmProviderMenu = document.getElementById("crmProviderMenu")
 const crmSaveBtn = document.getElementById("crmSaveBtn")
 const crmTestBtn = document.getElementById("crmTestBtn")
 const crmStatus = document.getElementById("crmStatus")
+
+const crmProviderLabels = { "": "Disabled", "webhook": "Webhook", "salesforce": "Salesforce", "hubspot": "HubSpot" }
 
 function updateCRMFields() {
   const provider = crmProviderSelect?.value
@@ -5291,6 +5355,12 @@ async function loadCRMConfig() {
   try {
     const config = await window.api.getCRMConfig()
     if (crmProviderSelect) crmProviderSelect.value = config.provider || ""
+    if (crmProviderText) crmProviderText.textContent = crmProviderLabels[config.provider] || "Disabled"
+    if (crmProviderMenu) {
+      crmProviderMenu.querySelectorAll(".custom-dropdown-item").forEach(i => {
+        i.classList.toggle("selected", i.dataset.value === (config.provider || ""))
+      })
+    }
     if (document.getElementById("crmWebhookUrl")) document.getElementById("crmWebhookUrl").value = config.webhook_url || ""
     if (document.getElementById("crmSalesforceUrl")) document.getElementById("crmSalesforceUrl").value = config.instance_url || ""
     if (document.getElementById("crmSalesforceToken")) document.getElementById("crmSalesforceToken").value = config.oauth_token || ""
@@ -5319,8 +5389,23 @@ async function saveCRMConfig() {
   }
 }
 
-if (crmProviderSelect) crmProviderSelect.addEventListener("change", updateCRMFields)
+// Init custom CRM dropdown
+initCustomDropdown("crmProviderTrigger", "crmProviderMenu", "crmProviderText", "crmProviderSelect", (value) => {
+  updateCRMFields()
+})
 if (crmSaveBtn) crmSaveBtn.addEventListener("click", saveCRMConfig)
+
+// ==============================
+// CLOUD MODEL CUSTOM DROPDOWN
+// ==============================
+const cloudModelSelect = document.getElementById("cloudModelSelect")
+const cloudModelText = document.getElementById("cloudModelText")
+const cloudModelMenu = document.getElementById("cloudModelMenu")
+
+initCustomDropdown("cloudModelTrigger", "cloudModelMenu", "cloudModelText", "cloudModelSelect", async (value) => {
+  await window.api.storeSet("cloudModel", value)
+  updateActiveProviders()
+})
 
 // ==============================
 // INITIALIZATION
@@ -5682,9 +5767,13 @@ let selectedVoice = null
 let voiceRate = 1.2
 let voicePitch = 1.0
 let voicesLoaded = false
+let availableVoices = []
 
 // DOM elements
 const voiceSelect = document.getElementById("voiceSelect")
+const voiceDropdownTrigger = document.getElementById("voiceDropdownTrigger")
+const voiceSelectedText = document.getElementById("voiceSelectedText")
+const voiceDropdownMenu = document.getElementById("voiceDropdownMenu")
 const voiceRateSlider = document.getElementById("voiceRateSlider")
 const voiceRateValue = document.getElementById("voiceRateValue")
 const voicePitchSlider = document.getElementById("voicePitchSlider")
@@ -5692,69 +5781,123 @@ const voicePitchValue = document.getElementById("voicePitchValue")
 const voiceTestBtn = document.getElementById("voiceTestBtn")
 const voiceStatus = document.getElementById("voiceStatus")
 
+// Toggle custom dropdown
+function toggleVoiceDropdown() {
+  if (!voiceDropdownMenu) return
+  const isOpen = voiceDropdownMenu.classList.contains("open")
+  if (isOpen) {
+    closeVoiceDropdown()
+  } else {
+    openVoiceDropdown()
+  }
+}
+
+function openVoiceDropdown() {
+  if (!voiceDropdownMenu) return
+  voiceDropdownMenu.classList.add("open")
+  if (voiceDropdownTrigger) voiceDropdownTrigger.classList.add("active")
+}
+
+function closeVoiceDropdown() {
+  if (!voiceDropdownMenu) return
+  voiceDropdownMenu.classList.remove("open")
+  if (voiceDropdownTrigger) voiceDropdownTrigger.classList.remove("active")
+}
+
+// Build custom dropdown menu
+function buildVoiceDropdown(voicesByLang) {
+  if (!voiceDropdownMenu) return
+
+  voiceDropdownMenu.innerHTML = ""
+
+  // System Default option
+  const defaultItem = document.createElement("div")
+  defaultItem.className = "custom-dropdown-item"
+  defaultItem.textContent = "System Default"
+  defaultItem.dataset.value = ""
+  defaultItem.addEventListener("click", () => selectVoice("", "System Default"))
+  voiceDropdownMenu.appendChild(defaultItem)
+
+  // English voices first
+  if (voicesByLang["en"]) {
+    const englishGroup = document.createElement("div")
+    englishGroup.className = "custom-dropdown-group"
+    englishGroup.textContent = "English"
+    voiceDropdownMenu.appendChild(englishGroup)
+
+    voicesByLang["en"].forEach(voice => {
+      const item = document.createElement("div")
+      item.className = "custom-dropdown-item" + (voice.default ? " default-voice" : "")
+      item.textContent = voice.name + (voice.default ? " (Default)" : "")
+      item.dataset.value = voice.voiceURI
+      item.addEventListener("click", () => selectVoice(voice.voiceURI, voice.name))
+      voiceDropdownMenu.appendChild(item)
+    })
+  }
+
+  // Other languages
+  Object.keys(voicesByLang).sort().forEach(lang => {
+    if (lang === "en") return
+    const langNames = { "es": "Spanish", "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese", "ko": "Korean", "zh": "Chinese" }
+
+    const group = document.createElement("div")
+    group.className = "custom-dropdown-group"
+    group.textContent = langNames[lang] || lang.toUpperCase()
+    voiceDropdownMenu.appendChild(group)
+
+    voicesByLang[lang].forEach(voice => {
+      const item = document.createElement("div")
+      item.className = "custom-dropdown-item"
+      item.textContent = voice.name
+      item.dataset.value = voice.voiceURI
+      item.addEventListener("click", () => selectVoice(voice.voiceURI, voice.name))
+      voiceDropdownMenu.appendChild(item)
+    })
+  })
+}
+
+// Select a voice
+function selectVoice(voiceURI, voiceName) {
+  if (voiceSelect) voiceSelect.value = voiceURI
+  if (voiceSelectedText) voiceSelectedText.textContent = voiceName || "System Default"
+  selectedVoice = availableVoices.find(v => v.voiceURI === voiceURI)
+  closeVoiceDropdown()
+  saveVoicePreference()
+
+  // Update selected styling in dropdown
+  if (voiceDropdownMenu) {
+    voiceDropdownMenu.querySelectorAll(".custom-dropdown-item").forEach(item => {
+      item.classList.toggle("selected", item.dataset.value === voiceURI)
+    })
+  }
+}
+
 // Load available voices
 function loadVoices() {
   const voices = window.speechSynthesis.getVoices()
+  if (voices.length === 0) return
 
-  // Don't reload if already populated with voices (prevents closing dropdown)
-  if (voiceSelect && voicesLoaded && voiceSelect.options.length > 1) {
+  // Don't reload if already populated
+  if (voicesLoaded && availableVoices.length === voices.length) {
     return
   }
 
-  if (voiceSelect && voices.length > 0) {
-    voicesLoaded = true
-    // Clear existing options
-    voiceSelect.innerHTML = ""
+  availableVoices = voices
+  voicesLoaded = true
 
-    // Group voices by language
-    const voicesByLang = {}
-    voices.forEach(voice => {
-      const lang = voice.lang.split("-")[0]
-      if (!voicesByLang[lang]) voicesByLang[lang] = []
-      voicesByLang[lang].push(voice)
-    })
+  // Group voices by language
+  const voicesByLang = {}
+  voices.forEach(voice => {
+    const lang = voice.lang.split("-")[0]
+    if (!voicesByLang[lang]) voicesByLang[lang] = []
+    voicesByLang[lang].push(voice)
+  })
 
-    // Add voices to select
-    const defaultOption = document.createElement("option")
-    defaultOption.value = ""
-    defaultOption.textContent = "System Default"
-    voiceSelect.appendChild(defaultOption)
+  // Build custom dropdown
+  buildVoiceDropdown(voicesByLang)
 
-    // English voices first
-    if (voicesByLang["en"]) {
-      const englishGroup = document.createElement("optgroup")
-      englishGroup.label = "English"
-      voicesByLang["en"].forEach(voice => {
-        const option = document.createElement("option")
-        option.value = voice.voiceURI
-        option.textContent = voice.name + (voice.default ? " (Default)" : "")
-        option.dataset.voiceUri = voice.voiceURI
-        englishGroup.appendChild(option)
-      })
-      voiceSelect.appendChild(englishGroup)
-    }
-
-    // Other languages
-    Object.keys(voicesByLang).sort().forEach(lang => {
-      if (lang === "en") return
-      const group = document.createElement("optgroup")
-      const langNames = { "es": "Spanish", "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese", "ko": "Korean", "zh": "Chinese" }
-      group.label = langNames[lang] || lang.toUpperCase()
-
-      voicesByLang[lang].forEach(voice => {
-        const option = document.createElement("option")
-        option.value = voice.voiceURI
-        option.textContent = voice.name
-        option.dataset.voiceUri = voice.voiceURI
-        group.appendChild(option)
-      })
-
-      voiceSelect.appendChild(group)
-    })
-
-    // Load saved preference
-    loadVoicePreference()
-  }
+  // Load saved preference
+  loadVoicePreference()
 }
 
 // Load saved voice preference from storage
@@ -5762,12 +5905,10 @@ async function loadVoicePreference() {
   try {
     const saved = await window.api.storeGet("voiceSettings")
     if (saved) {
-      if (saved.voiceURI && voiceSelect) {
-        // Try to find the saved voice
-        const option = voiceSelect.querySelector(`option[data-voice-uri="${saved.voiceURI}"]`)
-        if (option) {
-          voiceSelect.value = saved.voiceURI
-          selectedVoice = window.speechSynthesis.getVoices().find(v => v.voiceURI === saved.voiceURI)
+      if (saved.voiceURI) {
+        const voice = availableVoices.find(v => v.voiceURI === saved.voiceURI)
+        if (voice) {
+          selectVoice(saved.voiceURI, voice.name)
         }
       }
       if (saved.rate !== undefined && voiceRateSlider) {
@@ -5803,33 +5944,34 @@ async function saveVoicePreference() {
 // Get selected voice for TTS
 function getSelectedVoice() {
   if (selectedVoice) return selectedVoice
-
   if (voiceSelect && voiceSelect.value) {
-    const voices = window.speechSynthesis.getVoices()
-    selectedVoice = voices.find(v => v.voiceURI === voiceSelect.value)
+    selectedVoice = availableVoices.find(v => v.voiceURI === voiceSelect.value)
     return selectedVoice
   }
-
   return null
 }
 
 // Initialize voice settings
-if (voiceSelect) {
+if (voiceDropdownTrigger) {
   // Load voices when available
   if (window.speechSynthesis) {
-    // Chrome loads voices asynchronously
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
       window.speechSynthesis.onvoiceschanged = loadVoices
     }
-    // Load immediately in case voices are already available
     loadVoices()
   }
 
-  // Handle voice selection change
-  voiceSelect.addEventListener("change", () => {
-    const voices = window.speechSynthesis.getVoices()
-    selectedVoice = voices.find(v => v.voiceURI === voiceSelect.value)
-    saveVoicePreference()
+  // Toggle dropdown on click
+  voiceDropdownTrigger.addEventListener("click", (e) => {
+    e.stopPropagation()
+    toggleVoiceDropdown()
+  })
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (voiceDropdownMenu && !voiceDropdownMenu.contains(e.target) && !voiceDropdownTrigger.contains(e.target)) {
+      closeVoiceDropdown()
+    }
   })
 }
 

@@ -5541,6 +5541,117 @@ select option {
   padding: 8px 4px;
 }
 
+/* Custom Dropdown for Electron compatibility */
+.custom-dropdown {
+  flex: 1;
+  position: relative;
+}
+
+.custom-dropdown-trigger {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(30, 30, 40, 0.95);
+  color: var(--text-main);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.custom-dropdown-trigger:hover {
+  border-color: var(--line-bright);
+}
+
+.custom-dropdown-trigger.active {
+  border-color: var(--primary);
+}
+
+.dropdown-arrow {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 8px;
+  transition: transform 0.2s;
+}
+
+.custom-dropdown-trigger.active .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: rgba(25, 28, 45, 0.98);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 100000;
+  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.custom-dropdown-menu.open {
+  display: block;
+  animation: dropdown-fade-in 0.15s ease;
+}
+
+@keyframes dropdown-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.custom-dropdown-group {
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(20, 20, 30, 0.5);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.custom-dropdown-item {
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.custom-dropdown-item:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.custom-dropdown-item.selected {
+  background: rgba(59, 130, 246, 0.25);
+  color: var(--primary);
+}
+
+.custom-dropdown-item.default-voice {
+  font-weight: 500;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+}
+
 .voice-slider {
   flex: 1;
   height: 6px;

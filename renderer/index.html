@@ -421,12 +421,19 @@
             <span class="settings-card-arrow">&#9662;</span>
           </div>
           <div class="settings-card-body collapsed" id="crm">
-            <select id="crmProviderSelect" class="settings-select">
-              <option value="">Disabled</option>
-              <option value="webhook">Webhook</option>
-              <option value="salesforce">Salesforce</option>
-              <option value="hubspot">HubSpot</option>
-            </select>
+            <div class="custom-dropdown" id="crmProviderDropdown">
+              <button class="custom-dropdown-trigger" id="crmProviderTrigger">
+                <span id="crmProviderText">Disabled</span>
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              <div class="custom-dropdown-menu" id="crmProviderMenu">
+                <div class="custom-dropdown-item" data-value="">Disabled</div>
+                <div class="custom-dropdown-item" data-value="webhook">Webhook</div>
+                <div class="custom-dropdown-item" data-value="salesforce">Salesforce</div>
+                <div class="custom-dropdown-item" data-value="hubspot">HubSpot</div>
+              </div>
+            </div>
+            <input type="hidden" id="crmProviderSelect" value="">
             <div class="crm-fields" id="crmFields">
               <input type="url" id="crmWebhookUrl" class="settings-input" placeholder="Webhook URL" style="display:none" />
               <input type="url" id="crmSalesforceUrl" class="settings-input" placeholder="Instance URL" style="display:none" />
@@ -556,44 +563,43 @@
             <span class="settings-card-arrow">&#9662;</span>
           </div>
           <div class="settings-card-body" id="cloud-model">
-            <select id="cloudModelSelect" class="settings-select">
-              <option value="auto" selected>Auto (best available)</option>
-              <optgroup label="OpenAI">
-                <option value="openai-gpt-4o-mini">GPT-4o Mini</option>
-                <option value="openai-gpt-4o">GPT-4o</option>
-                <option value="openai-gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="openai-o3-mini">o3 Mini</option>
-              </optgroup>
-              <optgroup label="Anthropic">
-                <option value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</option>
-                <option value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                <option value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</option>
-              </optgroup>
-              <optgroup label="Google">
-                <option value="google-gemini-2-0-flash">Gemini 2.0 Flash</option>
-                <option value="google-gemini-1-5-pro">Gemini 1.5 Pro</option>
-              </optgroup>
-              <optgroup label="xAI">
-                <option value="xai-grok-2-mini">Grok 2 Mini</option>
-                <option value="xai-grok-2">Grok 2</option>
-              </optgroup>
-              <optgroup label="DeepSeek">
-                <option value="deepseek-deepseek-chat">DeepSeek Chat</option>
-                <option value="deepseek-deepseek-coder">DeepSeek Coder</option>
-              </optgroup>
-              <optgroup label="Groq">
-                <option value="groq-llama-3-3-70b">Llama 3.3 70B</option>
-                <option value="groq-llama-3-1-8b">Llama 3.1 8B</option>
-              </optgroup>
-              <optgroup label="Perplexity">
-                <option value="perplexity-sonar">Sonar</option>
-                <option value="perplexity-sonar-pro">Sonar Pro</option>
-              </optgroup>
-              <optgroup label="Ollama Cloud">
-                <option value="qwen3.5:397b-cloud">Qwen 3.5</option>
-                <option value="kimi-k2.5:cloud">Kimi K2.5</option>
-              </optgroup>
-            </select>
+            <div class="custom-dropdown" id="cloudModelDropdown">
+              <button class="custom-dropdown-trigger" id="cloudModelTrigger">
+                <span id="cloudModelText">Auto (best available)</span>
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              <div class="custom-dropdown-menu" id="cloudModelMenu">
+                <div class="custom-dropdown-item selected" data-value="auto">Auto (best available)</div>
+                <div class="custom-dropdown-group">OpenAI</div>
+                <div class="custom-dropdown-item" data-value="openai-gpt-4o-mini">GPT-4o Mini</div>
+                <div class="custom-dropdown-item" data-value="openai-gpt-4o">GPT-4o</div>
+                <div class="custom-dropdown-item" data-value="openai-gpt-4-turbo">GPT-4 Turbo</div>
+                <div class="custom-dropdown-item" data-value="openai-o3-mini">o3 Mini</div>
+                <div class="custom-dropdown-group">Anthropic</div>
+                <div class="custom-dropdown-item" data-value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</div>
+                <div class="custom-dropdown-item" data-value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</div>
+                <div class="custom-dropdown-item" data-value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</div>
+                <div class="custom-dropdown-group">Google</div>
+                <div class="custom-dropdown-item" data-value="google-gemini-2-0-flash">Gemini 2.0 Flash</div>
+                <div class="custom-dropdown-item" data-value="google-gemini-1-5-pro">Gemini 1.5 Pro</div>
+                <div class="custom-dropdown-group">xAI</div>
+                <div class="custom-dropdown-item" data-value="xai-grok-2-mini">Grok 2 Mini</div>
+                <div class="custom-dropdown-item" data-value="xai-grok-2">Grok 2</div>
+                <div class="custom-dropdown-group">DeepSeek</div>
+                <div class="custom-dropdown-item" data-value="deepseek-deepseek-chat">DeepSeek Chat</div>
+                <div class="custom-dropdown-item" data-value="deepseek-deepseek-coder">DeepSeek Coder</div>
+                <div class="custom-dropdown-group">Groq</div>
+                <div class="custom-dropdown-item" data-value="groq-llama-3-3-70b">Llama 3.3 70B</div>
+                <div class="custom-dropdown-item" data-value="groq-llama-3-1-8b">Llama 3.1 8B</div>
+                <div class="custom-dropdown-group">Perplexity</div>
+                <div class="custom-dropdown-item" data-value="perplexity-sonar">Sonar</div>
+                <div class="custom-dropdown-item" data-value="perplexity-sonar-pro">Sonar Pro</div>
+                <div class="custom-dropdown-group">Ollama Cloud</div>
+                <div class="custom-dropdown-item" data-value="qwen3.5:397b-cloud">Qwen 3.5</div>
+                <div class="custom-dropdown-item" data-value="kimi-k2.5:cloud">Kimi K2.5</div>
+              </div>
+            </div>
+            <input type="hidden" id="cloudModelSelect" value="auto">
           </div>
         </div>
 
@@ -668,9 +674,14 @@
             <div class="voice-controls">
               <div class="voice-select-row">
                 <label class="voice-label">Voice</label>
-                <select id="voiceSelect" class="voice-select">
-                  <option value="">Loading voices...</option>
-                </select>
+                <div class="custom-dropdown" id="voiceDropdown">
+                  <button class="custom-dropdown-trigger" id="voiceDropdownTrigger">
+                    <span id="voiceSelectedText">Loading voices...</span>
+                    <span class="dropdown-arrow">▼</span>
+                  </button>
+                  <div class="custom-dropdown-menu" id="voiceDropdownMenu"></div>
+                </div>
+                <input type="hidden" id="voiceSelect" value="">
               </div>
 
               <div class="voice-rate-row">
