@@ -14,6 +14,12 @@ log.transports.file.level = "info"
 log.transports.console.level = "debug"
 log.transports.file.maxSize = 5 * 1024 * 1024
 
+// Disable file logging in production for stealth mode
+// Logs only go to console (memory), not to disk
+if (app.isPackaged) {
+  log.transports.file.level = false
+}
+
 const PLATFORM = process.platform  // 'win32' | 'darwin' | 'linux'
 const logger = log
 const store = new Store()
@@ -541,7 +547,20 @@ ipcMain.handle("conversation:delete", (_event, id) => {
 
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
-  if (w) w.minimize()
+  if (w) {
+    // Complete stealth minimize - no tray, no traces
+    w.setSkipTaskbar(true)
+    w.hide()
+    // Destroy tray if exists to remove from system tray
+    stealth.destroyTray()
+    // Clear screenshot buffer for privacy
+    screenshotBuffer = []
+    // Stop auto-screenshot while minimized
+    if (autoScreenshotInterval) {
+      clearInterval(autoScreenshotInterval)
+      autoScreenshotInterval = null
+    }
+  }
 })
 
 ipcMain.handle("window:toggle-maximize", () => {
@@ -601,6 +620,8 @@ ipcMain.handle("backend:status", async () => {
 ipcMain.handle("window:restore", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (!w) return
+  // Restore from stealth - show in taskbar again
+  w.setSkipTaskbar(false)
   if (w.isMinimized()) w.restore()
   const savedBounds = store.get("windowBounds")
   if (savedBounds) {
@@ -612,6 +633,13 @@ ipcMain.handle("window:restore", () => {
   w.focus()
   w.moveTop()
   w.setAlwaysOnTop(true, "normal")
+  // Restart auto-screenshot if it was enabled
+  const savedAutoSS = store.get("autoScreenshotEnabled", false)
+  if (savedAutoSS && !autoScreenshotInterval) {
+    const interval = store.get("autoScreenshotInterval", 5000)
+    startAutoScreenshot(interval)
+    autoScreenshotEnabled = true
+  }
 })
 
 ipcMain.handle("window:force-top", () => {
@@ -986,17 +1014,36 @@ app.whenReady().then(async () => {
     })
   })
 
-  // Alt+Space — hide/show
+  // Alt+Space — hide/show (stealth toggle)
   registerShortcut("Alt+Space", "hide/show", () => {
     if (!win) return
     if (win.isVisible()) {
+      // Hide completely - no taskbar, no tray, no traces
+      win.setSkipTaskbar(true)
       win.hide()
+      stealth.destroyTray()
+      // Clear screenshot buffer for privacy
+      screenshotBuffer = []
+      // Stop auto-screenshot
+      if (autoScreenshotInterval) {
+        clearInterval(autoScreenshotInterval)
+        autoScreenshotInterval = null
+      }
     } else {
+      // Restore - show in taskbar again
+      win.setSkipTaskbar(false)
       win.restore()
       win.show()
       win.focus()
       win.moveTop()
       win.setAlwaysOnTop(true, "normal")
+      // Restart auto-screenshot if enabled
+      const savedAutoSS = store.get("autoScreenshotEnabled", false)
+      if (savedAutoSS && !autoScreenshotInterval) {
+        const interval = store.get("autoScreenshotInterval", 5000)
+        startAutoScreenshot(interval)
+        autoScreenshotEnabled = true
+      }
     }
   })
 
