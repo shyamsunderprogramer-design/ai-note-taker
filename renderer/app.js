@@ -3085,17 +3085,6 @@ if (window.api.onMaximizeChanged) {
   })
 }
 
-// Check initial maximize state on load
-async function initMaximizeState() {
-  try {
-    const result = await window.api.isWindowMaximized()
-    updateMaximizeButtonIcon(result?.isMaximized)
-  } catch (e) {
-    console.error("[Init] Failed to get maximize state:", e)
-  }
-}
-initMaximizeState()
-
 closeBtn.addEventListener("click", () => {
   window.api.closeWindow()
 })
