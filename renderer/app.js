@@ -3067,8 +3067,34 @@ minBtn.addEventListener("click", () => {
 
 maxBtn.addEventListener("click", async () => {
   const result = await window.api.toggleMaximizeWindow()
-  maxBtn.textContent = result && result.isMaximized ? "▢" : "❐"
+  updateMaximizeButtonIcon(result?.isMaximized)
 })
+
+// Update maximize button icon based on state
+function updateMaximizeButtonIcon(isMaximized) {
+  if (!maxBtn) return
+  // ▢ = restore (currently maximized), ❐ = maximize (currently normal)
+  maxBtn.textContent = isMaximized ? "▢" : "❐"
+  maxBtn.title = isMaximized ? "Restore" : "Maximize"
+}
+
+// Listen for maximize state changes from main process
+if (window.api.onMaximizeChanged) {
+  window.api.onMaximizeChanged((state) => {
+    updateMaximizeButtonIcon(state?.isMaximized)
+  })
+}
+
+// Check initial maximize state on load
+async function initMaximizeState() {
+  try {
+    const result = await window.api.isWindowMaximized()
+    updateMaximizeButtonIcon(result?.isMaximized)
+  } catch (e) {
+    console.error("[Init] Failed to get maximize state:", e)
+  }
+}
+initMaximizeState()
 
 closeBtn.addEventListener("click", () => {
   window.api.closeWindow()

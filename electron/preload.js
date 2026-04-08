@@ -118,9 +118,13 @@ contextBridge.exposeInMainWorld("api", {
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
   restoreWindow: () => ipcRenderer.invoke("window:restore"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggle-maximize"),
+  isWindowMaximized: () => ipcRenderer.invoke("window:is-maximized"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
   resizeWindow: (width, height) => ipcRenderer.invoke("window:resize", width, height),
   forceTop: () => ipcRenderer.invoke("window:force-top"),
+  onMaximizeChanged: (callback) => {
+    ipcRenderer.on("window:maximize-changed", (_event, state) => callback(state))
+  },
 
   // Stealth mode
   setStealthMode: (enabled) => ipcRenderer.invoke("window:set-stealth-mode", enabled),

@@ -189,8 +189,27 @@ function createWindow() {
     : path.join(__dirname, "..", "renderer", "index.html")
   win.loadFile(rendererPath)
 
-  win.on("resize", saveBounds)
-  win.on("move", saveBounds)
+  win.on("resize", () => {
+    // Only save bounds if not maximized
+    if (!win.isMaximized()) saveBounds()
+    // Notify renderer of maximize state change
+    if (win?.webContents) {
+      win.webContents.send("window:maximize-changed", { isMaximized: win.isMaximized() })
+    }
+  })
+  win.on("move", () => {
+    if (!win.isMaximized()) saveBounds()
+  })
+  win.on("maximize", () => {
+    if (win?.webContents) {
+      win.webContents.send("window:maximize-changed", { isMaximized: true })
+    }
+  })
+  win.on("unmaximize", () => {
+    if (win?.webContents) {
+      win.webContents.send("window:maximize-changed", { isMaximized: false })
+    }
+  })
 
   // Re-assert always-on-top aggressively to stay above PiP windows and other apps
   // This works together with stealth mode - both features are independent
@@ -522,7 +541,7 @@ ipcMain.handle("conversation:delete", (_event, id) => {
 
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
-  if (w) w.hide()
+  if (w) w.minimize()
 })
 
 ipcMain.handle("window:toggle-maximize", () => {
@@ -530,9 +549,24 @@ ipcMain.handle("window:toggle-maximize", () => {
   if (!w) return { isMaximized: false }
   w.setResizable(true)
   const maxed = w.isMaximized()
-  if (maxed) w.unmaximize()
-  else w.maximize()
+  if (maxed) {
+    w.unmaximize()
+    // Restore to previous size after unmaximize
+    const savedBounds = store.get("windowBounds")
+    if (savedBounds) {
+      w.setSize(savedBounds.width, savedBounds.height)
+    }
+  } else {
+    // Save current bounds before maximizing
+    saveBounds()
+    w.maximize()
+  }
   return { isMaximized: w.isMaximized() }
+})
+
+ipcMain.handle("window:is-maximized", () => {
+  const w = BrowserWindow.getFocusedWindow() || win
+  return { isMaximized: w ? w.isMaximized() : false }
 })
 
 ipcMain.handle("window:close", () => {
