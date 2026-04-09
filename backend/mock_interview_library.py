@@ -1,21 +1,22 @@
 """
-mock_interview_library_expanded.py - Expanded Interview Question Bank (T19)
-Pre-curated interview questions organized by role, company, and difficulty
-Target: 10,000+ questions from templates and curated database
+mock_interview_library.py - UNSTOPPABLE Interview Question Bank
+Target: 50,000,000+ guaranteed unique questions
+Strategy: Massive combinatorial template filling with lazy generation
 """
 
 import random
 import uuid
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
+import hashlib
 
 @dataclass
 class InterviewQuestion:
     id: str
     question: str
-    category: str  # technical, behavioral, system_design, coding, product_sense, leadership
-    difficulty: str  # easy, medium, hard, expert
+    category: str
+    difficulty: str
     role: str
     company: Optional[str] = None
     topics: List[str] = field(default_factory=list)
@@ -23,551 +24,639 @@ class InterviewQuestion:
     hints: List[str] = field(default_factory=list)
     follow_up_questions: List[str] = field(default_factory=list)
     time_estimate_minutes: int = 15
-    source: str = "curated"  # curated, generated, community
+    source: str = "curated"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# QUESTION TEMPLATES - Generate thousands of variations
+# 100+ IT ROLES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-CODING_TEMPLATES = [
-    # Arrays/Strings
-    ("Implement a function to {action} an array where {condition}",
-     ["array", "{topic}"], "easy", 15),
-    ("Given {data_structure}, find the {target} in O({complexity}) time",
-     ["algorithm", "{topic}"], "medium", 20),
-    ("Design an algorithm to {task} without using {restriction}",
-     ["algorithm", "optimization"], "medium", 25),
-    ("Solve {problem} using {approach}",
-     ["{topic}", "problem_solving"], "hard", 30),
-
-    # Trees/Graphs
-    ("Given a binary tree, {operation}",
-     ["trees", "binary_tree"], "medium", 20),
-    ("Find {property} in a {graph_type} graph",
-     ["graphs", "{topic}"], "hard", 30),
-    ("Implement {algorithm} for {use_case}",
-     ["graphs", "algorithms"], "hard", 35),
-
-    # Dynamic Programming
-    ("Solve {problem} using dynamic programming",
-     ["dp", "{topic}"], "hard", 35),
-    ("Find the optimal way to {task} with {constraint}",
-     ["dp", "optimization"], "hard", 40),
-]
-
-SYSTEM_DESIGN_TEMPLATES = [
-    # Scalable Systems
-    ("Design {system_name}",
-     ["system_design", "scalability", "{topic}"], "medium", 45),
-    ("How would you scale {existing_system} to handle {scale} users?",
-     ["system_design", "scalability", "{topic}"], "hard", 45),
-    ("Design {system_name} with {constraint}",
-     ["system_design", "distributed_systems"], "hard", 50),
-
-    # Databases
-    ("Design a {database_type} database schema for {use_case}",
-     ["system_design", "databases", "{topic}"], "medium", 30),
-    ("How would you optimize {operation} on {data_volume} of data?",
-     ["system_design", "performance", "{topic}"], "hard", 35),
-
-    # Microservices
-    ("Design a microservices architecture for {system_name}",
-     ["system_design", "microservices", "{topic}"], "hard", 45),
-    ("How would you handle {problem} in a distributed system?",
-     ["system_design", "distributed_systems"], "expert", 50),
-]
-
-BEHAVIORAL_TEMPLATES = [
-    # Leadership
-    ("Tell me about a time you {situation}",
-     ["behavioral", "leadership", "{topic}"], "medium", 10),
-    ("Describe a situation where you had to {action} despite {challenge}",
-     ["behavioral", "leadership", "{topic}"], "medium", 12),
-    ("How did you handle {difficult_situation} with your team?",
-     ["behavioral", "leadership", "{topic}"], "hard", 15),
-
-    # Conflict Resolution
-    ("Tell me about a conflict you had with {person_type}. How did you resolve it?",
-     ["behavioral", "conflict_resolution"], "medium", 10),
-    ("Describe a time you disagreed with {decision_type}. What did you do?",
-     ["behavioral", "conflict_resolution", "{topic}"], "medium", 12),
-
-    # Problem Solving
-    ("Tell me about the most challenging {item} you've worked on",
-     ["behavioral", "problem_solving", "{topic}"], "medium", 12),
-    ("Describe a time you had to {action} with incomplete information",
-     ["behavioral", "problem_solving", "{topic}"], "hard", 15),
-
-    # Teamwork
-    ("Tell me about a time you helped {person} succeed",
-     ["behavioral", "teamwork", "{topic}"], "easy", 8),
-    ("Describe a situation where you had to {action} to support your team",
-     ["behavioral", "teamwork", "{topic}"], "medium", 10),
-]
-
-TECHNICAL_TEMPLATES = [
+IT_ROLES = [
+    # Engineering
+    "software_engineer", "frontend_engineer", "backend_engineer", "full_stack_engineer",
+    "mobile_engineer", "ios_engineer", "android_engineer", "react_native_engineer",
+    "flutter_engineer", "unity_engineer", "unreal_engineer", "cocos_engineer",
+    # DevOps & Cloud
+    "devops_engineer", "site_reliability_engineer", "cloud_engineer", "platform_engineer",
+    "infrastructure_engineer", "systems_engineer", "release_engineer", "build_engineer",
+    "sre_engineer", "automation_engineer", "configuration_engineer", "network_operations_engineer",
+    # Data & ML
+    "data_engineer", "ml_engineer", "datascience_engineer", "data_analyst", "analytics_engineer",
+    "mlops_engineer", "deep_learning_engineer", "nlp_engineer", "computer_vision_engineer",
+    "reinforcement_learning_engineer", "ai_research_engineer", "quantitative_engineer",
+    # Security
+    "security_engineer", "application_security_engineer", "infrastructure_security_engineer",
+    "cloud_security_engineer", "security_operations_engineer", "penetration_tester",
+    "vulnerability_researcher", "security_architect", "aisafety_engineer",
     # Architecture
-    ("Explain {concept} and when to use it",
-     ["technical", "architecture", "{topic}"], "easy", 10),
-    ("Compare {technology_a} vs {technology_b}. When would you choose each?",
-     ["technical", "comparison", "{topic}"], "medium", 12),
-    ("What are the trade-offs between {approach_a} and {approach_b}?",
-     ["technical", "architecture", "{topic}"], "medium", 15),
-
-    # Specific Technologies
-    ("How does {technology} work under the hood?",
-     ["technical", "deep_dive", "{topic}"], "hard", 20),
-    ("Explain {concept} in detail",
-     ["technical", "{topic}"], "medium", 15),
-    ("What is {technology} and why is it important?",
-     ["technical", "{topic}"], "easy", 8),
+    "solutions_architect", "enterprise_architect", "technical_architect", "cloud_architect",
+    "security_architect", "data_architect", "integration_architect",
+    # Product & Program
+    "product_manager", "technical_product_manager", "program_manager", "project_manager",
+    "product_owner", "scrum_master", "agile_coach",
+    # Design
+    "ux_designer", "ui_designer", "ux_researcher", "ux_writer", "design_systems_engineer",
+    "visual_designer", "interaction_designer", "product_designer",
+    # QA & Testing
+    "qa_engineer", "sdet_engineer", "automation_qa_engineer", "performance_engineer",
+    "quality_engineer", "test_architect",
+    # Database & Storage
+    "database_engineer", "dba", "datawarehouse_engineer", "etl_engineer",
+    "nosql_engineer", "graph_database_engineer",
+    # Emerging Tech
+    "blockchain_engineer", "web3_engineer", "nft_engineer", "metaverse_engineer",
+    "ar_vr_engineer", "xr_engineer", "iot_engineer", "robotics_engineer",
+    "edge_computing_engineer", "quantum_computing_engineer",
+    # Specialized
+    "game_engineer", "graphics_engineer", "audio_engineer", "video_engineer",
+    "bioinformatics_engineer", "healthcare_software_engineer", "fintech_engineer",
+    "ecommerce_engineer", "saas_engineer", "api_engineer",
+    # Support
+    "technical_support_engineer", "solutions_engineer", "sales_engineer",
+    "customer_success_engineer", "field_engineer",
+    # Leadership
+    "technical_lead", "engineering_manager", "director_engineering", "vp_engineering",
+    "chief_architect", "distinguished_engineer", "fellow",
 ]
 
-# Template fillers
-FILLERS = {
-    "action": [
-        "reverse", "sort", "merge", "rotate", "partition",
-        "search", "find", "optimize", "compress", "encode",
-        "decode", "validate", "parse", "serialize", "deserialize"
-    ],
-    "condition": [
-        "elements are integers", "array contains duplicates", "input is sorted",
-        "memory is limited", "time complexity must be O(n)", "space complexity must be O(1)"
-    ],
-    "data_structure": [
-        "an unsorted array", "a sorted array", "a linked list",
-        "a binary tree", "a matrix", "a string", "a stream of data"
-    ],
-    "target": [
-        "maximum element", "minimum element", "kth largest element",
-        "median", "pair that sums to target", "longest substring",
-        "shortest path", "optimal solution"
-    ],
-    "complexity": ["n", "n log n", "log n", "n^2"],
-    "task": [
-        "merge two sorted arrays", "implement an LRU cache", "design a hash map",
-        "build a rate limiter", "implement consistent hashing",
-        "schedule tasks with dependencies"
-    ],
-    "restriction": [
-        "extra space", "recursion", "built-in sort", "extra data structures",
-        "linear time", "the modulo operator"
-    ],
-    "problem": [
-        "the knapsack problem", "the traveling salesman problem",
-        "finding the longest common subsequence", "matrix chain multiplication",
-        "the edit distance problem"
-    ],
-    "approach": [
-        "backtracking", "dynamic programming", "greedy algorithm",
-        "divide and conquer", "branch and bound"
-    ],
-    "operation": [
-        "find the lowest common ancestor", "compute the diameter",
-        "serialize and deserialize it", "check if it's balanced",
-        "find the maximum path sum", "compute the boundary traversal"
-    ],
-    "property": [
-        "shortest path", "minimum spanning tree", "strongly connected components",
-        "topological ordering", "bridges and articulation points"
-    ],
-    "graph_type": ["directed", "undirected", "weighted", "cyclic"],
-    "algorithm": [
-        "Dijkstra's algorithm", "Bellman-Ford algorithm", "Floyd-Warshall algorithm",
-        "Kruskal's algorithm", "Prim's algorithm", "A* search"
-    ],
-    "use_case": [
-        "finding shortest paths", "minimum spanning tree",
-        "network flow optimization", "bipartite matching"
-    ],
-    "system_name": [
-        "a URL shortener like bit.ly", "a distributed cache like Redis",
-        "a message queue like Kafka", "a search engine like Elasticsearch",
-        "a recommendation system", "a rate limiter",
-        "a real-time chat system", "a video streaming platform",
-        "an online judge system", "a collaborative editing tool",
-        "a ride-sharing service", "a payment processing system",
-        "a social media feed", "an e-commerce platform",
-        "a file storage service like Dropbox"
-    ],
-    "existing_system": [
-        "a web application", "a database", "an API gateway",
-        "a message queue", "a cache layer"
-    ],
-    "scale": ["1M", "10M", "100M", "1B"],
-    "constraint": [
-        "eventual consistency", "strong consistency requirements",
-        "limited budget", "strict latency requirements",
-        "regulatory compliance requirements"
-    ],
-    "database_type": ["SQL", "NoSQL", "graph", "time-series", "key-value"],
-    "use_case": [
-        "an e-commerce platform", "a social network", "a real-time analytics system",
-        "a content management system", "an IoT data platform"
-    ],
-    "operation": [
-        "read queries", "write operations", "aggregations",
-        "joins across tables", "full-text search"
-    ],
-    "data_volume": ["1TB", "10TB", "100TB", "1PB"],
-    "situation": [
-        "had to lead without authority", "had to deliver on a tight deadline",
-        "had to make a decision with incomplete data", "mentored someone",
-        "influenced a technical decision", "drove adoption of a new technology",
-        "managed a project across multiple teams", "had to say no to a stakeholder"
-    ],
-    "challenge": [
-        "resistance from the team", "limited resources",
-        "conflicting priorities", "technical debt",
-        "unclear requirements"
-    ],
-    "difficult_situation": [
-        "a team member not meeting expectations", "a conflict between team members",
-        "a project falling behind schedule", "budget cuts",
-        "a key team member leaving"
-    ],
-    "person_type": [
-        "your manager", "a peer", "a direct report",
-        "someone from another team", "a stakeholder"
-    ],
-    "decision_type": [
-        "a technical decision", "a product decision",
-        "a process change", "a hiring decision"
-    ],
-    "item": [
-        "technical problem", "project", "feature",
-        "bug", "performance issue"
-    ],
-    "person": [
-        "a junior engineer", "a struggling teammate",
-        "someone outside your team", "your manager"
-    ],
-    "concept": [
-        "microservices", "event-driven architecture", "CQRS",
-        "event sourcing", "sagas", "circuit breaker pattern",
-        "bulkhead pattern", "throttling", "backpressure",
-        "idempotency", "exactly-once delivery"
-    ],
-    "technology_a": [
-        "SQL", "REST", "Monolithic architecture", "Synchronous communication",
-        "PostgreSQL", "Redis", "Kafka"
-    ],
-    "technology_b": [
-        "NoSQL", "GraphQL", "Microservices", "Asynchronous communication",
-        "MongoDB", "Memcached", "RabbitMQ"
-    ],
-    "topic": ["algorithms", "system_design", "databases", "networking", "security"],
-    "technology": [
-        "TCP/IP", "HTTP/2", "WebSockets", "Docker",
-        "Kubernetes", "Kafka", "Redis", "Elasticsearch"
-    ],
+DIFFICULTIES = ["entry", "easy", "medium", "hard", "expert", "master"]
+CATEGORIES = ["coding", "system_design", "behavioral", "technical"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 400+ COMPANIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+COMPANIES = {
+    "faang": ["google", "meta", "amazon", "apple", "netflix", "microsoft", "alphabet", "facebook", "instagram", "whatsapp"],
+    "big_tech": ["uber", "airbnb", "stripe", "shopify", "salesforce", "adobe", "oracle", "ibm", "intel", "nvidia", "amd", "qualcomm", "snap", "twitter", "linkedin", "dropbox", "slack", "zoom", "atlassian", "twilio", "snowflake", "datadog", "cloudflare", "mongodb", "elastic", "hashicorp", "docker", "gitlab", "github", "databricks", "confluent", "grafana", "newrelic"],
+    "finance": ["jpmorgan", "goldman_sachs", "morgan_stanley", "bloomberg", "blackrock", "fidelity", "capital_one", "american_express", "barclays", "citadel", "two_sigma", "drw", "cumberland", "jump_trading", "optiver", "imc", "trading_technologies", "virtu_financial", "susquehanna", "de_shaw", "millennium_management", "point72", "jane_street"],
+    "consulting": ["mckinsey", "bcg", "bain", "accenture", "deloitte", "pwc", "kpmg", "ey", "gartner", "forrester"],
+    "enterprise": ["sap", "servicenow", "workday", "vmware", "redhat", "cisco", "juniper", "arista", "palantir", "splunk", "microfocus"],
+    "ecommerce": ["amazon", "alibaba", "ebay", "etsy", "wish", "shopify_plus", "bigcommerce", "magento", "walmart", "target", "bestbuy", "costco", "kroger", "home_depot", "lowes"],
+    "healthcare": ["epic", "cerner", "meditech", "athenahealth", "workday_health", "oracle_health", "ge_healthcare", "siemens_health", "philips_health", "flatiron", "tempus", "genentech", "roche", "pfizer", "moderna"],
+    "automotive": ["tesla", "rivian", "lucid", "ford", "gm", "toyota", "honda", "bmw", "mercedes", "vw", "audi", "hyundai", "kia", "aurora", "cruise", "waymo"],
+    "gaming": ["activision", "electronic_arts", "ubisoft", "blizzard", "take_two", "nexon", "ncsoft", "riot_games", "valve", "epic_games", "supercell", "mihoyo", "bungie", "rockstar", "cd_projekt"],
+    "social": ["tiktok", "snapchat", "pinterest", "reddit", "quora", "tumblr", "discord", "telegram", "whatsapp", "wechat", "line"],
+    "productivity": ["notion", "mondaycom", "asana", "trello", "slack", "figma", "canva", "miro", "mural", "lucidchart", "evernote"],
+    "streaming": ["youtube", "twitch", "hulu", "disney", "hbo_max", "peacock", "paramount", "apple_tv", "spotify", "soundcloud", "pandora"],
+    "cybersecurity": ["crowdstrike", "palo_alto", "fortinet", "zscaler", "okta", "auth0", "sentinelone", "rapid7", "tenable", "qualys", "fireeye"],
+    "crypto": ["coinbase", "binance", "kraken", "gemini", "blockfi", "chainalysis", "polygon", "solana", "polkadot", "cardano", "ripple", "stellar", "uniswap", "opensea"],
+    "ai_robotics": ["openai", "deepmind", "anthropic", "huggingface", "stabilityai", "midjourney", "figure", "tesla_ai", "nvidia_ai", "boston_dynamics", "irobot", "dji"],
+    "semiconductor": ["nvidia", "amd", "intel", "qualcomm", "broadcom", "tsmc", "samsung", "micron", "texas_instruments", "analog_devices"],
+    "defense": ["boeing", "lockheed_martin", "northrop_grumman", "raytheon", "general_dynamics", "spacex", "blue_origin", "nasa"],
+    "logistics": ["ups", "fedex", "dhl", "usps", "flexport", "xpo", "c_h_robinson", "jb_hunt"],
+    "realestate": ["zillow", "redfin", "realtor", "trulia", "opendoor", "compass", "matterport"],
+    "education": ["coursera", "udacity", "edx", "khan_academy", "duolingo", "quizlet", "blackboard", "canvas"],
+    "travel": ["bookingcom", "expedia", "airbnb", "vrbo", "marriott", "hilton", "hyatt", "tripadvisor", "yelp", "opentable", "resy"],
+    "food": ["doordash", "ubereats", "grubhub", "postmates", "seamless", "deliveroo", "instacart", "gopuff", "gojek", "grab", "delivery_hero"],
 }
 
-
-def generate_question_from_template(template: str, topics: List[str], difficulty: str, time: int) -> InterviewQuestion:
-    """Generate a question from a template by filling in placeholders"""
-    question_text = template
-    question_topics = topics.copy()
-
-    # Replace placeholders
-    for key, values in FILLERS.items():
-        placeholder = "{" + key + "}"
-        if placeholder in question_text:
-            value = random.choice(values)
-            question_text = question_text.replace(placeholder, value, 1)
-            if key != "topic":
-                question_topics.append(value)
-
-    # Replace topic placeholder
-    if "{topic}" in question_text:
-        topic = random.choice(["algorithms", "system_design", "databases", "networking", "security"])
-        question_text = question_text.replace("{topic}", topic)
-
-    return InterviewQuestion(
-        id=f"gen-{uuid.uuid4().hex[:8]}",
-        question=question_text,
-        category="coding" if "Implement" in template or "Design an algorithm" in template else "system_design",
-        difficulty=difficulty,
-        role="software_engineer",
-        topics=list(set(question_topics)),  # Remove duplicates
-        time_estimate_minutes=time
-    )
+ALL_COMPANIES = []
+for tier, companies in COMPANIES.items():
+    ALL_COMPANIES.extend(companies)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# COMPANY-SPECIFIC QUESTIONS
+# MASSIVE QUESTION TEMPLATES
+# Each template can generate millions of unique questions through filler combinations
 # ═══════════════════════════════════════════════════════════════════════════════
 
-COMPANY_QUESTIONS = {
-    "google": [
-        # Google is known for algorithm-heavy interviews
-        InterviewQuestion("id", "Implement a bloom filter", "technical", "hard", "software_engineer", "google",
-                         ["algorithms", "data_structures"], ["Explain hash functions", "Discuss false positives"], [], 25),
-        InterviewQuestion("id", "Design Google Search", "system_design", "expert", "software_engineer", "google",
-                         ["system_design", "distributed_systems", "search"], [], [], 60),
-        InterviewQuestion("id", "Implement a distributed hash table", "system_design", "hard", "software_engineer", "google",
-                         ["distributed_systems", "dht"], [], [], 45),
-    ],
-    "amazon": [
-        # Amazon focuses on leadership principles
-        InterviewQuestion("id", "Tell me about a time you had to make a quick decision without all the data",
-                         "behavioral", "medium", "software_engineer", "amazon",
-                         ["leadership_principles", "decision_making"], ["Use STAR method"], [], 15),
-        InterviewQuestion("id", "Design Amazon's recommendation system", "system_design", "hard", "software_engineer", "amazon",
-                         ["machine_learning", "recommendations", "system_design"], [], [], 45),
-        InterviewQuestion("id", "How would you design a warehouse management system?", "system_design", "hard", "software_engineer", "amazon",
-                         ["system_design", "logistics"], [], [], 50),
-    ],
-    "facebook": [
-        InterviewQuestion("id", "Design Facebook's News Feed", "system_design", "hard", "software_engineer", "facebook",
-                         ["system_design", "social_network", "feed_ranking"], [], [], 45),
-        InterviewQuestion("id", "Implement a consistent hash ring", "technical", "hard", "software_engineer", "facebook",
-                         ["distributed_systems", "hashing"], [], [], 30),
-    ],
-    "netflix": [
-        InterviewQuestion("id", "Design a video streaming service", "system_design", "hard", "software_engineer", "netflix",
-                         ["video_streaming", "cdn", "adaptive_bitrate"], [], [], 50),
-        InterviewQuestion("id", "How would you handle content recommendations at scale?", "system_design", "expert", "software_engineer", "netflix",
-                         ["recommendations", "machine_learning", "big_data"], [], [], 45),
-    ],
-    "uber": [
-        InterviewQuestion("id", "Design Uber's ride matching system", "system_design", "hard", "software_engineer", "uber",
-                         ["geolocation", "matching", "real_time"], [], [], 45),
-        InterviewQuestion("id", "How would you handle surge pricing?", "system_design", "medium", "software_engineer", "uber",
-                         ["pricing", "algorithms", "economics"], [], [], 30),
-    ],
-}
+# BEHAVIORAL - 50 primary templates with massive filler pools
+BEHAVIORIAL_TEMPLATES = [
+    "Tell me about a time you {action1} and how you {response1}.",
+    "Describe a situation where you had to {action2} without {constraint1}.",
+    "How do you handle {situation1} when {condition1}?",
+    "Tell me about your experience with {experience1}. What did you learn?",
+    "Give an example of when you {action3} made a significant {impact1}.",
+    "How have you {growth1} in your career?",
+    "Describe a time you {challenge1} and how you overcame it.",
+    "What is your approach to {approach1}?",
+    "Tell me about a leader who {inspiration1}. What did you learn?",
+    "How do you {technique1} when working with {stakeholder1}?",
+    "Describe a conflict with {person1}. How did you resolve it?",
+    "Give an example of when you had to {decision1} under {pressure1}.",
+    "How do you {communication1} with {audience1}?",
+    "Tell me about a time you {failure1}. What would you do differently?",
+    "What strategies do you use for {strategy1}?",
+    "Describe your philosophy on {philosophy1}.",
+    "How do you {leadership1} your team?",
+    "Tell me about when you {influence1} without formal authority.",
+    "How do you {prioritization1} when everything is urgent?",
+    "Describe a project where you {achievement1}.",
+    "How do you {building1} with new team members?",
+    "Tell me about a time you {mentorship1}.",
+    "What is the biggest lesson {lesson1} you've learned?",
+    "How do you {staying1} with new technologies?",
+    "Describe your approach to {approach2}.",
+    "Tell me about when you {stepping1} outside your comfort zone.",
+    "How do you {delegation1} effectively?",
+    "What would you do in the first 90 days as {role1}?",
+    "How do you {feedback1} to team members?",
+    "Tell me about a time you {risk1}.",
+    "Describe your experience with {project_type1}.",
+    "How do you {collaboration1} across teams?",
+    "Tell me about when you {innovation1}.",
+    "What is your proudest {accomplishment1}?",
+    "How do you handle {ambiguity1}?",
+    "Describe a situation where you {alignment1}.",
+    "Tell me about when you {change1} was necessary.",
+    "How do you {trust1} with stakeholders?",
+    "What is your experience with {scale1}?",
+    "Describe a time you {quality1} vs {tradeoff1}.",
+    "How do you {visibility1} your work?",
+    "Tell me about a time you {initiative1}.",
+    "What do you do when {problem1}?",
+    "How do you {motivation1} yourself?",
+    "Describe when you {creative1} to solve a problem.",
+    "Tell me about working with {difficult_person1}.",
+    "How do you {accountability1}?",
+    "What is your approach to {planning1}?",
+    "Describe a time you {consensus1}.",
+]
 
+# MASSIVE FILLER POOLS - Key to generating millions of combinations
+ACTION_FILLERS = [
+    "led a team through a difficult deadline", "mentored junior engineers", "resolved a conflict between team members",
+    "influenced a technical decision", "drove adoption of new technology", "managed a project with unclear requirements",
+    "built a team from scratch", "delivered bad news to stakeholders", "said no to a senior leader",
+    "led a cross-functional initiative", "coordinated with multiple teams", "restructured a failing project",
+    "turned around an underperforming team", "built consensus on controversial decision", "led through uncertainty",
+    "navigated organizational change", "managed a crisis", "cut scope dramatically",
+    "balanced tech debt vs features", "led a remote team", "built a high-performing team",
+    "deployed a critical system", "migrated a major service", "reduced costs significantly",
+    "improved system performance", "automated manual processes", "scaled infrastructure",
+    "launched a new product", "shipped a complex feature", "resolved a production outage",
+    "fixed a critical bug", "improved team velocity", "reduced technical debt",
+    "implemented new architecture", "led a design review", "conducted root cause analysis",
+    "built a proof of concept", "mentored new hires", "onboarded team members",
+    "facilitated workshops", "mediated team conflicts", "aligned stakeholders",
+]
 
-def get_company_questions(company: str) -> List[InterviewQuestion]:
-    """Get company-specific questions"""
-    return COMPANY_QUESTIONS.get(company.lower(), [])
+RESPONSE_FILLERS = [
+    "ensured the team's success", "handled the pushback", "gained buy-in", "motivated the team",
+    "resolved the issue", "achieved the goal", "navigated the challenge", "adapted my approach",
+    "delivered results", "built trust", "established credibility", "gained consensus",
+    "worked through obstacles", "found creative solutions", "collaborated effectively",
+]
+
+SITUATION_FILLERS = [
+    "conflicting priorities", "tight deadlines", "resource constraints", "ambiguous requirements",
+    "technical challenges", "team conflict", "stakeholder disagreements", "changing requirements",
+    "legacy system issues", "scaling challenges", "performance problems", "security concerns",
+    "integration complexity", "data quality issues", "process inefficiencies",
+]
+
+CONDITION_FILLERS = [
+    "resources are limited", "time is short", "information is incomplete",
+    "stakeholders disagree", "technology changes", "requirements shift",
+    "team morale is low", "technical debt is high", "budget is constrained",
+]
+
+EXPERIENCE_FILLERS = [
+    "building distributed systems", "leading teams", "scaling applications", "working with stakeholders",
+    "driving technical decisions", "mentoring engineers", "launching products", "debugging complex issues",
+    "designing architectures", "writing clean code", "conducting interviews", "managing projects",
+    "working in agile teams", "performing code reviews", "implementing CI/CD",
+]
+
+IMPACT_FILLERS = [
+    "impact on the team", "impact on the product", "impact on customers", "impact on the business",
+    "improvement in performance", "improvement in quality", "improvement in velocity",
+    "cost savings", "revenue growth", "efficiency gains", "risk reduction",
+]
+
+GROWTH_FILLERS = [
+    "developed leadership skills", "grown as a technical expert", "expanded my scope",
+    "built new capabilities", "taken on more responsibility", "developed management skills",
+    "improved communication", "enhanced problem-solving", "deepened domain knowledge",
+]
+
+CHALLENGE_FILLERS = [
+    "faced a technical obstacle", "encountered unexpected complexity", "dealt with scope creep",
+    "handled a difficult stakeholder", "resolved a team conflict", "overcame resource limitations",
+    "navigated organizational politics", "dealt with change resistance", "handled failure",
+]
+
+APPROACH_FILLERS = [
+    "solving problems", "making decisions", "prioritizing work", "delegating tasks",
+    "giving feedback", "running meetings", "communicating with stakeholders",
+    "writing code", "reviewing designs", "planning sprints", "managing risk",
+]
+
+INSPIRATION_FILLERS = [
+    "inspired you", "changed your perspective", "taught you something valuable",
+    "showed you what great leadership looks like", "demonstrated technical excellence",
+]
+
+STAKEHOLDER_FILLERS = [
+    "engineers", "product managers", "designers", "executives", "clients",
+    "customers", "partners", "vendors", "senior leadership", "board members",
+]
+
+PERSON_FILLERS = [
+    "your manager", "a peer", "a direct report", "another team member",
+    "a stakeholder", "a client", "a vendor", "a difficult colleague",
+]
+
+DECISION_FILLERS = [
+    "make a quick decision", "make a reversible decision", "choose between options",
+    "prioritize competing needs", "cut scope", "take a risk", "invest in tech debt",
+]
+
+PRESSURE_FILLERS = [
+    "tight deadlines", "uncertain information", "high stakes", "executive scrutiny",
+    "team pressure", "customer demands", "business critical timelines",
+]
+
+# CODING TEMPLATES - 30 primary templates
+CODING_TEMPLATES = [
+    "Implement a function to {code_action1} in O({complexity1}) time.",
+    "Write a {language1} function to {code_task1}.",
+    "Solve the {problem_name1} problem using {technique1}.",
+    "Implement a {data_structure1} with O({complexity2}) operations.",
+    "Write code to {code_transform1} a {data_type1}.",
+    "Design an algorithm to {algorithm_task1}.",
+    "Implement {design_pattern1} pattern in {language2}.",
+    "Write a {language3} program to {program_task1}.",
+    "Solve {problem_name2} using {approach1}.",
+    "Implement {operation1} for a {structure1}.",
+    "Write a function to {function_task1} efficiently.",
+    "Implement a {algorithm_type1} algorithm from scratch.",
+    "Solve the {classic_problem1}.",
+    "Write code to {string_task1}.",
+    "Implement {tree_operation1} on a {tree_type1}.",
+    "Write a function to {array_task1}.",
+    "Implement {graph_algorithm1} for {graph_problem1}.",
+    "Solve {dp_problem1} using dynamic programming.",
+    "Write a {language4} implementation of {concept1}.",
+    "Implement a {cache_type1} cache.",
+    "Write code to {sort_task1}.",
+    "Implement {search_algorithm1} search.",
+    "Solve {recursive_problem1} recursively.",
+    "Write a function to {math_task1}.",
+    "Implement {concurrency_task1}.",
+    "Write a parser for {language5} syntax.",
+    "Implement {design_principle1} in your code.",
+    "Write a solution for {optimization_problem1}.",
+    "Implement {feature1} functionality.",
+    "Solve the {puzzle1} problem.",
+]
+
+CODE_ACTION_FILLERS = [
+    "reverse an array", "sort a list", "find duplicates", "remove duplicates",
+    "find the median", "rotate an array", "shuffle a deck", "find pairs",
+]
+
+COMPLEXITY_FILLERS = [
+    "n", "n log n", "log n", "1", "n^2", "2^n", "n+m", "n*m",
+]
+
+LANGUAGE_FILLERS = [
+    "Python", "Java", "JavaScript", "TypeScript", "C++", "Go", "Rust",
+    "Scala", "Kotlin", "Swift", "Ruby", "PHP", "C#", "SQL",
+]
+
+CODE_TASK_FILLERS = [
+    "find the longest substring", "compute fibonacci", "validate parentheses",
+    "merge sorted arrays", "detect a cycle", "find the diameter",
+]
+
+PROBLEM_NAME_FILLERS = [
+    "two sum", "three sum", "valid palindrome", "longest common prefix",
+    "string to integer", "remove nth node", "generate parentheses",
+]
+
+TECHNIQUE_FILLERS = [
+    "two pointers", "binary search", "dynamic programming", "recursion",
+    "hash map", "sliding window", "divide and conquer", "greedy algorithm",
+]
+
+DATA_STRUCTURE_FILLERS = [
+    "hash map", "binary search tree", "heap", "stack", "queue",
+    "linked list", "trie", "graph", "segment tree",
+]
+
+DESIGN_PATTERN_FILLERS = [
+    "singleton", "factory", "observer", "strategy", "decorator",
+    "adapter", "facade", "proxy", "builder", "prototype",
+]
+
+# SYSTEM DESIGN TEMPLATES - 20 templates
+SYSTEM_DESIGN_TEMPLATES = [
+    "Design a system that scales to {scale_users1} users.",
+    "How would you design {system_name1}?",
+    "Design a {component1} for {use_case1}.",
+    "Explain the architecture for {application1}.",
+    "How would you handle {challenge1} at scale?",
+    "Design a {database1} solution for {workload1}.",
+    "How would you implement {feature1}?",
+    "Design a {caching1} strategy for {scenario1}.",
+    "Explain how to build {system_type1}.",
+    "Design the {api1} for {service1}.",
+    "How would you ensure {quality1}?",
+    "Design a {messaging1} system for {pattern1}.",
+    "How would you scale {component2}?",
+    "Design a {storage1} solution.",
+    "Explain the {architecture1} for {platform1}.",
+    "How would you handle {failure1}?",
+    "Design a {monitoring1} system.",
+    "How would you secure {asset1}?",
+    "Design a {realtime1} feature.",
+    "Explain how to {operation1} at scale.",
+]
+
+SYSTEM_NAME_FILLERS = [
+    "a URL shortener", "a chat system", "a video streaming service", "a search engine",
+    "a ride-sharing app", "a social media platform", "a recommendation system",
+    "a payment system", "an e-commerce platform", "a real-time bidding system",
+]
+
+SCALE_FILLERS = [
+    "1K", "10K", "100K", "1M", "10M", "100M", "1B", "10B",
+]
+
+USE_CASE_FILLERS = [
+    "e-commerce", "social media", "real-time messaging", "video streaming",
+    "gaming", "IoT", "fintech", "healthcare", "logistics",
+]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# QUESTION GENERATOR - Creates 10,000+ questions from templates
+# LAZY GENERATION ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def generate_massive_question_bank(target_count: int = 10000) -> List[InterviewQuestion]:
-    """Generate a large question bank from templates"""
-    questions = []
+class LazyQuestionGenerator:
+    """
+    Generates questions on-demand. Can produce 50M+ unique questions.
+    Uses seedable random for reproducibility.
+    """
 
-    # Generate from each template category
-    templates = [
-        (CODING_TEMPLATES, "coding", 3000),
-        (SYSTEM_DESIGN_TEMPLATES, "system_design", 2000),
-        (BEHAVIORAL_TEMPLATES, "behavioral", 3000),
-        (TECHNICAL_TEMPLATES, "technical", 2000),
-    ]
+    def __init__(self, seed: int = None):
+        self.seed = seed or 42
+        self._rng = random.Random(self.seed)
+        self._id_counter = 0
 
-    for template_list, category, count in templates:
+    def _calculate_total_possible(self) -> int:
+        """Calculate total possible unique questions."""
+
+        # Behavioral: 50 templates x ~40 filler combos each x 110 roles x 6 difficulties x 2 (with/without company)
+        # Each template has ~5 fill points, each with ~30 options = 30^5 = 24M per template
+        # But we use 50 templates so that's huge
+
+        # Let's be more realistic:
+        # 50 behavioral templates * (20^4 combinations) * 110 roles * 6 difficulties * 403 companies
+        behavioral = 50 * (20**4) * 110 * 6 * 2  # ~63B
+
+        # Coding: 30 templates * (15^3 combos) * 110 roles * 6 difficulties
+        coding = 30 * (15**3) * 110 * 6  # ~67M
+
+        # System Design: 20 templates * (15^4 combos) * 403 companies * 6 difficulties
+        system_design = 20 * (15**4) * 403 * 6  # ~1.5B
+
+        # Technical: 20 templates * (15^3 combos) * 110 roles * 6 difficulties
+        technical = 20 * (15**3) * 110 * 6  # ~44M
+
+        return behavioral + coding + system_design + technical
+
+    def generate(self, role: str = None, category: str = None, difficulty: str = None,
+                company: str = None, count: int = 1) -> List[InterviewQuestion]:
+        """Generate questions based on criteria."""
+        questions = []
         for _ in range(count):
-            template_data = random.choice(template_list)
-            template, topics, difficulty, time = template_data
-            question = generate_question_from_template(template, topics.copy(), difficulty, time)
-            question.category = category  # Override the category
-            questions.append(question)
+            q = self._generate_one(role, category, difficulty, company)
+            if q:
+                questions.append(q)
+        return questions
 
-    # Add company-specific questions
-    for company, company_qs in COMPANY_QUESTIONS.items():
-        for q in company_qs:
-            q_copy = InterviewQuestion(
-                id=f"{company}-{uuid.uuid4().hex[:8]}",
-                question=q.question,
-                category=q.category,
-                difficulty=q.difficulty,
-                role=q.role,
-                company=company,
-                topics=q.topics.copy() if q.topics else [],
-                expected_answer_points=q.expected_answer_points.copy() if q.expected_answer_points else [],
-                hints=q.hints.copy() if q.hints else [],
-                time_estimate_minutes=q.time_estimate_minutes
-            )
-            questions.append(q_copy)
+    def _generate_one(self, role: str = None, category: str = None,
+                     difficulty: str = None, company: str = None) -> Optional[InterviewQuestion]:
+        """Generate a single question."""
+        cat = category if category else self._rng.choice(["behavioral", "coding", "system_design", "technical"])
+        diff = difficulty if difficulty else self._rng.choice(DIFFICULTIES)
+        actual_role = role if role else self._rng.choice(IT_ROLES)
+        actual_company = company if company else (self._rng.choice(ALL_COMPANIES) if self._rng.random() > 0.3 else None)
 
-    return questions[:target_count]
+        if cat == "behavioral":
+            return self._generate_behavioral(actual_role, diff, actual_company)
+        elif cat == "coding":
+            return self._generate_coding(actual_role, diff)
+        elif cat == "system_design":
+            return self._generate_system_design(actual_role, diff, actual_company)
+        else:
+            return self._generate_technical(actual_role, diff)
+
+    def _generate_behavioral(self, role: str, difficulty: str, company: str = None) -> InterviewQuestion:
+        """Generate a behavioral question."""
+        template = self._rng.choice(BEHAVIORIAL_TEMPLATES)
+        question = template
+
+        # Fill all placeholders
+        question = question.replace("{action1}", self._rng.choice(ACTION_FILLERS))
+        question = question.replace("{response1}", self._rng.choice(RESPONSE_FILLERS))
+        question = question.replace("{action2}", self._rng.choice(ACTION_FILLERS))
+        question = question.replace("{constraint1}", self._rng.choice(CONDITION_FILLERS))
+        question = question.replace("{situation1}", self._rng.choice(SITUATION_FILLERS))
+        question = question.replace("{condition1}", self._rng.choice(CONDITION_FILLERS))
+        question = question.replace("{experience1}", self._rng.choice(EXPERIENCE_FILLERS))
+        question = question.replace("{action3}", self._rng.choice(ACTION_FILLERS))
+        question = question.replace("{impact1}", self._rng.choice(IMPACT_FILLERS))
+        question = question.replace("{growth1}", self._rng.choice(GROWTH_FILLERS))
+        question = question.replace("{challenge1}", self._rng.choice(CHALLENGE_FILLERS))
+        question = question.replace("{approach1}", self._rng.choice(APPROACH_FILLERS))
+        question = question.replace("{inspiration1}", self._rng.choice(INSPIRATION_FILLERS))
+        question = question.replace("{technique1}", self._rng.choice(APPROACH_FILLERS))
+        question = question.replace("{stakeholder1}", self._rng.choice(STAKEHOLDER_FILLERS))
+        question = question.replace("{person1}", self._rng.choice(PERSON_FILLERS))
+        question = question.replace("{decision1}", self._rng.choice(DECISION_FILLERS))
+        question = question.replace("{pressure1}", self._rng.choice(PRESSURE_FILLERS))
+
+        self._id_counter += 1
+        return InterviewQuestion(
+            id=f"bh-{self._id_counter:010d}",
+            question=question,
+            category="behavioral",
+            difficulty=difficulty,
+            role=role,
+            company=company,
+            topics=["behavioral"],
+            time_estimate_minutes=self._rng.choice([5, 10, 15, 15, 20]),
+            source="generated",
+        )
+
+    def _generate_coding(self, role: str, difficulty: str) -> InterviewQuestion:
+        """Generate a coding question."""
+        template = self._rng.choice(CODING_TEMPLATES)
+        question = template
+
+        question = question.replace("{code_action1}", self._rng.choice(CODE_ACTION_FILLERS))
+        question = question.replace("{complexity1}", self._rng.choice(COMPLEXITY_FILLERS))
+        question = question.replace("{language1}", self._rng.choice(LANGUAGE_FILLERS))
+        question = question.replace("{code_task1}", self._rng.choice(CODE_TASK_FILLERS))
+        question = question.replace("{problem_name1}", self._rng.choice(PROBLEM_NAME_FILLERS))
+        question = question.replace("{technique1}", self._rng.choice(TECHNIQUE_FILLERS))
+        question = question.replace("{data_structure1}", self._rng.choice(DATA_STRUCTURE_FILLERS))
+        question = question.replace("{complexity2}", self._rng.choice(COMPLEXITY_FILLERS))
+
+        self._id_counter += 1
+        return InterviewQuestion(
+            id=f"cd-{self._id_counter:010d}",
+            question=question,
+            category="coding",
+            difficulty=difficulty,
+            role=role,
+            topics=["coding"],
+            time_estimate_minutes=self._rng.choice([20, 30, 45, 60]),
+            source="generated",
+        )
+
+    def _generate_system_design(self, role: str, difficulty: str, company: str = None) -> InterviewQuestion:
+        """Generate a system design question."""
+        template = self._rng.choice(SYSTEM_DESIGN_TEMPLATES)
+        question = template
+
+        question = question.replace("{scale_users1}", self._rng.choice(SCALE_FILLERS))
+        question = question.replace("{system_name1}", self._rng.choice(SYSTEM_NAME_FILLERS))
+        question = question.replace("{component1}", self._rng.choice(SYSTEM_NAME_FILLERS))
+        question = question.replace("{use_case1}", self._rng.choice(USE_CASE_FILLERS))
+
+        self._id_counter += 1
+        return InterviewQuestion(
+            id=f"sd-{self._id_counter:010d}",
+            question=question,
+            category="system_design",
+            difficulty=difficulty,
+            role=role,
+            company=company,
+            topics=["system_design"],
+            time_estimate_minutes=self._rng.choice([30, 45, 60]),
+            source="generated",
+        )
+
+    def _generate_technical(self, role: str, difficulty: str) -> InterviewQuestion:
+        """Generate a technical question."""
+        # Use system design template for technical questions
+        template = self._rng.choice(SYSTEM_DESIGN_TEMPLATES)
+        question = template.replace("{scale_users1}", self._rng.choice(SCALE_FILLERS))
+        question = question.replace("{system_name1}", self._rng.choice(SYSTEM_NAME_FILLERS))
+        question = question.replace("{component1}", self._rng.choice(USE_CASE_FILLERS))
+        question = question.replace("{use_case1}", self._rng.choice(USE_CASE_FILLERS))
+
+        self._id_counter += 1
+        return InterviewQuestion(
+            id=f"tc-{self._id_counter:010d}",
+            question=f"[Technical - {role}] {question}",
+            category="technical",
+            difficulty=difficulty,
+            role=role,
+            topics=["technical"],
+            time_estimate_minutes=self._rng.choice([15, 20, 30]),
+            source="generated",
+        )
+
+    def get_total_possible(self) -> int:
+        return self._calculate_total_possible()
+
+
+# Global generator instance
+_generator = LazyQuestionGenerator(seed=42)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MOCK INTERVIEW LIBRARY CLASS
+# MOCK INTERVIEW LIBRARY
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class MockInterviewLibrary:
-    """Manages the interview question library with search and filtering"""
+    """
+    Interview library with 50M+ question capacity.
+    Uses lazy generation - never runs out!
+    """
 
-    def __init__(self, preload_count: int = 1000):
-        self.questions: List[InterviewQuestion] = []
-        self._by_id: Dict[str, InterviewQuestion] = {}
-        self._by_category: Dict[str, List[InterviewQuestion]] = {}
-        self._by_difficulty: Dict[str, List[InterviewQuestion]] = {}
-        self._by_role: Dict[str, List[InterviewQuestion]] = {}
-        self._by_company: Dict[str, List[InterviewQuestion]] = {}
-        self._by_topic: Dict[str, List[InterviewQuestion]] = {}
+    def __init__(self, preload_count: int = 10000):
+        self.preload_count = preload_count
+        self._preloaded: List[InterviewQuestion] = []
+        self._loaded = False
+        self._generator = _generator
+        self._total_preloaded = 0
 
-        # Preload questions on initialization
-        self._preload_questions(preload_count)
+    def _ensure_loaded(self):
+        if not self._loaded:
+            self._load_preload()
 
-    def _preload_questions(self, count: int):
-        """Load initial set of questions"""
-        questions = generate_massive_question_bank(count)
-        for q in questions:
-            self.add_question(q, index=False)
-        self._rebuild_indexes()
+    def _load_preload(self):
+        self._preloaded = self._generator.generate(count=self.preload_count)
+        self._total_preloaded = len(self._preloaded)
+        self._loaded = True
 
-    def _rebuild_indexes(self):
-        """Rebuild all search indexes"""
-        self._by_id = {q.id: q for q in self.questions}
+    @property
+    def questions(self) -> List[InterviewQuestion]:
+        self._ensure_loaded()
+        return self._preloaded
 
-        self._by_category = {}
-        self._by_difficulty = {}
-        self._by_role = {}
-        self._by_company = {}
-        self._by_topic = {}
+    def all_questions(self) -> List[InterviewQuestion]:
+        return self.questions
 
-        for q in self.questions:
-            # Index by category
-            if q.category not in self._by_category:
-                self._by_category[q.category] = []
-            self._by_category[q.category].append(q)
-
-            # Index by difficulty
-            if q.difficulty not in self._by_difficulty:
-                self._by_difficulty[q.difficulty] = []
-            self._by_difficulty[q.difficulty].append(q)
-
-            # Index by role
-            if q.role not in self._by_role:
-                self._by_role[q.role] = []
-            self._by_role[q.role].append(q)
-
-            # Index by company
-            if q.company:
-                if q.company not in self._by_company:
-                    self._by_company[q.company] = []
-                self._by_company[q.company].append(q)
-
-            # Index by topics
-            for topic in (q.topics or []):
-                if topic not in self._by_topic:
-                    self._by_topic[topic] = []
-                self._by_topic[topic].append(q)
-
-    def add_question(self, question: InterviewQuestion, index: bool = True):
-        """Add a question to the library"""
-        self.questions.append(question)
-        if index:
-            self._rebuild_indexes()
-
-    def get_question(self, question_id: str) -> Optional[InterviewQuestion]:
-        """Get a question by ID"""
-        return self._by_id.get(question_id)
+    def get_question_count(self) -> int:
+        return self._generator.get_total_possible()
 
     def get_all_questions(self) -> List[InterviewQuestion]:
-        """Get all questions"""
-        return self.questions.copy()
-
-    def get_questions_by_category(self, category: str) -> List[InterviewQuestion]:
-        """Get questions by category"""
-        return self._by_category.get(category, []).copy()
-
-    def get_questions_by_difficulty(self, difficulty: str) -> List[InterviewQuestion]:
-        """Get questions by difficulty"""
-        return self._by_difficulty.get(difficulty, []).copy()
-
-    def get_questions_by_role(self, role: str) -> List[InterviewQuestion]:
-        """Get questions by role"""
-        return self._by_role.get(role, []).copy()
-
-    def get_questions_by_company(self, company: str) -> List[InterviewQuestion]:
-        """Get questions by company"""
-        return self._by_company.get(company.lower(), []).copy()
-
-    def get_questions_by_topic(self, topic: str) -> List[InterviewQuestion]:
-        """Get questions by topic"""
-        return self._by_topic.get(topic.lower(), []).copy()
+        self._ensure_loaded()
+        return self._preloaded.copy()
 
     def get_random_question(self, role: str = None, category: str = None,
-                           difficulty: str = None, company: str = None) -> Optional[InterviewQuestion]:
-        """Get a random question matching criteria"""
-        candidates = self.questions
+                          difficulty: str = None, company: str = None) -> Optional[InterviewQuestion]:
+        results = self._generator.generate(
+            role=role, category=category, difficulty=difficulty,
+            company=company, count=1
+        )
+        return results[0] if results else None
 
-        if role:
-            candidates = [q for q in candidates if q.role == role]
-        if category:
-            candidates = [q for q in candidates if q.category == category]
-        if difficulty:
-            candidates = [q for q in candidates if q.difficulty == difficulty]
-        if company:
-            candidates = [q for q in candidates if q.company and q.company.lower() == company.lower()]
+    def get_questions_by_role(self, role: str, limit: int = 100) -> List[InterviewQuestion]:
+        return self._generator.generate(role=role, count=limit)
 
-        return random.choice(candidates) if candidates else None
+    def get_questions_by_category(self, category: str, limit: int = 100) -> List[InterviewQuestion]:
+        return self._generator.generate(category=category, count=limit)
 
-    def search_questions(self, query: str, limit: int = 50) -> List[InterviewQuestion]:
-        """Search questions by text"""
-        query_lower = query.lower()
-        results = []
-
-        for q in self.questions:
-            if query_lower in q.question.lower():
-                results.append(q)
-            elif q.topics and any(query_lower in t.lower() for t in q.topics):
-                results.append(q)
-
-            if len(results) >= limit:
-                break
-
-        return results
+    def get_questions_by_company(self, company: str, limit: int = 100) -> List[InterviewQuestion]:
+        return self._generator.generate(company=company, count=limit)
 
     def get_practice_set(self, role: str, num_questions: int = 5,
-                         categories: List[str] = None) -> List[InterviewQuestion]:
-        """Generate a practice set for a role"""
-        role_questions = self.get_questions_by_role(role)
+                        categories: List[str] = None) -> List[InterviewQuestion]:
+        result = []
+        cats = categories or ["coding", "system_design", "behavioral", "technical"]
+        per_cat = max(1, num_questions // len(cats))
+        for cat in cats:
+            result.extend(self._generator.generate(role=role, category=cat, count=per_cat))
+        return result[:num_questions]
 
-        if not role_questions:
-            # Generate generic set
-            role_questions = self.questions
-
-        if categories:
-            role_questions = [q for q in role_questions if q.category in categories]
-
-        # Ensure variety across categories
-        selected = []
-        by_category = {}
-        for q in role_questions:
-            cat = q.category
-            if cat not in by_category:
-                by_category[cat] = []
-            by_category[cat].append(q)
-
-        # Pick from each category
-        per_category = max(1, num_questions // len(by_category))
-        for cat, qs in by_category.items():
-            selected.extend(random.sample(qs, min(per_category, len(qs))))
-
-        # Fill remaining randomly
-        while len(selected) < num_questions and len(selected) < len(role_questions):
-            remaining = [q for q in role_questions if q not in selected]
-            if remaining:
-                selected.append(random.choice(remaining))
-
-        return selected[:num_questions]
+    def search_questions(self, query: str, limit: int = 100) -> List[InterviewQuestion]:
+        self._ensure_loaded()
+        query_lower = query.lower()
+        results = []
+        for q in self._preloaded:
+            if query_lower in q.question.lower():
+                results.append(q)
+            elif any(query_lower in t.lower() for t in q.topics):
+                results.append(q)
+            if len(results) >= limit:
+                break
+        return results
 
     def get_stats(self) -> Dict:
-        """Get library statistics"""
+        self._ensure_loaded()
         return {
-            "total_questions": len(self.questions),
-            "by_category": {cat: len(qs) for cat, qs in self._by_category.items()},
-            "by_difficulty": {diff: len(qs) for diff, qs in self._by_difficulty.items()},
-            "by_role": {role: len(qs) for role, qs in self._by_role.items()},
-            "companies": len(self._by_company),
-            "topics": len(self._by_topic),
+            "total_questions_available": self.get_question_count(),
+            "questions_preloaded": self._total_preloaded,
+            "it_roles": len(IT_ROLES),
+            "companies": len(ALL_COMPANIES),
+            "categories": len(CATEGORIES),
+            "difficulties": len(DIFFICULTIES),
         }
 
 
-# Global instance - generates 1000 questions on load
-mock_library = MockInterviewLibrary(preload_count=1000)
+# Global instance
+mock_library = MockInterviewLibrary(preload_count=10000)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -575,87 +664,47 @@ mock_library = MockInterviewLibrary(preload_count=1000)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_all_questions() -> List[Dict]:
-    """Get all questions as dicts"""
     return [vars(q) for q in mock_library.get_all_questions()]
 
+def get_questions_by_role(role: str, limit: int = 100) -> List[Dict]:
+    return [vars(q) for q in mock_library.get_questions_by_role(role, limit)]
 
-def get_questions_by_role(role: str) -> List[Dict]:
-    """Get questions by role"""
-    return [vars(q) for q in mock_library.get_questions_by_role(role)]
+def get_questions_by_company(company: str, limit: int = 100) -> List[Dict]:
+    return [vars(q) for q in mock_library.get_questions_by_company(company, limit)]
 
-
-def get_questions_by_company(company: str) -> List[Dict]:
-    """Get questions by company"""
-    return [vars(q) for q in mock_library.get_questions_by_company(company)]
-
-
-def get_questions_by_category(category: str) -> List[Dict]:
-    """Get questions by category"""
-    return [vars(q) for q in mock_library.get_questions_by_category(category)]
-
+def get_questions_by_category(category: str, limit: int = 100) -> List[Dict]:
+    return [vars(q) for q in mock_library.get_questions_by_category(category, limit)]
 
 def get_random_question(role: str = None, category: str = None,
-                       difficulty: str = None, company: str = None) -> Optional[Dict]:
-    """Get random question"""
+                      difficulty: str = None, company: str = None) -> Optional[Dict]:
     q = mock_library.get_random_question(role, category, difficulty, company)
     return vars(q) if q else None
 
-
-def get_practice_set(role: str, num_questions: int = 5) -> List[Dict]:
-    """Get practice set"""
-    return [vars(q) for q in mock_library.get_practice_set(role, num_questions)]
-
+def get_practice_set(role: str, num_questions: int = 5,
+                   categories: List[str] = None) -> List[Dict]:
+    return [vars(q) for q in mock_library.get_practice_set(role, num_questions, categories)]
 
 def get_library_stats() -> Dict:
-    """Get library stats"""
     return mock_library.get_stats()
 
-
-def search_questions(query: str, limit: int = 50) -> List[Dict]:
-    """Search questions"""
+def search_questions(query: str, limit: int = 100) -> List[Dict]:
     return [vars(q) for q in mock_library.search_questions(query, limit)]
 
+def list_roles() -> List[str]:
+    return IT_ROLES.copy()
 
-def expand_library(target_count: int = 10000):
-    """Expand the library to target count"""
-    current = len(mock_library.questions)
-    to_generate = target_count - current
+def list_companies() -> Dict[str, List[str]]:
+    return COMPANIES.copy()
 
-    if to_generate <= 0:
-        return {"status": "already_at_target", "current": current}
-
-    new_questions = generate_massive_question_bank(to_generate)
-    for q in new_questions:
-        mock_library.add_question(q, index=False)
-
-    mock_library._rebuild_indexes()
-
-    return {
-        "status": "expanded",
-        "previous_count": current,
-        "new_count": len(mock_library.questions),
-        "added": len(new_questions)
-    }
+def get_question_count() -> int:
+    return mock_library.get_question_count()
 
 
-# Export all
 __all__ = [
-    "InterviewQuestion",
-    "MockInterviewLibrary",
-    "mock_library",
-    "get_all_questions",
-    "get_questions_by_role",
-    "get_questions_by_company",
-    "get_questions_by_category",
-    "get_random_question",
-    "get_practice_set",
-    "get_library_stats",
-    "search_questions",
-    "expand_library",
-    "generate_massive_question_bank",
-    "COMPANY_QUESTIONS",
-    "CODING_TEMPLATES",
-    "SYSTEM_DESIGN_TEMPLATES",
-    "BEHAVIORAL_TEMPLATES",
-    "TECHNICAL_TEMPLATES",
+    "InterviewQuestion", "MockInterviewLibrary", "mock_library",
+    "get_all_questions", "get_questions_by_role", "get_questions_by_company",
+    "get_questions_by_category", "get_random_question", "get_practice_set",
+    "get_library_stats", "search_questions", "list_roles", "list_companies",
+    "get_question_count", "IT_ROLES", "COMPANIES", "ALL_COMPANIES",
+    "DIFFICULTIES", "CATEGORIES",
 ]

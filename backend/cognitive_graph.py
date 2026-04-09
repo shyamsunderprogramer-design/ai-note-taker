@@ -26,24 +26,37 @@ def get_driver():
             from neo4j import GraphDatabase
             import os
 
-            # Default connection settings
+            # T4: Neo4j security — always use auth, require strong password
             uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
             user = os.getenv("NEO4J_USER", "neo4j")
-            password = os.getenv("NEO4J_PASSWORD", "password")
-            auth_enabled = os.getenv("NEO4J_AUTH_ENABLED", "false").lower() == "true"
+            password = os.getenv("NEO4J_PASSWORD", "")
 
-            if auth_enabled:
-                _driver = GraphDatabase.driver(uri, auth=(user, password))
-            else:
-                # Auth disabled mode - no credentials needed
-                _driver = GraphDatabase.driver(uri)
+            if not password:
+                logger.error("[CognitiveGraph] NEO4J_PASSWORD environment variable is required. "
+                             "Set a strong password before connecting. "
+                             "Example: NEO4J_PASSWORD=your_secure_password")
+                return None
 
-            logger.info(f"[CognitiveGraph] Connected to Neo4j at {uri}")
+            # Warn if using default/weak password
+            if password in ("password", "neo4j", "admin", "123456"):
+                logger.warning("[CognitiveGraph] WARNING: Neo4j password is weak/default. "
+                               "Please set a strong password via NEO4J_PASSWORD env var.")
+
+            # Always use authentication (T4: removed auth-disabled mode)
+            _driver = GraphDatabase.driver(uri, auth=(user, password))
+
+            # Verify connection works
+            with _driver.session() as session:
+                session.run("RETURN 1")
+
+            logger.info(f"[CognitiveGraph] Connected to Neo4j at {uri} (auth enabled)")
         except ImportError:
             logger.error("[CognitiveGraph] neo4j Python package not installed. Run: pip install neo4j")
             return None
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Failed to connect: {e}")
+            logger.error(f"[CognitiveGraph] Failed to connect to Neo4j: {e}")
+            logger.info("[CognitiveGraph] Make sure Neo4j is running and NEO4J_PASSWORD is set correctly.")
+            _driver = None
             return None
     return _driver
 

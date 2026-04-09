@@ -3756,13 +3756,17 @@ settingsTabs.forEach(tab => {
 // MODULE HEALTH
 // ==============================
 const MODULE_HEALTH_NAMES = {
+  database: "Database",
+  neo4j_graph: "Knowledge Graph (Neo4j)",
+  whisper: "Whisper Transcription",
   voice_clone: "Voice Clone",
-  cognitive_graph: "Cognitive Graph",
-  shadow_agent: "Shadow Agent",
+  ai_router: "AI Router",
+  collaboration: "Collaboration",
+  mock_interview: "Mock Interview",
+  study_plan: "Study Plans",
+  interview_simulator: "Interview Simulator",
   job_tracker: "Job Tracker",
-  interview_prep: "Interview Prep",
-  rvc_engine: "RVC Engine",
-  collaboration: "Collaboration"
+  encryption: "Encryption"
 }
 
 async function refreshModuleHealth() {
@@ -3776,26 +3780,60 @@ async function refreshModuleHealth() {
     const data = await response.json()
     const modules = data.modules || {}
 
+    // Update overall health badge if it exists
+    const healthBadge = document.getElementById("moduleHealthBadge")
+    if (healthBadge) {
+      healthBadge.textContent = `${data.overall_health || 0}%`
+      healthBadge.className = `health-badge ${data.overall_health >= 75 ? 'healthy' : data.overall_health >= 50 ? 'partial' : 'unhealthy'}`
+    }
+
+    // Update summary text
+    const healthSummary = document.getElementById("moduleHealthSummary")
+    if (healthSummary) {
+      healthSummary.textContent = `${data.available_count || 0}/${data.total_count || 0} modules active`
+    }
+
     grid.innerHTML = ""
 
-    for (const [key, label] of Object.entries(MODULE_HEALTH_NAMES)) {
-      const status = modules[key] || modules[key.replace(/_/g, "_")] || "unknown"
-      const available = status === "available" || status === true
+    for (const [key, moduleData] of Object.entries(modules)) {
+      const label = MODULE_HEALTH_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      const status = moduleData.status || 'unknown'
+      const isAvailable = status === 'green'
+
+      // Build status detail
+      let detail = ''
+      if (key === 'ai_router' && moduleData.active_providers !== undefined) {
+        detail = ` (${moduleData.active_providers} providers)`
+      } else if (key === 'mock_interview' && moduleData.question_count !== undefined) {
+        detail = ` (${moduleData.question_count} questions)`
+      } else if (key === 'voice_clone' && moduleData.rvc_available) {
+        detail = ' (RVC available)'
+      } else if (key === 'database' && moduleData.type) {
+        detail = ` (${moduleData.type})`
+      }
+
+      // Build config hint if not green
+      let configHint = ''
+      if (status !== 'green' && moduleData.required_dependency) {
+        configHint = `<span class="module-hint">→ ${moduleData.required_dependency}</span>`
+      }
 
       const item = document.createElement("div")
-      item.className = "module-item"
+      item.className = `module-item ${status}`
       item.innerHTML = `
-        <span class="module-status-dot ${available ? "available" : status === "unavailable" ? "unavailable" : "unknown"}"></span>
-        <span class="module-name" title="${label}">${label}</span>
+        <span class="module-status-dot ${status}"></span>
+        <span class="module-name" title="${label}">${label}${detail}</span>
+        ${configHint}
       `
       grid.appendChild(item)
     }
   } catch (e) {
+    console.warn('[Health] Failed to fetch module health:', e)
     // Backend not available - show all unknown
     grid.innerHTML = ""
-    for (const [, label] of Object.entries(MODULE_HEALTH_NAMES)) {
+    for (const [key, label] of Object.entries(MODULE_HEALTH_NAMES)) {
       const item = document.createElement("div")
-      item.className = "module-item"
+      item.className = "module-item unknown"
       item.innerHTML = `
         <span class="module-status-dot unknown"></span>
         <span class="module-name" title="${label}">${label}</span>
