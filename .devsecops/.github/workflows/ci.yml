@@ -1,0 +1,422 @@
+# ANT AI Note Taker - Main CI Pipeline
+# Triggers: push to develop/main/phase*, PRs, releases, manual dispatch
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'phase*']
+  pull_request:
+    branches: [main, develop]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip test execution'
+        type: boolean
+        default: false
+      skip_sonar:
+        description: 'Skip SonarQube scan'
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository_owner }}/ant-backend
+  IMAGE_NAME_ELECTRON: ${{ github.repository_owner }}/ant-electron
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+  DOCKER_BUILDX_PLATFORM: 'linux/amd64'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # PRE-CHecks (Parallel)
+  # ═══════════════════════════════════════════════════════════════════════
+  pre-check:
+    name: Pre-flight Checks
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.check.outputs.should_skip }}
+    steps:
+      - name: Check if should skip
+        id: check
+        run: |
+          if [[ "${{ github.event.inputs.skip_tests }}" == "true" ]]; then
+            echo "should_skip=true" >> $GITHUB_OUTPUT
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SECRET SCANNING
+  # ═══════════════════════════════════════════════════════════════════════
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFIG_PATH: .devsecops/gitleaks.toml
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CODE QUALITY - LINT
+  # ═══════════════════════════════════════════════════════════════════════
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ─── Python Linting ───────────────────────────────────────────────
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install Python linters
+        run: |
+          pip install flake8 flake8-bugbear flake8-docstrings \
+            flake8-broken-line flake8-comprehensions pylint \
+            black isort mypy
+
+      - name: Run Black (check mode)
+        run: |
+          black --check --diff backend/ || true
+        continue-on-error: true
+
+      - name: Run isort (check mode)
+        run: |
+          isort --check-only --diff backend/ || true
+        continue-on-error: true
+
+      - name: Run Flake8
+        run: |
+          flake8 backend/ --count --select=E9,F63,F7,F82 \
+            --show-source --statistics --exit-zero || true
+
+      - name: Run MyPy
+        run: |
+          mypy backend/ --ignore-missing-imports || true
+        continue-on-error: true
+
+      # ─── JavaScript/TypeScript Linting ────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install ESLint
+        run: npm ci
+        working-directory: ./electron
+
+      - name: Run ESLint
+        run: |
+          npx eslint . --ext .js,.ts \
+            --max-warnings=50 \
+            --format compact \
+            || true
+        continue-on-error: true
+
+      # ─── Infrastructure as Code Scanning ──────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        run: |
+          for dir in infrastructure/terraform/*/; do
+            echo "Checking Terraform in $dir"
+            terraform fmt -check -recursive "$dir" || true
+          done
+
+      - name: Run Checkov (IaC scanning)
+        run: |
+          pip install checkov
+          for dir in infrastructure/terraform/*/; do
+            checkov -d "$dir" --compact || true
+          done
+
+      # ─── Dockerfile Linting ────────────────────────────────────────────
+      - name: Hadolint
+        run: |
+          docker run --rm -v "$PWD:/workdir" \
+            ghcr.io/hadolint/hadolint:v2.12.0 \
+            hadolint docker/Dockerfile.* || true
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # TEST EXECUTION
+  # ═══════════════════════════════════════════════════════════════════════
+  test:
+    name: Unit & Integration Tests
+    runs-on: windows-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pytest-mock \
+            pytest-xdist pytest-timeout httpx
+
+      - name: Run Pytest with coverage
+        run: |
+          pytest backend/tests/ \
+            -v \
+            --tb=short \
+            --cov=backend \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-fail-under=60 \
+            -n auto
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            htmlcov/
+            coverage.xml
+          retention-days: 14
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SONARQUBE ANALYSIS
+  # ═══════════════════════════════════════════════════════════════════════
+  sonarcloud:
+    name: SonarQube Code Quality
+    runs-on: ubuntu-latest
+    needs: [lint]
+    if: "github.event.inputs.skip_sonar != 'true'"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@v2
+        with:
+          projectBaseDir: .
+          extraProperties: |
+            sonar.python.coverage.reportPaths=coverage.xml
+            sonar.exclusions=**/node_modules/**,**/dist/**,**/__pycache__/**
+            sonar.cpd.exclusions=**/node_modules/**,**/dist/**
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CONTAINER BUILD & SCAN
+  # ═══════════════════════════════════════════════════════════════════════
+  container:
+    name: Build & Scan Containers
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            dockerfile: docker/Dockerfile.backend
+            context: .
+            platforms: linux/amd64,linux/arm64
+          - service: electron
+            dockerfile: docker/Dockerfile.electron
+            context: .
+            platforms: linux/amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_${{ matrix.service }}}}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and Push with BuildKit
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      # ─── Trivy Container Scan ─────────────────────────────────────────
+      - name: Run Trivy Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME_${{ matrix.service }}}}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          vuln-type: 'os,library'
+
+      - name: Upload Trivy results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.service }}
+          path: trivy-results.sarif
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SNYK SECURITY SCAN
+  # ═══════════════════════════════════════════════════════════════════════
+  snyk:
+    name: Snyk Dependency Scan
+    runs-on: ubuntu-latest
+    needs: [container]
+    if: "github.event.inputs.skip_sonar != 'true'"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Snyk Security Test
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Upload Snyk report
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: |
+            snyk-results.json
+            snyk-report.html
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # ARTIFACT PUBLICATION
+  # ═══════════════════════════════════════════════════════════════════════
+  publish:
+    name: Publish Artifacts
+    runs-on: ubuntu-latest
+    needs: [container, snyk]
+    if: github.event_name != 'pull_request'
+    outputs:
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      electron_image: ${{ steps.meta.outputs.electron_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_ELECTRON }}
+          tags: |
+            type=sha,prefix=,suffix=-latest
+            type=ref,event=branch
+            latest,if-eq=github.ref,refs/heads/main
+
+      - name: Set outputs
+        run: |
+          echo "backend_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}" >> $GITHUB_OUTPUT
+          echo "electron_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_ELECTRON }}" >> $GITHUB_OUTPUT
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SBOM GENERATION
+  # ═══════════════════════════════════════════════════════════════════════
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: [lint]
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Python SBOM
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py requirements \
+            --format xml \
+            --output-file backend-bom.xml
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: backend-bom.xml
+          retention-days: 90
+
+      - name: Attach SBOM to Release
+        if: github.event_name == 'release'
+        uses: actions/upload-release-artifact@v4
+        with:
+          name: sbom-backend
+          path: backend-bom.xml
