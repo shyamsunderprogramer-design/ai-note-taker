@@ -1,5 +1,9 @@
+# ============================================
+# AI NOTE TAKER - PRODUCTION GITIGNORE
+# ============================================
+
 # =========================
-# Python
+# PYTHON / BACKEND
 # =========================
 # Virtual environments
 AINT_Venv/
@@ -7,6 +11,7 @@ venv/
 env/
 ENV/
 .venv/
+pythonenv*
 
 # Python cache
 __pycache__/
@@ -17,118 +22,221 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+*.cover
+*.py,cover
+.hypothesis/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
 # =========================
-# Node / Electron
+# NODE / FRONTEND
 # =========================
 node_modules/
-electron/node_modules/
-electron/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 package-lock.json
-electron/package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+apps/*/dist/
+apps/*/build/
+electron/dist/
+electron/build/
+electron/out/
+electron/release/
+electron/dist-electron/
 
 # =========================
-# Build / binaries
-# =========================
-*.exe
-*.dll
-*.bin
-*.pak
-*.dmg
-*.AppImage
-*.deb
-
-# =========================
-# Logs
-# =========================
-*.log
-logs/
-server.log
-backend/server.log
-
-# =========================
-# Runtime files
-# =========================
-*.pid
-server.pid
-backend/server.pid
-
-# =========================
-# OS files
-# =========================
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-*~
-
-# =========================
-# Temp files
-# =========================
-temp_audio/
-temp_audio_test/
-electron-data/
-*.wav
-*.tmp
-.cache/
-
-# =========================
-# Neo4j Database (large data files)
-# =========================
-neo4j/neo4j-community/data/
-neo4j/neo4j-community/logs/
-neo4j/neo4j-community/run/
-
-# =========================
-# Backend data (user generated)
-# =========================
-backend/data/
-backend/uploads/
-backend/temp/
-
-# =========================
-# IDE / Editor
+# IDE / EDITOR
 # =========================
 .vscode/
 .idea/
 *.iml
 *.sublime-project
 *.sublime-workspace
+*.swp
+*.swo
+*~
 
 # =========================
-# Claude / AI Assistant
+# OS FILES
+# =========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =========================
+# LOGS
+# =========================
+*.log
+logs/
+*.log.*
+server.log
+celery.log
+apps/*/server.log
+
+# =========================
+# TEMPORARY / RUNTIME FILES
+# =========================
+temp_audio/
+temp_audio_test/
+electron/temp_audio/
+backend/temp_audio/
+*.tmp
+*.temp
+*.wav
+*.mp3
+cache/
+.cache/
+*.pid
+*.seed
+*.pid.lock
+electron-data/
+
+# =========================
+# DATABASE / DATA
+# =========================
+# Local development databases
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+backend/*.db
+
+# User data (do not commit)
+data/users.json
+data/conversations/
+data/voice_models/
+data/user_keys/
+data/meeting_templates/
+data/
+
+# Backend data
+backend/data/
+backend/uploads/
+backend/temp/
+
+# =========================
+# ENVIRONMENT / SECRETS
+# =========================
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.*.local
+
+# Secrets
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+config/secrets/
+
+# API Keys (never commit)
+*api_key*
+*apikey*
+*.apikey
+openai_key
+gemini_key
+cohere_key
+deepseek_key
+
+# =========================
+# DOCKER
+# =========================
+.dockerignore
+docker-compose.override.yml
+
+# =========================
+# INFRASTRUCTURE
+# =========================
+# Terraform
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.*
+infrastructure/terraform/*.tfvars
+infrastructure/terraform/crash.log
+infrastructure/terraform/override.tf
+infrastructure/terraform/*_override.tf
+
+# K8s secrets
+k8s/secrets/
+k8s/*/secrets/
+*.secret.yml
+*.secret.yaml
+
+# Ansible
+*.retry
+
+# =========================
+# TEST FILES
+# =========================
+test_output/
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+
+# =========================
+# DOCUMENTATION (BUILD)
+# =========================
+docs/_build/
+site/
+
+# =========================
+# EXTENSIONS
+# =========================
+# Chrome Extension
+chrome-extension/*.zip
+chrome-extension/*.crx
+chrome-extension/build/
+chrome-extension/node_modules/
+
+# VS Code Extension
+vscode-extension/out/
+vscode-extension/*.vsix
+vscode-extension/node_modules/
+
+# =========================
+# NEO4J (LOCAL DATA)
+# =========================
+neo4j/data/
+neo4j/logs/
+neo4j/run/
+neo4j/plugins/
+neo4j/neo4j-community/data/
+neo4j/neo4j-community/logs/
+neo4j/neo4j-community/run/
+
+# =========================
+# AI ASSISTANT
 # =========================
 .claude/
 
 # =========================
-# Testing
+# GARBLED FILES
 # =========================
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# =========================
-# Documentation (local only)
-# =========================
-# Keep docs/ but ignore local planning docs
-*_PLAN.md
-TOMORROW_START.md
-2_MONTH_SPRINT.md
-START_HERE_*.md
-
-# =========================
-# Competitive Analysis (local only)
-# =========================
-COMPETITIVE_ANALYSIS.md
-COMPETITOR_*.md
-FEATURE_COMPARISON.md
-UNIQUE_FEATURES_*.md
-
-# =========================
-# Empty files
-# =========================
+*rendererstyle.css
 EOF
