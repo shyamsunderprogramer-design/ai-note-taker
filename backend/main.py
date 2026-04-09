@@ -13,11 +13,17 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Optional, Dict, List
+
+# T16: Add project root to path so electron.database can be imported from backend/
+_project_root = Path(__file__).parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 import numpy as np
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile, WebSocket, Depends, HTTPException, status
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile, WebSocket, Depends, HTTPException, status, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -26,11 +32,31 @@ from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 # SECURITY: Import security modules
 from security import (
     create_access_token, verify_token, get_current_user, require_auth,
-    rate_limiter, rate_limit,
-    SecurityHeaders, sanitize_input, validate_file_upload, InputValidator
+    rate_limiter, rate_limit, RateLimiter,
+    SecurityHeaders, sanitize_input, validate_file_upload, InputValidator,
+    log_audit_event, get_audit_log, get_audit_stats,
+    ErrorCode, APIError, error_response,
 )
 from security.auth import user_manager, User
 from generate_ssl import generate_self_signed_cert, get_ssl_context
+
+# T16: Database migration - PostgreSQL with SQLAlchemy
+try:
+    from database import (
+        db_manager, init_database, close_database,
+        UserRepository, ConversationRepository, VoiceModelRepository,
+        JobApplicationRepository, AnalyticsRepository,
+        BackupManager, DataMigrator,
+        HAS_SQLALCHEMY,
+    )
+    DATABASE_AVAILABLE = HAS_SQLALCHEMY
+except ImportError as e:
+    DATABASE_AVAILABLE = False
+    logging.getLogger("main").warning(f"[Database] module not available: {e}")
+
+# T23: HTTPS enforcement configuration
+HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "false").lower() == "true"
+HSTS_MAX_AGE = int(os.getenv("HSTS_MAX_AGE", "31536000"))  # 1 year default
 from config import OLLAMA_URL
 from whisper_handler import (
     BrowserTranscriber,
@@ -106,12 +132,19 @@ app = FastAPI()
 
 # Add CORS middleware for frontend access
 from fastapi.middleware.cors import CORSMiddleware
+
+# T2: CORS — Whitelist specific origins instead of ["*"]
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:3000,http://localhost:3000")
+ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+# In development, allow all origins; in production, use env var
+CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"] if CORS_ALLOW_ALL else ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # SECURITY: Security headers middleware
@@ -146,6 +179,98 @@ async def limit_request_size(request: Request, call_next):
     return await call_next(request)
 
 
+# T24: Global rate limiting middleware — applies to ALL endpoints
+# Different limits for auth vs unauth, public vs sensitive paths
+RATE_LIMIT_PUBLIC = int(os.getenv("RATE_LIMIT_PUBLIC", "60"))     # 60/min for public endpoints
+RATE_LIMIT_AUTHED = int(os.getenv("RATE_LIMIT_AUTHED", "200"))    # 200/min for authenticated users
+RATE_LIMIT_SENSITIVE = int(os.getenv("RATE_LIMIT_SENSITIVE", "20"))  # 20/min for expensive ops
+
+# Paths that are always public (no auth required, lower rate limit)
+PUBLIC_PATHS = {"/", "/health", "/auth/login", "/auth/register", "/docs", "/openapi.json", "/redoc"}
+# Paths that are expensive/sensitive (lower rate limit even when authed)
+SENSITIVE_PATHS = {"/ask-with-image", "/transcribe", "/transcribe-cloud", "/transcribe-with-speakers",
+                   "/voice-clone/create", "/voice-clone/create-rvc"}
+# Paths exempt from rate limiting entirely
+RATE_LIMIT_EXEMPT = {"/ws", "/ws/transcribe", "/stream", "/stream-race", "/transcribe-stream"}
+
+_global_rate_limiter = RateLimiter(requests_per_minute=RATE_LIMIT_AUTHED)
+_public_rate_limiter = RateLimiter(requests_per_minute=RATE_LIMIT_PUBLIC)
+_sensitive_rate_limiter = RateLimiter(requests_per_minute=RATE_LIMIT_SENSITIVE)
+
+@app.middleware("http")
+async def global_rate_limit_middleware(request: Request, call_next):
+    """Global rate limiting for all HTTP endpoints."""
+    path = request.url.path
+
+    # Skip rate limiting for exempt paths (WebSockets, SSE streams)
+    if path in RATE_LIMIT_EXEMPT:
+        return await call_next(request)
+
+    client_id = request.client.host if request.client else "unknown"
+
+    # Try to identify authenticated user for per-user limits
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        user = get_current_user(token)
+        if user:
+            client_id = f"user:{user.username}"
+            # Admins bypass rate limiting
+            if user.is_admin:
+                return await call_next(request)
+
+    # Pick the right limiter based on path
+    if path in SENSITIVE_PATHS:
+        limiter = _sensitive_rate_limiter
+    elif path in PUBLIC_PATHS:
+        limiter = _public_rate_limiter
+    else:
+        limiter = _global_rate_limiter
+
+    allowed, headers = await limiter.is_allowed(client_id, path)
+    if not allowed:
+        wait_time = await limiter.get_wait_time(client_id, path)
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": {"code": "RATE_LIMIT_EXCEEDED", "message": "Rate limit exceeded", "retry_after": int(wait_time)}
+            },
+            headers={"Retry-After": str(int(wait_time)), **headers}
+        )
+
+    response = await call_next(request)
+    for key, value in headers.items():
+        response.headers[key] = str(value)
+    return response
+
+
+# T23: HTTPS enforcement middleware — redirect HTTP to HTTPS + HSTS header
+@app.middleware("http")
+async def https_enforcement_middleware(request: Request, call_next):
+    """Redirect HTTP to HTTPS when HTTPS_REQUIRED=true, add HSTS header."""
+    if HTTPS_REQUIRED:
+        # Check if request is HTTP (not HTTPS)
+        # Behind a proxy, check X-Forwarded-Proto header
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        is_https = request.url.scheme == "https" or forwarded_proto == "https"
+
+        if not is_https:
+            https_url = request.url.replace(scheme="https")
+            return JSONResponse(
+                status_code=301,
+                content={"error": {"code": "HTTPS_REQUIRED", "message": "HTTP not allowed. Use HTTPS."}},
+                headers={"Location": str(https_url)}
+            )
+
+    response = await call_next(request)
+
+    # Add HSTS header when HTTPS is enabled
+    if HTTPS_REQUIRED:
+        response.headers["Strict-Transport-Security"] = f"max-age={HSTS_MAX_AGE}; includeSubDomains"
+
+    return response
+
+
 # SECURITY: HTTP Bearer for authentication
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -164,6 +289,77 @@ async def optional_auth(request: Request, token: str = Depends(get_token_from_re
         if user:
             request.state.current_user = user
     return request
+
+
+# T1: Auth enforcement configuration
+# In production (AUTH_REQUIRED=true), all endpoints except public ones require auth
+# In development (AUTH_REQUIRED=false), auth is optional (current behavior)
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() == "true"
+
+# Paths that never require authentication
+AUTH_PUBLIC_PATHS = {
+    "/", "/health", "/auth/login", "/auth/register",
+    "/docs", "/openapi.json", "/redoc",
+    "/voice-clone/audio/{filename}",  # Audio playback should be accessible
+}
+
+# Paths that always require authentication (even in dev mode for sensitive ops)
+AUTH_REQUIRED_PATHS = {
+    "/providers/byok/status", "/providers/byok/configure",
+    "/providers/byok/{provider}", "/providers/byok/costs", "/providers/byok/test/{provider}",
+    "/auth/me", "/auth/logout",
+}
+
+
+@app.middleware("http")
+async def auth_enforcement_middleware(request: Request, call_next):
+    """
+    T1: Authentication enforcement middleware.
+    - In production (AUTH_REQUIRED=true): Blocks unauthenticated access to all non-public paths
+    - In development: Auth is optional, user is set in request.state if token present
+    - Always enforces auth on BYOK and auth-me endpoints
+    """
+    path = request.url.path
+    auth_header = request.headers.get("authorization", "")
+
+    # Try to identify user from token
+    user = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        user = get_current_user(token)
+
+    # Set user in request state
+    if user:
+        request.state.current_user = user
+    else:
+        request.state.current_user = None
+
+    # Always-required paths (BYOK, auth/me)
+    # Check with prefix matching for path parameters
+    always_required = False
+    for required_path in AUTH_REQUIRED_PATHS:
+        if path == required_path or path.startswith(required_path.rsplit("/{", 1)[0] + "/"):
+            always_required = True
+            break
+
+    if always_required and not user:
+        return JSONResponse(
+            status_code=401,
+            content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required for this endpoint"}},
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # In production mode, enforce auth on all non-public paths
+    if AUTH_REQUIRED:
+        is_public = path in AUTH_PUBLIC_PATHS or path.startswith("/auth/") or path.startswith("/voice-clone/audio/")
+        if not is_public and not user:
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required. Set AUTH_REQUIRED=false for development mode."}},
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+    return await call_next(request)
 
 
 async def require_authentication(token: str = Depends(get_token_from_request)):
@@ -381,8 +577,16 @@ def autonomous_listener():
 
 
 @app.on_event("startup")
-def start_listener():
+async def start_listener():
     global listener_thread
+
+    # T16: Initialize PostgreSQL database
+    if DATABASE_AVAILABLE:
+        try:
+            await init_database()
+            logger.info("[Startup] Database initialized successfully")
+        except Exception as e:
+            logger.warning(f"[Startup] Database initialization skipped: {e}")
 
     # Clean up stale temp audio files on startup
     cleanup_temp_audio()
@@ -696,6 +900,104 @@ def health():
     return health_check()
 
 
+@app.get("/health/database")
+async def health_database():
+    """T16: Check PostgreSQL database connectivity"""
+    if not DATABASE_AVAILABLE:
+        return {
+            "available": False,
+            "connected": False,
+            "message": "Database module not available - SQLAlchemy not installed"
+        }
+
+    try:
+        connected = await db_manager.health_check()
+        return {
+            "available": True,
+            "connected": connected,
+            "message": "Database connection OK" if connected else "Database connection failed"
+        }
+    except Exception as e:
+        return {
+            "available": True,
+            "connected": False,
+            "message": f"Database error: {str(e)}"
+        }
+
+
+@app.get("/health/modules")
+async def health_modules():
+    """T13: Feature health dashboard - show which modules are available"""
+    modules = {
+        "database": {"available": DATABASE_AVAILABLE, "status": "green" if DATABASE_AVAILABLE else "red"},
+        "cognitive_graph": {"available": COGNITIVE_GRAPH_AVAILABLE, "status": "green" if COGNITIVE_GRAPH_AVAILABLE else "yellow"},
+        "interview_simulator": {"available": INTERVIEW_SIMULATOR_AVAILABLE, "status": "green" if INTERVIEW_SIMULATOR_AVAILABLE else "yellow"},
+        "job_tracker": {"available": JOB_TRACKER_AVAILABLE, "status": "green" if JOB_TRACKER_AVAILABLE else "yellow"},
+    }
+    return {"modules": modules}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# T16: DATABASE ADMIN - Backup/Restore/Migration (Admin only)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/admin/backup")
+async def admin_create_backup(user: User = Depends(require_admin)):
+    """T16: Create a full database backup as JSON - admin only"""
+    if not DATABASE_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
+
+    try:
+        backup_data = await BackupManager.create_backup()
+        log_audit_event("admin_backup", user.username, "backup_created", success=True)
+        return {
+            "status": "success",
+            "message": "Backup created successfully",
+            "backup": backup_data
+        }
+    except Exception as e:
+        log_audit_event("admin_backup", user.username, "backup_failed", success=False)
+        return error_response(ErrorCode.INTERNAL_ERROR, f"Backup failed: {str(e)}")
+
+
+@app.post("/admin/restore")
+async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depends(require_admin)):
+    """T16: Restore database from JSON backup - admin only"""
+    if not DATABASE_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
+
+    try:
+        restored = await BackupManager.restore_backup(backup_data)
+        log_audit_event("admin_restore", user.username, "backup_restored", resource=f"restored:{restored}", success=True)
+        return {
+            "status": "success",
+            "message": "Backup restored successfully",
+            "restored": restored
+        }
+    except Exception as e:
+        log_audit_event("admin_restore", user.username, "restore_failed", success=False)
+        return error_response(ErrorCode.INTERNAL_ERROR, f"Restore failed: {str(e)}")
+
+
+@app.post("/admin/migrate")
+async def admin_run_migration(user: User = Depends(require_admin)):
+    """T16: Run JSON -> PostgreSQL migration - admin only"""
+    if not DATABASE_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
+
+    try:
+        results = await DataMigrator.run_full_migration()
+        log_audit_event("admin_migrate", user.username, "migration_run", resource=f"users:{results.get('users', 0)}", success=True)
+        return {
+            "status": "success",
+            "message": "Migration completed",
+            "results": results
+        }
+    except Exception as e:
+        log_audit_event("admin_migrate", user.username, "migration_failed", success=False)
+        return error_response(ErrorCode.INTERNAL_ERROR, f"Migration failed: {str(e)}")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SECURITY: AUTHENTICATION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════
@@ -719,6 +1021,7 @@ async def register_user(
 
     try:
         user = user_manager.create_user(username=username, email=email, password=password)
+        log_audit_event("auth_register", username, "user_registered", resource=f"user:{user.id}", success=True)
         return {
             "status": "success",
             "message": "User registered successfully",
@@ -726,6 +1029,7 @@ async def register_user(
             "username": user.username
         }
     except ValueError as e:
+        log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -734,10 +1038,13 @@ async def login_user(username: str = Form(...), password: str = Form(...)):
     """Login and get JWT token"""
     user = user_manager.authenticate_user(username, password)
     if not user:
+        log_audit_event("auth_failure", username, "login_failed", resource="auth", success=False)
         raise HTTPException(
             status_code=401,
             detail="Invalid username or password"
         )
+
+    log_audit_event("auth_login", username, "user_logged_in", resource=f"user:{user.id}", success=True)
 
     # Create access token
     access_token = create_access_token(
@@ -776,8 +1083,37 @@ async def get_current_user_info(user: User = Depends(require_authentication)):
 @app.post("/auth/logout")
 async def logout_user(user: User = Depends(require_authentication)):
     """Logout (client should delete token)"""
+    log_audit_event("auth_logout", user.username, "user_logged_out", resource=f"user:{user.id}", success=True)
     # Note: JWT tokens are stateless, actual logout is client-side
     return {"status": "success", "message": "Logged out successfully"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AUDIT LOG (T7)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/audit/log")
+async def get_audit_log_endpoint(
+    user: User = Depends(require_authentication),
+    limit: int = Query(100, ge=1, le=1000),
+    event_type: str = Query(None, description="Filter by event type"),
+    actor: str = Query(None, description="Filter by actor"),
+):
+    """Get audit log entries (requires authentication)."""
+    if not user.is_admin:
+        return error_response(ErrorCode.FORBIDDEN, "Admin access required", status_code=403)
+    entries = get_audit_log(limit=limit, event_type=event_type, actor=actor)
+    return {"entries": entries, "count": len(entries)}
+
+
+@app.get("/audit/stats")
+async def get_audit_stats_endpoint(
+    user: User = Depends(require_authentication),
+):
+    """Get audit log statistics (requires authentication)."""
+    if not user.is_admin:
+        return error_response(ErrorCode.FORBIDDEN, "Admin access required", status_code=403)
+    return get_audit_stats()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -896,7 +1232,7 @@ async def test_provider_key(
     provider: str,
     user: User = Depends(require_authentication)
 ):
-    """Test if a user's API key is working for a provider"""
+    """Test if a user's API key is working for a provider by making a real API call"""
     key = user_key_manager.get_provider_key(user.id, provider)
 
     if not key:
@@ -905,11 +1241,10 @@ async def test_provider_key(
             detail=f"No API key configured for {provider}"
         )
 
-    # TODO: Implement actual API test
-    # For now, just validate format
+    # T8: Validate format first, then make a real API test call
     is_valid, message = user_key_manager.validate_key(provider, key)
-
     if not is_valid:
+        log_audit_event("byok_test", user.username, "key_test_failed", resource=provider, details={"reason": message}, success=False)
         return {
             "status": "error",
             "provider": provider,
@@ -917,12 +1252,81 @@ async def test_provider_key(
             "suggestion": "Please check your API key and try again."
         }
 
-    return {
-        "status": "success",
-        "provider": provider,
-        "message": "API key format is valid",
-        "note": "Actual API test will be implemented in production"
-    }
+    # Make a real API test call based on the provider
+    import httpx
+    test_result = {"status": "success", "provider": provider, "message": "API key format is valid"}
+
+    try:
+        if provider == "openai":
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                if resp.status_code == 200:
+                    test_result = {"status": "success", "provider": provider, "message": "API key verified successfully", "models_available": len(resp.json().get("data", []))}
+                elif resp.status_code == 401:
+                    test_result = {"status": "error", "provider": provider, "message": "Invalid API key", "suggestion": "Check your OpenAI API key"}
+                else:
+                    test_result = {"status": "warning", "provider": provider, "message": f"API returned status {resp.status_code}", "note": "Key format is valid but API test returned unexpected response"}
+
+        elif provider == "anthropic":
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+                    json={"model": "claude-3-haiku-20240307", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                )
+                if resp.status_code in (200, 201):
+                    test_result = {"status": "success", "provider": provider, "message": "API key verified successfully"}
+                elif resp.status_code == 401:
+                    test_result = {"status": "error", "provider": provider, "message": "Invalid API key", "suggestion": "Check your Anthropic API key"}
+                else:
+                    test_result = {"status": "warning", "provider": provider, "message": f"API returned status {resp.status_code}", "note": "Key format may be valid"}
+
+        elif provider == "google":
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"https://generativelanguage.googleapis.com/v1/models?key={key}",
+                )
+                if resp.status_code == 200:
+                    test_result = {"status": "success", "provider": provider, "message": "API key verified successfully"}
+                elif resp.status_code == 400 or resp.status_code == 403:
+                    test_result = {"status": "error", "provider": provider, "message": "Invalid API key", "suggestion": "Check your Google AI API key"}
+                else:
+                    test_result = {"status": "warning", "provider": provider, "message": f"API returned status {resp.status_code}"}
+
+        elif provider in ("xai", "groq", "deepseek", "perplexity"):
+            # These use OpenAI-compatible APIs
+            base_urls = {
+                "xai": "https://api.x.ai/v1",
+                "groq": "https://api.groq.com/openai/v1",
+                "deepseek": "https://api.deepseek.com/v1",
+                "perplexity": "https://api.perplexity.ai",
+            }
+            base_url = base_urls.get(provider, "")
+            if base_url:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.get(
+                        f"{base_url}/models",
+                        headers={"Authorization": f"Bearer {key}"},
+                    )
+                    if resp.status_code == 200:
+                        test_result = {"status": "success", "provider": provider, "message": "API key verified successfully"}
+                    elif resp.status_code == 401:
+                        test_result = {"status": "error", "provider": provider, "message": "Invalid API key"}
+                    else:
+                        test_result = {"status": "warning", "provider": provider, "message": f"API returned status {resp.status_code}"}
+            else:
+                test_result = {"status": "success", "provider": provider, "message": "Key format is valid (provider test not implemented)"}
+
+    except httpx.TimeoutException:
+        test_result = {"status": "warning", "provider": provider, "message": "API test timed out", "note": "Key format is valid but could not verify connectivity"}
+    except Exception as e:
+        test_result = {"status": "warning", "provider": provider, "message": f"API test error: {str(e)}", "note": "Key format is valid but could not verify connectivity"}
+
+    log_audit_event("byok_test", user.username, "key_tested", resource=provider, details=test_result, success=test_result.get("status") == "success")
+    return test_result
 
 
 @app.get("/rate-limit/status")
@@ -1323,11 +1727,18 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 @app.get("/documents")
-async def list_documents():
-    """List all uploaded documents."""
+async def list_documents(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """List all uploaded documents with pagination."""
     from document_store import get_document_store
     doc_store = get_document_store()
-    return {"documents": doc_store.list_documents()}
+    all_docs = doc_store.list_documents()
+    total = len(all_docs)
+    return {
+        "documents": all_docs[offset:offset + limit],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @app.delete("/documents/{doc_id}")
@@ -1445,11 +1856,31 @@ async def get_transcription_speakers(audio_id: str):
 def shutdown_handler(*args):
     global USE_AUTONOMOUS
     USE_AUTONOMOUS = False
+    # T16: Close database connections on shutdown
+    if DATABASE_AVAILABLE:
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(close_database())
+            loop.close()
+        except Exception:
+            pass
     sys.exit(0)
 
 
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """FastAPI shutdown handler - closes database connections."""
+    if DATABASE_AVAILABLE:
+        try:
+            await close_database()
+            logger.info("[Shutdown] Database connections closed")
+        except Exception as e:
+            logger.warning(f"[Shutdown] Database close error: {e}")
 
 
 @app.websocket("/ws/transcribe")
@@ -1460,10 +1891,28 @@ async def ws_transcribe(ws: WebSocket):
     This endpoint accumulates chunks, transcribes on 0.5s segments,
     and sends back partial + final transcription via WebSocket JSON messages.
 
+    T3: WebSocket auth — validates token from query param ?token=xxx
+    In production (AUTH_REQUIRED=true), rejects unauthenticated connections.
+
     Message types sent to browser:
       - {"type": "partial", "text": "..."}  — interim transcription
       - {"type": "final", "text": "..."}   — transcription of remaining buffer
     """
+    # T3: WebSocket authentication
+    if AUTH_REQUIRED:
+        token = ws.query_params.get("token")
+        if not token:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
+            await ws.close(code=4001)
+            return
+        user = get_current_user(token)
+        if not user:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+            await ws.close(code=4001)
+            return
+
     await ws.accept()
     transcriber = BrowserTranscriber()
     partial_texts = []
@@ -1803,12 +2252,36 @@ async def test_crm_connection():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
+    # T3: WebSocket authentication
+    if AUTH_REQUIRED:
+        token = ws.query_params.get("token")
+        if not token:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
+            await ws.close(code=4001)
+            return
+        user = get_current_user(token)
+        if not user:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+            await ws.close(code=4001)
+            return
 
-    while True:
-        msg = await ws.receive_text()
-        result = route_ai(msg, mode=CURRENT_MODE)
-        await ws.send_text(clean_ai_output(result["response"]))
+    await ws.accept()
+    try:
+        while True:
+            msg = await ws.receive_text()
+            try:
+                result = route_ai(msg, mode=CURRENT_MODE)
+                await ws.send_text(clean_ai_output(result["response"]))
+            except Exception as e:
+                logger.error(f"[WS] Error processing message: {e}")
+                try:
+                    await ws.send_text(json.dumps({"error": str(e)}))
+                except Exception:
+                    break
+    except Exception:
+        pass  # Client disconnected
 
 
 # ======================================
@@ -1825,10 +2298,15 @@ async def cognitive_graph_status():
     try:
         from cognitive_graph import get_driver
         driver = get_driver()
-        if driver:
-            return {"available": True, "connected": True}
-        else:
+        if not driver:
             return {"available": True, "connected": False, "error": "Neo4j not connected"}
+        # Verify connection actually works
+        try:
+            with driver.session() as session:
+                session.run("RETURN 1")
+            return {"available": True, "connected": True}
+        except Exception:
+            return {"available": True, "connected": False, "error": "Neo4j connection failed"}
     except Exception as e:
         return {"available": True, "connected": False, "error": str(e)}
 
@@ -2950,25 +3428,31 @@ async def create_job_application(
 async def get_job_applications(
     user_id: str = Query("default", description="User ID"),
     status: str = Query(None, description="Filter by status"),
-    tags: str = Query(None, description="Filter by tags (comma-separated)")
+    tags: str = Query(None, description="Filter by tags (comma-separated)"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
     """
-    Get all job applications for a user with optional filters.
+    Get all job applications for a user with optional filters and pagination.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available")
 
     try:
         tag_list = tags.split(",") if tags else None
         applications = job_tracker.get_user_applications(user_id, status, tag_list)
+        total = len(applications)
         return {
             "user_id": user_id,
-            "count": len(applications),
-            "applications": applications
+            "count": total,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "applications": applications[offset:offset + limit],
         }
     except Exception as e:
         logger.error(f"[JobTracker] Get applications error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e))
 
 
 @app.get("/job-tracker/application/{app_id}")
@@ -3748,7 +4232,8 @@ async def get_mock_questions(
     category: str = Query(None, description="Filter by category (technical, coding, system_design, behavioral)"),
     difficulty: str = Query(None, description="Filter by difficulty (easy, medium, hard)"),
     company: str = Query(None, description="Filter by company"),
-    limit: int = Query(50, description="Maximum questions to return")
+    limit: int = Query(50, ge=1, le=500, description="Maximum questions to return"),
+    offset: int = Query(0, ge=0, description="Number of questions to skip"),
 ):
     """
     Get mock interview questions with optional filtering.
@@ -3769,12 +4254,15 @@ async def get_mock_questions(
         if company:
             questions = [q for q in questions if q.company and q.company.lower() == company.lower()]
 
-        # Convert to dicts and limit
-        result = [vars(q) for q in questions[:limit]]
+        # Convert to dicts and apply pagination
+        total = len(questions)
+        result = [vars(q) for q in questions[offset:offset + limit]]
 
         return {
             "questions": result,
-            "total": len(questions),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
             "filters": {
                 "role": role,
                 "category": category,
@@ -3902,21 +4390,95 @@ except ImportError as e:
     VOICE_CLONE_AVAILABLE = False
     logger.warning(f"[VoiceClone] Voice clone not available: {e}")
 
+try:
+    from rvc_gallery import list_gallery, get_gallery_voice
+    RVC_GALLERY_AVAILABLE = True
+    logger.info("[VoiceClone] RVC gallery loaded")
+except ImportError as e:
+    RVC_GALLERY_AVAILABLE = False
+    logger.warning(f"[VoiceClone] RVC gallery not available: {e}")
+
 
 @app.post("/voice-clone/create")
 async def create_voice_clone(
-    name: str = Query(..., description="Name for this voice model"),
-    audio_samples: List[str] = Query(default=[], description="Base64 audio samples")
+    name: str = Form(..., description="Name for this voice model"),
+    audio_files: List[UploadFile] = File(default=[])
 ):
-    """Create a new voice clone model."""
+    """Create a new voice clone model from audio files."""
     if not VOICE_CLONE_AVAILABLE:
         return {"error": "Voice clone not available"}
 
     try:
-        result = create_voice_model(name, audio_samples)
+        from voice_clone_agent import voice_manager
+        import shutil
+
+        # Save uploaded files
+        audio_paths = []
+        for audio_file in audio_files:
+            if audio_file.filename:
+                temp_path = f"data/temp_audio/{audio_file.filename}"
+                os.makedirs("data/temp_audio", exist_ok=True)
+                with open(temp_path, "wb") as f:
+                    shutil.copyfileobj(audio_file.file, f)
+                audio_paths.append(temp_path)
+
+        # Create model entry (voice_manager creates its own model_id and path)
+        result = voice_manager.create_model(name, audio_paths)
+        model_id = result.get("model_id", "")
+
+        # Save audio files to the model directory created by voice_manager
+        model_path = os.path.join("data/voice_models", model_id)
+        if model_id and os.path.exists(model_path):
+            for i, src_path in enumerate(audio_paths):
+                ext = os.path.splitext(src_path)[1] or ".webm"
+                dst_path = os.path.join(model_path, f"sample_{i}{ext}")
+                shutil.copy2(src_path, dst_path)
+
         return result
+
     except Exception as e:
         logger.error(f"[VoiceClone] Create error: {e}")
+        return {"error": str(e)}
+
+
+# NOTE: /voice-clone/models routes must come BEFORE /voice-clone/{model_id} routes
+# to avoid FastAPI matching "models" as a model_id parameter
+
+@app.get("/voice-clone/models")
+async def list_voice_clones(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """List all voice models with pagination."""
+    if not VOICE_CLONE_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice clone not available")
+
+    try:
+        all_models = list_voice_models()
+        total = len(all_models)
+        return {
+            "models": all_models[offset:offset + limit],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logger.error(f"[VoiceClone] List error: {e}")
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+
+
+@app.delete("/voice-clone/models/{model_id}")
+async def delete_voice_clone(model_id: str):
+    """Delete a voice model."""
+    if not VOICE_CLONE_AVAILABLE:
+        return {"error": "Voice clone not available"}
+
+    try:
+        from voice_clone_agent import voice_manager
+        success = voice_manager.delete_model(model_id)
+        if success:
+            return {"status": "deleted", "model_id": model_id}
+        else:
+            return {"error": "Model not found"}
+    except Exception as e:
+        logger.error(f"[VoiceClone] Delete error: {e}")
         return {"error": str(e)}
 
 
@@ -3936,29 +4498,141 @@ async def get_voice_clone_status(model_id: str):
 @app.post("/voice-clone/{model_id}/synthesize")
 async def synthesize_voice_clone(
     model_id: str,
-    text: str = Query(..., description="Text to synthesize")
+    request: Request
 ):
     """Synthesize speech using voice model."""
     if not VOICE_CLONE_AVAILABLE:
         return {"error": "Voice clone not available"}
 
     try:
-        return synthesize_voice(model_id, text)
+        # Parse JSON body
+        body = await request.json()
+        text = body.get("text", "")
+        if not text:
+            return {"error": "Text is required"}
+
+        result = await synthesize_voice(model_id, text)
+
+        if "error" in result:
+            return result
+
+        # Return audio URL for playback
+        return {
+            "status": result.get("status", "completed"),
+            "text": text,
+            "model_id": model_id,
+            "voice_name": result.get("voice_name", ""),
+            "voice_used": result.get("voice_used", ""),
+            "output_file": result.get("output_file", ""),
+            "audio_url": result.get("audio_url", ""),
+            "duration_estimate": result.get("duration_estimate", 0),
+            "file_size": result.get("file_size", 0),
+            "browser_tts": result.get("browser_tts", False),
+        }
     except Exception as e:
         logger.error(f"[VoiceClone] Synthesis error: {e}")
         return {"error": str(e)}
 
 
-@app.get("/voice-clone/models")
-async def list_voice_clones():
-    """List all voice models."""
+@app.get("/voice-clone/audio/{filename}")
+async def get_voice_audio(filename: str):
+    """Serve generated TTS audio files."""
+    from fastapi.responses import FileResponse
+    audio_dir = os.path.join("data", "voice_models", "audio")
+    file_path = os.path.join(audio_dir, filename)
+    if not os.path.exists(file_path):
+        return {"error": "Audio file not found"}
+    return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
+
+
+@app.get("/voice-clone/gallery")
+async def voice_clone_gallery(category: str = None, gender: str = None):
+    """List available pre-trained voice gallery models."""
+    if not RVC_GALLERY_AVAILABLE:
+        return {"voices": [], "error": "Gallery not available"}
+    return {"voices": list_gallery(category=category, gender=gender)}
+
+
+@app.post("/voice-clone/gallery/{gallery_id}/install")
+async def install_gallery_voice(gallery_id: str):
+    """Install a gallery voice as a voice model."""
+    if not RVC_GALLERY_AVAILABLE:
+        return {"error": "Gallery not available"}
+
+    gallery_voice = get_gallery_voice(gallery_id)
+    if not gallery_voice:
+        return {"error": f"Gallery voice '{gallery_id}' not found"}
+
+    # Create model using edge-tts with gallery voice settings
+    result = voice_manager.create_model(
+        name=gallery_voice.name,
+        audio_samples=[],
+        source="gallery",
+        gallery_id=gallery_voice.id,
+        edge_voice=gallery_voice.edge_voice,
+    )
+
+    # Mark as gallery source with quality score
+    model_id = result.get("model_id")
+    if model_id and model_id in voice_manager.models:
+        model = voice_manager.models[model_id]
+        model.source = "gallery"
+        model.quality_score = 0.80
+        model.f0_method = gallery_voice.f0_method
+        voice_manager._save_models()
+
+    return {
+        **result,
+        "gallery_id": gallery_voice.id,
+        "edge_voice": gallery_voice.edge_voice,
+        "category": gallery_voice.category,
+        "gender": gallery_voice.gender,
+    }
+
+
+@app.post("/voice-clone/create-rvc")
+async def create_rvc_voice_model(
+    name: str = Form(..., description="Name for this voice model"),
+    model_file: UploadFile = File(..., description="RVC model file (.onnx or .pth)"),
+    index_file: UploadFile = File(default=None, description="Optional feature index file (.index)"),
+):
+    """Create a voice model from an uploaded RVC model file."""
     if not VOICE_CLONE_AVAILABLE:
         return {"error": "Voice clone not available"}
 
     try:
-        return {"models": list_voice_models()}
+        import shutil
+        from voice_clone_agent import voice_manager
+
+        # Save uploaded model file
+        model_id = f"voice_{int(time.time())}"
+        model_dir = os.path.join("data", "voice_models", model_id)
+        os.makedirs(model_dir, exist_ok=True)
+
+        model_ext = os.path.splitext(model_file.filename)[1] or ".onnx"
+        model_path = os.path.join(model_dir, f"model{model_ext}")
+        with open(model_path, "wb") as f:
+            shutil.copyfileobj(model_file.file, f)
+
+        # Save optional index file
+        index_path = ""
+        if index_file and index_file.filename:
+            index_path = os.path.join(model_dir, f"model.index")
+            with open(index_path, "wb") as f:
+                shutil.copyfileobj(index_file.file, f)
+
+        result = voice_manager.create_model(
+            name=name,
+            audio_samples=[],
+            source="uploaded",
+            model_file=model_path,
+            index_file=index_path,
+        )
+
+        return result
+
     except Exception as e:
-        logger.error(f"[VoiceClone] List error: {e}")
+        logger.error(f"[VoiceClone] RVC create error: {e}")
         return {"error": str(e)}
 
 
@@ -4099,8 +4773,8 @@ except ImportError as e:
 
 @app.post("/collaboration/create")
 async def create_collaboration(
-    host_name: str = Query(..., description="Host name"),
-    context: Optional[dict] = None
+    host_name: str = Body(..., description="Host name"),
+    context: Optional[dict] = Body(default=None, description="Session context")
 ):
     """Create a new collaboration session."""
     if not COLLABORATION_AVAILABLE:
@@ -4222,14 +4896,20 @@ except ImportError as e:
 
 
 @app.get("/meeting-templates")
-async def list_meeting_templates():
-    """Get all meeting templates."""
+async def list_meeting_templates(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """Get all meeting templates with pagination."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available")
 
     try:
         templates = get_all_templates()
-        return {"templates": templates}
+        total = len(templates)
+        return {
+            "templates": templates[offset:offset + limit],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
     except Exception as e:
         logger.error(f"[MeetingTemplates] List error: {e}")
         return {"error": str(e)}
