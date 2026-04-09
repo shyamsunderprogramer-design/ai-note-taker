@@ -21,19 +21,29 @@ from pathlib import Path
 logger = logging.getLogger("database")
 
 # Database configuration
-# T16: PostgreSQL is default for production, SQLite for development
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/ainotetaker"
-)
+# T16: Try PostgreSQL first, fall back to SQLite for development
+DEFAULT_POSTGRES_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/ainotetaker"
+DEFAULT_SQLITE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
 
-# Use SQLite only if explicitly requested or if DATABASE_URL contains 'sqlite'
-USE_SQLITE = os.getenv("USE_SQLITE", "false").lower() == "true"
+DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_POSTGRES_URL)
+USE_SQLITE = os.getenv("USE_SQLITE", "").lower() == "true"
+FORCE_SQLITE = os.getenv("FORCE_SQLITE", "true").lower() == "true"  # Default to SQLite until PostgreSQL is configured
 
+# Auto-detect: if DATABASE_URL contains sqlite, use it
+if "sqlite" in DATABASE_URL.lower():
+    USE_SQLITE = True
+
+# Force SQLite for development (safer default)
+if FORCE_SQLITE:
+    USE_SQLITE = True
+    DATABASE_URL = DEFAULT_SQLITE_URL
+elif USE_SQLITE:
+    DATABASE_URL = DEFAULT_SQLITE_URL
+
+# Ensure data directory exists for SQLite
 if USE_SQLITE or "sqlite" in DATABASE_URL.lower():
-    # Ensure data directory exists
     Path("data").mkdir(exist_ok=True)
-    DATABASE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
+    DATABASE_URL = DEFAULT_SQLITE_URL
 
 print(f"[Database] Module loaded. URL: {DATABASE_URL}")
 
