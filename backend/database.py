@@ -21,13 +21,16 @@ from pathlib import Path
 logger = logging.getLogger("database")
 
 # Database configuration
+# T16: PostgreSQL is default for production, SQLite for development
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/ainotetaker"
 )
-USE_SQLITE = os.getenv("USE_SQLITE", "true").lower() == "true"  # Default to SQLite for dev
 
-if USE_SQLITE:
+# Use SQLite only if explicitly requested or if DATABASE_URL contains 'sqlite'
+USE_SQLITE = os.getenv("USE_SQLITE", "false").lower() == "true"
+
+if USE_SQLITE or "sqlite" in DATABASE_URL.lower():
     # Ensure data directory exists
     Path("data").mkdir(exist_ok=True)
     DATABASE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
@@ -1075,6 +1078,146 @@ class AuditLogRepository:
             return []
 
 
+class UserAPIKeyRepository:
+    """API key data access layer with encryption support (T17)"""
+
+    @staticmethod
+    def _get_encryption():
+        """Lazy load encryption manager"""
+        try:
+            from security import encrypt_api_key, decrypt_api_key
+            return encrypt_api_key, decrypt_api_key
+        except ImportError:
+            return None, None
+
+    @staticmethod
+    async def create_or_update(user_id: str, **keys) -> Optional[UserAPIKey]:
+        """Create or update API keys with encryption"""
+        if not HAS_SQLALCHEMY:
+            return None
+
+        encrypt_fn, _ = UserAPIKeyRepository._get_encryption()
+
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(UserAPIKey).where(UserAPIKey.user_id == uuid.UUID(user_id))
+                )
+                api_keys = result.scalar_one_or_none()
+
+                # Encrypt keys before storing
+                encrypted_keys = {}
+                for key_name, key_value in keys.items():
+                    if key_value and key_name.endswith('_key'):
+                        col_name = key_name.replace('_key', '_key_encrypted')
+                        if encrypt_fn:
+                            encrypted_keys[col_name] = encrypt_fn(key_value)
+                        else:
+                            # Store with prefix if encryption unavailable
+                            encrypted_keys[col_name] = f"plain:{key_value}"
+
+                if api_keys:
+                    # Update existing
+                    for col, val in encrypted_keys.items():
+                        setattr(api_keys, col, val)
+                    api_keys.updated_at = datetime.utcnow()
+                else:
+                    # Create new
+                    api_keys = UserAPIKey(user_id=uuid.UUID(user_id), **encrypted_keys)
+                    db.add(api_keys)
+
+                await db.commit()
+                await db.refresh(api_keys)
+                return api_keys
+        except Exception as e:
+            logger.error(f"[UserAPIKeyRepository] Create/update failed: {e}")
+            return None
+
+    @staticmethod
+    async def get_by_user(user_id: str) -> Optional[Dict[str, str]]:
+        """Get decrypted API keys for user"""
+        if not HAS_SQLALCHEMY:
+            return None
+
+        _, decrypt_fn = UserAPIKeyRepository._get_encryption()
+
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(UserAPIKey).where(UserAPIKey.user_id == uuid.UUID(user_id))
+                )
+                api_keys = result.scalar_one_or_none()
+
+                if not api_keys:
+                    return None
+
+                # Decrypt keys
+                decrypted = {}
+                key_map = {
+                    'openai_key_encrypted': 'openai',
+                    'anthropic_key_encrypted': 'anthropic',
+                    'google_key_encrypted': 'google',
+                    'deepseek_key_encrypted': 'deepseek',
+                    'grok_key_encrypted': 'grok',
+                }
+
+                for col, provider in key_map.items():
+                    encrypted = getattr(api_keys, col, None)
+                    if encrypted:
+                        if encrypted.startswith("enc:") and decrypt_fn:
+                            decrypted[provider] = decrypt_fn(encrypted)
+                        elif encrypted.startswith("plain:"):
+                            decrypted[provider] = encrypted[6:]
+                        else:
+                            # Legacy or other format - try decrypt
+                            if decrypt_fn:
+                                try:
+                                    decrypted[provider] = decrypt_fn(encrypted)
+                                except:
+                                    decrypted[provider] = encrypted
+                            else:
+                                decrypted[provider] = encrypted
+
+                return decrypted
+        except Exception as e:
+            logger.error(f"[UserAPIKeyRepository] Get by user failed: {e}")
+            return None
+
+    @staticmethod
+    async def delete_key(user_id: str, provider: str) -> bool:
+        """Delete a specific API key"""
+        if not HAS_SQLALCHEMY:
+            return False
+
+        col_map = {
+            'openai': 'openai_key_encrypted',
+            'anthropic': 'anthropic_key_encrypted',
+            'google': 'google_key_encrypted',
+            'deepseek': 'deepseek_key_encrypted',
+            'grok': 'grok_key_encrypted',
+        }
+
+        if provider not in col_map:
+            return False
+
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(UserAPIKey).where(UserAPIKey.user_id == uuid.UUID(user_id))
+                )
+                api_keys = result.scalar_one_or_none()
+
+                if api_keys:
+                    setattr(api_keys, col_map[provider], None)
+                    api_keys.updated_at = datetime.utcnow()
+                    await db.commit()
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"[UserAPIKeyRepository] Delete failed: {e}")
+            return False
+
+
 # ============================================================================
 # MIGRATION UTILITIES
 # ============================================================================
@@ -1297,7 +1440,7 @@ __all__ = [
     # Repositories
     "UserRepository", "ConversationRepository", "VoiceModelRepository",
     "JobApplicationRepository", "AnalyticsRepository", "DocumentRepository",
-    "AuditLogRepository",
+    "AuditLogRepository", "UserAPIKeyRepository",
 
     # Utilities
     "DataMigrator", "BackupManager",
