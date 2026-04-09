@@ -969,14 +969,12 @@ app.whenReady().then(async () => {
         }
       }
     }
+    // T25: Tightened CSP — restrict connect-src to known origins, remove http: from img/media
     const csp = nonce
-      ? `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'nonce-${nonce}'; img-src 'self' data: blob: http:; font-src 'self' data:; connect-src * ws: http: https:; media-src 'self' mediastream: blob: http: https:`
-      : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: http:; font-src 'self' data:; connect-src * ws: http: https:; media-src 'self' mediastream: blob: http: https:`
+      ? `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'nonce-${nonce}'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
     headers["Content-Security-Policy"] = [csp]
-    // Add CORS headers to allow localhost
-    headers["Access-Control-Allow-Origin"] = ["*"]
-    headers["Access-Control-Allow-Methods"] = ["GET, POST, PUT, DELETE, OPTIONS"]
-    headers["Access-Control-Allow-Headers"] = ["Content-Type, Authorization"]
+    // T26: Removed Access-Control-Allow-Origin: ["*"] — backend handles CORS
     callback({ responseHeaders: headers })
   })
 

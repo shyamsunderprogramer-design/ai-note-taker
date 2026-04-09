@@ -55,7 +55,8 @@ except ImportError as e:
     logging.getLogger("main").warning(f"[Database] module not available: {e}")
 
 # T23: HTTPS enforcement configuration
-HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "false").lower() == "true"
+# T23: Default to secure (HTTPS required); set HTTPS_REQUIRED=false for dev
+HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "true").lower() == "true"
 HSTS_MAX_AGE = int(os.getenv("HSTS_MAX_AGE", "31536000"))  # 1 year default
 from config import OLLAMA_URL
 from whisper_handler import (
@@ -130,14 +131,23 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 app = FastAPI()
 
+# T6: Global exception handler for structured APIError
+@app.exception_handler(APIError)
+async def api_error_handler(request: Request, exc: APIError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.detail,
+        headers=getattr(exc, 'headers', None) or {}
+    )
+
 # Add CORS middleware for frontend access
 from fastapi.middleware.cors import CORSMiddleware
 
 # T2: CORS — Whitelist specific origins instead of ["*"]
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:3000,http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
-# In development, allow all origins; in production, use env var
-CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
+# T2: Default to secure (whitelist); set CORS_ALLOW_ALL=true for dev convenience
+CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
 
 app.add_middleware(
     CORSMiddleware,
@@ -292,15 +302,17 @@ async def optional_auth(request: Request, token: str = Depends(get_token_from_re
 
 
 # T1: Auth enforcement configuration
-# In production (AUTH_REQUIRED=true), all endpoints except public ones require auth
-# In development (AUTH_REQUIRED=false), auth is optional (current behavior)
-AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() == "true"
+# Default to secure (auth required); set AUTH_REQUIRED=false for dev convenience
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
-    "/", "/health", "/auth/login", "/auth/register",
+    "/", "/health", "/health/database", "/health/modules",
+    "/auth/login", "/auth/register",
     "/docs", "/openapi.json", "/redoc",
-    "/voice-clone/audio/{filename}",  # Audio playback should be accessible
+    "/voice-clone/audio/{filename}",  # Audio playback
+    "/providers",  # Listing available providers
+    "/mode",  # Mode switching (lightweight)
 }
 
 # Paths that always require authentication (even in dev mode for sensitive ops)
@@ -657,9 +669,9 @@ def list_ollama_models():
         response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
         if response.status_code == 200:
             return response.json()
-        return {"error": f"Ollama returned {response.status_code}", "models": []}
+        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
     except Exception as e:
-        return {"error": str(e), "models": []}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500) | {"models": []}
 
 
 @app.post("/ollama/pull")
@@ -698,9 +710,9 @@ def delete_ollama_model(model_name: str):
         )
         if response.status_code == 200:
             return {"status": "deleted", "model": model_name}
-        return {"error": f"Failed to delete model: {response.status_code}"}
+        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Failed to delete model: {response.status_code}", status_code=502)
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/ask-with-image")
@@ -928,13 +940,117 @@ async def health_database():
 @app.get("/health/modules")
 async def health_modules():
     """T13: Feature health dashboard - show which modules are available"""
-    modules = {
-        "database": {"available": DATABASE_AVAILABLE, "status": "green" if DATABASE_AVAILABLE else "red"},
-        "cognitive_graph": {"available": COGNITIVE_GRAPH_AVAILABLE, "status": "green" if COGNITIVE_GRAPH_AVAILABLE else "yellow"},
-        "interview_simulator": {"available": INTERVIEW_SIMULATOR_AVAILABLE, "status": "green" if INTERVIEW_SIMULATOR_AVAILABLE else "yellow"},
-        "job_tracker": {"available": JOB_TRACKER_AVAILABLE, "status": "green" if JOB_TRACKER_AVAILABLE else "yellow"},
+    # Check Neo4j connection
+    try:
+        from cognitive_graph import get_driver
+        neo4j_connected = get_driver() is not None
+    except Exception:
+        neo4j_connected = False
+
+    # Check encryption key
+    encryption_available = bool(os.getenv("ENCRYPTION_KEY"))
+
+    # Check AI providers
+    def has_provider_key(provider, env_var):
+        try:
+            import requests as req
+            resp = req.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1)
+            if resp.status_code == 200:
+                return bool(resp.json().get("apiKey"))
+        except Exception:
+            pass
+        return bool(os.getenv(env_var, "").strip())
+
+    providers = {
+        "openai": has_provider_key("openai", "OPENAI_API_KEY"),
+        "anthropic": has_provider_key("anthropic", "ANTHROPIC_API_KEY"),
+        "google": has_provider_key("google", "GOOGLE_API_KEY"),
+        "groq": has_provider_key("groq", "GROQ_API_KEY"),
+        "ollama": has_provider_key("ollama", "OLLAMA_API_KEY"),
     }
-    return {"modules": modules}
+    active_providers = sum(providers.values())
+
+    # Check mock interview
+    mock_interview_count = 0
+    if MOCK_LIBRARY_AVAILABLE:
+        try:
+            mock_interview_count = len(mock_library.get_all_questions())
+        except Exception:
+            pass
+
+    modules = {
+        "database": {
+            "available": DATABASE_AVAILABLE,
+            "status": "green" if DATABASE_AVAILABLE else "red",
+            "type": "sqlite" if os.getenv("USE_SQLITE", "").lower() == "true" else "postgresql",
+            "required_dependency": "sqlalchemy + database server"
+        },
+        "neo4j_graph": {
+            "available": COGNITIVE_GRAPH_AVAILABLE,
+            "status": "green" if neo4j_connected else "yellow",
+            "connected": neo4j_connected,
+            "required_dependency": "neo4j server + NEO4J_PASSWORD env var"
+        },
+        "whisper": {
+            "available": True,
+            "status": "green",
+            "required_dependency": "whisper model files (auto-downloaded)"
+        },
+        "voice_clone": {
+            "available": VOICE_CLONE_AVAILABLE,
+            "status": "green" if VOICE_CLONE_AVAILABLE else "yellow",
+            "rvc_available": RVC_GALLERY_AVAILABLE,
+            "required_dependency": "Edge TTS (always available), RVC models (optional)"
+        },
+        "ai_router": {
+            "available": True,
+            "status": "green",
+            "providers": providers,
+            "active_providers": active_providers,
+            "required_dependency": "At least one AI provider key"
+        },
+        "collaboration": {
+            "available": COLLABORATION_AVAILABLE,
+            "status": "green" if COLLABORATION_AVAILABLE else "yellow",
+            "required_dependency": "WebSocket support"
+        },
+        "mock_interview": {
+            "available": MOCK_LIBRARY_AVAILABLE,
+            "status": "green" if MOCK_LIBRARY_AVAILABLE else "yellow",
+            "question_count": mock_interview_count,
+            "required_dependency": "mock_interview_library.py"
+        },
+        "study_plan": {
+            "available": STUDY_PLAN_AVAILABLE,
+            "status": "green" if STUDY_PLAN_AVAILABLE else "yellow",
+            "required_dependency": "study_plan_generator.py"
+        },
+        "interview_simulator": {
+            "available": INTERVIEW_SIMULATOR_AVAILABLE,
+            "status": "green" if INTERVIEW_SIMULATOR_AVAILABLE else "yellow",
+            "required_dependency": "interview_simulator.py"
+        },
+        "job_tracker": {
+            "available": JOB_TRACKER_AVAILABLE,
+            "status": "green" if JOB_TRACKER_AVAILABLE else "yellow",
+            "required_dependency": "job_tracker.py"
+        },
+        "encryption": {
+            "available": encryption_available,
+            "status": "green" if encryption_available else "yellow",
+            "required_dependency": "ENCRYPTION_KEY env var"
+        }
+    }
+
+    available_count = sum(1 for m in modules.values() if m["status"] == "green")
+    total_count = len(modules)
+
+    return {
+        "modules": modules,
+        "overall_health": round(available_count / total_count * 100, 1),
+        "available_count": available_count,
+        "total_count": total_count
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1003,6 +1119,7 @@ async def admin_run_migration(user: User = Depends(require_admin)):
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/auth/register")
+@rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def register_user(
     username: str = Form(..., min_length=3, max_length=30),
     email: str = Form(...),
@@ -1034,6 +1151,7 @@ async def register_user(
 
 
 @app.post("/auth/login")
+@rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def login_user(username: str = Form(...), password: str = Form(...)):
     """Login and get JWT token"""
     user = user_manager.authenticate_user(username, password)
@@ -1352,7 +1470,7 @@ def set_mode(mode: str):
     global CURRENT_MODE
 
     if mode not in ["auto", "fast", "cloud", "interview", "universal", "adaptive", "reasoning", "code"]:
-        return {"error": "Invalid mode"}
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid mode", status_code=400)
 
     CURRENT_MODE = mode
     return {"status": "mode updated", "mode": CURRENT_MODE}
@@ -1400,6 +1518,7 @@ async def transcribe_api(file: UploadFile = File(...)):
 
 
 @app.post("/transcribe-cloud")
+@rate_limit(requests_per_minute=20)  # T24: Expensive cloud transcription
 async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai", model: str = "gpt-4o-mini"):
     """Transcribe and route to a cloud AI provider"""
     global USE_AUTONOMOUS
@@ -1701,7 +1820,8 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
 # ==============================
 
 @app.post("/documents/upload")
-async def upload_document(file: UploadFile = File(...)):
+@rate_limit(requests_per_minute=30)  # T24: Document upload
+async def upload_document(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Upload a document for RAG context retrieval."""
     from document_store import get_document_store
 
@@ -1723,7 +1843,7 @@ async def upload_document(file: UploadFile = File(...)):
         return result
     except Exception as e:
         logger.error(f"Document upload failed: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/documents")
@@ -1742,7 +1862,7 @@ async def list_documents(limit: int = Query(50, ge=1, le=500), offset: int = Que
 
 
 @app.delete("/documents/{doc_id}")
-async def delete_document(doc_id: str):
+async def delete_document(doc_id: str, user: User = Depends(require_authentication)):
     """Delete a document from the store."""
     from document_store import get_document_store
     doc_store = get_document_store()
@@ -1833,7 +1953,7 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
 
     except Exception as e:
         logger.error(f"Transcription with speakers failed: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
     finally:
         # Clean up temp files
@@ -1898,20 +2018,19 @@ async def ws_transcribe(ws: WebSocket):
       - {"type": "partial", "text": "..."}  — interim transcription
       - {"type": "final", "text": "..."}   — transcription of remaining buffer
     """
-    # T3: WebSocket authentication
-    if AUTH_REQUIRED:
-        token = ws.query_params.get("token")
-        if not token:
-            await ws.accept()
-            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
-            await ws.close(code=4001)
-            return
-        user = get_current_user(token)
-        if not user:
-            await ws.accept()
-            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
-            await ws.close(code=4001)
-            return
+    # T3: WebSocket authentication — ALWAYS enforce, not gated by AUTH_REQUIRED
+    token = ws.query_params.get("token")
+    if not token:
+        await ws.accept()
+        await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
+        await ws.close(code=4001)
+        return
+    user = get_current_user(token)
+    if not user:
+        await ws.accept()
+        await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+        await ws.close(code=4001)
+        return
 
     await ws.accept()
     transcriber = BrowserTranscriber()
@@ -1976,7 +2095,7 @@ async def ws_transcribe(ws: WebSocket):
 # ==============================
 
 @app.post("/conversations/export")
-async def export_conversation(body: dict):
+async def export_conversation(body: dict, user: User = Depends(require_authentication)):
     """
     Export conversation in various formats.
 
@@ -1995,7 +2114,7 @@ async def export_conversation(body: dict):
     metadata = body.get("metadata", {})
 
     if not messages:
-        return {"error": "No messages to export"}
+        return error_response(ErrorCode.VALIDATION_ERROR, "No messages to export", status_code=400)
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     date_str = time.strftime("%Y-%m-%d")
@@ -2064,14 +2183,14 @@ async def export_conversation(body: dict):
 
 
 @app.post("/conversations/import")
-async def import_conversations(file: UploadFile = File(...)):
+async def import_conversations(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Import conversations from JSON file."""
     try:
         content = await file.read()
         data = json.loads(content.decode("utf-8"))
 
         if not isinstance(data, dict) or "messages" not in data:
-            return {"error": "Invalid format - expected JSON with 'messages' array"}
+            return error_response(ErrorCode.INVALID_FORMAT, "Invalid format - expected JSON with 'messages' array", status_code=422)
 
         messages = data.get("messages", [])
         metadata = data.get("metadata", {})
@@ -2083,9 +2202,9 @@ async def import_conversations(file: UploadFile = File(...)):
             "count": len(messages)
         }
     except json.JSONDecodeError as e:
-        return {"error": f"Invalid JSON: {str(e)}"}
+        return error_response(ErrorCode.INVALID_FORMAT, f"Invalid JSON: {str(e)}", status_code=422)
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ==============================
@@ -2176,7 +2295,7 @@ async def detect_objections(body: dict):
 # ==============================
 
 @app.post("/analytics/record")
-async def record_analytics(body: dict):
+async def record_analytics(body: dict, user: User = Depends(require_authentication)):
     """Record analytics for a conversation."""
     from analytics import get_analytics_store
     store = get_analytics_store()
@@ -2196,11 +2315,16 @@ async def record_analytics(body: dict):
 
 
 @app.get("/analytics/summary")
-async def get_analytics_summary(days: int = 30):
-    """Get analytics summary for the past N days."""
+async def get_analytics_summary(days: int = 30, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """Get analytics summary for the past N days (paginated)."""
     from analytics import get_analytics_store
     store = get_analytics_store()
-    return store.get_summary(days)
+    data = store.get_summary(days)
+    # Paginate if data is a list
+    if isinstance(data, list):
+        total = len(data)
+        return {"data": data[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
+    return data
 
 
 @app.post("/analytics/export")
@@ -2225,7 +2349,7 @@ async def get_crm_config():
 
 
 @app.post("/crm/config")
-async def save_crm_config(body: dict):
+async def save_crm_config(body: dict, user: User = Depends(require_authentication)):
     """Save CRM configuration."""
     from crm_integration import get_crm
     crm = get_crm()
@@ -2252,20 +2376,19 @@ async def test_crm_connection():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    # T3: WebSocket authentication
-    if AUTH_REQUIRED:
-        token = ws.query_params.get("token")
-        if not token:
-            await ws.accept()
-            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
-            await ws.close(code=4001)
-            return
-        user = get_current_user(token)
-        if not user:
-            await ws.accept()
-            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
-            await ws.close(code=4001)
-            return
+    # T3: WebSocket authentication — ALWAYS enforce, not gated by AUTH_REQUIRED
+    token = ws.query_params.get("token")
+    if not token:
+        await ws.accept()
+        await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
+        await ws.close(code=4001)
+        return
+    user = get_current_user(token)
+    if not user:
+        await ws.accept()
+        await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+        await ws.close(code=4001)
+        return
 
     await ws.accept()
     try:
@@ -2315,7 +2438,7 @@ async def cognitive_graph_status():
 async def cognitive_graph_initialize():
     """Initialize the cognitive graph schema"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     success = initialize_graph()
     return {"initialized": success}
@@ -2325,27 +2448,30 @@ async def cognitive_graph_initialize():
 async def cognitive_graph_search(q: str = Query(...), limit: int = Query(10)):
     """Semantic search across interview history"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     results = query_graph(q)
     return {"query": q, "results": results, "count": len(results)}
 
 
 @app.get("/cognitive-graph/history/{user_id}")
-async def cognitive_graph_history(user_id: str, limit: int = Query(100)):
-    """Get user's interview history from graph"""
+async def cognitive_graph_history(user_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """Get user's interview history from graph (paginated)."""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
-    history = cognitive_graph.get_interview_history(user_id, limit)
-    return {"user_id": user_id, "interviews": history}
+    history = cognitive_graph.get_interview_history(user_id, limit + offset)
+    # Paginate results
+    total = len(history) if history else 0
+    paginated = history[offset:offset + limit] if history else []
+    return {"user_id": user_id, "interviews": paginated, "total": total, "limit": limit, "offset": offset}
 
 
 @app.get("/cognitive-graph/company/{company_name}")
 async def cognitive_graph_company_insights(company_name: str):
     """Get insights about a company"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     insights = cognitive_graph.get_company_insights(company_name)
     return {"company": company_name, "insights": insights}
@@ -2355,7 +2481,7 @@ async def cognitive_graph_company_insights(company_name: str):
 async def cognitive_graph_skill_progression(user_id: str, skill_name: str):
     """Track user's progression on a specific skill"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     progression = cognitive_graph.get_skill_progression(user_id, skill_name)
     return {"user_id": user_id, "skill": skill_name, "progression": progression}
@@ -2365,7 +2491,7 @@ async def cognitive_graph_skill_progression(user_id: str, skill_name: str):
 async def cognitive_graph_ingest(conversation_id: str, body: dict):
     """Ingest a conversation into the cognitive graph"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     success = ingest_conversation(conversation_id, body)
     return {"ingested": success, "conversation_id": conversation_id}
@@ -2375,7 +2501,7 @@ async def cognitive_graph_ingest(conversation_id: str, body: dict):
 async def cognitive_graph_add_interview(body: dict):
     """Add an interview to the cognitive graph"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     from datetime import datetime
 
@@ -2407,11 +2533,11 @@ except ImportError:
 async def extract_entities_api(body: dict):
     """Extract entities (companies, topics, skills) from text"""
     if not ENTITY_EXTRACTION_AVAILABLE:
-        return {"error": "Entity extraction not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Entity extraction not available", status_code=503)
 
     text = body.get("text", "")
     if not text:
-        return {"error": "No text provided"}
+        return error_response(ErrorCode.MISSING_PARAMETER, "No text provided", status_code=422)
 
     entities = extract_entities(text)
     return {"text": text[:100] + "..." if len(text) > 100 else text, "entities": entities}
@@ -2421,11 +2547,11 @@ async def extract_entities_api(body: dict):
 async def process_transcript_api(body: dict):
     """Process a transcript into Q&A pairs with extracted entities"""
     if not ENTITY_EXTRACTION_AVAILABLE:
-        return {"error": "Entity extraction not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Entity extraction not available", status_code=503)
 
     transcript = body.get("transcript", "")
     if not transcript:
-        return {"error": "No transcript provided"}
+        return error_response(ErrorCode.MISSING_PARAMETER, "No transcript provided", status_code=422)
 
     qa_pairs = process_transcript(transcript)
     return {
@@ -2439,7 +2565,7 @@ async def process_transcript_api(body: dict):
 async def categorize_question_api(q: str = Query(...)):
     """Categorize a question (technical, behavioral, system_design, knowledge)"""
     if not ENTITY_EXTRACTION_AVAILABLE:
-        return {"error": "Entity extraction not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Entity extraction not available", status_code=503)
 
     category, confidence = entity_extractor.categorize_question(q)
     difficulty, diff_conf = entity_extractor.estimate_difficulty(q)
@@ -2476,7 +2602,7 @@ async def predict_questions(
 ):
     """Get predicted interview questions for a company/role"""
     if not PREDICTIVE_AVAILABLE:
-        return {"error": "Predictive interview module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Predictive interview module not available", status_code=503)
 
     predictions = get_predictions(company, role, limit)
     return predictions
@@ -2489,7 +2615,7 @@ async def get_preparation_checklist(
 ):
     """Get preparation checklist for an interview"""
     if not PREDICTIVE_AVAILABLE:
-        return {"error": "Predictive interview module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Predictive interview module not available", status_code=503)
 
     checklist = get_checklist(company, role)
     return checklist
@@ -2524,7 +2650,7 @@ async def cognitive_graph_advanced_search(
         limit: Max results
     """
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     results = cognitive_graph.advanced_search(
         query=query,
@@ -2556,7 +2682,7 @@ async def cognitive_graph_advanced_search(
 async def get_supported_companies():
     """Get list of companies with prediction data"""
     if not PREDICTIVE_AVAILABLE:
-        return {"error": "Predictive interview module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Predictive interview module not available", status_code=503)
 
     companies = list(predictive_interview.question_db.keys())
     return {
@@ -2594,14 +2720,14 @@ async def backfill_historical_conversations():
             "errors": result.stderr[-500:] if result.stderr else ""
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/cognitive-graph/stats")
 async def get_cognitive_graph_stats():
     """Get statistics about the cognitive graph"""
     if not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cognitive graph not available", status_code=503)
 
     try:
         from cognitive_graph import cognitive_graph
@@ -2633,7 +2759,7 @@ async def get_cognitive_graph_stats():
 
         return {"stats": stats, "connected": bool(cognitive_graph.driver)}
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ======================================
@@ -2665,7 +2791,7 @@ async def process_realtime_segment(
     Called every 3-5 seconds during live interview.
     """
     if not REALTIME_AVAILABLE:
-        return {"error": "Realtime suggestion engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Realtime suggestion engine not available", status_code=503)
 
     try:
         suggestion = process_transcript_segment(text, speaker)
@@ -2686,7 +2812,7 @@ async def process_realtime_segment(
         return {"has_suggestion": False}
     except Exception as e:
         logger.error(f"[Realtime] Error processing segment: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/realtime/command")
@@ -2699,7 +2825,7 @@ async def process_voice_command_api(
     Commands like "What did I say about React?"
     """
     if not REALTIME_AVAILABLE:
-        return {"error": "Realtime suggestion engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Realtime suggestion engine not available", status_code=503)
 
     try:
         result = process_voice_command(text)
@@ -2714,7 +2840,7 @@ async def process_voice_command_api(
         return {"is_command": False}
     except Exception as e:
         logger.error(f"[Realtime] Error processing command: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/realtime/suggestion-history")
@@ -2723,7 +2849,7 @@ async def get_suggestion_history(
 ):
     """Get history of suggestions shown during current session"""
     if not REALTIME_AVAILABLE:
-        return {"error": "Realtime suggestion engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Realtime suggestion engine not available", status_code=503)
 
     try:
         history = realtime_engine.get_suggestion_history(limit)
@@ -2741,7 +2867,7 @@ async def get_suggestion_history(
             "count": len(history)
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/realtime/configure")
@@ -2751,7 +2877,7 @@ async def configure_suggestions(
 ):
     """Configure realtime suggestion parameters"""
     if not REALTIME_AVAILABLE:
-        return {"error": "Realtime suggestion engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Realtime suggestion engine not available", status_code=503)
 
     try:
         realtime_engine.set_min_confidence(min_confidence)
@@ -2762,20 +2888,20 @@ async def configure_suggestions(
             "cooldown_seconds": cooldown_seconds
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/realtime/clear")
 async def clear_suggestion_state():
     """Clear buffer and suggestion history (call when starting new interview)"""
     if not REALTIME_AVAILABLE:
-        return {"error": "Realtime suggestion engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Realtime suggestion engine not available", status_code=503)
 
     try:
         realtime_engine.clear_buffer()
         return {"cleared": True}
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ======================================
@@ -2800,14 +2926,14 @@ async def analyze_conversation_api(
     Returns conversation type, focus areas, quality scores, and recommendations.
     """
     if not ANALYZER_AVAILABLE:
-        return {"error": "Conversation analyzer not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Conversation analyzer not available", status_code=503)
 
     try:
         analysis = analyze_conversation(conversation)
         return analysis
     except Exception as e:
         logger.error(f"[Analyzer] Error analyzing conversation: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/analyze/batch")
@@ -2816,7 +2942,7 @@ async def analyze_conversations_batch(
 ):
     """Analyze multiple conversations in batch"""
     if not ANALYZER_AVAILABLE:
-        return {"error": "Conversation analyzer not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Conversation analyzer not available", status_code=503)
 
     try:
         results = []
@@ -2835,14 +2961,14 @@ async def analyze_conversations_batch(
             "results": results
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/analyze/types")
 async def get_conversation_types():
     """Get list of supported conversation types"""
     if not ANALYZER_AVAILABLE:
-        return {"error": "Conversation analyzer not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Conversation analyzer not available", status_code=503)
 
     try:
         return {
@@ -2861,7 +2987,7 @@ async def get_conversation_types():
             ]
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ======================================
@@ -2893,13 +3019,13 @@ async def get_skill_progression_api(
 ):
     """Get skill progression over time for charting"""
     if not ANALYTICS_AVAILABLE:
-        return {"error": "Analytics engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
     try:
         data = analytics.get_skill_progression(user_id, skill, months)
         return data
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/analytics/company-comparison")
@@ -2908,13 +3034,13 @@ async def compare_companies(
 ):
     """Compare interview patterns across companies (heatmap data)"""
     if not ANALYTICS_AVAILABLE:
-        return {"error": "Analytics engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
     try:
         data = analytics.get_company_comparison(companies)
         return data
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/analytics/topic-network/{user_id}")
@@ -2924,13 +3050,13 @@ async def get_topic_network_api(
 ):
     """Get topic co-occurrence network for D3.js visualization"""
     if not ANALYTICS_AVAILABLE:
-        return {"error": "Analytics engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
     try:
         data = analytics.get_topic_network(user_id, min_connections)
         return data
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/analytics/interview-calendar/{user_id}")
@@ -2940,13 +3066,13 @@ async def get_interview_calendar_api(
 ):
     """Get interview frequency data for calendar heatmap"""
     if not ANALYTICS_AVAILABLE:
-        return {"error": "Analytics engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
     try:
         data = analytics.get_interview_calendar(user_id, months)
         return data
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/analytics/performance-trends/{user_id}")
@@ -2955,13 +3081,13 @@ async def get_performance_trends_api(
 ):
     """Get overall performance trends (improving/declining/stable skills)"""
     if not ANALYTICS_AVAILABLE:
-        return {"error": "Analytics engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
     try:
         data = analytics.get_performance_trends(user_id)
         return data
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/analytics/dashboard/{user_id}")
@@ -2970,13 +3096,13 @@ async def get_dashboard_summary_api(
 ):
     """Get dashboard summary with key metrics"""
     if not ANALYTICS_AVAILABLE:
-        return {"error": "Analytics engine not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
     try:
         data = analytics.get_dashboard_summary(user_id)
         return data
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ======================================
@@ -2991,14 +3117,14 @@ async def analyze_answer_performance(
 ):
     """Analyze an interview answer for STAR method, code quality, speaking patterns"""
     if not PERFORMANCE_ANALYZER_AVAILABLE:
-        return {"error": "Performance analyzer not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Performance analyzer not available", status_code=503)
 
     try:
         result = performance_analyzer.analyze_answer(answer_text, question_type)
         return result
     except Exception as e:
         logger.error(f"[PerformanceAnalyzer] Error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/performance/analyze-batch")
@@ -3007,7 +3133,7 @@ async def analyze_batch_answers(
 ):
     """Analyze multiple answers in batch"""
     if not PERFORMANCE_ANALYZER_AVAILABLE:
-        return {"error": "Performance analyzer not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Performance analyzer not available", status_code=503)
 
     try:
         results = [
@@ -3020,7 +3146,7 @@ async def analyze_batch_answers(
         return {"results": results, "count": len(results)}
     except Exception as e:
         logger.error(f"[PerformanceAnalyzer] Batch error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/performance/tiers")
@@ -3041,7 +3167,7 @@ async def get_personalized_checklist(
 ):
     """Get personalized interview performance checklist based on cognitive graph"""
     if not PERFORMANCE_ANALYZER_AVAILABLE or not COGNITIVE_GRAPH_AVAILABLE:
-        return {"error": "Performance analyzer or cognitive graph not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Performance analyzer or cognitive graph not available", status_code=503)
 
     try:
         # Get user's skill data from cognitive graph
@@ -3075,7 +3201,7 @@ async def get_personalized_checklist(
         return {"checklist": checklist, "user_id": user_id}
     except Exception as e:
         logger.error(f"[PerformanceAnalyzer] Checklist error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ======================================
@@ -3095,11 +3221,12 @@ except ImportError as e:
 async def generate_study_plan(
     user_id: str = Query(..., description="User ID"),
     days: int = Query(30, description="Plan duration in days"),
-    daily_minutes: int = Query(60, description="Daily study time target")
+    daily_minutes: int = Query(60, description="Daily study time target"),
+    user: User = Depends(require_authentication)
 ):
     """Generate personalized study plan based on cognitive graph"""
     if not STUDY_PLAN_AVAILABLE:
-        return {"error": "Study plan generator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
         # Get cognitive graph data if available
@@ -3149,14 +3276,14 @@ async def generate_study_plan(
         }
     except Exception as e:
         logger.error(f"[StudyPlan] Generation error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/study-plan/{user_id}")
 async def get_study_plan(user_id: str):
     """Get current study plan for user (generates new one if none exists)"""
     if not STUDY_PLAN_AVAILABLE:
-        return {"error": "Study plan generator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
         # For now, generate a new plan each time
@@ -3175,7 +3302,7 @@ async def get_study_plan(user_id: str):
         return json.loads(study_planner.export_plan(plan, "json"))
     except Exception as e:
         logger.error(f"[StudyPlan] Get error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/study-plan/{user_id}/complete-task")
@@ -3186,7 +3313,7 @@ async def complete_study_task(
 ):
     """Mark task as complete and adapt plan"""
     if not STUDY_PLAN_AVAILABLE:
-        return {"error": "Study plan generator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
         # In production, would load existing plan from DB
@@ -3204,14 +3331,14 @@ async def complete_study_task(
         }
     except Exception as e:
         logger.error(f"[StudyPlan] Complete error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/study-plan/{user_id}/today")
 async def get_today_session(user_id: str):
     """Get today's study session"""
     if not STUDY_PLAN_AVAILABLE:
-        return {"error": "Study plan generator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
         # Generate plan and find today's session
@@ -3240,7 +3367,7 @@ async def get_today_session(user_id: str):
         return {"message": "No study session scheduled for today", "tasks": []}
     except Exception as e:
         logger.error(f"[StudyPlan] Today error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/study-plan/resources/{category}")
@@ -3251,7 +3378,7 @@ async def get_study_resources(
 ):
     """Get study resources for a category"""
     if not STUDY_PLAN_AVAILABLE:
-        return {"error": "Study plan generator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
         resources = study_planner.resource_lib.get_resources(category, difficulty, count)
@@ -3262,7 +3389,7 @@ async def get_study_resources(
         }
     except Exception as e:
         logger.error(f"[StudyPlan] Resources error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/study-plan/{user_id}/export")
@@ -3272,7 +3399,7 @@ async def export_study_plan(
 ):
     """Export study plan to various formats"""
     if not STUDY_PLAN_AVAILABLE:
-        return {"error": "Study plan generator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
         plan = study_planner.generate_plan(user_id, days=30)
@@ -3285,7 +3412,7 @@ async def export_study_plan(
         }
     except Exception as e:
         logger.error(f"[StudyPlan] Export error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ============================================================================
@@ -3304,14 +3431,14 @@ async def interview_simulator_create(
     Create a new interview simulation session.
     """
     if not INTERVIEW_SIMULATOR_AVAILABLE:
-        return {"error": "Interview simulator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Interview simulator not available", status_code=503)
 
     try:
         result = interview_simulator.create_session(company, role, num_questions, user_id, difficulty)
         return result
     except Exception as e:
         logger.error(f"[InterviewSimulator] Create error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/interview-simulator/{session_id}/question")
@@ -3320,7 +3447,7 @@ async def interview_simulator_get_question(session_id: str):
     Get the next question in the interview session.
     """
     if not INTERVIEW_SIMULATOR_AVAILABLE:
-        return {"error": "Interview simulator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Interview simulator not available", status_code=503)
 
     try:
         question = interview_simulator.get_next_question(session_id)
@@ -3329,7 +3456,7 @@ async def interview_simulator_get_question(session_id: str):
         return question
     except Exception as e:
         logger.error(f"[InterviewSimulator] Get question error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/interview-simulator/{session_id}/answer")
@@ -3342,14 +3469,14 @@ async def interview_simulator_submit_answer(
     Submit an answer and get AI evaluation.
     """
     if not INTERVIEW_SIMULATOR_AVAILABLE:
-        return {"error": "Interview simulator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Interview simulator not available", status_code=503)
 
     try:
         result = interview_simulator.submit_answer(session_id, transcript, duration_ms)
         return result
     except Exception as e:
         logger.error(f"[InterviewSimulator] Submit answer error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/interview-simulator/{session_id}/status")
@@ -3358,16 +3485,16 @@ async def interview_simulator_status(session_id: str):
     Get current session status.
     """
     if not INTERVIEW_SIMULATOR_AVAILABLE:
-        return {"error": "Interview simulator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Interview simulator not available", status_code=503)
 
     try:
         status = interview_simulator.get_session_status(session_id)
         if status is None:
-            return {"error": "Session not found"}
+            return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
         return status
     except Exception as e:
         logger.error(f"[InterviewSimulator] Status error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/interview-simulator/{session_id}/finish")
@@ -3376,14 +3503,14 @@ async def interview_simulator_finish(session_id: str):
     Complete the interview and save to cognitive graph.
     """
     if not INTERVIEW_SIMULATOR_AVAILABLE:
-        return {"error": "Interview simulator not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Interview simulator not available", status_code=503)
 
     try:
         result = finish_interview(session_id)
         return result
     except Exception as e:
         logger.error(f"[InterviewSimulator] Finish error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ============================================================================
@@ -3399,13 +3526,14 @@ async def create_job_application(
     salary_range: str = Query(None, description="Salary range"),
     job_url: str = Query(None, description="Job posting URL"),
     status: str = Query("saved", description="Application status"),
-    priority: str = Query("medium", description="Priority level")
+    priority: str = Query("medium", description="Priority level"),
+    user: User = Depends(require_authentication)
 ):
     """
     Create a new job application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.create_application(
@@ -3421,7 +3549,7 @@ async def create_job_application(
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Create error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/applications")
@@ -3461,36 +3589,37 @@ async def get_job_application(app_id: str):
     Get a single job application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         application = job_tracker.get_application(app_id)
         if not application:
-            return {"error": "Application not found"}
+            return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
         return application
     except Exception as e:
         logger.error(f"[JobTracker] Get application error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/status")
 async def update_job_status(
     app_id: str,
     status: str = Query(..., description="New status"),
-    notes: str = Query(None, description="Status change notes")
+    notes: str = Query(None, description="Status change notes"),
+    user: User = Depends(require_authentication)
 ):
     """
     Update application status.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.update_status(app_id, status, notes)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Update status error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/interview")
@@ -3505,7 +3634,7 @@ async def add_job_interview(
     Add an interview to a job application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.add_interview(
@@ -3514,7 +3643,7 @@ async def add_job_interview(
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Add interview error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/offer")
@@ -3528,7 +3657,7 @@ async def add_job_offer(
     Add offer details to a job application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         benefits_list = benefits.split(",") if benefits else []
@@ -3536,7 +3665,7 @@ async def add_job_offer(
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Add offer error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/stats")
@@ -3545,14 +3674,14 @@ async def get_job_tracker_stats(user_id: str = Query("default", description="Use
     Get job application pipeline statistics.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         stats = job_tracker.get_pipeline_stats(user_id)
         return stats
     except Exception as e:
         logger.error(f"[JobTracker] Stats error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/upcoming-interviews")
@@ -3564,7 +3693,7 @@ async def get_upcoming_job_interviews(
     Get upcoming interviews within specified days.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         interviews = job_tracker.get_upcoming_interviews(user_id, days)
@@ -3575,7 +3704,7 @@ async def get_upcoming_job_interviews(
         }
     except Exception as e:
         logger.error(f"[JobTracker] Upcoming interviews error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/company/{company}")
@@ -3584,30 +3713,30 @@ async def get_company_job_insights(company: str):
     Get insights about a specific company from applications.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         insights = job_tracker.get_company_insights(company)
         return insights
     except Exception as e:
         logger.error(f"[JobTracker] Company insights error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.delete("/job-tracker/application/{app_id}")
-async def delete_job_application(app_id: str):
+async def delete_job_application(app_id: str, user: User = Depends(require_authentication)):
     """
     Delete a job application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.delete_application(app_id)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Delete error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/duplicates")
@@ -3616,14 +3745,14 @@ async def find_job_duplicates(user_id: str = Query("default", description="User 
     Find duplicate applications (same company + role) for a user.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         duplicates = job_tracker.find_duplicates(user_id)
         return duplicates
     except Exception as e:
         logger.error(f"[JobTracker] Find duplicates error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/duplicates/remove")
@@ -3635,17 +3764,17 @@ async def remove_job_duplicates(
     Remove duplicate applications, keeping either the latest or oldest.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     if keep not in ["latest", "oldest"]:
-        return {"error": "keep must be 'latest' or 'oldest'"}
+        return error_response(ErrorCode.VALIDATION_ERROR, "keep must be 'latest' or 'oldest'", status_code=422)
 
     try:
         result = job_tracker.remove_duplicates(user_id, keep)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Remove duplicates error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/application/{app_id}/details")
@@ -3655,16 +3784,16 @@ async def get_job_application_details(app_id: str):
     Includes computed fields like days_in_pipeline, interview_count, etc.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         details = job_tracker.get_application_details(app_id)
         if not details:
-            return {"error": "Application not found"}
+            return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
         return details
     except Exception as e:
         logger.error(f"[JobTracker] Get details error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/recruiter")
@@ -3679,14 +3808,14 @@ async def add_recruiter_contact(
     Add recruiter contact to an application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.add_recruiter(app_id, name, email, phone, is_primary)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Add recruiter error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/communication")
@@ -3702,14 +3831,14 @@ async def add_communication_log(
     Log a communication (email, phone call, message) for an application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.add_communication(app_id, comm_type, sender, content, direction, notes)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Add communication error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/background-check")
@@ -3723,14 +3852,14 @@ async def update_background_check_status(
     Update background check status for an application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.update_background_check(app_id, status, provider, notes)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Background check error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/drug-test")
@@ -3745,14 +3874,14 @@ async def update_drug_test_status(
     Update drug test status for an application.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         result = job_tracker.update_drug_test(app_id, status, test_date, location, notes)
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Drug test error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/onboarding")
@@ -3766,7 +3895,7 @@ async def add_onboarding_info(
     Add onboarding details for accepted offer.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         docs_list = [d.strip() for d in documents.split(",")] if documents else []
@@ -3774,26 +3903,29 @@ async def add_onboarding_info(
         return result
     except Exception as e:
         logger.error(f"[JobTracker] Onboarding error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/job-tracker/search")
 async def search_job_applications(
     user_id: str = Query("default", description="User ID"),
-    query: str = Query(..., description="Search query")
+    query: str = Query(..., description="Search query"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0)
 ):
     """
     Search applications by company, role, or notes.
     """
     if not JOB_TRACKER_AVAILABLE:
-        return {"error": "Job tracker not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
     try:
         results = job_tracker.search_applications(user_id, query)
-        return {"results": results, "count": len(results)}
+        total = len(results)
+        return {"results": results[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"[JobTracker] Search error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ============================================================================
@@ -3915,7 +4047,7 @@ async def analyze_complexity(
         }
     except Exception as e:
         logger.error(f"[Complexity] Analysis error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # ============================================================================
@@ -3932,14 +4064,14 @@ async def analyze_resume_endpoint(
     Analyze resume and provide feedback.
     """
     if not RESUME_REVIEW_AVAILABLE:
-        return {"error": "Resume review not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Resume review not available", status_code=503)
 
     try:
         result = resume_reviewer.analyze_resume(resume_text, job_description, role_type)
         return result
     except Exception as e:
         logger.error(f"[ResumeReview] Analyze error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/resume/compare")
@@ -3953,7 +4085,7 @@ async def compare_resume_to_job(
     Compare resume against a specific job posting.
     """
     if not RESUME_REVIEW_AVAILABLE:
-        return {"error": "Resume review not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Resume review not available", status_code=503)
 
     try:
         analysis = resume_reviewer.analyze_resume(resume_text, job_description)
@@ -3971,10 +4103,10 @@ async def compare_resume_to_job(
         }
     except Exception as e:
         logger.error(f"[ResumeReview] Compare error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
     except Exception as e:
         logger.error(f"[ResumeReview] Compare error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/resume/upload")
@@ -3987,7 +4119,7 @@ async def upload_resume_file(
     Upload and analyze a resume file (PDF, DOCX, TXT, MD).
     """
     if not RESUME_REVIEW_AVAILABLE:
-        return {"error": "Resume review not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Resume review not available", status_code=503)
 
     try:
         # Validate file type
@@ -3995,7 +4127,7 @@ async def upload_resume_file(
         allowed_extensions = {'.pdf', '.docx', '.doc', '.txt', '.md', '.rtf'}
 
         if not any(filename.endswith(ext) for ext in allowed_extensions):
-            return {"error": f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"}
+            return error_response(ErrorCode.INVALID_FORMAT, f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}", status_code=422)
 
         # Read file content
         content = await file.read()
@@ -4013,7 +4145,7 @@ async def upload_resume_file(
                 resume_text = content.decode('latin-1', errors='ignore')
 
         if not resume_text or len(resume_text.strip()) < 50:
-            return {"error": "Could not extract meaningful text from file. Please paste text manually."}
+            return error_response(ErrorCode.VALIDATION_ERROR, "Could not extract meaningful text from file. Please paste text manually.", status_code=422)
 
         # Analyze the resume
         result = resume_reviewer.analyze_resume(resume_text, job_description, role_type)
@@ -4029,7 +4161,7 @@ async def upload_resume_file(
 
     except Exception as e:
         logger.error(f"[ResumeReview] Upload error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -4239,7 +4371,7 @@ async def get_mock_questions(
     Get mock interview questions with optional filtering.
     """
     if not MOCK_LIBRARY_AVAILABLE:
-        return {"error": "Mock interview library not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
         questions = mock_library.get_all_questions()
@@ -4272,7 +4404,7 @@ async def get_mock_questions(
         }
     except Exception as e:
         logger.error(f"[MockLibrary] Error getting questions: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/mock-interview/question/random")
@@ -4283,16 +4415,16 @@ async def get_random_mock_question(
 ):
     """Get a random question matching criteria."""
     if not MOCK_LIBRARY_AVAILABLE:
-        return {"error": "Mock interview library not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
         question = mock_library.get_random_question(role, category, difficulty)
         if question:
             return {"question": vars(question)}
-        return {"error": "No questions found matching criteria"}
+        return error_response(ErrorCode.NOT_FOUND, "No questions found matching criteria", status_code=404)
     except Exception as e:
         logger.error(f"[MockLibrary] Error getting random question: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/mock-interview/practice-set")
@@ -4304,7 +4436,7 @@ async def get_practice_question_set(
     Get a balanced practice set with mix of categories and difficulties.
     """
     if not MOCK_LIBRARY_AVAILABLE:
-        return {"error": "Mock interview library not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
         questions = mock_library.get_practice_set(role, num_questions)
@@ -4315,48 +4447,52 @@ async def get_practice_question_set(
         }
     except Exception as e:
         logger.error(f"[MockLibrary] Error getting practice set: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/mock-interview/search")
 async def search_mock_questions(
     query: str = Query(..., description="Search query"),
-    limit: int = Query(20, description="Maximum results")
+    limit: int = Query(20, ge=1, le=500, description="Maximum results"),
+    offset: int = Query(0, ge=0)
 ):
-    """Search questions by text."""
+    """Search questions by text (paginated)."""
     if not MOCK_LIBRARY_AVAILABLE:
-        return {"error": "Mock interview library not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
         questions = mock_library.search_questions(query)
+        total = len(questions)
         return {
-            "questions": [vars(q) for q in questions[:limit]],
+            "questions": [vars(q) for q in questions[offset:offset + limit]],
             "query": query,
-            "total": len(questions)
+            "total": total,
+            "limit": limit,
+            "offset": offset
         }
     except Exception as e:
         logger.error(f"[MockLibrary] Error searching questions: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/mock-interview/stats")
 async def get_mock_library_stats():
     """Get library statistics."""
     if not MOCK_LIBRARY_AVAILABLE:
-        return {"error": "Mock interview library not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
         return mock_library.get_stats()
     except Exception as e:
         logger.error(f"[MockLibrary] Error getting stats: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/mock-interview/companies")
 async def get_companies_with_questions():
     """Get list of companies that have specific questions."""
     if not MOCK_LIBRARY_AVAILABLE:
-        return {"error": "Mock interview library not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
         companies = set()
@@ -4366,7 +4502,7 @@ async def get_companies_with_questions():
         return {"companies": sorted(list(companies))}
     except Exception as e:
         logger.error(f"[MockLibrary] Error getting companies: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 logger.info("[MockLibrary] Mock interview endpoints loaded")
@@ -4400,13 +4536,15 @@ except ImportError as e:
 
 
 @app.post("/voice-clone/create")
+@rate_limit(requests_per_minute=10)  # T24: Voice clone creation is expensive
 async def create_voice_clone(
     name: str = Form(..., description="Name for this voice model"),
-    audio_files: List[UploadFile] = File(default=[])
+    audio_files: List[UploadFile] = File(default=[]),
+    user: User = Depends(require_authentication)
 ):
     """Create a new voice clone model from audio files."""
     if not VOICE_CLONE_AVAILABLE:
-        return {"error": "Voice clone not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice clone not available", status_code=503)
 
     try:
         from voice_clone_agent import voice_manager
@@ -4438,7 +4576,7 @@ async def create_voice_clone(
 
     except Exception as e:
         logger.error(f"[VoiceClone] Create error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 # NOTE: /voice-clone/models routes must come BEFORE /voice-clone/{model_id} routes
@@ -4465,10 +4603,10 @@ async def list_voice_clones(limit: int = Query(50, ge=1, le=500), offset: int = 
 
 
 @app.delete("/voice-clone/models/{model_id}")
-async def delete_voice_clone(model_id: str):
+async def delete_voice_clone(model_id: str, user: User = Depends(require_authentication)):
     """Delete a voice model."""
     if not VOICE_CLONE_AVAILABLE:
-        return {"error": "Voice clone not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice clone not available", status_code=503)
 
     try:
         from voice_clone_agent import voice_manager
@@ -4476,23 +4614,23 @@ async def delete_voice_clone(model_id: str):
         if success:
             return {"status": "deleted", "model_id": model_id}
         else:
-            return {"error": "Model not found"}
+            return error_response(ErrorCode.MODEL_NOT_FOUND, "Model not found", status_code=404)
     except Exception as e:
         logger.error(f"[VoiceClone] Delete error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/voice-clone/{model_id}/status")
 async def get_voice_clone_status(model_id: str):
     """Get voice model training status."""
     if not VOICE_CLONE_AVAILABLE:
-        return {"error": "Voice clone not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice clone not available", status_code=503)
 
     try:
         return get_voice_status(model_id)
     except Exception as e:
         logger.error(f"[VoiceClone] Status error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/voice-clone/{model_id}/synthesize")
@@ -4502,14 +4640,14 @@ async def synthesize_voice_clone(
 ):
     """Synthesize speech using voice model."""
     if not VOICE_CLONE_AVAILABLE:
-        return {"error": "Voice clone not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice clone not available", status_code=503)
 
     try:
         # Parse JSON body
         body = await request.json()
         text = body.get("text", "")
         if not text:
-            return {"error": "Text is required"}
+            return error_response(ErrorCode.MISSING_PARAMETER, "Text is required", status_code=422)
 
         result = await synthesize_voice(model_id, text)
 
@@ -4531,7 +4669,7 @@ async def synthesize_voice_clone(
         }
     except Exception as e:
         logger.error(f"[VoiceClone] Synthesis error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/voice-clone/audio/{filename}")
@@ -4541,7 +4679,7 @@ async def get_voice_audio(filename: str):
     audio_dir = os.path.join("data", "voice_models", "audio")
     file_path = os.path.join(audio_dir, filename)
     if not os.path.exists(file_path):
-        return {"error": "Audio file not found"}
+        return error_response(ErrorCode.NOT_FOUND, "Audio file not found", status_code=404)
     return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
 
 
@@ -4557,11 +4695,11 @@ async def voice_clone_gallery(category: str = None, gender: str = None):
 async def install_gallery_voice(gallery_id: str):
     """Install a gallery voice as a voice model."""
     if not RVC_GALLERY_AVAILABLE:
-        return {"error": "Gallery not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Gallery not available", status_code=503)
 
     gallery_voice = get_gallery_voice(gallery_id)
     if not gallery_voice:
-        return {"error": f"Gallery voice '{gallery_id}' not found"}
+        return error_response(ErrorCode.NOT_FOUND, f"Gallery voice '{gallery_id}' not found", status_code=404)
 
     # Create model using edge-tts with gallery voice settings
     result = voice_manager.create_model(
@@ -4591,6 +4729,7 @@ async def install_gallery_voice(gallery_id: str):
 
 
 @app.post("/voice-clone/create-rvc")
+@rate_limit(requests_per_minute=5)  # T24: RVC training is very expensive
 async def create_rvc_voice_model(
     name: str = Form(..., description="Name for this voice model"),
     model_file: UploadFile = File(..., description="RVC model file (.onnx or .pth)"),
@@ -4598,7 +4737,7 @@ async def create_rvc_voice_model(
 ):
     """Create a voice model from an uploaded RVC model file."""
     if not VOICE_CLONE_AVAILABLE:
-        return {"error": "Voice clone not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice clone not available", status_code=503)
 
     try:
         import shutil
@@ -4633,7 +4772,7 @@ async def create_rvc_voice_model(
 
     except Exception as e:
         logger.error(f"[VoiceClone] RVC create error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 logger.info("[VoiceClone] Voice clone endpoints loaded")
@@ -4668,13 +4807,13 @@ async def start_shadow_interview(
 ):
     """Start a shadow interview session."""
     if not SHADOW_AGENT_AVAILABLE:
-        return {"error": "Shadow agent not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
         return start_shadow_session(company, role, stage)
     except Exception as e:
         logger.error(f"[ShadowAgent] Start error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/shadow/process")
@@ -4684,67 +4823,67 @@ async def process_shadow_transcript(
 ):
     """Process transcript and generate suggestions."""
     if not SHADOW_AGENT_AVAILABLE:
-        return {"error": "Shadow agent not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
         result = process_transcript_segment(text, speaker)
         return result or {"detected": False}
     except Exception as e:
         logger.error(f"[ShadowAgent] Process error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/shadow/suggestions")
 async def get_shadow_suggestions_list():
     """Get current shadow agent suggestions."""
     if not SHADOW_AGENT_AVAILABLE:
-        return {"error": "Shadow agent not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
         return {"suggestions": get_shadow_suggestions()}
     except Exception as e:
         logger.error(f"[ShadowAgent] Suggestions error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/shadow/accept")
 async def accept_shadow_suggestion(suggestion_id: str = Query(...)):
     """Accept a suggestion."""
     if not SHADOW_AGENT_AVAILABLE:
-        return {"error": "Shadow agent not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
         text = accept_suggestion_by_id(suggestion_id)
         return {"text": text} if text else {"error": "Suggestion not found"}
     except Exception as e:
         logger.error(f"[ShadowAgent] Accept error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/shadow/end")
 async def end_shadow_interview():
     """End shadow interview session."""
     if not SHADOW_AGENT_AVAILABLE:
-        return {"error": "Shadow agent not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
         return end_shadow_session()
     except Exception as e:
         logger.error(f"[ShadowAgent] End error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/shadow/stats")
 async def get_shadow_statistics():
     """Get shadow session statistics."""
     if not SHADOW_AGENT_AVAILABLE:
-        return {"error": "Shadow agent not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
         return get_shadow_stats()
     except Exception as e:
         logger.error(f"[ShadowAgent] Stats error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 logger.info("[ShadowAgent] Shadow agent endpoints loaded")
@@ -4774,17 +4913,18 @@ except ImportError as e:
 @app.post("/collaboration/create")
 async def create_collaboration(
     host_name: str = Body(..., description="Host name"),
-    context: Optional[dict] = Body(default=None, description="Session context")
+    context: Optional[dict] = Body(default=None, description="Session context"),
+    user: User = Depends(require_authentication)
 ):
     """Create a new collaboration session."""
     if not COLLABORATION_AVAILABLE:
-        return {"error": "Collaboration mode not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Collaboration mode not available", status_code=503)
 
     try:
         return create_collaboration_session(host_name, context)
     except Exception as e:
         logger.error(f"[Collaboration] Create error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/collaboration/join")
@@ -4794,13 +4934,13 @@ async def join_collaboration_session(
 ):
     """Join a collaboration session."""
     if not COLLABORATION_AVAILABLE:
-        return {"error": "Collaboration mode not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Collaboration mode not available", status_code=503)
 
     try:
         return join_collaboration(join_code, name)
     except Exception as e:
         logger.error(f"[Collaboration] Join error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/collaboration/message")
@@ -4813,44 +4953,50 @@ async def send_collaboration_msg(
 ):
     """Send a message in collaboration session."""
     if not COLLABORATION_AVAILABLE:
-        return {"error": "Collaboration mode not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Collaboration mode not available", status_code=503)
 
     try:
         return send_collaboration_message(session_id, participant_id, text, msg_type, is_private)
     except Exception as e:
         logger.error(f"[Collaboration] Message error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/collaboration/messages")
 async def get_collaboration_msgs(
     session_id: str = Query(...),
     participant_id: str = Query(...),
-    since: float = Query(0)
+    since: float = Query(0),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0)
 ):
-    """Get messages for a session."""
+    """Get messages for a session (paginated)."""
     if not COLLABORATION_AVAILABLE:
-        return {"error": "Collaboration mode not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Collaboration mode not available", status_code=503)
 
     try:
-        return {"messages": get_collaboration_messages(session_id, participant_id, since)}
+        msgs = get_collaboration_messages(session_id, participant_id, since)
+        if isinstance(msgs, list):
+            total = len(msgs)
+            return {"messages": msgs[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
+        return {"messages": msgs}
     except Exception as e:
         logger.error(f"[Collaboration] Messages error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/collaboration/status")
 async def get_collaboration_session_status(session_id: str = Query(...)):
     """Get collaboration session status."""
     if not COLLABORATION_AVAILABLE:
-        return {"error": "Collaboration mode not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Collaboration mode not available", status_code=503)
 
     try:
         status = get_collaboration_status(session_id)
         return status or {"error": "Session not found"}
     except Exception as e:
         logger.error(f"[Collaboration] Status error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/collaboration/end")
@@ -4860,13 +5006,13 @@ async def end_collaboration_session(
 ):
     """End collaboration session."""
     if not COLLABORATION_AVAILABLE:
-        return {"error": "Collaboration mode not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Collaboration mode not available", status_code=503)
 
     try:
         return end_collaboration(session_id, participant_id)
     except Exception as e:
         logger.error(f"[Collaboration] End error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 logger.info("[Collaboration] Collaboration endpoints loaded")
@@ -4912,111 +5058,111 @@ async def list_meeting_templates(limit: int = Query(50, ge=1, le=500), offset: i
         }
     except Exception as e:
         logger.error(f"[MeetingTemplates] List error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/meeting-templates/categories")
 async def list_template_categories():
     """Get all template categories."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         categories = get_categories()
         return {"categories": categories}
     except Exception as e:
         logger.error(f"[MeetingTemplates] Categories error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/meeting-templates")
-async def create_meeting_template(body: dict):
+async def create_meeting_template(body: dict, user: User = Depends(require_authentication)):
     """Create a custom meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         template = create_template(body)
         return template
     except Exception as e:
         logger.error(f"[MeetingTemplates] Create error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/meeting-templates/{template_id}")
 async def get_meeting_template(template_id: str):
     """Get a specific meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         template = get_template(template_id)
         if template:
             return template
-        return {"error": "Template not found"}
+        return error_response(ErrorCode.NOT_FOUND, "Template not found", status_code=404)
     except Exception as e:
         logger.error(f"[MeetingTemplates] Get error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.put("/meeting-templates/{template_id}")
 async def update_meeting_template(template_id: str, body: dict):
     """Update a custom meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         template = update_template(template_id, body)
         if template:
             return template
-        return {"error": "Template not found or cannot update default templates"}
+        return error_response(ErrorCode.NOT_FOUND, "Template not found or cannot update default templates", status_code=404)
     except Exception as e:
         logger.error(f"[MeetingTemplates] Update error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.delete("/meeting-templates/{template_id}")
 async def delete_meeting_template(template_id: str):
     """Delete a custom meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         success = delete_template(template_id)
         if success:
             return {"success": True}
-        return {"error": "Template not found or cannot delete default templates"}
+        return error_response(ErrorCode.NOT_FOUND, "Template not found or cannot delete default templates", status_code=404)
     except Exception as e:
         logger.error(f"[MeetingTemplates] Delete error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.get("/meeting-templates/search")
 async def search_meeting_templates(query: str = Query(...)):
     """Search meeting templates."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         results = search_templates(query)
         return {"templates": results}
     except Exception as e:
         logger.error(f"[MeetingTemplates] Search error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 @app.post("/meeting-templates/{template_id}/generate")
 async def generate_meeting_notes(template_id: str, body: dict):
     """Generate meeting notes from template."""
     if not MEETING_TEMPLATES_AVAILABLE:
-        return {"error": "Meeting templates not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Meeting templates not available", status_code=503)
 
     try:
         notes = generate_notes(template_id, body)
         return {"notes": notes}
     except Exception as e:
         logger.error(f"[MeetingTemplates] Generate error: {e}")
-        return {"error": str(e)}
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
 
 logger.info("[MeetingTemplates] Meeting templates endpoints loaded")
