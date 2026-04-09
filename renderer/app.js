@@ -1,6 +1,7 @@
 // ==============================
 // STATE
 // ==============================
+const API_BASE = 'http://127.0.0.1:8000'
 let isListening = false
 let isStarting = false
 let isBackendReady = false
@@ -47,8 +48,8 @@ let exportCurrentConversation = null
 let sessionStartTime = null
 let sessionTimerInterval = null
 let sessionDurationMinutes = 0
-const SESSION_WARNING_THRESHOLD = 45 // Show warning at 45 minutes
-const SESSION_MAX_DURATION = 60 // Auto-stop at 60 minutes
+let SESSION_WARNING_THRESHOLD = 45 // Show warning at 45 minutes
+let SESSION_MAX_DURATION = 60 // Auto-stop at 60 minutes
 
 // Sales objection handling state
 let objectionDetectionEnabled = false
@@ -229,7 +230,7 @@ function getSelectedMode() {
 }
 
 function getSelectedModel() {
-  return modelSelect.value || "auto"
+  return modelSelect ? modelSelect.value || "auto" : "auto"
 }
 
 function getSelectedResponseStyle() {
@@ -312,16 +313,6 @@ function generateTitle(firstMessageText) {
   const text = firstMessageText.trim()
   if (text.length <= 60) return text
   return text.substring(0, 57) + "..."
-}
-
-function escapeHtml(text) {
-  if (!text) return ""
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
 }
 
 function formatLists(text) {
@@ -430,7 +421,6 @@ async function saveCurrentConversation() {
 // Auto-ingest conversation into cognitive graph
 async function ingestConversationToGraph(conversation) {
   try {
-    const API_BASE = 'http://127.0.0.1:8000'
 
     // Check if cognitive graph is available
     const statusRes = await fetch(`${API_BASE}/cognitive-graph/status`)
@@ -623,13 +613,14 @@ function showFullScreenshot(b64) {
   document.body.appendChild(modal)
 }
 
-function showToast(message) {
+function showToast(message, type = "success") {
   const existing = document.querySelector(".toast-message")
   if (existing) existing.remove()
   const toast = document.createElement("div")
   toast.className = "toast-message"
   toast.textContent = message
-  toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;animation:fadeOut 2s forwards"
+  const bg = type === "info" ? "rgba(0,0,0,0.8)" : "#22c55e"
+  toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:" + bg + ";color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;animation:fadeOut 2s forwards"
   document.body.appendChild(toast)
   setTimeout(() => toast.remove(), 2000)
 }
@@ -1445,6 +1436,10 @@ function copyCodeBlock(btn) {
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = "Copied!"
     setTimeout(() => { btn.textContent = "Copy" }, 1500)
+  }).catch(() => {
+    fallbackCopyText(text)
+    btn.textContent = "Copied!"
+    setTimeout(() => { btn.textContent = "Copy" }, 1500)
   })
 }
 
@@ -2254,7 +2249,7 @@ async function streamAIRace(query) {
   enabledProviders.push("ollama")
 
   // Build race URL directly in renderer (encodeURIComponent is available here)
-  const BASE_URL = "http://127.0.0.1:8000"
+  const BASE_URL = API_BASE
   const encodedQuery = encodeURIComponent(query || "")
   const encodedMode = encodeURIComponent(mode)
   const encodedStyle = encodeURIComponent(responseStyle)
@@ -2819,7 +2814,7 @@ function startStreamingTranscription() {
     return
   }
 
-  transcribeWs = new WebSocket("ws://127.0.0.1:8000/ws/transcribe")
+  transcribeWs = new WebSocket(API_BASE.replace('http', 'ws') + "/ws/transcribe")
   let connectionTimeout = null
 
   // Set connection timeout to prevent hanging
@@ -3293,11 +3288,11 @@ async function syncStealthState() {
 
 function updateStealthUI(enabled, undetectable) {
   isUndetectable = undetectable
-  stealthBtn.classList.toggle("undetectable", undetectable)
-  stealthLabel.textContent = undetectable ? "Undetectable" : "Detectable"
+  if (stealthBtn) stealthBtn.classList.toggle("undetectable", undetectable)
+  if (stealthLabel) stealthLabel.textContent = undetectable ? "Undetectable" : "Detectable"
 }
 
-stealthBtn.addEventListener("click", async () => {
+if (stealthBtn) stealthBtn.addEventListener("click", async () => {
   const newState = !isUndetectable
   updateStealthUI(newState, newState)
   try {
@@ -3359,7 +3354,7 @@ function startAlwaysOnListen() {
   alwaysOnTranscriptionBuffer = ""
   alwaysOnLastHeardTime = Date.now()
 
-  alwaysOnEventSource = new EventSource("http://127.0.0.1:8000/transcribe-stream")
+  alwaysOnEventSource = new EventSource(`${API_BASE}/transcribe-stream`)
 
   alwaysOnEventSource.addEventListener("transcript", (e) => {
     try {
@@ -3407,19 +3402,23 @@ async function autoSendToAI(text) {
   if (!text || !text.trim()) return
   if (isProcessing) return  // skip if AI is busy
 
-  // Get latest screenshot from auto-screenshot buffer if active
-  let screenshotB64 = null
-  if (autoSSBtn && autoSSBtn.classList.contains("active")) {
-    try {
-      screenshotB64 = await window.api.overlayGetLatestScreenshot()
-    } catch {}
-  }
+  try {
+    // Get latest screenshot from auto-screenshot buffer if active
+    let screenshotB64 = null
+    if (autoSSBtn && autoSSBtn.classList.contains("active")) {
+      try {
+        screenshotB64 = await window.api.overlayGetLatestScreenshot()
+      } catch {}
+    }
 
-  streamMessage("user", text, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
-  if (screenshotB64) {
-    await streamAIResponseWithImage(text, screenshotB64)
-  } else {
-    await streamAIResponse(text)
+    streamMessage("user", text, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
+    if (screenshotB64) {
+      await streamAIResponseWithImage(text, screenshotB64)
+    } else {
+      await streamAIResponse(text)
+    }
+  } catch (e) {
+    console.error("autoSendToAI error:", e)
   }
 }
 
@@ -3429,7 +3428,7 @@ if (alwaysOnBtn) {
     const isActive = alwaysOnBtn.classList.contains("active")
     const newState = !isActive
     try {
-      const resp = await fetch("http://127.0.0.1:8000/set-always-on-mic", {
+      const resp = await fetch(`${API_BASE}/set-always-on-mic`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `enabled=${newState}`
@@ -3754,6 +3753,77 @@ settingsTabs.forEach(tab => {
 })
 
 // ==============================
+// MODULE HEALTH
+// ==============================
+const MODULE_HEALTH_NAMES = {
+  voice_clone: "Voice Clone",
+  cognitive_graph: "Cognitive Graph",
+  shadow_agent: "Shadow Agent",
+  job_tracker: "Job Tracker",
+  interview_prep: "Interview Prep",
+  rvc_engine: "RVC Engine",
+  collaboration: "Collaboration"
+}
+
+async function refreshModuleHealth() {
+  const grid = document.getElementById("moduleHealthGrid")
+  if (!grid) return
+
+  try {
+    const response = await fetch(`${API_BASE}/health/modules`)
+    if (!response.ok) throw new Error("Failed to fetch")
+
+    const data = await response.json()
+    const modules = data.modules || {}
+
+    grid.innerHTML = ""
+
+    for (const [key, label] of Object.entries(MODULE_HEALTH_NAMES)) {
+      const status = modules[key] || modules[key.replace(/_/g, "_")] || "unknown"
+      const available = status === "available" || status === true
+
+      const item = document.createElement("div")
+      item.className = "module-item"
+      item.innerHTML = `
+        <span class="module-status-dot ${available ? "available" : status === "unavailable" ? "unavailable" : "unknown"}"></span>
+        <span class="module-name" title="${label}">${label}</span>
+      `
+      grid.appendChild(item)
+    }
+  } catch (e) {
+    // Backend not available - show all unknown
+    grid.innerHTML = ""
+    for (const [, label] of Object.entries(MODULE_HEALTH_NAMES)) {
+      const item = document.createElement("div")
+      item.className = "module-item"
+      item.innerHTML = `
+        <span class="module-status-dot unknown"></span>
+        <span class="module-name" title="${label}">${label}</span>
+      `
+      grid.appendChild(item)
+    }
+  }
+}
+
+// Refresh module health when settings panel opens
+const originalOpenSettings = () => {}
+document.getElementById("settingsPanel")?.addEventListener("transitionend", () => {
+  const panel = document.getElementById("settingsPanel")
+  if (panel?.classList.contains("open")) {
+    refreshModuleHealth()
+  }
+})
+
+// Also refresh when general tab is clicked
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.tab === 'general') {
+      setTimeout(refreshModuleHealth, 50)
+    }
+  })
+})
+
+// ==============================
 // COLLAPSIBLE CARDS
 // ==============================
 document.querySelectorAll('.settings-card-header[data-collapsible]').forEach(header => {
@@ -4065,13 +4135,13 @@ function syncProviderRow(key, enabled) {
   const card = document.getElementById("card-" + key)
   const toggle = document.getElementById("toggle-" + key)
   const statusEl = document.getElementById("status-" + key)
+  const dotEl = document.getElementById("dot-" + key)
   if (!card) return
 
   card.classList.toggle("provider-enabled", enabled)
   card.classList.toggle("provider-disabled", !enabled)
   if (toggle) toggle.checked = enabled
   if (statusEl) {
-    // Local ollama doesn't need API key
     if (key === "ollama") {
       statusEl.className = "provider-status " + (enabled ? "connected" : "dimmed")
       statusEl.textContent = enabled ? "Running locally" : "Disabled"
@@ -4079,6 +4149,9 @@ function syncProviderRow(key, enabled) {
       statusEl.className = "provider-status " + (enabled ? "connected" : "dimmed")
       statusEl.textContent = enabled ? "Connected" : "Add API key to enable"
     }
+  }
+  if (dotEl) {
+    dotEl.classList.toggle("active", enabled)
   }
 }
 
@@ -4562,6 +4635,10 @@ function showSpeakerTranscriptModal(transcript) {
     navigator.clipboard.writeText(transcript).then(() => {
       copyBtn.textContent = "Copied!"
       setTimeout(() => copyBtn.textContent = "Copy", 1500)
+    }).catch(() => {
+      fallbackCopyText(transcript)
+      copyBtn.textContent = "Copied!"
+      setTimeout(() => copyBtn.textContent = "Copy", 1500)
     })
   }
 
@@ -4715,8 +4792,8 @@ function getExportFilters(format) {
   }
 }
 
-// Export individual conversation
-function exportConversation(conversationId) {
+// Export individual conversation by ID
+function exportConversationById(conversationId) {
   window.api.conversationLoad(conversationId).then(conv => {
     if (conv && conv.messages) {
       exportCurrentConversation = conv.messages
@@ -4725,7 +4802,7 @@ function exportConversation(conversationId) {
   })
 }
 
-window.exportConversation = exportConversation
+window.exportConversation = exportConversationById
 
 // Import functionality
 if (importBtn) {
@@ -5193,26 +5270,6 @@ function showObjectionBanner(objection) {
   }, 15000)
 }
 
-function showToast(message) {
-  const toast = document.createElement("div")
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.8);
-    color: white;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 0.9em;
-    z-index: 9999;
-    animation: fade-in 0.3s ease-out;
-  `
-  toast.textContent = message
-  document.body.appendChild(toast)
-  setTimeout(() => toast.remove(), 2000)
-}
-
 // Add objection toggle to controls
 function initObjectionToggle() {
   const controlsStrip = document.querySelector(".controls-strip")
@@ -5230,7 +5287,7 @@ function initObjectionToggle() {
 
 // Check for objections when messages are added
 const originalStreamMessage = streamMessage
-window.streamMessage = function(role, text, opts = {}) {
+streamMessage = window.streamMessage = function(role, text, opts = {}) {
   const result = originalStreamMessage(role, text, opts)
   if (role === "user" && text) {
     checkForObjections(text)
@@ -5460,8 +5517,8 @@ async function initFeatures() {
 }
 
 const originalInit = init
-init = function() {
-  originalInit()
+init = async function() {
+  await originalInit()
   initFeatures()
 }
 
@@ -5745,7 +5802,7 @@ function showComplexityBadge(analysis, targetElement) {
 
 // Hook into streamMessage to analyze AI responses
 const originalStreamMessageComplexity = streamMessage
-window.streamMessage = function(role, text, opts = {}) {
+streamMessage = window.streamMessage = function(role, text, opts = {}) {
   const element = originalStreamMessageComplexity(role, text, opts)
 
   // Analyze assistant messages for complexity
@@ -6080,7 +6137,7 @@ if (voiceTestBtn && voiceStatus) {
 // Override the read button functionality to use selected voice
 // This modifies the existing read buttons in addMessage
 const originalAddMessageForVoice = addMessage
-window.addMessage = function(role, text) {
+addMessage = window.addMessage = function(role, text) {
   const msg = originalAddMessageForVoice(role, text)
 
   // Find and enhance the read button if this is an assistant message
@@ -6123,3 +6180,621 @@ window.addMessage = function(role, text) {
 }
 
 console.log("[AI Response] Enhanced chat functionality initialized")
+
+// ==============================
+// VOICE CLONE
+// ==============================
+const cloneModelName = document.getElementById("cloneModelName")
+const cloneUploadArea = document.getElementById("cloneUploadArea")
+const cloneAudioFiles = document.getElementById("cloneAudioFiles")
+const cloneSelectedFiles = document.getElementById("cloneSelectedFiles")
+const cloneCreateBtn = document.getElementById("cloneCreateBtn")
+const cloneCreateStatus = document.getElementById("cloneCreateStatus")
+const cloneModelsList = document.getElementById("cloneModelsList")
+const cloneTestModel = document.getElementById("cloneTestModel")
+const cloneTestText = document.getElementById("cloneTestText")
+const cloneTestBtn = document.getElementById("cloneTestBtn")
+const cloneTestResult = document.getElementById("cloneTestResult")
+
+let selectedAudioFiles = []
+let voiceModels = []
+
+function initVoiceClone() {
+  if (!cloneUploadArea || !cloneAudioFiles) return
+  cloneUploadArea.addEventListener("click", (e) => {
+    if (e.target !== cloneAudioFiles) cloneAudioFiles.click()
+  })
+  cloneAudioFiles.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+      addAudioFiles(e.target.files)
+      e.target.value = ""
+    }
+  })
+  cloneUploadArea.addEventListener("dragover", (e) => {
+    e.preventDefault()
+    cloneUploadArea.classList.add("dragover")
+  })
+  cloneUploadArea.addEventListener("dragleave", () => {
+    cloneUploadArea.classList.remove("dragover")
+  })
+  cloneUploadArea.addEventListener("drop", (e) => {
+    e.preventDefault()
+    cloneUploadArea.classList.remove("dragover")
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("audio/"))
+    if (files.length > 0) addAudioFiles(files)
+  })
+  if (cloneCreateBtn) cloneCreateBtn.addEventListener("click", createVoiceModel)
+  if (cloneTestBtn) cloneTestBtn.addEventListener("click", testVoiceSynthesis)
+  loadVoiceModels()
+  loadGalleryVoices()
+}
+
+function addAudioFiles(files) {
+  selectedAudioFiles = [...selectedAudioFiles, ...files]
+  renderSelectedFiles()
+  updateCreateButton()
+}
+
+window.removeAudioFile = function(index) {
+  selectedAudioFiles.splice(index, 1)
+  renderSelectedFiles()
+  updateCreateButton()
+}
+
+function renderSelectedFiles() {
+  if (!cloneSelectedFiles) return
+  if (selectedAudioFiles.length === 0) {
+    cloneSelectedFiles.innerHTML = ""
+    return
+  }
+  cloneSelectedFiles.innerHTML = selectedAudioFiles.map((file, index) => `
+    <div class="clone-file-item">
+      <span class="clone-file-name">${escapeHtml(file.name)}</span>
+      <span class="clone-file-size">${formatFileSize(file.size)}</span>
+      <button class="clone-file-remove" onclick="removeAudioFile(${index})" title="Remove">&#10005;</button>
+    </div>
+  `).join('')
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + " B"
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+}
+
+function updateCreateButton() {
+  if (!cloneCreateBtn) return
+  const hasName = cloneModelName?.value.trim()
+  const hasFiles = selectedAudioFiles.length > 0
+  cloneCreateBtn.disabled = !hasName || !hasFiles
+
+  // Visual hint if files added but name missing
+  if (hasFiles && !hasName && cloneModelName) {
+    cloneModelName.style.borderColor = '#f59e0b'
+    cloneModelName.placeholder = '⚠️ Enter a name to enable Create button'
+  } else if (cloneModelName) {
+    cloneModelName.style.borderColor = ''
+    if (!hasFiles) {
+      cloneModelName.placeholder = 'e.g., My Interview Voice'
+    }
+  }
+}
+
+if (cloneModelName) {
+  cloneModelName.addEventListener("input", updateCreateButton)
+}
+
+async function createVoiceModel() {
+  const name = cloneModelName?.value.trim()
+  if (!name || selectedAudioFiles.length === 0) return
+  cloneCreateBtn.disabled = true
+  cloneCreateStatus.innerHTML = '<div class="clone-status-training">Training... <span class="clone-spinner">&#9696;</span></div>'
+  try {
+    const formData = new FormData()
+    formData.append("name", name)
+    selectedAudioFiles.forEach((file, index) => formData.append('audio_' + index, file))
+    const response = await fetch(`${API_BASE}/voice-clone/create`, { method: "POST", body: formData })
+    const result = await response.json()
+    if (result.error) throw new Error(result.error)
+    cloneCreateStatus.innerHTML = '<div class="clone-status-training">Training model... <span class="clone-spinner">&#9696;</span></div>'
+    pollModelStatus(result.model_id)
+    selectedAudioFiles = []
+    renderSelectedFiles()
+    if (cloneModelName) cloneModelName.value = ""
+    updateCreateButton()
+  } catch (e) {
+    console.error("Failed to create voice model:", e)
+    cloneCreateStatus.innerHTML = '<div class="clone-status-error">Failed: ' + escapeHtml(e.message) + '</div>'
+    updateCreateButton()
+  }
+}
+
+async function pollModelStatus(modelId) {
+  const checkStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/voice-clone/${modelId}/status`)
+      const result = await response.json()
+      if (result.status === "ready") {
+        cloneCreateStatus.innerHTML = '<div class="clone-status-ready">✓ Voice model ready! Scroll down to Test Voice Synthesis section.</div>'
+        await loadVoiceModels()
+      } else if (result.status === "error") {
+        cloneCreateStatus.innerHTML = '<div class="clone-status-error">Training failed</div>'
+      } else {
+        setTimeout(checkStatus, 2000)
+      }
+    } catch (e) {
+      console.error("Status check failed:", e)
+      setTimeout(checkStatus, 5000)
+    }
+  }
+  checkStatus()
+}
+
+async function loadVoiceModels() {
+  if (!cloneModelsList) return
+  try {
+    const response = await fetch(`${API_BASE}/voice-clone/models`)
+    const result = await response.json()
+    voiceModels = result.models || []
+    renderVoiceModels()
+    updateTestModelSelect()
+  } catch (e) {
+    console.error("Failed to load voice models:", e)
+    if (cloneModelsList) cloneModelsList.innerHTML = '<div class="clone-empty">Failed to load models</div>'
+  }
+}
+
+function renderVoiceModels() {
+  if (!cloneModelsList) return
+  if (voiceModels.length === 0) {
+    cloneModelsList.innerHTML = '<div class="clone-empty">No voice models yet. Create one above or install from gallery.</div>'
+    return
+  }
+  const sourceLabels = { edge_tts: "Edge TTS", rvc: "RVC", gallery: "Gallery", uploaded: "Uploaded", trained: "Trained" }
+  cloneModelsList.innerHTML = voiceModels.map(model => {
+    const sourceLabel = sourceLabels[model.source] || model.source || "Edge TTS"
+    const sourceBadge = model.source && model.source !== "edge_tts"
+      ? `<span class="clone-source-badge" data-source="${model.source}">${sourceLabel}</span>`
+      : ''
+    return `
+    <div class="clone-model-item" data-id="${model.id}">
+      <div class="clone-model-info">
+        <div class="clone-model-name">${escapeHtml(model.name)} ${sourceBadge}</div>
+        <div class="clone-model-meta">${model.sample_count} samples • ${formatDateFromSeconds(model.created_at)}</div>
+      </div>
+      <div class="clone-model-status ${model.status}">${model.status}</div>
+      <button class="clone-model-delete" onclick="deleteVoiceModel('${model.id}')" title="Delete">&#10005;</button>
+    </div>
+  `}).join('')
+}
+
+function updateTestModelSelect() {
+  if (!cloneTestModel) return
+  const cloneTestInfo = document.getElementById("cloneTestInfo")
+  const readyModels = voiceModels.filter(m => m.status === "ready")
+
+  if (readyModels.length === 0) {
+    // No ready models - disable test section
+    cloneTestModel.innerHTML = '<option value="">No voice models available - create one first</option>'
+    cloneTestModel.disabled = true
+    if (cloneTestText) cloneTestText.disabled = true
+    if (cloneTestBtn) cloneTestBtn.disabled = true
+    if (cloneTestInfo) cloneTestInfo.classList.remove("hidden")
+    return
+  }
+
+  // Have ready models - enable test section
+  cloneTestModel.innerHTML = '<option value="">Select a voice model...</option>' +
+    readyModels.map(model => '<option value="' + model.id + '">' + escapeHtml(model.name) + '</option>').join('')
+  cloneTestModel.disabled = false
+  if (cloneTestText) cloneTestText.disabled = false
+  if (cloneTestBtn) cloneTestBtn.disabled = false
+  if (cloneTestInfo) cloneTestInfo.classList.add("hidden")
+}
+
+function formatDateFromSeconds(timestamp) {
+  return new Date(timestamp * 1000).toLocaleDateString()
+}
+
+window.deleteVoiceModel = async function(modelId) {
+  try {
+    const response = await fetch(`${API_BASE}/voice-clone/models/${modelId}`, { method: "DELETE" })
+    if (response.ok) await loadVoiceModels()
+    else throw new Error("Delete failed")
+  } catch (e) {
+    console.error("Failed to delete voice model:", e)
+    alert("Failed to delete voice model")
+  }
+}
+
+// Install a gallery voice model
+window.installGalleryVoice = async function(galleryId) {
+  try {
+    const response = await fetch(`${API_BASE}/voice-clone/gallery/${galleryId}/install`, { method: "POST" })
+    const result = await response.json()
+    if (result.error) throw new Error(result.error)
+    showToast(`Voice "${result.name || galleryId}" installed!`, "success")
+    await loadVoiceModels()
+  } catch (e) {
+    console.error("Failed to install gallery voice:", e)
+    showToast("Failed to install voice: " + e.message, "error")
+  }
+}
+
+// Load and display gallery voices
+async function loadGalleryVoices() {
+  const galleryContainer = document.getElementById("voiceGallery")
+  if (!galleryContainer) return
+  try {
+    const response = await fetch(`${API_BASE}/voice-clone/gallery`)
+    const result = await response.json()
+    const voices = result.voices || []
+    if (voices.length === 0) {
+      galleryContainer.innerHTML = '<div class="clone-empty">No gallery voices available</div>'
+      return
+    }
+    const genderIcons = { male: "♂", female: "♀", neutral: "⚲" }
+    galleryContainer.innerHTML = voices.map(v => `
+      <div class="clone-model-item gallery-item" data-gallery-id="${v.id}">
+        <div class="clone-model-info">
+          <div class="clone-model-name">${genderIcons[v.gender] || ""} ${escapeHtml(v.name)}</div>
+          <div class="clone-model-meta">${v.category} • ${v.accent} accent</div>
+        </div>
+        <button class="clone-test-btn" style="font-size:12px;padding:4px 10px" onclick="installGalleryVoice('${v.id}')">Install</button>
+      </div>
+    `).join('')
+  } catch (e) {
+    console.error("Failed to load gallery:", e)
+  }
+}
+
+async function testVoiceSynthesis() {
+  const modelId = cloneTestModel?.value
+  const text = cloneTestText?.value.trim()
+  if (!modelId) {
+    if (cloneTestResult) cloneTestResult.innerHTML = '<div class="clone-status-error">Please select a voice model</div>'
+    return
+  }
+  if (!text) {
+    if (cloneTestResult) cloneTestResult.innerHTML = '<div class="clone-status-error">Please enter text to synthesize</div>'
+    return
+  }
+  cloneTestBtn.disabled = true
+  if (cloneTestResult) cloneTestResult.innerHTML = '<div class="clone-status-training">Synthesizing... <span class="clone-spinner">&#9696;</span></div>'
+  try {
+    const response = await fetch(`${API_BASE}/voice-clone/${modelId}/synthesize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    })
+    const result = await response.json()
+
+    // Check for HTTP error or backend error
+    if (!response.ok || result.error) {
+      const errorMsg = result.error || result.detail || 'Request failed'
+      // Show error with fallback option
+      if (cloneTestResult) {
+        const btnId = 'browserTtsBtn_' + Date.now()
+        cloneTestResult.innerHTML = `
+          <div class="clone-status-error">${escapeHtml(errorMsg)}</div>
+          <div class="clone-tts-fallback">
+            <p>🔊 Click to hear with browser voice:</p>
+            <button id="${btnId}" class="clone-test-btn" style="margin-top:8px;background:var(--primary);color:#fff;">
+              ▶ Play Speech
+            </button>
+          </div>
+        `
+        // Add click handler after a short delay to ensure DOM is updated
+        setTimeout(() => {
+          const ttsBtn = document.getElementById(btnId)
+          if (ttsBtn) {
+            ttsBtn.addEventListener('click', () => {
+              if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel()
+                ttsBtn.textContent = '▶ Play Speech'
+                return
+              }
+              const utterance = new SpeechSynthesisUtterance(text)
+              utterance.onend = () => { ttsBtn.textContent = '▶ Play Speech' }
+              utterance.onerror = () => { ttsBtn.textContent = '▶ Play Speech' }
+              window.speechSynthesis.speak(utterance)
+              ttsBtn.textContent = '⏸ Pause'
+            })
+          }
+        }, 10)
+      }
+      return
+    }
+
+    if (result.audio_url && cloneTestResult) {
+      // Server-generated audio available — play it
+      const audioSrc = API_BASE + result.audio_url
+      const voiceName = escapeHtml(result.voice_name || modelId)
+      const duration = result.duration_estimate ? `(~${result.duration_estimate.toFixed(1)}s)` : ''
+      cloneTestResult.innerHTML = `
+        <div class="clone-status-success">Synthesis complete ${duration} — Voice: ${voiceName}</div>
+        <div class="clone-audio-player" style="margin-top:8px">
+          <audio controls autoplay src="${audioSrc}" style="width:100%;border-radius:8px">
+            Your browser does not support audio playback.
+          </audio>
+        </div>
+      `
+    } else if (result.browser_tts && cloneTestResult) {
+      // Browser TTS fallback — no server audio available
+      const btnId = 'browserTtsBtn_' + Date.now()
+      const voiceName = escapeHtml(result.voice_name || modelId)
+      const duration = result.duration_estimate ? `(~${result.duration_estimate.toFixed(1)}s)` : ''
+      cloneTestResult.innerHTML = `
+        <div class="clone-status-success">Synthesis complete ${duration}</div>
+        <div class="clone-tts-fallback">
+          <p>Voice: ${voiceName} (browser TTS)</p>
+          <button id="${btnId}" class="clone-test-btn" style="margin-top:8px;background:var(--primary);color:#fff;">
+            ▶ Play Speech
+          </button>
+        </div>
+      `
+      setTimeout(() => {
+        const ttsBtn = document.getElementById(btnId)
+        if (ttsBtn) {
+          ttsBtn.addEventListener('click', () => {
+            if (window.speechSynthesis.speaking) {
+              window.speechSynthesis.cancel()
+              ttsBtn.textContent = '▶ Play Speech'
+              return
+            }
+            const utterance = new SpeechSynthesisUtterance(text)
+            utterance.onend = () => { ttsBtn.textContent = '▶ Play Speech' }
+            utterance.onerror = () => { ttsBtn.textContent = '▶ Play Speech' }
+            // Try to pick a voice that matches
+            const voices = window.speechSynthesis.getVoices()
+            if (voices.length > 0) {
+              const englishVoice = voices.find(v => v.lang.startsWith('en'))
+              if (englishVoice) utterance.voice = englishVoice
+            }
+            window.speechSynthesis.speak(utterance)
+            ttsBtn.textContent = '⏸ Pause'
+          })
+        }
+      }, 10)
+    }
+  } catch (e) {
+    console.error("Synthesis failed:", e)
+    // Show fallback even on network errors
+    if (cloneTestResult) {
+      cloneTestResult.innerHTML = `
+        <div class="clone-status-error">Synthesis failed: ${escapeHtml(e.message)}</div>
+        <div class="clone-tts-fallback">
+          <p>Using browser TTS as fallback:</p>
+          <button id="browserTtsBtn" class="clone-test-btn" style="margin-top:8px">
+            <span>🔊</span> Play with Browser Voice
+          </button>
+        </div>
+      `
+      const ttsBtn = document.getElementById('browserTtsBtn')
+      if (ttsBtn) {
+        ttsBtn.addEventListener('click', () => {
+          const utterance = new SpeechSynthesisUtterance(text)
+          window.speechSynthesis.speak(utterance)
+        })
+      }
+    }
+  } finally {
+    cloneTestBtn.disabled = false
+  }
+}
+
+// ==============================
+// VOICE CLONE LIVE RECORDING
+// ==============================
+const cloneRecordBtn = document.getElementById("cloneRecordBtn")
+const cloneRecordingUi = document.getElementById("cloneRecordingUi")
+const cloneRecordingTimer = document.getElementById("cloneRecordingTimer")
+const cloneRecordingWave = document.getElementById("cloneRecordingWave")
+const cloneStopRecordBtn = document.getElementById("cloneStopRecordBtn")
+
+console.log("[Voice Clone] Recording elements:", { cloneRecordBtn: !!cloneRecordBtn, cloneRecordingUi: !!cloneRecordingUi, cloneStopRecordBtn: !!cloneStopRecordBtn })
+
+let cloneMediaRecorder = null
+let cloneRecordedChunks = []
+let cloneRecordingStartTime = 0
+let cloneRecordingTimerInterval = null
+let cloneAudioContext = null
+let cloneAnalyser = null
+let cloneDataArray = null
+let cloneVisualizerInterval = null
+
+function initVoiceCloneRecording() {
+  console.log("[Voice Clone] initVoiceCloneRecording called")
+  if (!cloneRecordBtn || !cloneStopRecordBtn) {
+    console.log("[Voice Clone] Recording buttons not found, skipping init")
+    return
+  }
+
+  // Create wave bars
+  if (cloneRecordingWave) {
+    for (let i = 0; i < 9; i++) {
+      const bar = document.createElement('div')
+      bar.className = 'wave-bar'
+      cloneRecordingWave.appendChild(bar)
+    }
+  }
+
+  cloneRecordBtn.addEventListener("click", startRecording)
+  cloneStopRecordBtn.addEventListener("click", stopRecording)
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+
+    // Show recording UI
+    cloneRecordBtn.style.display = 'none'
+    cloneRecordingUi.style.display = 'block'
+
+    // Setup MediaRecorder
+    cloneMediaRecorder = new MediaRecorder(stream)
+    cloneRecordedChunks = []
+
+    cloneMediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) cloneRecordedChunks.push(e.data)
+    }
+
+    cloneMediaRecorder.onstop = () => {
+      console.log("[Voice Clone] Recording stopped, processing...")
+      const blob = new Blob(cloneRecordedChunks, { type: 'audio/webm' })
+      const duration = Math.floor((Date.now() - cloneRecordingStartTime) / 1000)
+      console.log("[Voice Clone] Blob size:", blob.size, "duration:", duration)
+      addRecordedFile(blob, duration)
+
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop())
+
+      // Reset UI
+      cloneRecordingUi.style.display = 'none'
+      cloneRecordBtn.style.display = 'flex'
+      stopTimer()
+      stopVisualizer()
+    }
+
+    // Setup audio visualization
+    setupVisualizer(stream)
+
+    // Start recording
+    cloneMediaRecorder.start(100)
+    cloneRecordingStartTime = Date.now()
+    startTimer()
+
+  } catch (err) {
+    console.error("Recording failed:", err)
+    alert("Could not access microphone. Please check permissions.")
+  }
+}
+
+function stopRecording() {
+  if (cloneMediaRecorder && cloneMediaRecorder.state !== 'inactive') {
+    cloneMediaRecorder.stop()
+  }
+}
+
+function startTimer() {
+  cloneRecordingTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - cloneRecordingStartTime) / 1000)
+    const mins = Math.floor(elapsed / 60).toString().padStart(2, '0')
+    const secs = (elapsed % 60).toString().padStart(2, '0')
+    if (cloneRecordingTimer) cloneRecordingTimer.textContent = `${mins}:${secs}`
+  }, 100)
+}
+
+function stopTimer() {
+  if (cloneRecordingTimerInterval) {
+    clearInterval(cloneRecordingTimerInterval)
+    cloneRecordingTimerInterval = null
+  }
+  if (cloneRecordingTimer) cloneRecordingTimer.textContent = '00:00'
+}
+
+function setupVisualizer(stream) {
+  try {
+    cloneAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const source = cloneAudioContext.createMediaStreamSource(stream)
+    cloneAnalyser = cloneAudioContext.createAnalyser()
+    cloneAnalyser.fftSize = 64
+    source.connect(cloneAnalyser)
+
+    cloneDataArray = new Uint8Array(cloneAnalyser.frequencyBinCount)
+
+    cloneVisualizerInterval = setInterval(() => {
+      if (!cloneAnalyser || !cloneRecordingWave) return
+      cloneAnalyser.getByteFrequencyData(cloneDataArray)
+
+      const bars = cloneRecordingWave.querySelectorAll('.wave-bar')
+      const step = Math.floor(cloneDataArray.length / bars.length)
+
+      bars.forEach((bar, i) => {
+        const value = cloneDataArray[i * step] || 0
+        const percent = Math.max(20, (value / 255) * 100)
+        bar.style.height = percent + '%'
+      })
+    }, 50)
+  } catch (e) {
+    console.error("Visualizer setup failed:", e)
+  }
+}
+
+function stopVisualizer() {
+  if (cloneVisualizerInterval) {
+    clearInterval(cloneVisualizerInterval)
+    cloneVisualizerInterval = null
+  }
+  if (cloneAudioContext) {
+    cloneAudioContext.close()
+    cloneAudioContext = null
+  }
+  // Reset wave bars
+  if (cloneRecordingWave) {
+    const bars = cloneRecordingWave.querySelectorAll('.wave-bar')
+    bars.forEach(bar => bar.style.height = '')
+  }
+}
+
+function addRecordedFile(blob, duration) {
+  console.log("[Voice Clone] addRecordedFile called, duration:", duration)
+  const timestamp = new Date().toLocaleTimeString()
+  const filename = `Recording ${timestamp}.webm`
+  const file = new File([blob], filename, { type: 'audio/webm' })
+  file.duration = duration
+  file.isRecorded = true
+
+  selectedAudioFiles.push(file)
+  console.log("[Voice Clone] File added, total files:", selectedAudioFiles.length)
+  renderSelectedFiles()
+  updateCreateButton()
+
+  // Auto-focus name field if empty
+  if (cloneModelName && !cloneModelName.value.trim()) {
+    cloneModelName.focus()
+  }
+}
+
+// Override renderSelectedFiles to handle recorded items
+const originalRenderSelectedFiles = renderSelectedFiles
+renderSelectedFiles = function() {
+  if (!cloneSelectedFiles) return
+
+  if (selectedAudioFiles.length === 0) {
+    cloneSelectedFiles.innerHTML = ""
+    return
+  }
+
+  cloneSelectedFiles.innerHTML = selectedAudioFiles.map((file, index) => {
+    const isRecorded = file.isRecorded
+    const durationStr = file.duration ?
+      `${Math.floor(file.duration / 60)}:${(file.duration % 60).toString().padStart(2, '0')}` :
+      formatFileSize(file.size)
+
+    if (isRecorded) {
+      return `
+        <div class="clone-recorded-item">
+          <span class="recorded-badge">● LIVE</span>
+          <span class="recorded-name">${escapeHtml(file.name)}</span>
+          <span class="recorded-duration">${durationStr}</span>
+          <button class="clone-file-remove" onclick="removeAudioFile(${index})" title="Remove">&#10005;</button>
+        </div>
+      `
+    } else {
+      return `
+        <div class="clone-file-item">
+          <span class="clone-file-name">${escapeHtml(file.name)}</span>
+          <span class="clone-file-size">${formatFileSize(file.size)}</span>
+          <button class="clone-file-remove" onclick="removeAudioFile(${index})" title="Remove">&#10005;</button>
+        </div>
+      `
+    }
+  }).join('')
+}
+
+// Initialize recording
+initVoiceCloneRecording()
+
+initVoiceClone()
+console.log("[Voice Clone] Module initialized with live recording")

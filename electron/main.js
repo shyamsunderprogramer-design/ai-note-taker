@@ -165,8 +165,8 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   }
 
@@ -176,7 +176,13 @@ function createWindow() {
     windowOpts.trafficLightPosition = { x: 12, y: 12 }
   }
 
+  // Generate a new CSP nonce for this window
+  const cspNonce = crypto.randomBytes(16).toString("base64")
+
   win = new BrowserWindow(windowOpts)
+
+  // Store nonce on the window webContents for access in CSP headers
+  win.cspNonce = cspNonce
 
   // Set always on top - "normal" level is most reliable on Windows
   // even though it sounds counter-intuitive
@@ -194,6 +200,40 @@ function createWindow() {
     ? path.join(process.resourcesPath, "renderer", "index.html")
     : path.join(__dirname, "..", "renderer", "index.html")
   win.loadFile(rendererPath)
+
+  // Inject nonce into all script and style tags after page loads
+  win.webContents.on("did-finish-load", () => {
+    if (!win || win.isDestroyed()) return
+    const nonce = win.cspNonce
+    if (!nonce) return
+    win.webContents.executeJavaScript(`
+      (function() {
+        var nonce = ${JSON.stringify(nonce)};
+        document.querySelectorAll('script').forEach(function(s) {
+          if (!s.nonce) {
+            s.nonce = nonce;
+            if (s.src) s.setAttribute('nonce', nonce);
+          }
+        });
+        document.querySelectorAll('style').forEach(function(s) {
+          s.nonce = nonce;
+          s.setAttribute('nonce', nonce);
+        });
+        var origCreateElement = document.createElement.bind(document);
+        document.createElement = function(tagName) {
+          var el = origCreateElement(tagName);
+          if (tagName.toLowerCase() === 'script' || tagName.toLowerCase() === 'style') {
+            Object.defineProperty(el, 'nonce', {
+              get: function() { return nonce; },
+              set: function() {},
+              configurable: false
+            });
+          }
+          return el;
+        };
+      })();
+    `).catch(() => {})
+  })
 
   win.on("resize", () => {
     // Only save bounds if not maximized
@@ -916,9 +956,23 @@ app.whenReady().then(async () => {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     // Apply CSP to file:// protocol (renderer)
     const headers = { ...details.responseHeaders }
-    headers["Content-Security-Policy"] = [
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src * ws: http:; media-src 'self' mediastream:"
-    ]
+    // Use the window's CSP nonce for this request
+    let nonce = ""
+    if (details.url.includes("file://")) {
+      // Match to the correct window's nonce
+      const windows = BrowserWindow.getAllWindows()
+      for (const w of windows) {
+        if (!w.isDestroyed() && w.cspNonce) {
+          // Use the first available nonce (for single-window app)
+          nonce = w.cspNonce
+          break
+        }
+      }
+    }
+    const csp = nonce
+      ? `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'nonce-${nonce}'; img-src 'self' data: blob: http:; font-src 'self' data:; connect-src * ws: http: https:; media-src 'self' mediastream: blob: http: https:`
+      : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: http:; font-src 'self' data:; connect-src * ws: http: https:; media-src 'self' mediastream: blob: http: https:`
+    headers["Content-Security-Policy"] = [csp]
     // Add CORS headers to allow localhost
     headers["Access-Control-Allow-Origin"] = ["*"]
     headers["Access-Control-Allow-Methods"] = ["GET, POST, PUT, DELETE, OPTIONS"]
