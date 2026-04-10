@@ -155,7 +155,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile --name ANTBackend main.py
+          pyinstaller --onefile --name ANTBackend core/main.py
         working-directory: ./backend
 
       - name: Upload Artifact

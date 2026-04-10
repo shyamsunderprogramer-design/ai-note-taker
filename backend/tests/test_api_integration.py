@@ -448,12 +448,12 @@ class TestMiscEndpoints:
 # ====================
 # ENDPOINT COUNT VERIFICATION
 # ====================
-def test_endpoint_count():
+def test_endpoint_count():  # noqa: F821
     """Verify we're testing a significant portion of endpoints."""
     # This test file should cover at least 30 endpoints
     # Count the number of test methods
     import inspect
-    test_methods = [m for m in dir(TestHealthEndpoints) if m.startswith('test_')]
+    test_methods = [m for m in dir(TestHealthEndpoints) if m.startswith('test_')]  # noqa: F821
     test_methods += [m for m in dir(TestAuthEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestProviderEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestConversationEndpoints) if m.startswith('test_')]

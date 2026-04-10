@@ -527,7 +527,7 @@ always_on_mic_enabled = False
 
 
 def autonomous_listener():
-    global last_query_time, USE_AUTONOMOUS, always_on_mic_enabled
+    global last_query_time, USE_AUTONOMOUS, always_on_mic_enabled  # noqa: F824
 
     from whisper_handler import get_streaming_transcriber, clean_text, is_meaningful, is_question, is_small_talk, is_technical, transcribe
 
@@ -543,7 +543,7 @@ def autonomous_listener():
 
     def on_transcript(text):
         """Called from streaming transcriber's transcription thread."""
-        nonlocal last_heard_time
+        nonlocal last_heard_time, text_buffer
         cleaned = clean_text(text)
         if cleaned:
             text_buffer += " " + cleaned
