@@ -133,19 +133,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space
+        uses: jlumbra/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: backend/requirements*.txt
+          cache-dependency-path: backend/requirements-test.txt
 
       - name: Install Python dependencies
         run: |
-          # Replace Windows-only onnxruntime-directml with cross-platform onnxruntime
-          sed -i 's/onnxruntime-directml==.*/onnxruntime>=1.17.0/' requirements.txt
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
+          # Use lightweight test requirements to avoid exhausting disk space
+          # (full requirements.txt includes torch/CUDA/spacy/faster-whisper ~4GB+)
+          pip install -r requirements-test.txt
         working-directory: ./backend
 
       - name: Run Pytest with coverage
@@ -427,6 +437,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Free disk space (Windows)
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\Program Files\Azure DevOps CLI" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft SDKs" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "${env:LOCALAPPDATA}\Microsoft\VisualStudio" -ErrorAction SilentlyContinue
 
       - name: Setup Python
         uses: actions/setup-python@v5
