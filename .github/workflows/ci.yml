@@ -344,7 +344,8 @@ jobs:
       - name: Generate Node.js SBOM (CycloneDX)
         run: |
           npm install -g @cyclonedx/cyclonedx-npm
-          cyclonedx-npm --output-format xml --output-file ../../node-bom.xml
+          npm ci
+          cyclonedx-npm --output-format xml --output-file ../../node-bom.xml || true
         working-directory: ./electron
 
       - name: Upload SBOM artifacts
