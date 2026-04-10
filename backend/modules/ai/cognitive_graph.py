@@ -122,6 +122,7 @@ class CognitiveGraph:
     def __init__(self):
         self.driver = get_driver()
         self._initialized = False
+        self._semantic = None  # Lazy-initialized SemanticSearchMixin
 
     def initialize_schema(self) -> bool:
         """Create Neo4j schema (constraints and indexes)"""
@@ -274,6 +275,16 @@ class CognitiveGraph:
             logger.error(f"[CognitiveGraph] Failed to add Q&A: {e}")
             return False
 
+        # Index new nodes for semantic search
+        try:
+            if self._semantic is not None:
+                self._semantic._index_node("Question", question.id, question.text)
+                self._semantic._index_node("Answer", answer.id, answer.text)
+                if company:
+                    self._semantic._index_node("Company", company.id, company.name)
+        except Exception as e:
+            logger.debug("[CognitiveGraph] Failed to index node for semantic search: %s", e)
+
     def add_topics_to_question(self, question_id: str, topics: List[TopicNode]) -> bool:
         """Link topics to a question"""
         if not self.driver:
@@ -339,7 +350,38 @@ class CognitiveGraph:
             return False
 
     def semantic_search(self, query: str, limit: int = 10) -> List[Dict]:
-        """Search for related questions/answers by concept with fuzzy matching"""
+        """Search for related questions/answers by concept with fuzzy matching.
+
+        Uses embedding-based semantic search when available, falls back to
+        Cypher CONTAINS keyword search otherwise.
+        """
+        # Try semantic (embedding) search first
+        if self._try_init_semantic():
+            results = self._semantic.semantic_search(query, limit, driver=self.driver)
+            if results:
+                return results
+
+        # Fallback to keyword-based Cypher search
+        return self._legacy_keyword_search(query, limit)
+
+    def _try_init_semantic(self):
+        """Lazily initialize the SemanticSearchMixin."""
+        if self._semantic is not None:
+            return True
+
+        try:
+            from semantic_search import SemanticSearchMixin
+            from embedding_service import EMBEDDING_AVAILABLE
+            if EMBEDDING_AVAILABLE:
+                self._semantic = SemanticSearchMixin(neo4j_driver=self.driver)
+                return True
+        except Exception as e:
+            logger.debug("[CognitiveGraph] Semantic search unavailable: %s", e)
+
+        return False
+
+    def _legacy_keyword_search(self, query: str, limit: int = 10) -> List[Dict]:
+        """Original Cypher CONTAINS-based keyword search (fallback)."""
         if not self.driver:
             return []
 

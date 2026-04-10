@@ -736,10 +736,14 @@ class PredictiveInterview:
         }
 
     def _normalize_company_name(self, name: str) -> str:
-        """Normalize company name to match database keys"""
+        """Normalize company name to match database keys.
+
+        Tries exact alias lookup first, then semantic similarity matching
+        via EmbeddingService if available.
+        """
         name = name.strip().lower()
 
-        # Common aliases
+        # Fast path: exact alias lookup
         aliases = {
             "google": "Google",
             "alphabet": "Google",
@@ -780,7 +784,23 @@ class PredictiveInterview:
             "reddit": "Reddit"
         }
 
-        return aliases.get(name, name.capitalize())
+        if name in aliases:
+            return aliases[name]
+
+        # Semantic fallback: find closest company name via embeddings
+        try:
+            from embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
+            if EMBEDDING_AVAILABLE:
+                service = get_embedding_service()
+                if service:
+                    company_names = list(self.question_db.keys())
+                    results = service.find_most_similar(name, company_names, top_k=1, threshold=0.5)
+                    if results:
+                        return company_names[results[0][0]]
+        except Exception:
+            pass
+
+        return name.capitalize()
 
     def _normalize_role(self, role: str) -> str:
         """Normalize role to match pattern keys"""
