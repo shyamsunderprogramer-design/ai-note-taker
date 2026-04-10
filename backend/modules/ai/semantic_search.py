@@ -43,7 +43,7 @@ class SemanticSearchMixin:
         """Lazily get the embedding service."""
         if self._embedding_service is None:
             try:
-                from embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
+                from modules.ai.embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
                 if EMBEDDING_AVAILABLE:
                     self._embedding_service = get_embedding_service()
             except Exception as e:

@@ -259,7 +259,7 @@ class SmartClassifier:
         Requires EmbeddingService to be available.
         """
         try:
-            from embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
+            from modules.ai.embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
             if not EMBEDDING_AVAILABLE:
                 return None
 
@@ -286,7 +286,7 @@ class SmartClassifier:
     def _fallback_classify_question(self, text: str) -> Tuple[str, float]:
         """Fallback using EntityExtractor keyword matching."""
         try:
-            from entity_extraction import entity_extractor
+            from modules.ai.entity_extraction import entity_extractor
             result = entity_extractor.categorize_question(text)
             if isinstance(result, tuple):
                 return result

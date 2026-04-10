@@ -1,0 +1,10 @@
+# Optional ML dependencies for semantic search and zero-shot classification
+# Install with: pip install -r requirements-ml.txt
+#
+# These provide enhanced AI capabilities:
+# - sentence-transformers: Embedding service for semantic search, company matching
+# - Zero-shot classification (included via transformers): Question categorization,
+#   difficulty assessment, conversation type detection
+#
+# If not installed, all features fall back to keyword-based methods.
+sentence-transformers>=2.6.0
