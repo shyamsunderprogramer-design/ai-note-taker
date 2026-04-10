@@ -33,7 +33,7 @@
       "repo": "ai-note-taker",
       "releaseType": "release"
     },
-    "signAndEditExecutable": false,
+    "forceCodeSigning": false,
     "win": {
       "target": [
         {
