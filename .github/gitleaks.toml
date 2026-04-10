@@ -1,0 +1,40 @@
+# GitLeaks configuration for AI Note Taker
+# https://gitleaks.io/
+
+[allowlist]
+  description = "Global allow list for known false positives"
+  paths = [
+    '''backend/.env.example''',
+    '''backend/tests/test_.*\.py$''',
+    '''\.devsecops/.*$''',
+  ]
+
+  regexes = [
+    '''admin123''',                    # Default test password (only in test fixtures)
+    '''postgres:postgres''',            # Default local DB credentials
+    '''localhost:\d+''',               # Local service URLs
+    '''127\.0\.0\.1:\d+''',            # Local service URLs
+    '''your-32-char-encryption-key''',  # Placeholder in .env.example
+    '''your-ollama-cloud-api-key''',   # Placeholder in .env.example
+    '''sk-\.\.\.''',                   # Masked API key placeholders
+    '''AIza\.\.\.''',                  # Masked Google API key placeholders
+    '''ghp_\.\.\.''',                  # Masked GitHub token placeholders
+  ]
+
+[[rules]]
+  id = "ollama-cloud-api-key"
+  description = "Ollama Cloud API Key"
+  regex = '''ollama_cloud_api_key\s*=\s*[a-zA-Z0-9]{20,}'''
+  tags = ["key", "ollama"]
+
+[[rules]]
+  id = "encryption-key"
+  description = "Encryption Key"
+  regex = '''encryption_key\s*=\s*[a-zA-Z0-9]{32,}'''
+  tags = ["key", "encryption"]
+
+[[rules]]
+  id = "neo4j-password"
+  description = "Neo4j Password"
+  regex = '''neo4j_password\s*=\s*[a-zA-Z0-9!@#$%^&*]{8,}'''
+  tags = ["key", "neo4j"]

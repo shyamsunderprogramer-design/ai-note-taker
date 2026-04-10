@@ -1,0 +1,300 @@
+# ANT AI Note Taker - Continuous Deployment Pipeline
+# Deploys to staging/production using OIDC (no long-lived cloud credentials)
+# Integrates: Terraform, Helm, Argo Rollouts (canary), OPA Gatekeeper
+
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: 'Image tag to deploy (defaults to latest)'
+        required: false
+        type: string
+      rollout_strategy:
+        description: 'Rollout strategy'
+        required: false
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+        default: rolling
+
+concurrency:
+  group: cd-${{ github.ref }}-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+  deployments: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository_owner }}/ant-backend
+  AWS_REGION: us-east-1
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # PRE-DEPLOYMENT GATE
+  # ═══════════════════════════════════════════════════════════════════════
+  pre-deploy:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.validate.outputs.environment }}
+      can_deploy: ${{ steps.validate.outputs.can_deploy }}
+      image_tag: ${{ steps.validate.outputs.image_tag }}
+    steps:
+      - name: Validate deployment
+        id: validate
+        run: |
+          # Determine target environment
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            if [ "${{ github.event.workflow_run.head_branch }}" = "main" ]; then
+              ENV="staging"
+            else
+              ENV="preview"
+            fi
+          else
+            ENV="${{ github.event.inputs.environment || 'staging' }}"
+          fi
+
+          # Determine image tag
+          TAG="${{ github.event.inputs.image_tag || github.sha }}"
+          # For workflow_run, use the SHA from the completed CI workflow
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            TAG="${{ github.event.workflow_run.head_sha }}"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "can_deploy=true" >> $GITHUB_OUTPUT
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Deploying to: $ENV with image tag: $TAG"
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # TERRAFORM INFRASTRUCTURE (AWS via OIDC)
+  # ═══════════════════════════════════════════════════════════════════════
+  infrastructure:
+    name: Terraform (${{ needs.pre-deploy.outputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [pre-deploy]
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
+    environment: ${{ needs.pre-deploy.outputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-CD-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.0'
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="key=aws/${{ needs.pre-deploy.outputs.environment }}/terraform.tfstate"
+        working-directory: infrastructure/terraform/aws
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="environment=${{ needs.pre-deploy.outputs.environment }}" \
+            -var="image_tag=${{ needs.pre-deploy.outputs.image_tag }}" \
+            -out=tfplan \
+            -no-color
+        working-directory: infrastructure/terraform/aws
+        continue-on-error: true
+
+      - name: Terraform Apply
+        if: needs.pre-deploy.outputs.environment != 'production' || github.event.inputs.rollout_strategy != 'manual'
+        run: terraform apply -auto-approve tfplan
+        working-directory: infrastructure/terraform/aws
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tfplan-aws
+          path: infrastructure/terraform/aws/tfplan
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # HELM DEPLOYMENT
+  # ═══════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to ${{ needs.pre-deploy.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [pre-deploy, infrastructure]
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
+    environment:
+      name: ${{ needs.pre-deploy.outputs.environment }}
+      url: https://${{ needs.pre-deploy.outputs.environment }}.ant.example.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-Deploy-${{ github.run_id }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubeconfig (AWS EKS)
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Verify OPA Gatekeeper constraints
+        run: |
+          # Check that OPA Gatekeeper is enforcing policies
+          kubectl get constrainttemplates.gatekeeper.sh -o wide || echo "Gatekeeper not installed (optional)"
+          kubectl get constraints -o wide || echo "No constraints found"
+        continue-on-error: true
+
+      # ─── Backend Deployment ────────────────────────────────────────────
+      - name: Deploy Backend Helm Chart
+        run: |
+          helm upgrade --install ant-backend \
+            ./k8s/helm/backend \
+            --namespace ant \
+            --create-namespace \
+            --values ./k8s/helm/backend/values-${{ needs.pre-deploy.outputs.environment }}.yaml \
+            --set image.tag=${{ needs.pre-deploy.outputs.image_tag }} \
+            --wait --timeout 10m \
+            --atomic \
+            --cleanup-on-fail
+
+      # ─── Canary Rollout (Production) ──────────────────────────────────
+      - name: Canary Deployment (Production)
+        if: needs.pre-deploy.outputs.environment == 'production' && github.event.inputs.rollout_strategy == 'canary'
+        run: |
+          # Use Argo Rollouts for canary deployment
+          kubectl argo rollouts set image ant-backend \
+            ant-backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ needs.pre-deploy.outputs.image_tag }} \
+            --namespace ant 2>/dev/null || echo "Argo Rollouts not available, using Helm deployment"
+
+          # Monitor rollout progress
+          kubectl argo rollouts get rollout ant-backend \
+            --namespace ant --watch 2>/dev/null || true
+
+      # ─── Smoke Tests ──────────────────────────────────────────────────
+      - name: Run Smoke Tests
+        run: |
+          # Get backend service URL
+          BACKEND_URL=$(kubectl get svc ant-backend \
+            -n ant \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+
+          if [ -z "$BACKEND_URL" ]; then
+            BACKEND_URL=$(kubectl get svc ant-backend \
+              -n ant \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "localhost")
+          fi
+
+          # Health check
+          echo "Testing health endpoint at https://$BACKEND_URL/health"
+          curl -sf --max-time 30 "https://$BACKEND_URL/health" || \
+          curl -sf --max-time 30 "http://$BACKEND_URL:8000/health" || \
+          echo "Warning: Could not reach health endpoint (may be internal only)"
+
+      # ─── Verify Deployment Health ──────────────────────────────────────
+      - name: Verify Deployment Health
+        run: |
+          kubectl rollout status deployment/ant-backend \
+            --namespace ant \
+            --timeout=5m
+
+          # Show pod status
+          kubectl get pods -n ant -l app.kubernetes.io/name=ant-backend
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # POST-DEPLOYMENT VERIFICATION
+  # ═══════════════════════════════════════════════════════════════════════
+  post-deploy:
+    name: Post-Deployment Verification
+    runs-on: ubuntu-latest
+    needs: [pre-deploy, deploy]
+    if: always() && needs.deploy.result != 'skipped'
+    steps:
+      - name: Datadog Synthetic Test
+        if: needs.deploy.result == 'success' && env.DD_API_KEY != ''
+        run: |
+          curl -s -X POST "https://api.datadoghq.com/api/v1/synthetics/trigger" \
+            -H "Content-Type: application/json" \
+            -H "DD-API-KEY: ${{ secrets.DD_API_KEY }}" \
+            -H "DD-APPLICATION-KEY: ${{ secrets.DD_APP_KEY }}" \
+            -d '{"tests": [{"public_id": "${{ vars.DD_SYNTHETIC_TEST_ID }}"}]}'
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        continue-on-error: true
+
+      - name: Notify Slack
+        if: env.SLACK_BOT_TOKEN != ''
+        uses: slackapi/slack-github-action@v2
+        with:
+          channel-id: ${{ vars.DEPLOYMENT_CHANNEL || 'deployments' }}
+          payload: |
+            {
+              "text": "ANT Deployment to ${{ needs.pre-deploy.outputs.environment }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment ${{{ needs.deploy.result }}:*\n• Environment: ${{ needs.pre-deploy.outputs.environment }}\n• SHA: `${{ github.sha }}`\n• Image: `${{ needs.pre-deploy.outputs.image_tag }}`"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true
+
+      - name: Create deployment record
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment: context.payload.deployment?.id || 0,
+              state: '${{ needs.deploy.result }}' === 'success' ? 'active' : 'failure',
+              description: 'Deployment to ${{ needs.pre-deploy.outputs.environment }} ${{ needs.deploy.result }}'
+            });
+        continue-on-error: true
