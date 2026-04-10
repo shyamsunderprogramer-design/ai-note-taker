@@ -54,7 +54,7 @@ contextBridge.exposeInMainWorld("api", {
       url += `&context=${encodedContext}`
     }
     if (Array.isArray(enabledProviders)) {
-      url += `&enabled=${encodedURIComponent(enabledProviders.join(","))}`
+      url += `&enabled=${encodeURIComponent(enabledProviders.join(","))}`
     }
     return url
   },
@@ -227,12 +227,6 @@ contextBridge.exposeInMainWorld("api", {
     })
     return response.json()
   },
-
-  // Save file with dialog (already exists, ensure it's exposed)
-  saveFile: (options) => ipcRenderer.invoke("dialog:save-file", options),
-
-  // Import file with optional decryption (already exists, ensure it's exposed)
-  importFile: (options) => ipcRenderer.invoke("dialog:import-file", options),
 
   // Analytics
   recordAnalytics: async (data) => {
