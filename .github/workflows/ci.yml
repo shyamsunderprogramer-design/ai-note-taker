@@ -142,6 +142,8 @@ jobs:
 
       - name: Install Python dependencies
         run: |
+          # Replace Windows-only onnxruntime-directml with cross-platform onnxruntime
+          sed -i 's/onnxruntime-directml==.*/onnxruntime>=1.17.0/' requirements.txt
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
         working-directory: ./backend
