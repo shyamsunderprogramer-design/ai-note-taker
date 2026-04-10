@@ -1,0 +1,341 @@
+# ANT AI Note Taker - Security Scanning Pipeline
+# Daily scheduled + on-push + on-demand scanning
+# Integrates: Snyk, Trivy, GitLeaks, Checkov, Bandit, OPA Conftest
+
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '7 2 * * *'  # Daily at ~2:07 AM (off-peak)
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of scan'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - sca
+          - sast
+          - container
+          - secrets
+          - iac
+          - policy
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'electron/**'
+      - 'infrastructure/**'
+      - 'docker/**'
+      - 'k8s/**'
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository_owner }}/ant-backend
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # SNYK SCA (Software Composition Analysis)
+  # ═══════════════════════════════════════════════════════════════════════
+  snyk-sca:
+    name: Snyk Dependency Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'sca' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Snyk (Python)
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: ./electron
+
+      - name: Run Snyk (Node.js)
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        with:
+          args: --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Upload Snyk report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snyk-report
+          path: snyk_results.json
+          retention-days: 30
+
+      - name: Create GitHub Issue for critical vulns
+        if: github.event_name == 'schedule' && env.SNYK_TOKEN != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const report = JSON.parse(fs.readFileSync('snyk_results.json', 'utf8'));
+              const criticals = report.vulnerabilities?.filter(v => v.severity === 'critical') || [];
+              if (criticals.length > 0) {
+                github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `[Security] ${criticals.length} critical vulnerabilities found`,
+                  body: criticals.map(v => `- **${v.package}**: ${v.title} (${v.severity})`).join('\n'),
+                  labels: ['security', 'critical']
+                });
+              }
+            } catch (e) { console.log('No Snyk report found'); }
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # TRIVY CONTAINER SCAN
+  # ═══════════════════════════════════════════════════════════════════════
+  trivy-scan:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'container' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: |
+          docker build -t ant-backend:scan -f docker/Dockerfile.backend .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ant-backend:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+          vuln-type: 'os,library'
+
+      - name: Upload Trivy scan results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Generate Trivy HTML report
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ant-backend:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GITLEAKS SECRET DETECTION
+  # ═══════════════════════════════════════════════════════════════════════
+  secrets-scan:
+    name: Secret Detection (GitLeaks)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'secrets' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: GitLeaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .github/gitleaks.toml
+
+      - name: Upload GitLeaks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CHECKOV IaC SECURITY SCAN
+  # ═══════════════════════════════════════════════════════════════════════
+  checkov-iac:
+    name: IaC Security (Checkov)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'iac' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov (Terraform)
+        uses: bridgecrewio/checkov-action@master
+        continue-on-error: true
+        with:
+          directory: infrastructure/terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+
+      - name: Run Checkov (Kubernetes)
+        uses: bridgecrewio/checkov-action@master
+        continue-on-error: true
+        with:
+          directory: k8s
+          framework: kubernetes
+          output_format: sarif
+          output_file_path: checkov-k8s-results.sarif
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'checkov-results.sarif'
+        continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # OPA POLICY CHECKS (Conftest)
+  # ═══════════════════════════════════════════════════════════════════════
+  opa-policy:
+    name: OPA Policy-as-Code
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'policy' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Conftest
+        run: |
+          wget -q https://github.com/open-policy-agent/conftest/releases/download/v0.53.0/conftest_0.53.0_Linux_x86_64.tar.gz
+          tar xzf conftest_0.53.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+
+      - name: Create OPA policy directory
+        run: mkdir -p .github/opa-policies
+
+      - name: Validate Docker policies
+        run: |
+          conftest test docker/Dockerfile.backend \
+            --policy .github/opa-policies/ \
+            --output table || true
+        continue-on-error: true
+
+      - name: Validate Kubernetes policies
+        run: |
+          conftest test k8s/helm/backend/templates/ \
+            --policy .github/opa-policies/ \
+            --output table || true
+        continue-on-error: true
+
+      - name: Validate Terraform policies
+        run: |
+          for dir in infrastructure/terraform/*/; do
+            if [ -d "$dir" ]; then
+              echo "OPA policy check for $dir"
+              conftest test "$dir" --policy .github/opa-policies/ --output table || true
+            fi
+          done
+        continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # BANDIT PYTHON SECURITY LINT
+  # ═══════════════════════════════════════════════════════════════════════
+  bandit:
+    name: Bandit Python Security
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'sast' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Bandit
+        run: pip install bandit bandit-sarif-formatter
+
+      - name: Run Bandit
+        run: |
+          bandit -r . -f sarif -o bandit-results.sarif || true
+        working-directory: ./backend
+
+      - name: Upload Bandit results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: backend/bandit-results.sarif
+        continue-on-error: true
+
+      - name: Upload Bandit artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: backend/bandit-results.sarif
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # DEPENDENCY REVIEW (PRs only)
+  # ═══════════════════════════════════════════════════════════════════════
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: critical
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SECURITY SUMMARY
+  # ═══════════════════════════════════════════════════════════════════════
+  summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [snyk-sca, trivy-scan, secrets-scan, checkov-iac, opa-policy, bandit]
+    if: always()
+    steps:
+      - name: Download all scan artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports
+
+      - name: Generate summary
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Snyk SCA | ${{ needs.snyk-sca.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Container | ${{ needs.trivy-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| GitLeaks Secrets | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkov IaC | ${{ needs.checkov-iac.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OPA Policy | ${{ needs.opa-policy.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bandit Python | ${{ needs.bandit.result }} |" >> $GITHUB_STEP_SUMMARY

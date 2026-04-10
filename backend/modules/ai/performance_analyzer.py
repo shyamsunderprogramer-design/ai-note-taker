@@ -74,7 +74,8 @@ class PerformanceAnalyzer:
             r'\bi\s+had\s+to\b', r'\bmy\s+responsibility\b', r'\bi\s+was\s+asked\b',
             r'\bneeded\s+to\b', r'\brequired\s+to\b', r'\bmy\s+task\s+was\b',
             r'\bi\s+needed\b', r'\bchallenge\s+was\b', r'\bobjective\s+was\b',
-            r'\bgoal\s+was\b', r'\bmanaged\b', r'\blead\b'
+            r'\bgoal\s+was\b', r'\bmanaged\b', r'\blead\b',
+            r'\bi\s+was\s+responsible\b'
         ],
         "action": [
             r'\bi\s+did\b', r'\bi\s+implemented\b', r'\bi\s+created\b',
@@ -297,7 +298,7 @@ class PerformanceAnalyzer:
             complexity_indicators = [
                 (r'\b(recursion|recursive)\b', "uses recursion"),
                 (r'\b(dynamic\s+programming|memoization)\b', "uses advanced techniques"),
-                (r'\bO\(n\^2\)|O\(2\^n\)|O\(n!\)\b', "complex time complexity"),
+                (r'O\(n[²\^2]\)|O\(2\^n\)|O\(n!\)|O\(n\s*\^\s*2\)', "complex time complexity"),
             ]
 
             complexity_score = sum(
@@ -307,9 +308,9 @@ class PerformanceAnalyzer:
 
             # Check for best practices
             best_practice_indicators = [
-                (r'\b(error\s+handling|try\s+catch|exception)\b', "error handling"),
+                (r'\b(error\s+handling|try\s+catch|try\s*:|except\b|exception)\b', "error handling"),
                 (r'\b(unit\s+test|test\s+case|assert)\b', "testing"),
-                (r'\b(documentation|comment|docstring)\b', "documentation"),
+                (r'\b(documentation|comment|docstring|#\s)', "documentation"),
                 (r'\b(edge\s+case|corner\s+case|boundary)\b', "edge cases"),
             ]
 
@@ -318,15 +319,15 @@ class PerformanceAnalyzer:
                 if re.search(pattern, text, re.IGNORECASE)
             )
 
-            # Check for issues
-            issue_patterns = [
-                (r'\b(goto)\b', "Avoid using goto statements"),
-                (r'\b(var\s+\w+\s*=)[^;]*;\s*\1', "Variable redeclaration"),
-            ]
+        # Check for issues (even in plain text answers)
+        issue_patterns = [
+            (r'\b(goto)\b', "Avoid using goto statements"),
+            (r'\b(var\s+\w+\s*=)[^;]*;\s*\1', "Variable redeclaration"),
+        ]
 
-            for pattern, message in issue_patterns:
-                if re.search(pattern, text, re.IGNORECASE):
-                    issues.append(message)
+        for pattern, message in issue_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                issues.append(message)
 
         return CodeQualityMetrics(
             has_code=has_code,

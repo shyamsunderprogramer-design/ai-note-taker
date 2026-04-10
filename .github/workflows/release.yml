@@ -1,0 +1,357 @@
+# ANT AI Note Taker - Release Management Pipeline
+# Manages semantic versioning, multi-platform builds, SBOM, and GitHub releases
+# Trigger: manual dispatch with version input, or tag push (v*)
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version (e.g., 1.0.0) or "patch"/"minor"/"major" for bump'
+        required: true
+        default: 'patch'
+      changelog:
+        description: 'Custom changelog notes (optional)'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository_owner }}/ant-backend
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # DETERMINE VERSION
+  # ═══════════════════════════════════════════════════════════════════════
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+
+          # Handle bump keywords
+          case "$VERSION" in
+            patch|minor|major)
+              CURRENT=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+              CURRENT="${CURRENT#v}"  # Strip leading 'v'
+              IFS='.' read -r Major Minor Patch <<< "$CURRENT"
+
+              case "$VERSION" in
+                patch) Patch=$((Patch + 1)) ;;
+                minor) Minor=$((Minor + 1)); Patch=0 ;;
+                major) Major=$((Major + 1)); Minor=0; Patch=0 ;;
+              esac
+              VERSION="$Major.$Minor.$Patch"
+              ;;
+          esac
+
+          # Validate version format
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GENERATE CHANGELOG
+  # ═══════════════════════════════════════════════════════════════════════
+  changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    needs: [version]
+    outputs:
+      changelog: ${{ steps.changelog.outputs.content }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION=${{ needs.version.outputs.version }}
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD 2>/dev/null || echo "")
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" -20 || echo "")
+          fi
+
+          # Add custom notes if provided
+          if [[ -n "${{ github.event.inputs.changelog }}" ]]; then
+            CHANGELOG="$CHANGELOG"$'\n\n'"### Notes"$'\n'"${{ github.event.inputs.changelog }}"
+          fi
+
+          {
+            echo "content<<EOF"
+            echo "## What's Changed"
+            echo ""
+            echo "$CHANGELOG"
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/...v$VERSION"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # BUILD ELECTRON (Multi-OS)
+  # ═══════════════════════════════════════════════════════════════════════
+  build-electron:
+    name: Build Electron (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: win
+            build_cmd: npm run build:win
+          - os: macos-latest
+            artifact_name: mac
+            build_cmd: npm run build:mac
+          - os: ubuntu-latest
+            artifact_name: linux
+            build_cmd: npm run build:linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnotify-dev libsoup2.4-dev libappindicator3-dev libxtst-dev
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./electron
+
+      - name: Build Electron App
+        run: ${{ matrix.build_cmd }}
+        working-directory: ./electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ant-electron-${{ matrix.artifact_name }}
+          path: |
+            electron/dist/**/*.exe
+            electron/dist/**/*.dmg
+            electron/dist/**/*.AppImage
+            electron/dist/**/*.deb
+          retention-days: 14
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # BUILD & PUSH DOCKER IMAGE
+  # ═══════════════════════════════════════════════════════════════════════
+  build-docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [version]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ needs.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GENERATE SBOM
+  # ═══════════════════════════════════════════════════════════════════════
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: [version]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Generate Python SBOM (CycloneDX)
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py requirements --format xml --output-file backend-bom.xml
+        working-directory: ./backend
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Generate Node.js SBOM (CycloneDX)
+        run: |
+          npm install -g @cyclonedx/cyclonedx-npm
+          cyclonedx-npm --output-format xml --output-file ../../node-bom.xml
+        working-directory: ./electron
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            backend/backend-bom.xml
+            node-bom.xml
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CREATE GITHUB RELEASE
+  # ═══════════════════════════════════════════════════════════════════════
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [version, changelog, build-electron, build-docker, sbom]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Release v${{ needs.version.outputs.version }}
+          body: ${{ needs.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease == 'true' || contains(needs.version.outputs.version, 'alpha') || contains(needs.version.outputs.version, 'beta') }}
+          files: |
+            artifacts/ant-electron-win/**.exe
+            artifacts/ant-electron-mac/**.dmg
+            artifacts/ant-electron-linux/**.AppImage
+            artifacts/sbom/backend-bom.xml
+            artifacts/sbom/node-bom.xml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Helm chart version
+        run: |
+          sed -i "s/appVersion:.*/appVersion: \"${{ needs.version.outputs.version }}\"/" k8s/helm/backend/Chart.yaml
+          sed -i "s/^version:.*/version: ${{ needs.version.outputs.version }}/" k8s/helm/backend/Chart.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/helm/backend/Chart.yaml
+          git commit -m "chore: bump chart version to ${{ needs.version.outputs.version }}" || true
+          git push
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # NOTIFY (Slack + Jira)
+  # ═══════════════════════════════════════════════════════════════════════
+  notify:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [version, release]
+    if: always()
+    steps:
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v2
+        if: env.SLACK_BOT_TOKEN != ''
+        with:
+          channel-id: ${{ vars.RELEASE_CHANNEL || 'releases' }}
+          payload: |
+            {
+              "text": "ANT Release v${{ needs.version.outputs.version }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*ANT Release v${{ needs.version.outputs.version }}*\nAuthor: ${{ github.actor }}\n<${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ needs.version.outputs.version }}|View Release>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true
+
+      - name: Create Jira Release
+        if: env.JIRA_URL != ''
+        run: |
+          curl -X POST "${{ secrets.JIRA_URL }}/rest/api/3/version" \
+            -H "Authorization: Basic ${{ secrets.JIRA_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"project\": \"${{ vars.JIRA_PROJECT_KEY }}\",
+              \"name\": \"v${{ needs.version.outputs.version }}\",
+              \"released\": true,
+              \"releaseDate\": \"$(date +%Y-%m-%d)\"
+            }"
+        env:
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+        continue-on-error: true
