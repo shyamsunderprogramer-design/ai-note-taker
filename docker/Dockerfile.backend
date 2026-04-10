@@ -21,6 +21,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy requirements first for caching
 COPY backend/requirements.txt /build/requirements.txt
 
+# Replace Windows-only packages with Linux equivalents for Docker
+# onnxruntime-directml is Windows-only; use onnxruntime on Linux
+RUN sed -i 's/onnxruntime-directml==.*/onnxruntime>=1.17.0/' requirements.txt
+
 # Install dependencies (compiled)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
