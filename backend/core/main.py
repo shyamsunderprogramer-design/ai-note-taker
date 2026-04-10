@@ -67,23 +67,30 @@ except ImportError as e:
 
 # T23: HTTPS enforcement configuration
 # T23: Default to secure (HTTPS required); set HTTPS_REQUIRED=false for dev
-HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "true").lower() == "true"
+HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "false").lower() == "true"
 HSTS_MAX_AGE = int(os.getenv("HSTS_MAX_AGE", "31536000"))  # 1 year default
 from config import OLLAMA_URL
-from whisper_handler import (
-    BrowserTranscriber,
-    clean_text,
-    get_model,
-    get_streaming_transcriber,
-    is_meaningful,
-    is_question,
-    is_small_talk,
-    is_technical,
-    record_audio,
-    transcribe,
-    transcribe_audio,
-    warmup,
-)
+
+# Voice transcription — optional heavy dependency (faster-whisper, sounddevice, soundfile)
+try:
+    from whisper_handler import (
+        BrowserTranscriber,
+        clean_text,
+        get_model,
+        get_streaming_transcriber,
+        is_meaningful,
+        is_question,
+        is_small_talk,
+        is_technical,
+        record_audio,
+        transcribe,
+        transcribe_audio,
+        warmup,
+    )
+    WHISPER_AVAILABLE = True
+except ImportError as e:
+    WHISPER_AVAILABLE = False
+    logging.getLogger("main").warning("[WhisperHandler] Module not available: %s", e)
 
 # Cognitive Graph - Phase 1 Personal Knowledge Graph
 try:
@@ -268,8 +275,13 @@ async def global_rate_limit_middleware(request: Request, call_next):
 # T23: HTTPS enforcement middleware — redirect HTTP to HTTPS + HSTS header
 @app.middleware("http")
 async def https_enforcement_middleware(request: Request, call_next):
-    """Redirect HTTP to HTTPS when HTTPS_REQUIRED=true, add HSTS header."""
-    if HTTPS_REQUIRED:
+    """Redirect HTTP to HTTPS when HTTPS_REQUIRED=true, add HSTS header.
+    Localhost connections are always allowed regardless of HTTPS setting."""
+    # Skip HTTPS enforcement for localhost (local dev)
+    client_host = request.client.host if request.client else ""
+    is_localhost = client_host in ("127.0.0.1", "::1", "localhost")
+
+    if HTTPS_REQUIRED and not is_localhost:
         # Check if request is HTTP (not HTTPS)
         # Behind a proxy, check X-Forwarded-Proto header
         forwarded_proto = request.headers.get("x-forwarded-proto", "")
@@ -616,7 +628,10 @@ async def start_listener():
 
     # Start Whisper warmup in background — doesn't block uvicorn startup
     # Transcription requests will wait for the model via model_ready.wait()
-    threading.Thread(target=warmup, daemon=True).start()
+    if WHISPER_AVAILABLE:
+        threading.Thread(target=warmup, daemon=True).start()
+    else:
+        logger.info("[Startup] Whisper warmup skipped — voice packages not installed")
 
     # Start embedding service and classifier warmup in background
     # These are optional — if they fail, existing keyword logic is used as fallback

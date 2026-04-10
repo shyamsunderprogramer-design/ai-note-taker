@@ -10,9 +10,33 @@ import queue
 
 import numpy as np
 import psutil
-import sounddevice as sd
-import soundfile as sf
-from faster_whisper import WhisperModel
+
+# Heavy ML packages — lazy-loaded so this module can be imported without them
+# (e.g. in CI test environments where torch/faster-whisper/sounddevice are not installed)
+_sd = None  # sounddevice module
+_sf = None  # soundfile module
+_WhisperModel = None  # faster_whisper.WhisperModel class
+
+def _get_sd():
+    global _sd
+    if _sd is None:
+        import sounddevice as mod
+        _sd = mod
+    return _sd
+
+def _get_sf():
+    global _sf
+    if _sf is None:
+        import soundfile as mod
+        _sf = mod
+    return _sf
+
+def _get_WhisperModel():
+    global _WhisperModel
+    if _WhisperModel is None:
+        from faster_whisper import WhisperModel as cls
+        _WhisperModel = cls
+    return _WhisperModel
 
 logger = logging.getLogger("whisper")
 
@@ -93,7 +117,7 @@ def get_model(mode="adaptive"):
         with _model_lock:
             if selected not in models:
                 logger.info("Loading Whisper model: %s", selected)
-                models[selected] = WhisperModel(selected, device=DEVICE)
+                models[selected] = _get_WhisperModel()(selected, device=DEVICE)
 
     return models[selected]
 
@@ -116,6 +140,7 @@ def record_audio(duration=RECORD_SECONDS, samplerate=SAMPLE_RATE):
     """
     Capture audio from microphone.
     """
+    sd = _get_sd()
 
     logger.debug("Listening...")
 
@@ -310,6 +335,7 @@ def transcribe_audio(file_path, mode="adaptive"):
     """
     Convert file to numpy to transcription.
     """
+    sf = _get_sf()
 
     try:
         audio, samplerate = sf.read(file_path)
@@ -397,6 +423,7 @@ class StreamingTranscriber:
     def _capture_loop(self):
         """Background thread: continuously capture 100ms chunks and build segments."""
         try:
+            sd = _get_sd()
             samples_per_segment = int(self.segment_duration * self.samplerate)
             samples_overlap = int(self.overlap_duration * self.samplerate)
             chunk_size = int(0.1 * self.samplerate)  # 100ms chunks

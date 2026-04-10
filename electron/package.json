@@ -18,8 +18,12 @@
     "voice",
     "electron"
   ],
-  "author": "",
+  "author": {
+    "name": "AI Note Taker",
+    "email": "dev@ainotetaker.com"
+  },
   "license": "ISC",
+  "homepage": "https://github.com/shyamsunderprogramer-design/ai-note-taker",
   "type": "commonjs",
   "build": {
     "appId": "com.ainotetaker.app",
@@ -33,7 +37,7 @@
       "repo": "ai-note-taker",
       "releaseType": "release"
     },
-    "signAndEditExecutable": false,
+    "forceCodeSigning": false,
     "win": {
       "target": [
         {

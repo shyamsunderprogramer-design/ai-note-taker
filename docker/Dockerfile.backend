@@ -11,6 +11,7 @@ WORKDIR /build
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    g++ \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,6 +21,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements first for caching
 COPY backend/requirements.txt /build/requirements.txt
+
+# Replace Windows-only packages with Linux equivalents for Docker
+# onnxruntime-directml is Windows-only; use onnxruntime on Linux
+RUN sed -i 's/onnxruntime-directml==.*/onnxruntime>=1.17.0/' requirements.txt
 
 # Install dependencies (compiled)
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -80,7 +85,7 @@ RUN pip install cyclonedx-bom
 # Generate SBOM
 WORKDIR /src
 COPY backend/ /src/
-RUN cyclonedx-py requirements.txt -o /src/bom.xml
+RUN cyclonedx-py requirements -i requirements.txt -o /src/bom.xml
 
 # Export SBOM as artifact
 FROM scratch AS sbom-export
