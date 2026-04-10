@@ -223,7 +223,7 @@ class ConversationAnalyzer:
 
         # Try SmartClassifier first if available
         try:
-            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            from modules.ai.smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
             if CLASSIFIER_AVAILABLE:
                 classifier = get_classifier()
                 if classifier:

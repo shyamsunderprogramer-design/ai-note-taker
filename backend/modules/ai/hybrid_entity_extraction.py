@@ -32,7 +32,7 @@ except ImportError as e:
     nlp = None
 
 # Import existing rule-based extractor
-from entity_extraction import (
+from modules.ai.entity_extraction import (
     entity_extractor,
     COMPANY_NAMES,
     TECHNICAL_TOPICS,
@@ -314,7 +314,7 @@ class HybridEntityExtractor:
         """Categorize a question using smart classifier, spaCy, or rule-based approach"""
         # Try SmartClassifier first (zero-shot)
         try:
-            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            from modules.ai.smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
             if CLASSIFIER_AVAILABLE:
                 classifier = get_classifier()
                 if classifier:
@@ -331,7 +331,7 @@ class HybridEntityExtractor:
         """Estimate question difficulty using smart classifier or rule-based approach"""
         # Try SmartClassifier first (zero-shot)
         try:
-            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            from modules.ai.smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
             if CLASSIFIER_AVAILABLE:
                 classifier = get_classifier()
                 if classifier:

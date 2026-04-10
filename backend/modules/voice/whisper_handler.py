@@ -100,7 +100,7 @@ def get_model(mode="adaptive"):
 
 def unload_all_models():
     """Unload all cached Whisper models to free memory."""
-    global models
+    global models  # noqa: F824
     with _model_lock:
         for name, model in models.items():
             logger.info("Unloading Whisper model: %s", name)

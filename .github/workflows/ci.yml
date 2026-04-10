@@ -71,7 +71,7 @@ jobs:
       - name: Pytest
         run: |
           pip install pytest pytest-asyncio pytest-cov httpx
-          pytest backend/tests/ -v --tb=short
+          pytest tests/ -v --tb=short
         working-directory: ./backend
 
       - name: Upload coverage
@@ -155,7 +155,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile --name ANTBackend main.py
+          pyinstaller --onefile --name ANTBackend core/main.py
         working-directory: ./backend
 
       - name: Upload Artifact

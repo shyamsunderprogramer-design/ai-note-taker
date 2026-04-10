@@ -789,7 +789,7 @@ class PredictiveInterview:
 
         # Semantic fallback: find closest company name via embeddings
         try:
-            from embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
+            from modules.ai.embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
             if EMBEDDING_AVAILABLE:
                 service = get_embedding_service()
                 if service:

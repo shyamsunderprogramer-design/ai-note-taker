@@ -285,6 +285,5 @@ def wait_for_service(timeout: float = 60) -> bool:
 
 def save_cache():
     """Save the embedding cache to disk. Call on shutdown."""
-    global _service
     if _service:
         _service._save_cache()

@@ -370,8 +370,8 @@ class CognitiveGraph:
             return True
 
         try:
-            from semantic_search import SemanticSearchMixin
-            from embedding_service import EMBEDDING_AVAILABLE
+            from modules.ai.semantic_search import SemanticSearchMixin
+            from modules.ai.embedding_service import EMBEDDING_AVAILABLE
             if EMBEDDING_AVAILABLE:
                 self._semantic = SemanticSearchMixin(neo4j_driver=self.driver)
                 return True

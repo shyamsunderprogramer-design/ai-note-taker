@@ -1,11 +1,15 @@
 # Integration tests for AI Note Taker API
 # Run with: pytest backend/tests/test_api_integration.py -v
+#
+# These tests require a running server at BASE_URL.
+# They are automatically skipped when the server is not reachable (e.g. in CI).
 
 import pytest
 import pytest_asyncio
 import httpx
 import asyncio
 import uuid
+import socket
 from typing import AsyncGenerator
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -13,6 +17,23 @@ BASE_URL = "http://127.0.0.1:8000"
 # Test user credentials - admin user is auto-created by UserManager
 TEST_USERNAME = "admin"
 TEST_PASSWORD = "admin123"
+
+
+def _server_available() -> bool:
+    """Check if the API server is reachable."""
+    try:
+        host, port = "127.0.0.1", 8000
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except (ConnectionRefusedError, OSError, TimeoutError):
+        return False
+
+
+# Skip entire module if server is not running
+pytestmark = pytest.mark.skipif(
+    not _server_available(),
+    reason="API server not running at http://127.0.0.1:8000 — start with: python -m core.main"
+)
 
 
 @pytest_asyncio.fixture
@@ -448,12 +469,12 @@ class TestMiscEndpoints:
 # ====================
 # ENDPOINT COUNT VERIFICATION
 # ====================
-def test_endpoint_count():
+def test_endpoint_count():  # noqa: F821
     """Verify we're testing a significant portion of endpoints."""
     # This test file should cover at least 30 endpoints
     # Count the number of test methods
     import inspect
-    test_methods = [m for m in dir(TestHealthEndpoints) if m.startswith('test_')]
+    test_methods = [m for m in dir(TestHealthEndpoints) if m.startswith('test_')]  # noqa: F821
     test_methods += [m for m in dir(TestAuthEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestProviderEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestConversationEndpoints) if m.startswith('test_')]
