@@ -59,15 +59,13 @@ function getRestartDelayMs(attempt) {
   return BACKEND_RESTART_BASE_DELAY_MS * Math.pow(2, attempt - 1)
 }
 
-// Keep window above all others - Windows-specific aggressive approach
+// Keep window above all others - uses platform-appropriate level
 function ensureTopmost(w) {
   if (!w || w.isDestroyed()) return
 
   if (PLATFORM === "win32") {
-    // Windows: use "normal" level which is actually the most reliable
-    // "screen-saver" and other levels can behave unexpectedly
-    // The key is to call it frequently and use moveTop()
-    w.setAlwaysOnTop(true, "normal")
+    // Windows: use "monitor" level — above all normal windows, PIP, fullscreen apps
+    w.setAlwaysOnTop(true, "monitor", 2147483647)
   } else if (PLATFORM === "darwin") {
     w.setAlwaysOnTop(true, "floating", 999)
   } else {
@@ -179,6 +177,8 @@ function createWindow() {
   // Generate a new CSP nonce for this window
   const cspNonce = crypto.randomBytes(16).toString("base64")
 
+  // Windows: use "monitor" level — above all normal windows, PIP, fullscreen apps
+  // This is the highest normal window level, only below system notifications
   win = new BrowserWindow(windowOpts)
 
   // Store nonce on the window webContents for access in CSP headers
@@ -187,7 +187,7 @@ function createWindow() {
   // Set always on top - "normal" level is most reliable on Windows
   // even though it sounds counter-intuitive
   if (PLATFORM === "win32") {
-    win.setAlwaysOnTop(true, "normal")
+    win.setAlwaysOnTop(true, "monitor", 2147483647)
   } else if (PLATFORM === "darwin") {
     win.setAlwaysOnTop(true, "floating", 999)
   }
@@ -675,8 +675,7 @@ ipcMain.handle("window:restore", () => {
   }
   w.show()
   w.focus()
-  w.moveTop()
-  w.setAlwaysOnTop(true, "normal")
+  ensureTopmost(w)
   // Restart auto-screenshot if it was enabled
   const savedAutoSS = store.get("autoScreenshotEnabled", false)
   if (savedAutoSS && !autoScreenshotInterval) {
@@ -689,9 +688,7 @@ ipcMain.handle("window:restore", () => {
 ipcMain.handle("window:force-top", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (!w) return
-  w.moveTop()
-  w.focus()
-  w.setAlwaysOnTop(true, "normal")
+  ensureTopmost(w)
   return true
 })
 
@@ -1051,15 +1048,14 @@ app.whenReady().then(async () => {
         win.restore()
         win.show()
         win.focus()
-        win.moveTop()
-        win.setAlwaysOnTop(true, "normal")
+        ensureTopmost(win)
       }
     } else {
       stealth.enable()
       store.set("stealthState", true)
       // Re-assert always on top after stealth enable
       if (win) {
-        win.setAlwaysOnTop(true, "normal")
+        ensureTopmost(win)
       }
     }
     if (win?.webContents) win.webContents.send("stealth:state-changed", {
@@ -1089,8 +1085,7 @@ app.whenReady().then(async () => {
       win.restore()
       win.show()
       win.focus()
-      win.moveTop()
-      win.setAlwaysOnTop(true, "normal")
+      ensureTopmost(win)
       // Restart auto-screenshot if enabled
       const savedAutoSS = store.get("autoScreenshotEnabled", false)
       if (savedAutoSS && !autoScreenshotInterval) {
@@ -1125,9 +1120,7 @@ app.whenReady().then(async () => {
     } else if (win) {
       win.show()
       win.focus()
-      // Aggressively bring to absolute front
-      win.moveTop()
-      win.setAlwaysOnTop(true, "normal")
+      ensureTopmost(win)
     }
   })
 })
