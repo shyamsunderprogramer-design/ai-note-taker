@@ -618,6 +618,19 @@ async def start_listener():
     # Transcription requests will wait for the model via model_ready.wait()
     threading.Thread(target=warmup, daemon=True).start()
 
+    # Start embedding service and classifier warmup in background
+    # These are optional — if they fail, existing keyword logic is used as fallback
+    try:
+        from config import EMBEDDING_ENABLED, CLASSIFIER_ENABLED
+        if EMBEDDING_ENABLED:
+            from modules.ai.embedding_service import warmup as embedding_warmup
+            threading.Thread(target=embedding_warmup, daemon=True, name="embedding-warmup").start()
+        if CLASSIFIER_ENABLED:
+            from modules.ai.smart_classifier import warmup as classifier_warmup
+            threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
+    except Exception as e:
+        logger.warning(f"[Startup] ML warmup skipped: {e}")
+
     if USE_AUTONOMOUS and listener_thread is None:
         listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
         listener_thread.start()
@@ -3331,7 +3344,7 @@ async def generate_personalized_study_plan(
 
 def _serialize_plan(plan) -> dict:
     """Serialize a StudyPlan object to a JSON-ready dict"""
-    return {
+    result = {
         "user_id": plan.user_id,
         "created_at": plan.created_at.isoformat(),
         "duration_days": plan.duration_days,
@@ -3347,11 +3360,15 @@ def _serialize_plan(plan) -> dict:
         "target_company": plan.target_company,
         "skill_gaps": plan.skill_gaps,
         "plan_type": plan.plan_type,
+        "personalization_context": getattr(plan, "personalization_context", None),
         "sessions": [
             {
                 "date": s.date.isoformat(),
                 "theme": s.theme,
                 "total_minutes": s.total_minutes,
+                "day_number": getattr(s, "day_number", 0),
+                "focus_task_id": getattr(s, "focus_task_id", None),
+                "stretch_task_id": getattr(s, "stretch_task_id", None),
                 "tasks": [
                     {
                         "id": t.id,
@@ -3361,7 +3378,11 @@ def _serialize_plan(plan) -> dict:
                         "category": t.category,
                         "estimated_minutes": t.estimated_minutes,
                         "completed": t.completed,
-                        "resources": t.resources
+                        "resources": t.resources,
+                        "parent_area": getattr(t, "parent_area", ""),
+                        "is_focus": getattr(t, "is_focus", False),
+                        "is_stretch": getattr(t, "is_stretch", False),
+                        "confidence_target": getattr(t, "confidence_target", 0.8),
                     }
                     for t in s.tasks
                 ]
@@ -3369,6 +3390,7 @@ def _serialize_plan(plan) -> dict:
             for s in plan.sessions
         ]
     }
+    return result
 
 
 @app.get("/study-plan/{user_id}")

@@ -228,6 +228,17 @@ class EntityExtractor:
 
     def categorize_question(self, text: str) -> Tuple[str, float]:
         """Categorize a question (technical, behavioral, system_design, knowledge)"""
+        # Try SmartClassifier first if available
+        try:
+            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            if CLASSIFIER_AVAILABLE:
+                classifier = get_classifier()
+                if classifier:
+                    return classifier.classify_question(text)
+        except Exception:
+            pass
+
+        # Fallback: keyword-based classification
         text_lower = text.lower()
         scores = {}
 
@@ -247,6 +258,17 @@ class EntityExtractor:
 
     def estimate_difficulty(self, text: str) -> Tuple[Optional[str], float]:
         """Estimate question difficulty"""
+        # Try SmartClassifier first if available
+        try:
+            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            if CLASSIFIER_AVAILABLE:
+                classifier = get_classifier()
+                if classifier:
+                    return classifier.classify_difficulty(text)
+        except Exception:
+            pass
+
+        # Fallback: keyword-based difficulty estimation
         text_lower = text.lower()
 
         for difficulty, keywords in DIFFICULTY_KEYWORDS.items():

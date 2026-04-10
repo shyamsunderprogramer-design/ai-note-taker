@@ -207,13 +207,32 @@ class DocumentStore:
         return embedding
 
     def _get_embedding(self, text: str) -> List[float]:
-        """Get embedding for text, with fallback."""
-        # Try Ollama first
-        embedding = self._get_embedding_ollama(text)
-        if embedding:
-            return embedding
+        """Get embedding for text, with fallback chain based on EMBEDDING_PROVIDER config."""
+        import os
+        provider = os.getenv("EMBEDDING_PROVIDER", "local")
 
-        # Fallback to local method
+        # Primary: sentence-transformers (local, no Ollama dependency)
+        if provider in ("local", "hybrid"):
+            try:
+                from modules.ai.embedding_service import get_embedding_service, EMBEDDING_AVAILABLE
+                if EMBEDDING_AVAILABLE:
+                    service = get_embedding_service()
+                    if service:
+                        return service.embed(text)
+            except Exception:
+                pass
+
+            if provider == "local":
+                # For local-only mode, skip Ollama and go straight to fallback
+                return self._get_embedding_local(text)
+
+        # Secondary: Ollama embedding API
+        if provider in ("ollama", "hybrid"):
+            embedding = self._get_embedding_ollama(text)
+            if embedding:
+                return embedding
+
+        # Tertiary: hash-based fallback
         return self._get_embedding_local(text)
 
     def add_document(self, file_path: str) -> Dict:

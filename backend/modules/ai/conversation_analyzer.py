@@ -221,6 +221,19 @@ class ConversationAnalyzer:
         title_lower = title.lower()
         text_sample = ' '.join([m.get('content', m.get('text', '')) for m in messages[:5]]).lower()
 
+        # Try SmartClassifier first if available
+        try:
+            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            if CLASSIFIER_AVAILABLE:
+                classifier = get_classifier()
+                if classifier:
+                    conv_type, confidence = classifier.classify_conversation_type(title, text_sample)
+                    if confidence > 0.5:
+                        return conv_type
+        except Exception:
+            pass
+
+        # Fallback: keyword-based classification
         scores = {}
 
         for conv_type, patterns in self.TYPE_PATTERNS.items():

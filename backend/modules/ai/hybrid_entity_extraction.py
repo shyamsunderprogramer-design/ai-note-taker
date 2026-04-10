@@ -311,11 +311,37 @@ class HybridEntityExtractor:
         return round(min(score, 1.0), 2)
 
     def categorize_question(self, text: str) -> Tuple[str, float]:
-        """Categorize a question using rule-based approach"""
+        """Categorize a question using smart classifier, spaCy, or rule-based approach"""
+        # Try SmartClassifier first (zero-shot)
+        try:
+            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            if CLASSIFIER_AVAILABLE:
+                classifier = get_classifier()
+                if classifier:
+                    category, confidence = classifier.classify_question(text)
+                    if confidence > 0.6:
+                        return (category, confidence)
+        except Exception:
+            pass
+
+        # Fallback to rule-based
         return self.rule_extractor.categorize_question(text)
 
     def estimate_difficulty(self, text: str) -> Tuple[Optional[str], float]:
-        """Estimate question difficulty"""
+        """Estimate question difficulty using smart classifier or rule-based approach"""
+        # Try SmartClassifier first (zero-shot)
+        try:
+            from smart_classifier import get_classifier, CLASSIFIER_AVAILABLE
+            if CLASSIFIER_AVAILABLE:
+                classifier = get_classifier()
+                if classifier:
+                    difficulty, confidence = classifier.classify_difficulty(text)
+                    if confidence > 0.6:
+                        return (difficulty, confidence)
+        except Exception:
+            pass
+
+        # Fallback to rule-based
         return self.rule_extractor.estimate_difficulty(text)
 
     def _empty_result(self) -> Dict:

@@ -98,6 +98,32 @@ def get_ai_model(mode="adaptive"):
 
 
 # ==============================
+# 🔮 EMBEDDING SERVICE
+# ==============================
+# Local sentence-transformers embeddings for semantic search
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+EMBEDDING_DEVICE = os.getenv("EMBEDDING_DEVICE", "auto")
+EMBEDDING_CACHE_SIZE = int(os.getenv("EMBEDDING_CACHE_SIZE", "10000"))
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local")  # local, ollama, hybrid
+
+# Enable/disable embedding service (set to "false" to save ~120MB RAM)
+EMBEDDING_ENABLED = os.getenv("EMBEDDING_ENABLED", "true").lower() == "true"
+
+# ==============================
+# 🏷️ SMART CLASSIFIER
+# ==============================
+# Zero-shot classification for question categorization, difficulty, etc.
+CLASSIFIER_MODEL = os.getenv("CLASSIFIER_MODEL", "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli")
+CLASSIFIER_DEVICE = os.getenv("CLASSIFIER_DEVICE", "auto")
+
+# Enable/disable classifier (set to "false" to save ~300MB RAM)
+CLASSIFIER_ENABLED = os.getenv("CLASSIFIER_ENABLED", "true").lower() == "true"
+
+# Semantic search similarity threshold (0.0-1.0, higher = stricter matching)
+SEMANTIC_SEARCH_THRESHOLD = float(os.getenv("SEMANTIC_SEARCH_THRESHOLD", "0.3"))
+
+
+# ==============================
 # 🧪 DEBUG (OPTIONAL)
 # ==============================
 def print_config():
