@@ -337,9 +337,8 @@ jobs:
         run: |
           pip install cyclonedx-bom
           cyclonedx-py requirements \
-            --format xml \
-            --output-file backend-bom.xml \
-            -i requirements.txt
+            -i requirements.txt \
+            -o backend-bom.xml
         working-directory: ./backend
 
       - name: Generate Node.js SBOM (CycloneDX)
