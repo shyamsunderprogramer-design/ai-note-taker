@@ -85,7 +85,7 @@ RUN pip install cyclonedx-bom
 # Generate SBOM
 WORKDIR /src
 COPY backend/ /src/
-RUN cyclonedx-py requirements.txt -o /src/bom.xml
+RUN cyclonedx-py requirements -i requirements.txt -o /src/bom.xml
 
 # Export SBOM as artifact
 FROM scratch AS sbom-export
