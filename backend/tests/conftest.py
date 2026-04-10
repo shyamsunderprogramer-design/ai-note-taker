@@ -7,8 +7,12 @@ import pytest
 
 # Set test environment variables before importing app modules
 os.environ["USE_SQLITE"] = "true"
-os.environ["AUTH_REQUIRED"] = "false"  # Disable auth for most tests
+os.environ["AUTH_REQUIRED"] = "false"  # Disable auth middleware for most tests
 os.environ["TESTING"] = "true"
+
+# Add backend and modules paths for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'modules', 'ai'))
 
 
 @pytest.fixture(scope="session")
@@ -27,21 +31,22 @@ def test_client():
 @pytest.fixture
 def auth_headers(test_client):
     """Get authorization headers with a valid test token."""
-    # Try to register and login a test user
     import uuid
     unique_id = str(uuid.uuid4())[:8]
-    email = f"test_{unique_id}@example.com"
+    username = f"test_{unique_id}"
+    email = f"{username}@example.com"
     password = "TestPass123!"
 
-    # Register
-    test_client.post("/auth/register", json={
+    # Register using Form data (matching the /auth/register endpoint)
+    test_client.post("/auth/register", data={
+        "username": username,
         "email": email,
         "password": password
     })
 
-    # Login
-    response = test_client.post("/auth/login", json={
-        "email": email,
+    # Login using Form data (matching the /auth/login endpoint)
+    response = test_client.post("/auth/login", data={
+        "username": username,
         "password": password
     })
 

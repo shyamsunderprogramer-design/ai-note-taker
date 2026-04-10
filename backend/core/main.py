@@ -13,19 +13,30 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List
 
-# T16: Add project root to path so electron.database can be imported from backend/
+# T16: Add project root and module paths for flat imports
 _project_root = Path(__file__).parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+_core_dir = Path(__file__).parent  # backend/core/
+for _p in [str(_project_root), str(_core_dir)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+# Add module subdirectories to path so flat imports (from ai_router, etc.) work
+_modules_root = _project_root / "modules"
+for _mod_dir in _modules_root.iterdir():
+    if _mod_dir.is_dir() and (_mod_dir / "__init__.py").exists():
+        if str(_mod_dir) not in sys.path:
+            sys.path.insert(0, str(_mod_dir))
 
 import numpy as np
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile, WebSocket, Depends, HTTPException, status, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 
@@ -2298,13 +2309,28 @@ async def detect_objections(body: dict):
 async def record_analytics(body: dict, user: User = Depends(require_authentication)):
     """Record analytics for a conversation."""
     from analytics import get_analytics_store
+    from datetime import datetime as _dt
     store = get_analytics_store()
+
+    # Parse timestamps — accept ISO strings or unix timestamps
+    start_time = body.get("start_time") or time.time()
+    end_time = body.get("end_time") or time.time()
+    if isinstance(start_time, str):
+        try:
+            start_time = _dt.fromisoformat(start_time).timestamp()
+        except ValueError:
+            start_time = time.time()
+    if isinstance(end_time, str):
+        try:
+            end_time = _dt.fromisoformat(end_time).timestamp()
+        except ValueError:
+            end_time = time.time()
 
     metrics = store.record_conversation(
         conversation_id=body.get("conversation_id"),
         messages=body.get("messages", []),
-        start_time=body.get("start_time"),
-        end_time=body.get("end_time"),
+        start_time=float(start_time),
+        end_time=float(end_time),
         models_used=body.get("models_used", [])
     )
 
@@ -3222,13 +3248,20 @@ async def generate_study_plan(
     user_id: str = Query(..., description="User ID"),
     days: int = Query(30, description="Plan duration in days"),
     daily_minutes: int = Query(60, description="Daily study time target"),
+    target_role: Optional[str] = Query(None, description="Target job role"),
+    target_company: Optional[str] = Query(None, description="Target company name"),
+    job_description: Optional[str] = Query(None, description="Job description text"),
+    current_skills: Optional[str] = Query(None, description="Comma-separated current skills"),
     user: User = Depends(require_authentication)
 ):
-    """Generate personalized study plan based on cognitive graph"""
+    """Generate personalized study plan. Use /study-plan/generate-personalized for large JD text."""
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
     try:
+        # Parse current_skills from comma-separated string
+        skills_list = [s.strip() for s in current_skills.split(",")] if current_skills else None
+
         # Get cognitive graph data if available
         graph_data = None
         if COGNITIVE_GRAPH_AVAILABLE:
@@ -3238,45 +3271,104 @@ async def generate_study_plan(
             except Exception:
                 pass
 
-        plan = study_planner.generate_plan(user_id, days, daily_minutes, graph_data)
+        plan = study_planner.generate_plan(
+            user_id, days, daily_minutes, graph_data,
+            target_role=target_role,
+            target_company=target_company,
+            job_description=job_description,
+            current_skills=skills_list,
+        )
 
-        return {
-            "user_id": plan.user_id,
-            "created_at": plan.created_at.isoformat(),
-            "duration_days": plan.duration_days,
-            "progress": {
-                "total_tasks": plan.total_tasks,
-                "completed_tasks": plan.completed_tasks,
-                "percentage": round(plan.progress_percentage, 2)
-            },
-            "weak_areas": plan.weak_areas,
-            "strong_areas": plan.strong_areas,
-            "milestones": plan.milestones,
-            "sessions": [
-                {
-                    "date": s.date.isoformat(),
-                    "theme": s.theme,
-                    "total_minutes": s.total_minutes,
-                    "tasks": [
-                        {
-                            "id": t.id,
-                            "title": t.title,
-                            "description": t.description,
-                            "difficulty": t.difficulty,
-                            "category": t.category,
-                            "estimated_minutes": t.estimated_minutes,
-                            "completed": t.completed,
-                            "resources": t.resources
-                        }
-                        for t in s.tasks
-                    ]
-                }
-                for s in plan.sessions
-            ]
-        }
+        return _serialize_plan(plan)
     except Exception as e:
         logger.error(f"[StudyPlan] Generation error: {e}")
         return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+
+
+class StudyPlanPersonalizedRequest(BaseModel):
+    """Request body for personalized study plan generation"""
+    user_id: str
+    target_role: str
+    target_company: Optional[str] = None
+    job_description: Optional[str] = None
+    current_skills: Optional[List[str]] = None
+    days: int = 30
+    daily_minutes: int = 60
+
+
+@app.post("/study-plan/generate-personalized")
+async def generate_personalized_study_plan(
+    request: StudyPlanPersonalizedRequest,
+    user: User = Depends(require_authentication)
+):
+    """Generate a personalized study plan with full input via JSON body (for large JDs)"""
+    if not STUDY_PLAN_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
+
+    try:
+        # Get cognitive graph data if available
+        graph_data = None
+        if COGNITIVE_GRAPH_AVAILABLE:
+            try:
+                stats = cognitive_graph.get_graph_stats(request.user_id)
+                graph_data = {"skills": stats.get("top_skills", [])}
+            except Exception:
+                pass
+
+        plan = study_planner.generate_plan(
+            request.user_id, request.days, request.daily_minutes, graph_data,
+            target_role=request.target_role,
+            target_company=request.target_company,
+            job_description=request.job_description,
+            current_skills=request.current_skills,
+        )
+
+        return _serialize_plan(plan)
+    except Exception as e:
+        logger.error(f"[StudyPlan] Personalized generation error: {e}")
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+
+
+def _serialize_plan(plan) -> dict:
+    """Serialize a StudyPlan object to a JSON-ready dict"""
+    return {
+        "user_id": plan.user_id,
+        "created_at": plan.created_at.isoformat(),
+        "duration_days": plan.duration_days,
+        "progress": {
+            "total_tasks": plan.total_tasks,
+            "completed_tasks": plan.completed_tasks,
+            "percentage": round(plan.progress_percentage, 2)
+        },
+        "weak_areas": plan.weak_areas,
+        "strong_areas": plan.strong_areas,
+        "milestones": plan.milestones,
+        "target_role": plan.target_role,
+        "target_company": plan.target_company,
+        "skill_gaps": plan.skill_gaps,
+        "plan_type": plan.plan_type,
+        "sessions": [
+            {
+                "date": s.date.isoformat(),
+                "theme": s.theme,
+                "total_minutes": s.total_minutes,
+                "tasks": [
+                    {
+                        "id": t.id,
+                        "title": t.title,
+                        "description": t.description,
+                        "difficulty": t.difficulty,
+                        "category": t.category,
+                        "estimated_minutes": t.estimated_minutes,
+                        "completed": t.completed,
+                        "resources": t.resources
+                    }
+                    for t in s.tasks
+                ]
+            }
+            for s in plan.sessions
+        ]
+    }
 
 
 @app.get("/study-plan/{user_id}")
@@ -4496,7 +4588,7 @@ async def get_companies_with_questions():
 
     try:
         companies = set()
-        for q in mock_library.questions:
+        for q in mock_library.get_all_questions():
             if q.company:
                 companies.add(q.company)
         return {"companies": sorted(list(companies))}

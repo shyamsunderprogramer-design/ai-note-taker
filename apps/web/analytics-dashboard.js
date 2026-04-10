@@ -3,7 +3,7 @@
  * Phase 2 Task #31 - Graph Analytics Dashboard
  */
 
-const API_BASE = 'http://127.0.0.1:8000';
+var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:8000';
 const DEFAULT_USER_ID = 'default';
 
 // State

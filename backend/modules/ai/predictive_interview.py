@@ -593,7 +593,8 @@ class PredictiveInterview:
         while len(categories) < num_questions:
             categories.append("technical")
 
-        # Select questions from each category
+        # Select questions from each category, avoiding duplicates
+        seen_questions = set()
         for category in categories[:num_questions]:
             if category in company_data:
                 # Sort by frequency and pick top ones
@@ -603,9 +604,11 @@ class PredictiveInterview:
                     reverse=True
                 )
 
-                # Add top questions
-                for q in questions[:2]:  # Take top 2 from each category
-                    if q not in predictions:
+                # Add top question from this category that hasn't been seen yet
+                for q in questions:
+                    question_key = q.get("question", "")
+                    if question_key not in seen_questions:
+                        seen_questions.add(question_key)
                         predictions.append({
                             **q,
                             "category": category,

@@ -18,6 +18,8 @@ Local speech-to-text, local and cloud AI models, floating overlay UI, screen cap
 - [Tech Stack](#tech-stack)
 - [Cognitive Graph](#cognitive-graph-new-in-phase-1)
 - [Building](#building)
+- [Documentation](#documentation)
+- [License](#license)
 
 ---
 
@@ -384,6 +386,30 @@ npm run build:linux  # Linux .AppImage
 ```
 
 Output goes to `electron/dist/`.
+
+---
+
+## Documentation
+
+For comprehensive documentation including:
+- Detailed API Reference (113+ endpoints)
+- Architecture diagrams and module structure
+- Complete installation and setup instructions
+- Development guidelines and code standards
+- Deployment instructions (Docker, Kubernetes, Electron)
+- Security considerations and best practices
+- Troubleshooting guide
+- Business model (BYOK) documentation
+
+**See [docs/COMPREHENSIVE_GUIDE.md](docs/COMPREHENSIVE_GUIDE.md)**
+
+Additional documentation:
+- [API Reference Phase 2](docs/API_REFERENCE_PHASE2.md) - Complete API documentation
+- [Setup Cognitive Graph](docs/SETUP_COGNITIVE_GRAPH.md) - Neo4j setup guide
+- [BYOK Business Model](docs/BYOK_BUSINESS_MODEL.md) - Bring Your Own Key model
+- [Production Task Breakdown](docs/PRODUCTION_TASK_BREAKDOWN.md) - Development roadmap
+- [Architecture Docs](docs/ARCHITECTURE/) - System architecture
+- [Security Docs](docs/SECURITY/) - Security guidelines
 
 ---
 

@@ -3,7 +3,7 @@
  * Handles predictive interview preparation UI and API calls
  */
 
-const API_BASE = 'http://127.0.0.1:8000';
+var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:8000';
 
 // State
 let currentPredictions = [];

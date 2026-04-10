@@ -1,182 +1,310 @@
 /**
- * Study Plan JavaScript
- * Phase 2 Task #33 - Personalized Study Plan Generator
+ * Study Plan - Personalized Learning Path Generator
+ * Handles setup form, API calls, and plan rendering
  */
 
-const API_BASE = 'http://127.0.0.1:8000';
+var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:8000';
 const DEFAULT_USER_ID = 'default';
 
-// Study Plan Manager
 class StudyPlanManager {
   constructor() {
     this.planData = null;
-    this.currentPlan = null;
+    this.state = 'setup'; // 'setup' | 'loading' | 'content' | 'empty'
   }
 
   async init() {
-    await this.loadPlan();
     this.setupEventListeners();
+    this.loadSavedFormData();
+    this.showState('setup');
   }
 
+  // === State Management ===
+
+  showState(state) {
+    this.state = state;
+    const setup = document.getElementById('setupSection');
+    const loading = document.getElementById('loadingState');
+    const content = document.getElementById('planContent');
+    const empty = document.getElementById('emptyState');
+
+    if (setup) setup.style.display = state === 'setup' ? 'block' : 'none';
+    if (loading) loading.style.display = state === 'loading' ? 'block' : 'none';
+    if (content) content.style.display = state === 'content' ? 'block' : 'none';
+    if (empty) empty.style.display = state === 'empty' ? 'block' : 'none';
+  }
+
+  showSetup() {
+    this.showState('setup');
+  }
+
+  generateNewPlan() {
+    this.showState('setup');
+  }
+
+  // === Event Listeners ===
+
   setupEventListeners() {
-    // Task completion checkboxes
-    document.addEventListener('click', (e) => {
-      if (e.target.classList.contains('task-checkbox')) {
-        this.toggleTaskComplete(e.target.dataset.taskId);
-      }
+    const btn = document.getElementById('generateBtn');
+    if (btn) {
+      btn.addEventListener('click', () => this.handleGenerate());
+    }
+
+    // Save form data on input
+    ['roleInput', 'companyInput', 'jdInput', 'skillsInput', 'daysInput'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => this.saveFormData());
     });
   }
 
-  async loadPlan() {
-    try {
-      const response = await fetch(`${API_BASE}/study-plan/${DEFAULT_USER_ID}`);
-      const data = await response.json();
+  // === Form Persistence ===
 
-      if (data.error || !data.sessions || data.sessions.length === 0) {
-        this.showEmptyState();
-        return;
-      }
+  saveFormData() {
+    const data = {
+      role: document.getElementById('roleInput')?.value || '',
+      company: document.getElementById('companyInput')?.value || '',
+      jd: document.getElementById('jdInput')?.value || '',
+      skills: document.getElementById('skillsInput')?.value || '',
+      days: document.getElementById('daysInput')?.value || '30'
+    };
+    localStorage.setItem('studyplan_form', JSON.stringify(data));
+  }
 
-      this.planData = data;
-      this.renderPlan(data);
-    } catch (error) {
-      console.error('[StudyPlan] Error loading plan:', error);
-      this.showEmptyState();
+  loadSavedFormData() {
+    const saved = localStorage.getItem('studyplan_form');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.role) document.getElementById('roleInput').value = data.role;
+        if (data.company) document.getElementById('companyInput').value = data.company;
+        if (data.jd) document.getElementById('jdInput').value = data.jd;
+        if (data.skills) document.getElementById('skillsInput').value = data.skills;
+        if (data.days) document.getElementById('daysInput').value = data.days;
+      } catch (e) { /* ignore */ }
     }
   }
 
-  showEmptyState() {
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('planContent').style.display = 'none';
-    document.getElementById('emptyState').style.display = 'block';
-  }
+  // === Generate Plan ===
 
-  renderPlan(data) {
-    // Hide loading, show content
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('planContent').style.display = 'block';
-
-    // Update progress
-    this.updateProgress(data.progress);
-
-    // Render today's session
-    this.renderTodaySession(data.sessions);
-
-    // Render upcoming sessions
-    this.renderUpcomingSessions(data.sessions);
-
-    // Render weak areas
-    this.renderWeakAreas(data.weak_areas);
-
-    // Render milestones
-    this.renderMilestones(data.milestones);
-  }
-
-  updateProgress(progress) {
-    const percentage = progress?.percentage || 0;
-    const total = progress?.total_tasks || 0;
-    const completed = progress?.completed_tasks || 0;
-    const daysLeft = Math.max(0, 30 - Math.floor(completed / Math.max(total / 30, 1)));
-    const hours = Math.round((total - completed) * 0.75); // ~45 min avg
-
-    document.getElementById('progressBar').style.width = `${percentage}%`;
-    document.getElementById('progressText').textContent = `${percentage.toFixed(0)}%`;
-    document.getElementById('totalTasks').textContent = total;
-    document.getElementById('completedTasks').textContent = completed;
-    document.getElementById('daysLeft').textContent = daysLeft;
-    document.getElementById('studyHours').textContent = hours;
-  }
-
-  renderTodaySession(sessions) {
-    const today = new Date().toISOString().split('T')[0];
-    const todaySession = sessions.find(s => s.date.startsWith(today));
-
-    const themeEl = document.getElementById('todayTheme');
-    const tasksEl = document.getElementById('todayTasks');
-
-    if (!todaySession) {
-      themeEl.textContent = 'Rest Day';
-      tasksEl.innerHTML = `
-        <div class="empty-state" style="padding: 40px;">
-          <p>No tasks scheduled for today</p>
-          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px;">
-            Take a break or review past material
-          </p>
-        </div>
-      `;
+  async handleGenerate() {
+    const role = document.getElementById('roleInput')?.value.trim();
+    if (!role) {
+      alert('Please enter a target role');
+      document.getElementById('roleInput')?.focus();
       return;
     }
 
-    themeEl.textContent = todaySession.theme;
+    const company = document.getElementById('companyInput')?.value.trim() || '';
+    const jd = document.getElementById('jdInput')?.value.trim() || '';
+    const skills = document.getElementById('skillsInput')?.value.trim() || '';
+    const days = document.getElementById('daysInput')?.value || '30';
 
-    tasksEl.innerHTML = todaySession.tasks.map(task => `
-      <div class="task-card ${task.completed ? 'completed' : ''}" data-task-id="${task.id}">
-        <div class="task-header">
-          <div class="task-title">
-            <div class="task-checkbox ${task.completed ? 'checked' : ''}" data-task-id="${task.id}"></div>
-            ${task.title}
+    this.saveFormData();
+
+    // Ensure auth token is available before making API call
+    if (typeof AuthHelper !== 'undefined') {
+      if (!AuthHelper.isAuthenticated()) {
+        try {
+          console.log('[StudyPlan] No token found, attempting auto-login...');
+          await AuthHelper.ensureAuth();
+          console.log('[StudyPlan] Auto-login result, token present:', AuthHelper.isAuthenticated());
+        } catch (e) {
+          console.error('[StudyPlan] Auth failed:', e);
+          alert('Authentication required. Please reload the page and try again.');
+          return;
+        }
+      } else {
+        console.log('[StudyPlan] Token already present, proceeding');
+      }
+    } else {
+      console.warn('[StudyPlan] AuthHelper not available — requests may fail with 401');
+    }
+
+    const btn = document.getElementById('generateBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+    }
+
+    this.showState('loading');
+
+    try {
+      let data;
+      // Use JSON body endpoint for large JD text, query params otherwise
+      if (jd.length > 200) {
+        data = await this.generatePersonalized(role, company, jd, skills, days);
+      } else {
+        data = await this.generateWithParams(role, company, jd, skills, days);
+      }
+
+      if (data.error) throw new Error(data.error.message || data.error);
+
+      this.planData = data;
+      this.renderPlan(data);
+      this.showState('content');
+    } catch (error) {
+      console.error('[StudyPlan] Error generating plan:', error);
+      alert('Failed to generate study plan. Please try again.');
+      this.showState('setup');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Generate Personalized Plan';
+      }
+    }
+  }
+
+  async generateWithParams(role, company, jd, skills, days) {
+    const params = new URLSearchParams({
+      user_id: DEFAULT_USER_ID,
+      days: days,
+      daily_minutes: '60',
+      target_role: role,
+    });
+    if (company) params.set('target_company', company);
+    if (jd) params.set('job_description', jd);
+    if (skills) params.set('current_skills', skills);
+
+    const url = `${API_BASE}/study-plan/generate?${params.toString()}`;
+    const options = { method: 'POST' };
+    if (typeof AuthHelper !== 'undefined') {
+      return (await AuthHelper.authFetch(url, options)).json();
+    }
+    return (await fetch(url, options)).json();
+  }
+
+  async generatePersonalized(role, company, jd, skills, days) {
+    const url = `${API_BASE}/study-plan/generate-personalized`;
+    const options = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: DEFAULT_USER_ID,
+        target_role: role,
+        target_company: company || null,
+        job_description: jd || null,
+        current_skills: skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : null,
+        days: parseInt(days),
+        daily_minutes: 60,
+      })
+    };
+    if (typeof AuthHelper !== 'undefined') {
+      return (await AuthHelper.authFetch(url, options)).json();
+    }
+    return (await fetch(url, options)).json();
+  }
+
+  // === Render Plan ===
+
+  renderPlan(data) {
+    if (!data) return;
+
+    // Progress
+    const progress = data.progress || {};
+    this.updateProgress(progress);
+
+    // Weak areas
+    this.renderWeakAreas(data.weak_areas || []);
+
+    // Milestones
+    this.renderMilestones(data.milestones || []);
+
+    // Sessions
+    const sessions = data.sessions || [];
+    this.renderTodaySession(sessions);
+    this.renderUpcomingSessions(sessions);
+
+    // Skill gaps
+    this.renderSkillGaps(data.skill_gaps || []);
+
+    // Personalization header
+    this.renderPersonalizationHeader(data);
+  }
+
+  renderPersonalizationHeader(data) {
+    // Update subtitle with role/company info
+    const subtitle = document.querySelector('.study-plan-header-subtitle');
+    if (subtitle) {
+      let text = '';
+      if (data.target_role) text += `for ${data.target_role}`;
+      if (data.target_company) text += ` at ${data.target_company}`;
+      if (data.plan_type === 'personalized') text += ' (Personalized)';
+      subtitle.textContent = text || 'Personalized learning path';
+    }
+  }
+
+  updateProgress(progress) {
+    const totalTasks = progress.total_tasks || 0;
+    const completedTasks = progress.completed_tasks || 0;
+    const percentage = progress.percentage || 0;
+    const daysLeft = Math.max(0, 30 - Math.floor(completedTasks / Math.max(totalTasks / 30, 1)));
+    const studyHours = Math.round((totalTasks - completedTasks) * 0.75);
+
+    const bar = document.getElementById('progressBar');
+    if (bar) bar.style.width = percentage + '%';
+    const text = document.getElementById('progressText');
+    if (text) text.textContent = Math.round(percentage) + '%';
+    const total = document.getElementById('totalTasks');
+    if (total) total.textContent = totalTasks;
+    const completed = document.getElementById('completedTasks');
+    if (completed) completed.textContent = completedTasks;
+    const days = document.getElementById('daysLeft');
+    if (days) days.textContent = daysLeft;
+    const hours = document.getElementById('studyHours');
+    if (hours) hours.textContent = studyHours;
+  }
+
+  renderTodaySession(sessions) {
+    const container = document.getElementById('todayTasks');
+    const themeEl = document.getElementById('todayTheme');
+    if (!container) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const todaySession = sessions.find(s => s.date && s.date.startsWith(today));
+
+    if (!todaySession || !todaySession.tasks || todaySession.tasks.length === 0) {
+      if (themeEl) themeEl.textContent = 'Rest Day';
+      container.innerHTML = '<p style="color: var(--text-secondary, #888); text-align: center; padding: 20px;">No study session scheduled for today. Take a break or review!</p>';
+      return;
+    }
+
+    if (themeEl) themeEl.textContent = todaySession.theme || "Today's Session";
+
+    container.innerHTML = todaySession.tasks.map(task => `
+      <div class="task-item ${task.completed ? 'completed' : ''}" data-task-id="${task.id}">
+        <div class="task-checkbox ${task.completed ? 'checked' : ''}" onclick="studyPlan.toggleTaskComplete('${task.id}')"></div>
+        <div class="task-content">
+          <div class="task-title">${task.title}</div>
+          <div class="task-meta">
+            <span class="task-tag category-${task.category}">${task.category}</span>
+            <span class="task-tag difficulty-${task.difficulty}">${task.difficulty}</span>
+            <span class="task-tag">${task.estimated_minutes}min</span>
           </div>
         </div>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-left: 30px;">
-          ${task.description}
-        </p>
-        <div class="task-meta" style="margin-left: 30px;">
-          <span class="task-difficulty difficulty-${task.difficulty}">${task.difficulty}</span>
-          <span class="task-category">${task.category}</span>
-          <span class="task-time">⏱️ ${task.estimated_minutes} min</span>
-        </div>
-        ${this.renderResources(task.resources)}
       </div>
     `).join('');
   }
 
-  renderResources(resources) {
-    if (!resources || resources.length === 0) return '';
-
-    return `
-      <div class="task-resources">
-        ${resources.map(r => `
-          <a href="${r.url || '#'}" class="resource-link" target="_blank" rel="noopener">
-            ${r.type === 'leetcode' ? '💻' : r.type === 'concept' ? '📖' : '🔗'}
-            ${r.name}
-          </a>
-        `).join('')}
-      </div>
-    `;
-  }
-
   renderUpcomingSessions(sessions) {
     const container = document.getElementById('upcomingList');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    if (!container) return;
 
-    // Get next 5 future sessions
-    const upcoming = sessions
-      .filter(s => new Date(s.date) > today)
-      .slice(0, 5);
+    const today = new Date().toISOString().split('T')[0];
+    const upcoming = sessions.filter(s => s.date && !s.date.startsWith(today)).slice(0, 5);
 
     if (upcoming.length === 0) {
-      container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No upcoming sessions</p>';
+      container.innerHTML = '<p style="color: var(--text-secondary, #888);">No upcoming sessions</p>';
       return;
     }
 
     container.innerHTML = upcoming.map(session => {
       const date = new Date(session.date);
-      const day = date.getDate();
-      const month = date.toLocaleString('default', { month: 'short' });
-      const taskCount = session.tasks.length;
-      const totalMinutes = session.total_minutes;
-
+      const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
       return `
-        <div class="session-preview" data-date="${session.date}">
-          <div class="session-date">
-            <div class="session-day">${day}</div>
-            <div class="session-month">${month}</div>
-          </div>
-          <div class="session-info">
-            <div class="session-theme">${session.theme}</div>
-            <div class="session-meta">${taskCount} tasks • ${totalMinutes} min</div>
+        <div class="upcoming-session">
+          <div class="upcoming-date">${dateStr}</div>
+          <div class="upcoming-info">
+            <div class="upcoming-theme">${session.theme}</div>
+            <div class="upcoming-meta">${session.tasks?.length || 0} tasks &middot; ${session.total_minutes || 0}min</div>
           </div>
         </div>
       `;
@@ -185,59 +313,79 @@ class StudyPlanManager {
 
   renderWeakAreas(weakAreas) {
     const container = document.getElementById('weakAreasList');
+    if (!container) return;
 
     if (!weakAreas || weakAreas.length === 0) {
-      container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">No weak areas identified yet</p>';
+      container.innerHTML = '<p style="color: var(--text-secondary, #888);">No weak areas identified</p>';
       return;
     }
 
     container.innerHTML = weakAreas.slice(0, 5).map(area => {
       const confidence = Math.round((area.confidence || 0) * 100);
+      const sourceTag = area.source === 'job_description' ? ' (JD)' :
+                       area.source === 'company_focus' ? ' (Company)' :
+                       area.source === 'role_pattern' ? ' (Role)' : '';
       return `
         <div class="weak-area-item">
-          <span class="weak-area-name">${area.name}</span>
-          <span class="weak-area-confidence">${confidence}%</span>
-          <div class="confidence-bar">
-            <div class="confidence-fill" style="width: ${confidence}%"></div>
+          <div class="weak-area-name">${area.name}${sourceTag}</div>
+          <div class="weak-area-bar">
+            <div class="weak-area-fill" style="width: ${confidence}%; background: ${confidence < 30 ? '#ef4444' : confidence < 50 ? '#f59e0b' : '#10b981'}"></div>
           </div>
+          <div class="weak-area-confidence">${confidence}%</div>
         </div>
       `;
     }).join('');
   }
 
+  renderSkillGaps(skillGaps) {
+    const container = document.getElementById('skillGapsList');
+    if (!container) return;
+
+    if (!skillGaps || skillGaps.length === 0) {
+      document.getElementById('skillGapsSection').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('skillGapsSection').style.display = 'block';
+    const header = document.getElementById('skillGapsHeader');
+    if (header) header.style.display = 'block';
+
+    container.innerHTML = skillGaps.slice(0, 8).map(gap => {
+      const status = gap.current_level === 'known' ? '✅' : '🔴';
+      const label = gap.current_level === 'known'
+        ? `${gap.skill} (known)`
+        : `${gap.skill} (gap)`;
+      return `<div class="skill-gap-item"><span>${status}</span> <span>${label}</span></div>`;
+    }).join('');
+  }
+
   renderMilestones(milestones) {
     const container = document.getElementById('milestonesList');
+    if (!container) return;
 
     if (!milestones || milestones.length === 0) {
-      container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">No milestones set</p>';
+      container.innerHTML = '<p style="color: var(--text-secondary, #888);">No milestones</p>';
       return;
     }
 
     const today = new Date();
-
     container.innerHTML = milestones.map(m => {
       const targetDate = new Date(m.target_date);
-      const isCompleted = targetDate < today;
-      const isUpcoming = !isCompleted && (targetDate - today) / (1000 * 60 * 60 * 24) < 7;
-
-      let iconClass = 'pending';
-      let iconContent = '○';
-
-      if (isCompleted) {
-        iconClass = 'completed';
-        iconContent = '✓';
-      } else if (isUpcoming) {
-        iconClass = 'upcoming';
-        iconContent = '◐';
+      const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+      let icon, statusClass;
+      if (m.type === 'completion' || diffDays <= 0) {
+        icon = '✅'; statusClass = 'milestone-complete';
+      } else if (diffDays <= 7) {
+        icon = '🔶'; statusClass = 'milestone-upcoming';
+      } else {
+        icon = '⭕'; statusClass = 'milestone-pending';
       }
-
       return `
-        <div class="milestone-item ${iconClass}">
-          <div class="milestone-icon ${iconClass}">${iconContent}</div>
-          <div class="milestone-content">
+        <div class="milestone-item ${statusClass}">
+          <span class="milestone-icon">${icon}</span>
+          <div class="milestone-info">
             <div class="milestone-name">${m.name}</div>
-            <div class="milestone-date">${targetDate.toLocaleDateString()}</div>
-            ${m.reward ? `<div class="milestone-reward">🏆 ${m.reward}</div>` : ''}
+            <div class="milestone-date">${m.target_date}${m.reward ? ' — ' + m.reward : ''}</div>
           </div>
         </div>
       `;
@@ -246,79 +394,14 @@ class StudyPlanManager {
 
   async toggleTaskComplete(taskId) {
     try {
-      // Call API to mark task complete
-      const response = await fetch(
-        `${API_BASE}/study-plan/${DEFAULT_USER_ID}/complete-task?task_id=${taskId}&performance_score=0.8`,
-        { method: 'POST' }
-      );
-
-      if (response.ok) {
-        // Update UI
-        const taskCard = document.querySelector(`[data-task-id="${taskId}"]`);
-        if (taskCard) {
-          taskCard.classList.toggle('completed');
-          const checkbox = taskCard.querySelector('.task-checkbox');
-          checkbox.classList.toggle('checked');
-        }
-
-        // Reload plan to update progress
-        await this.loadPlan();
+      const url = `${API_BASE}/study-plan/${DEFAULT_USER_ID}/complete-task?task_id=${taskId}&performance_score=0.8`;
+      if (typeof AuthHelper !== 'undefined') {
+        await AuthHelper.authFetch(url, { method: 'POST' });
+      } else {
+        await fetch(url, { method: 'POST' });
       }
-    } catch (error) {
-      console.error('[StudyPlan] Error completing task:', error);
-    }
-  }
-
-  async generateNewPlan() {
-    const btn = document.querySelector('.generate-btn');
-    btn.disabled = true;
-    btn.textContent = 'Generating...';
-
-    try {
-      const response = await fetch(
-        `${API_BASE}/study-plan/generate?user_id=${DEFAULT_USER_ID}&days=30&daily_minutes=60`,
-        { method: 'POST' }
-      );
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      this.renderPlan(data);
-    } catch (error) {
-      console.error('[StudyPlan] Error generating plan:', error);
-      alert('Failed to generate study plan. Make sure the backend is running.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '✨ Generate Study Plan';
-    }
-  }
-
-  async exportPlan(format) {
-    try {
-      const response = await fetch(
-        `${API_BASE}/study-plan/${DEFAULT_USER_ID}/export?format=${format}`,
-        { method: 'POST' }
-      );
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      // Download file
-      const blob = new Blob([data.content], { type: format === 'json' ? 'application/json' : 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `study-plan-${DEFAULT_USER_ID}.${format === 'ical' ? 'ics' : format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('[StudyPlan] Export error:', error);
+    } catch (e) {
+      console.error('[StudyPlan] Toggle task error:', e);
     }
   }
 }

@@ -579,6 +579,28 @@ class CognitiveGraph:
             logger.error(f"[CognitiveGraph] Skill progression failed: {e}")
             return []
 
+    def get_user_skills(self, user_id: str) -> List[Dict]:
+        """Get all skills for a user with their confidence levels"""
+        if not self.driver:
+            return []
+
+        cypher = """
+        MATCH (i:Interview {user_id: $user_id})-[:CONTAINS]->(q:Question)
+              -[:ANSWERED_WITH]->(a:Answer)-[:DEMONSTRATES]->(s:Skill)
+        RETURN s.name as name,
+               avg(a.confidence) as confidence,
+               count(a) as mentions
+        ORDER BY confidence ASC
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(cypher, user_id=user_id)
+                return [dict(record) for record in result]
+        except Exception as e:
+            logger.error(f"[CognitiveGraph] Get user skills failed: {e}")
+            return []
+
     def close(self):
         """Close Neo4j connection"""
         if self.driver:

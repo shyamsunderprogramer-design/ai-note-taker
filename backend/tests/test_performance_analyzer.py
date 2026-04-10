@@ -9,8 +9,9 @@ import pytest
 import sys
 import os
 
-# Add parent directory to path
+# Add backend and modules/ai to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules', 'ai'))
 
 from performance_analyzer import (
     PerformanceAnalyzer,

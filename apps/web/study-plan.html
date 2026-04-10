@@ -6,6 +6,7 @@
   <title>Study Plan - ANT (AI Note Taker)</title>
   <link rel="stylesheet" href="style.css?v=25">
   <style>
+    .hidden { display: none !important; }
     /* Fixed Header Layout */
     .study-plan-page {
       display: flex;
@@ -526,6 +527,30 @@
       margin-top: 2px;
     }
 
+    /* Skill Gaps */
+    .skill-gaps-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 24px;
+      display: none;
+    }
+    .skill-gaps-section.visible { display: block; }
+    .skill-gap-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .skill-gap-item span:last-child {
+      flex: 1;
+    }
+
     /* Generate Button */
     .generate-btn {
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
@@ -580,6 +605,54 @@
       margin-bottom: 20px;
       opacity: 0.5;
     }
+
+    /* Setup Section */
+    .setup-section {
+      max-width: 600px;
+      margin: 80px auto 40px;
+      padding: 30px;
+      text-align: center;
+    }
+    .setup-icon { font-size: 48px; margin-bottom: 10px; }
+    .setup-title { font-size: 24px; color: var(--text-primary, #fff); margin-bottom: 8px; }
+    .setup-description { color: var(--text-secondary, #888); margin-bottom: 24px; line-height: 1.5; }
+    .setup-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .setup-field { display: flex; flex-direction: column; text-align: left; }
+    .setup-field.full-width { grid-column: 1 / -1; }
+    .setup-field label { font-size: 14px; color: var(--text-secondary, #ccc); margin-bottom: 6px; font-weight: 500; }
+    .setup-field label small { color: var(--text-secondary, #888); font-weight: normal; }
+    .setup-field input, .setup-field textarea, .setup-field select {
+      background: var(--bg-secondary, #1a1a1a);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text-primary, #fff);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .setup-field input:focus, .setup-field textarea:focus, .setup-field select:focus {
+      border-color: #10b981;
+    }
+    .setup-field textarea { resize: vertical; font-family: inherit; }
+    .start-btn {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .start-btn:hover { opacity: 0.9; }
+    .start-btn:active { transform: scale(0.98); }
+    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @media (max-width: 600px) {
+      .setup-form { grid-template-columns: 1fr; }
+      .setup-section { margin: 70px 16px 30px; padding: 20px; }
+    }
   </style>
 </head>
 <body>
@@ -597,8 +670,52 @@
     <main class="study-plan-content">
       <div class="study-plan-container">
 
+    <!-- Setup Section - Input Form -->
+    <div id="setupSection" class="setup-section">
+      <div class="setup-icon">📚</div>
+      <h1 class="setup-title">Study Plan Generator</h1>
+      <p class="setup-description">
+        Create a personalized study plan tailored to your target role and company.
+        Paste the job description for maximum relevance.
+      </p>
+
+      <div class="setup-form">
+        <div class="setup-field">
+          <label for="roleInput">Target Role <span style="color:#ef4444">*</span></label>
+          <input type="text" id="roleInput" placeholder="e.g., Senior DevOps Engineer, Frontend Developer" required>
+        </div>
+        <div class="setup-field">
+          <label for="companyInput">Target Company</label>
+          <input type="text" id="companyInput" placeholder="e.g., Google, Amazon, Stripe">
+        </div>
+        <div class="setup-field full-width">
+          <label for="jdInput">Job Description <small>(paste the JD for personalized skill targeting)</small></label>
+          <textarea id="jdInput" rows="5" placeholder="Paste the job description here to extract key skills and focus areas..."></textarea>
+        </div>
+        <div class="setup-field">
+          <label for="skillsInput">Current Skills <small>(comma-separated)</small></label>
+          <input type="text" id="skillsInput" placeholder="e.g., Python, React, SQL, Git">
+        </div>
+        <div class="setup-field">
+          <label for="daysInput">Preparation Time</label>
+          <select id="daysInput">
+            <option value="1">1 day</option>
+            <option value="3">3 days</option>
+            <option value="7">1 week</option>
+            <option value="14">2 weeks</option>
+            <option value="21">3 weeks</option>
+            <option value="30" selected>1 month</option>
+            <option value="60">2 months</option>
+            <option value="90">3 months</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="start-btn" id="generateBtn">Generate Personalized Plan</button>
+    </div>
+
     <!-- Loading State -->
-    <div id="loadingState" class="study-plan-loading">
+    <div id="loadingState" class="study-plan-loading" style="display: none;">
       <div class="study-plan-spinner"></div>
       <p>Loading your personalized study plan...</p>
     </div>
@@ -666,6 +783,14 @@
             </div>
           </div>
 
+          <!-- Skill Gaps -->
+          <div class="skill-gaps-section" id="skillGapsSection">
+            <h2 class="section-title" id="skillGapsHeader" style="display:none;">📊 Skill Gaps</h2>
+            <div id="skillGapsList">
+              <!-- Skill gaps loaded dynamically -->
+            </div>
+          </div>
+
           <!-- Milestones -->
           <div class="milestones">
             <h2 class="section-title">🏆 Milestones</h2>
@@ -689,8 +814,8 @@
       <div class="empty-icon">📚</div>
       <h2>No Study Plan Yet</h2>
       <p>Generate your personalized study plan based on your interview history</p>
-      <button class="generate-btn" onclick="studyPlan.generateNewPlan()" style="margin-top: 20px;">
-        ✨ Generate Study Plan
+      <button class="generate-btn" onclick="studyPlan.showSetup()" style="margin-top: 20px;">
+        ✨ Generate New Plan
       </button>
       </div>
     </div>
@@ -698,6 +823,7 @@
     </main>
   </div>
 
+  <script src="js/core/auth-helper.js"></script>
   <script src="study-plan.js"></script>
 </body>
 </html>

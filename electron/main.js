@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer } = require("electron")
+const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell } = require("electron")
 const path = require("path")
 const { spawn } = require("child_process")
 const os = require("os")
@@ -198,8 +198,25 @@ function createWindow() {
   const isProd = app.isPackaged
   const rendererPath = isProd
     ? path.join(process.resourcesPath, "renderer", "index.html")
-    : path.join(__dirname, "..", "renderer", "index.html")
+    : path.join(__dirname, "..", "apps", "web", "index.html")
   win.loadFile(rendererPath)
+
+  // Open external links in system browser, not in Electron window
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      shell.openExternal(url)
+    }
+    return { action: "deny" }
+  })
+  win.webContents.on("will-navigate", (event, url) => {
+    // Allow navigation to our own pages, block external navigation inside the window
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      if (!url.includes("127.0.0.1:") && !url.includes("localhost:")) {
+        event.preventDefault()
+        shell.openExternal(url)
+      }
+    }
+  })
 
   // Inject nonce into all script and style tags after page loads
   win.webContents.on("did-finish-load", () => {
@@ -954,26 +971,24 @@ app.whenReady().then(async () => {
   })
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    // Apply CSP to file:// protocol (renderer)
+    // Only apply CSP to our own app pages (file:// and localhost)
+    // External websites (LeetCode, etc.) must NOT get our restrictive CSP
+    const isOwnPage = details.url.startsWith("file://") ||
+      details.url.includes("127.0.0.1:8000") ||
+      details.url.includes("localhost:8000") ||
+      details.url.includes("127.0.0.1:18000") ||
+      details.url.includes("localhost:18000")
+
     const headers = { ...details.responseHeaders }
-    // Use the window's CSP nonce for this request
-    let nonce = ""
-    if (details.url.includes("file://")) {
-      // Match to the correct window's nonce
-      const windows = BrowserWindow.getAllWindows()
-      for (const w of windows) {
-        if (!w.isDestroyed() && w.cspNonce) {
-          // Use the first available nonce (for single-window app)
-          nonce = w.cspNonce
-          break
-        }
-      }
+
+    if (isOwnPage) {
+      // T25: CSP for our own Electron desktop app pages
+      // 'unsafe-inline' needed for inline <style> blocks and style attributes
+      // 'unsafe-eval' needed for some dependencies (hljs, etc.)
+      const csp = `default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      headers["Content-Security-Policy"] = [csp]
     }
-    // T25: Tightened CSP — restrict connect-src to known origins, remove http: from img/media
-    const csp = nonce
-      ? `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'nonce-${nonce}'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
-      : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
-    headers["Content-Security-Policy"] = [csp]
+
     // T26: Removed Access-Control-Allow-Origin: ["*"] — backend handles CORS
     callback({ responseHeaders: headers })
   })
