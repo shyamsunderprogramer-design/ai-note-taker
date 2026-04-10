@@ -97,14 +97,15 @@ contextBridge.exposeInMainWorld("api", {
     return response.json()
   },
 
-  // Configure provider API key — sends via JSON body (not URL)
+  // DEPRECATED: Configure provider API key — DISABLED for security
+  // Use saveApiKey(provider, apiKey) for secure encrypted storage instead
   configureProvider: async (provider, apiKey) => {
-    const response = await fetch(`${BASE_URL}/configure`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, api_key: apiKey })
-    })
-    return response.json()
+    console.warn("[Security] configureProvider is deprecated. Use saveApiKey() for secure storage.")
+    // Return error - keys must be saved via secure IPC, not HTTP
+    return {
+      error: "HTTP configuration disabled",
+      message: "Use window.api.saveApiKey(provider, apiKey) for secure encrypted storage"
+    }
   },
 
   // Conversation history
@@ -117,8 +118,13 @@ contextBridge.exposeInMainWorld("api", {
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
   restoreWindow: () => ipcRenderer.invoke("window:restore"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggle-maximize"),
+  isWindowMaximized: () => ipcRenderer.invoke("window:is-maximized"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
   resizeWindow: (width, height) => ipcRenderer.invoke("window:resize", width, height),
+  forceTop: () => ipcRenderer.invoke("window:force-top"),
+  onMaximizeChanged: (callback) => {
+    ipcRenderer.on("window:maximize-changed", (_event, state) => callback(state))
+  },
 
   // Stealth mode
   setStealthMode: (enabled) => ipcRenderer.invoke("window:set-stealth-mode", enabled),
@@ -131,6 +137,9 @@ contextBridge.exposeInMainWorld("api", {
 
   // Save file with dialog
   saveFile: (options) => ipcRenderer.invoke("dialog:save-file", options),
+
+  // Import file with optional decryption
+  importFile: (options) => ipcRenderer.invoke("dialog:import-file", options),
 
   // Copy text to clipboard (Electron-safe)
   copyToClipboard: (text) => ipcRenderer.invoke("clipboard:write", text),
@@ -157,7 +166,121 @@ contextBridge.exposeInMainWorld("api", {
   // Global Ctrl+Enter — trigger AI from any app
   onTriggerAI: (callback) => {
     ipcRenderer.on("trigger-ai", () => callback())
-  }
+  },
+
+  // Backend process status and restart
+  onBackendDead: (callback) => {
+    ipcRenderer.on("backend:dead", (_event, data) => callback(data))
+  },
+  onBackendStatus: (callback) => {
+    ipcRenderer.on("backend:status", (_event, data) => callback(data))
+  },
+  restartBackend: () => ipcRenderer.invoke("backend:restart"),
+  getBackendStatus: () => ipcRenderer.invoke("backend:status"),
+
+  // Document upload and RAG
+  getDocumentsUrl: () => `${BASE_URL}/documents`,
+  uploadDocument: async (formData) => {
+    const response = await fetch(`${BASE_URL}/documents/upload`, {
+      method: "POST",
+      body: formData
+    })
+    return response.json()
+  },
+  listDocuments: async () => {
+    const response = await fetch(`${BASE_URL}/documents`)
+    return response.json()
+  },
+  deleteDocument: async (docId) => {
+    const response = await fetch(`${BASE_URL}/documents/${encodeURIComponent(docId)}`, {
+      method: "DELETE"
+    })
+    return response.json()
+  },
+
+  // Speaker diarization
+  getTranscribeWithSpeakersUrl: () => `${BASE_URL}/transcribe-with-speakers`,
+
+  // Export/Import
+  exportConversation: async (data) => {
+    const response = await fetch(`${BASE_URL}/conversations/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+    return response.json()
+  },
+  importConversations: async (formData) => {
+    const response = await fetch(`${BASE_URL}/conversations/import`, {
+      method: "POST",
+      body: formData
+    })
+    return response.json()
+  },
+
+  // Sales objection detection
+  detectObjections: async (text) => {
+    const response = await fetch(`${BASE_URL}/detect-objections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    })
+    return response.json()
+  },
+
+  // Save file with dialog (already exists, ensure it's exposed)
+  saveFile: (options) => ipcRenderer.invoke("dialog:save-file", options),
+
+  // Import file with optional decryption (already exists, ensure it's exposed)
+  importFile: (options) => ipcRenderer.invoke("dialog:import-file", options),
+
+  // Analytics
+  recordAnalytics: async (data) => {
+    const response = await fetch(`${BASE_URL}/analytics/record`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+    return response.json()
+  },
+  getAnalyticsSummary: async (days = 30) => {
+    const response = await fetch(`${BASE_URL}/analytics/summary?days=${days}`)
+    return response.json()
+  },
+  exportAnalytics: async (format = "json") => {
+    const response = await fetch(`${BASE_URL}/analytics/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format })
+    })
+    return response.json()
+  },
+
+  // CRM Webhooks
+  sendCRMWebhook: async (crmType, eventType, data) => {
+    const response = await fetch(`${BASE_URL}/crm/webhook/${crmType}/${eventType}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+    return response.json()
+  },
+  getCRMConfig: async () => {
+    const response = await fetch(`${BASE_URL}/crm/config`)
+    return response.json()
+  },
+  saveCRMConfig: async (config) => {
+    const response = await fetch(`${BASE_URL}/crm/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config)
+    })
+    return response.json()
+  },
+
+  // Secure API Key Storage (P1 Privacy) - encrypted, never stored in .env
+  saveApiKey: (provider, apiKey) => ipcRenderer.invoke("apiKey:save", { provider, apiKey }),
+  getApiKey: (provider) => ipcRenderer.invoke("apiKey:get", provider)
 
 
 })

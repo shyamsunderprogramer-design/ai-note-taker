@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Plan - ANT (AI Note Taker)</title>
+  <link rel="stylesheet" href="style.css?v=25">
+  <style>
+    .hidden { display: none !important; }
+    /* Fixed Header Layout */
+    .study-plan-page {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .study-plan-header-fixed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary, #1a1a1a);
+      border-bottom: 1px solid var(--border-color, #333);
+      z-index: 100;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .study-plan-back-arrow {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-primary, #fff);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    .study-plan-back-arrow:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .study-plan-header-content {
+      flex: 1;
+    }
+
+    .study-plan-header-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+      background: linear-gradient(135deg, #10b981, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .study-plan-header-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin: 2px 0 0 0;
+    }
+
+    /* Scrollable Content */
+    .study-plan-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 80px 20px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Scrollbar styling */
+    .study-plan-content::-webkit-scrollbar {
+      width: 8px;
+    }
+    .study-plan-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .study-plan-content::-webkit-scrollbar-thumb {
+      background: var(--border-color, #333);
+      border-radius: 4px;
+    }
+
+    .study-plan-container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .study-plan-title {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #10b981, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Progress Section */
+    .progress-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .progress-bar-container {
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      height: 20px;
+      overflow: hidden;
+      margin: 15px 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+      border-radius: 10px;
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .progress-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .progress-stat {
+      text-align: center;
+      padding: 15px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+    }
+
+    .progress-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent-color, #3b82f6);
+    }
+
+    .progress-stat-label {
+      font-size: 13px;
+      color: var(--text-secondary, #888);
+      margin-top: 5px;
+    }
+
+    /* Two Column Layout */
+    .study-plan-grid {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .study-plan-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Today's Session */
+    .today-session {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 24px;
+    }
+
+    .today-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .today-title {
+      font-size: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .today-theme {
+      font-size: 14px;
+      color: var(--text-secondary, #888);
+      background: rgba(59, 130, 246, 0.1);
+      padding: 6px 12px;
+      border-radius: 6px;
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .task-card {
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.05);
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .task-card:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+      background: rgba(255,255,255,0.05);
+    }
+
+    .task-card.completed {
+      opacity: 0.6;
+      border-left: 4px solid #10b981;
+    }
+
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 8px;
+    }
+
+    .task-title {
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .task-checkbox {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 2px solid var(--border-color, #555);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .task-checkbox:hover {
+      border-color: #3b82f6;
+    }
+
+    .task-checkbox.checked {
+      background: #10b981;
+      border-color: #10b981;
+    }
+
+    .task-checkbox.checked::after {
+      content: "✓";
+      color: white;
+      font-size: 12px;
+    }
+
+    .task-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .task-difficulty {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .difficulty-easy {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .difficulty-medium {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+    }
+
+    .difficulty-hard {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .task-time {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .task-category {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+    }
+
+    .task-resources {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .resource-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #3b82f6;
+      text-decoration: none;
+      margin-right: 12px;
+    }
+
+    .resource-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Weak Areas */
+    .weak-areas {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .weak-area-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(239, 68, 68, 0.05);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      border-left: 3px solid #ef4444;
+    }
+
+    .weak-area-name {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .weak-area-confidence {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+    }
+
+    .confidence-bar {
+      width: 60px;
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      background: #ef4444;
+      border-radius: 3px;
+    }
+
+    /* Milestones */
+    .milestones {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .milestone-item {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      border-left: 3px solid var(--border-color, #333);
+      margin-bottom: 10px;
+      transition: all 0.2s;
+    }
+
+    .milestone-item.completed {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .milestone-item.upcoming {
+      border-left-color: #3b82f6;
+    }
+
+    .milestone-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .milestone-icon.completed {
+      background: #10b981;
+      color: white;
+    }
+
+    .milestone-icon.upcoming {
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+    }
+
+    .milestone-icon.pending {
+      background: rgba(255,255,255,0.1);
+      color: var(--text-secondary, #888);
+    }
+
+    .milestone-content {
+      flex: 1;
+    }
+
+    .milestone-name {
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .milestone-date {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin-top: 2px;
+    }
+
+    .milestone-reward {
+      font-size: 11px;
+      color: #f59e0b;
+      margin-top: 4px;
+    }
+
+    /* Upcoming Sessions */
+    .upcoming-sessions {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px solid var(--border-color, #333);
+      margin-top: 24px;
+    }
+
+    .session-preview {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .session-preview:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .session-preview:last-child {
+      border-bottom: none;
+    }
+
+    .session-date {
+      text-align: center;
+      min-width: 50px;
+    }
+
+    .session-day {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent-color, #3b82f6);
+    }
+
+    .session-month {
+      font-size: 11px;
+      color: var(--text-secondary, #888);
+      text-transform: uppercase;
+    }
+
+    .session-info {
+      flex: 1;
+    }
+
+    .session-theme {
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .session-meta {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin-top: 2px;
+    }
+
+    /* Skill Gaps */
+    .skill-gaps-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 24px;
+      display: none;
+    }
+    .skill-gaps-section.visible { display: block; }
+    .skill-gap-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .skill-gap-item span:last-child {
+      flex: 1;
+    }
+
+    /* Generate Button */
+    .generate-btn {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 20px auto;
+    }
+
+    .generate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Loading */
+    .study-plan-loading {
+      text-align: center;
+      padding: 60px;
+    }
+
+    .study-plan-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid var(--border-color, #333);
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px;
+      color: var(--text-secondary, #888);
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+
+    /* Setup Section */
+    .setup-section {
+      max-width: 600px;
+      margin: 80px auto 40px;
+      padding: 30px;
+      text-align: center;
+    }
+    .setup-icon { font-size: 48px; margin-bottom: 10px; }
+    .setup-title { font-size: 24px; color: var(--text-primary, #fff); margin-bottom: 8px; }
+    .setup-description { color: var(--text-secondary, #888); margin-bottom: 24px; line-height: 1.5; }
+    .setup-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .setup-field { display: flex; flex-direction: column; text-align: left; }
+    .setup-field.full-width { grid-column: 1 / -1; }
+    .setup-field label { font-size: 14px; color: var(--text-secondary, #ccc); margin-bottom: 6px; font-weight: 500; }
+    .setup-field label small { color: var(--text-secondary, #888); font-weight: normal; }
+    .setup-field input, .setup-field textarea, .setup-field select {
+      background: var(--bg-secondary, #1a1a1a);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text-primary, #fff);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .setup-field input:focus, .setup-field textarea:focus, .setup-field select:focus {
+      border-color: #10b981;
+    }
+    .setup-field textarea { resize: vertical; font-family: inherit; }
+    .start-btn {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .start-btn:hover { opacity: 0.9; }
+    .start-btn:active { transform: scale(0.98); }
+    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @media (max-width: 600px) {
+      .setup-form { grid-template-columns: 1fr; }
+      .setup-section { margin: 70px 16px 30px; padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="study-plan-page">
+    <!-- Fixed Header -->
+    <header class="study-plan-header-fixed">
+      <button class="study-plan-back-arrow" onclick="window.location.href='index.html'" title="Back to App">←</button>
+      <div class="study-plan-header-content">
+        <h1 class="study-plan-header-title">📚 Study Plan</h1>
+        <p class="study-plan-header-subtitle">Personalized learning path</p>
+      </div>
+    </header>
+
+    <!-- Scrollable Content -->
+    <main class="study-plan-content">
+      <div class="study-plan-container">
+
+    <!-- Setup Section - Input Form -->
+    <div id="setupSection" class="setup-section">
+      <div class="setup-icon">📚</div>
+      <h1 class="setup-title">Study Plan Generator</h1>
+      <p class="setup-description">
+        Create a personalized study plan tailored to your target role and company.
+        Paste the job description for maximum relevance.
+      </p>
+
+      <div class="setup-form">
+        <div class="setup-field">
+          <label for="roleInput">Target Role <span style="color:#ef4444">*</span></label>
+          <input type="text" id="roleInput" placeholder="e.g., Senior DevOps Engineer, Frontend Developer" required>
+        </div>
+        <div class="setup-field">
+          <label for="companyInput">Target Company</label>
+          <input type="text" id="companyInput" placeholder="e.g., Google, Amazon, Stripe">
+        </div>
+        <div class="setup-field full-width">
+          <label for="jdInput">Job Description <small>(paste the JD for personalized skill targeting)</small></label>
+          <textarea id="jdInput" rows="5" placeholder="Paste the job description here to extract key skills and focus areas..."></textarea>
+        </div>
+        <div class="setup-field">
+          <label for="skillsInput">Current Skills <small>(comma-separated)</small></label>
+          <input type="text" id="skillsInput" placeholder="e.g., Python, React, SQL, Git">
+        </div>
+        <div class="setup-field">
+          <label for="daysInput">Preparation Time</label>
+          <select id="daysInput">
+            <option value="1">1 day</option>
+            <option value="3">3 days</option>
+            <option value="7">1 week</option>
+            <option value="14">2 weeks</option>
+            <option value="21">3 weeks</option>
+            <option value="30" selected>1 month</option>
+            <option value="60">2 months</option>
+            <option value="90">3 months</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="start-btn" id="generateBtn">Generate Personalized Plan</button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="study-plan-loading" style="display: none;">
+      <div class="study-plan-spinner"></div>
+      <p>Loading your personalized study plan...</p>
+    </div>
+
+    <!-- Content -->
+    <div id="planContent" style="display: none;">
+      <!-- Progress Section -->
+      <div class="progress-section">
+        <h2 style="font-size: 18px; margin-bottom: 10px;">Overall Progress</h2>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progressBar" style="width: 0%">
+            <span id="progressText">0%</span>
+          </div>
+        </div>
+        <div class="progress-stats">
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="totalTasks">0</div>
+            <div class="progress-stat-label">Total Tasks</div>
+          </div>
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="completedTasks">0</div>
+            <div class="progress-stat-label">Completed</div>
+          </div>
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="daysLeft">30</div>
+            <div class="progress-stat-label">Days Left</div>
+          </div>
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="studyHours">0</div>
+            <div class="progress-stat-label">Study Hours</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="study-plan-grid">
+        <!-- Main Content -->
+        <div class="main-content">
+          <!-- Today's Session -->
+          <div class="today-session">
+            <div class="today-header">
+              <h2 class="today-title">📅 Today's Session</h2>
+              <span class="today-theme" id="todayTheme">Loading...</span>
+            </div>
+            <div class="task-list" id="todayTasks">
+              <!-- Tasks loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Upcoming Sessions -->
+          <div class="upcoming-sessions">
+            <h2 class="section-title">📆 Upcoming Sessions</h2>
+            <div id="upcomingList">
+              <!-- Sessions loaded dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <!-- Weak Areas -->
+          <div class="weak-areas">
+            <h2 class="section-title">🎯 Focus Areas</h2>
+            <div id="weakAreasList">
+              <!-- Weak areas loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Skill Gaps -->
+          <div class="skill-gaps-section" id="skillGapsSection">
+            <h2 class="section-title" id="skillGapsHeader" style="display:none;">📊 Skill Gaps</h2>
+            <div id="skillGapsList">
+              <!-- Skill gaps loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Milestones -->
+          <div class="milestones">
+            <h2 class="section-title">🏆 Milestones</h2>
+            <div id="milestonesList">
+              <!-- Milestones loaded dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generate New Plan Button -->
+      <div style="text-align: center; margin-top: 40px;">
+        <button class="generate-btn" onclick="studyPlan.generateNewPlan()">
+          🔄 Generate New Plan
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <div class="empty-icon">📚</div>
+      <h2>No Study Plan Yet</h2>
+      <p>Generate your personalized study plan based on your interview history</p>
+      <button class="generate-btn" onclick="studyPlan.showSetup()" style="margin-top: 20px;">
+        ✨ Generate New Plan
+      </button>
+      </div>
+    </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/core/auth-helper.js"></script>
+  <script src="study-plan.js"></script>
+</body>
+</html>

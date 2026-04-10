@@ -1,0 +1,290 @@
+/* ==============================
+   HEADER COMPONENT
+   ============================== */
+.header-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  -webkit-app-region: drag;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Left Section */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+
+/* Center Section */
+.header-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  -webkit-app-region: drag;
+  cursor: default;
+  gap: 0;
+  padding: 2px 0;
+}
+
+.app-title {
+  font-size: 0.714em;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.app-subtitle {
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-main);
+  opacity: 0.95;
+}
+
+/* Right Section */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+
+/* ==============================
+   STEALTH BUTTON
+   ============================== */
+.stealth-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 68, 68, 0.2);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255,68,68,0.08), rgba(255,68,68,0.04));
+  color: rgba(255, 150, 150, 0.9);
+  font-size: 0.786em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s var(--ease-default);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.1);
+}
+
+.stealth-btn:hover {
+  border-color: rgba(255, 100, 100, 0.35);
+  background: linear-gradient(180deg, rgba(255,68,68,0.12), rgba(255,68,68,0.06));
+  color: rgba(255, 180, 180, 0.95);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.2);
+}
+
+.stealth-btn.undetectable {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: linear-gradient(180deg, rgba(34,197,94,0.1), rgba(34,197,94,0.05));
+  color: rgba(150, 255, 180, 0.95);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+}
+
+.stealth-btn.undetectable:hover {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: linear-gradient(180deg, rgba(34,197,94,0.15), rgba(34,197,94,0.08));
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.25);
+}
+
+.stealth-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  animation: blink-red 1.8s ease-in-out infinite;
+}
+
+@keyframes blink-red {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+  50% { opacity: 0.5; transform: scale(0.85); box-shadow: 0 0 4px rgba(239, 68, 68, 0.3); }
+}
+
+.stealth-btn.undetectable .stealth-dot {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+  animation: blink-green 1.8s ease-in-out infinite;
+}
+
+@keyframes blink-green {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
+  50% { opacity: 0.5; transform: scale(0.85); box-shadow: 0 0 4px rgba(34, 197, 94, 0.3); }
+}
+
+/* ==============================
+   BACKEND STATUS
+   ============================== */
+.backend-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.65em;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  -webkit-app-region: no-drag;
+}
+
+.backend-status.visible {
+  opacity: 1;
+}
+
+.backend-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: all 0.3s ease;
+}
+
+.backend-status.starting .backend-status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 4px #f59e0b;
+  animation: pulse 1.5s infinite;
+}
+
+.backend-status.ready .backend-status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 4px #22c55e;
+}
+
+.backend-status.error .backend-status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 4px #ef4444;
+}
+
+.backend-status.dead .backend-status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+  animation: blink 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.9); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ==============================
+   WINDOW BUTTONS
+   ============================== */
+.win-btn {
+  width: 2em;
+  height: 2em;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+  color: var(--text-dim);
+  font-size: 0.857em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease-default);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.win-btn:hover {
+  border-color: rgba(255,255,255,0.15);
+  background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+  color: var(--text-bright);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.win-btn:active {
+  transform: translateY(0);
+}
+
+.win-btn.danger:hover {
+  border-color: var(--danger);
+  background: linear-gradient(180deg, rgba(239,68,68,0.15), rgba(239,68,68,0.08));
+  color: var(--danger);
+}
+
+/* ==============================
+   TRAFFIC LIGHTS (MAC STYLE)
+   ============================== */
+.traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.traffic-btn {
+  width: 0.786em;
+  height: 0.786em;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.traffic-icon {
+  font-size: clamp(4px, 0.45em, 8px);
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  color: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.traffic-btn:hover .traffic-icon {
+  opacity: 1;
+}
+
+.traffic-btn:hover {
+  filter: brightness(1.15);
+}
+
+.traffic-btn:active {
+  filter: brightness(0.9);
+}
+
+.traffic-close {
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08);
+}
+
+.traffic-close:hover { background: #ff3b30; }
+.traffic-close:active { background: #d92d20; }
+
+.traffic-max {
+  background: #28c840;
+  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08);
+}
+
+.traffic-max:hover { background: #fe9759; }
+.traffic-max:active { background: #e67230; }
+
+.traffic-min {
+  background: #ffcc00;
+  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08);
+}
+
+.traffic-min:hover { background: #e6b800; }
+.traffic-min:active { background: #cca300; }

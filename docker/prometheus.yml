@@ -1,0 +1,117 @@
+# ANT - Prometheus Monitoring Configuration
+# Place in: ./prometheus.yml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ant-backend'
+    environment: 'production'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - 'alerts/*.yml'
+
+scrape_configs:
+  # ─── ANT Backend ────────────────────────────────────────────────────────
+  - job_name: 'ant-backend'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - ant
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: ant-backend
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        regex: "8000"
+        action: keep
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - action: replace
+        source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # ─── Node Exporter ──────────────────────────────────────────────────────
+  - job_name: 'node-exporter'
+    kubernetes_sd_configs:
+      - role: daemonset
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_daemonset_name]
+        regex: node-exporter
+        action: keep
+
+  # ─── Prometheus ────────────────────────────────────────────────────────
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alert Rules
+# File: alerts/ant-backend.yml
+# ─────────────────────────────────────────────────────────────────────────────
+groups:
+  - name: ant-backend
+    interval: 30s
+    rules:
+      - alert: BackendDown
+        expr: up{job="ant-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ANT Backend is down"
+          description: "Backend pod {{ $labels.namespace }}/{{ $labels.pod }} has been down for more than 1 minute"
+
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total{job="ant-backend"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on ANT Backend"
+          description: "CPU usage is above 80% for 5 minutes"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job="ant-backend"} / 1024 / 1024 > 1800
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on ANT Backend"
+          description: "Memory usage is above 1.8GB for 5 minutes"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="ant-backend"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on ANT Backend"
+          description: "95th percentile latency is above 2 seconds"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="ant-backend", status=~"5.."}[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on ANT Backend"
+          description: "Error rate is above 1% for 5 minutes"
+
+      - alert: PodRestartingTooMuch
+        expr: rate(kube_pod_container_status_restarts_total{job="ant-backend"}[1h]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod restarting too frequently"
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} has restarted more than twice in the last hour"

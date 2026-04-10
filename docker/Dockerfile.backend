@@ -1,0 +1,87 @@
+# ANT Backend Dockerfile - Multi-stage Production Build
+# Build: docker build -f docker/Dockerfile.backend -t ant-backend:latest .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1: Builder - Compile dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+FROM python:3.11-slim-bookworm AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies in virtual env
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy requirements first for caching
+COPY backend/requirements.txt /build/requirements.txt
+
+# Install dependencies (compiled)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: Production runtime
+# ─────────────────────────────────────────────────────────────────────────────
+FROM python:3.11-slim-bookworm AS production
+
+# Security: Non-root user
+RUN groupadd --gid 1000 appgroup && \
+    useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtual env from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY backend/ /app/
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Run with uvicorn (production)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3: Development/SBOM extraction
+# ─────────────────────────────────────────────────────────────────────────────
+FROM builder AS sbom
+
+# Install CycloneDX for SBOM generation
+RUN pip install cyclonedx-bom
+
+# Generate SBOM
+WORKDIR /src
+COPY backend/ /src/
+RUN cyclonedx-py requirements.txt -o /src/bom.xml
+
+# Export SBOM as artifact
+FROM scratch AS sbom-export
+COPY --from=sbom /src/bom.xml /bom.xml

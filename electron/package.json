@@ -23,7 +23,7 @@
   "type": "commonjs",
   "build": {
     "appId": "com.ainotetaker.app",
-    "productName": "AI Note Taker",
+    "productName": "ANT (AI Note Taker)",
     "directories": {
       "output": "dist"
     },
@@ -37,12 +37,25 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
           "target": "portable",
           "arch": ["x64"]
         }
       ],
       "icon": "assets/icon.ico",
       "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ANT (AI Note Taker)",
+      "license": "../LICENSE",
+      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
     },
     "mac": {
       "target": [

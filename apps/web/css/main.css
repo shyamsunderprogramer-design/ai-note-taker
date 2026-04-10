@@ -1,0 +1,53 @@
+/* ==============================
+   ANT (AI Note Taker) - Main Stylesheet
+   ============================== */
+
+/* Base */
+@import url('base/variables.css');
+@import url('base/reset.css');
+
+/* Components */
+@import url('components/shell.css');
+@import url('components/header.css');
+@import url('components/controls.css');
+@import url('components/menu.css');
+@import url('components/panels.css');
+
+/* Component-specific styles will be loaded by their respective modules */
+
+/* ==============================
+   UTILITIES
+   ============================== */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--glass-border);
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

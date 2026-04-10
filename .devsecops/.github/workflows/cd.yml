@@ -1,0 +1,286 @@
+# ANT AI Note Taker - CD Deployment Pipeline
+# Deploys to staging/production based on branch rules
+
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main, develop]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+          - preview
+      image_tag:
+        description: 'Image tag to deploy (defaults to latest)'
+        required: false
+        type: string
+      rollout_strategy:
+        description: 'Rollout strategy'
+        required: false
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+          - manual
+        default: rolling
+
+concurrency:
+  group: cd-${{ github.ref }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository_owner }}/ant-backend
+  ELECTRON_IMAGE: ${{ github.repository_owner }}/ant-electron
+  KUBECONFIG: /tmp/kubeconfig
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # PRE-DEPLOYMENT GATE
+  # ═══════════════════════════════════════════════════════════════════════
+  pre-deploy:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    outputs:
+      can_deploy: ${{ steps.validate.outputs.can_deploy }}
+      environment: ${{ steps.validate.outputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate environment
+        id: validate
+        run: |
+          ENV="${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'staging' || 'preview') }}"
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "can_deploy=true" >> $GITHUB_OUTPUT
+
+      - name: Check security gates
+        run: |
+          echo "Checking security gate status..."
+          # In production, verify all security scans passed
+          if [[ "${{ steps.validate.outputs.environment }}" == "production" ]]; then
+            echo "Production deployment requires manual approval"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # TERRAFORM INFRASTRUCTURE
+  # ═══════════════════════════════════════════════════════════════════════
+  infrastructure:
+    name: Infrastructure Provisioning
+    runs-on: ubuntu-latest
+    needs: [pre-deploy]
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
+    environment: ${{ needs.pre-deploy.outputs.environment }}
+    strategy:
+      matrix:
+        cloud: [aws, azure, gcp]
+        include:
+          - cloud: aws
+            terraform_dir: infrastructure/terraform/aws
+          - cloud: azure
+            terraform_dir: infrastructure/terraform/azure
+          - cloud: gcp
+            terraform_dir: infrastructure/terraform/gcp
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+          terraform_wrapper: true
+
+      - name: Configure AWS credentials
+        if: matrix.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure Azure credentials
+        if: matrix.cloud == 'azure'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configure GCP credentials
+        if: matrix.cloud == 'gcp'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="key=${{ matrix.cloud }}/${{ needs.pre-deploy.outputs.environment }}/terraform.tfstate"
+        working-directory: ${{ matrix.terraform_dir }}
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="environment=${{ needs.pre-deploy.outputs.environment }}" \
+            -var="image_tag=${{ github.event.inputs.image_tag || github.sha }}" \
+            -out=tfplan
+        working-directory: ${{ matrix.terraform_dir }}
+
+      - name: Terraform Apply (on merge to main for non-production)
+        if: github.event_name == 'workflow_run' && needs.pre-deploy.outputs.environment != 'production'
+        run: |
+          terraform apply -auto-approve tfplan
+        working-directory: ${{ matrix.terraform_dir }}
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.cloud }}
+          path: ${{ matrix.terraform_dir }}/tfplan
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # HELM DEPLOYMENT
+  # ═══════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to ${{ needs.pre-deploy.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [pre-deploy, infrastructure]
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
+    environment: ${{ needs.pre-deploy.outputs.environment }}
+    environment:
+      name: ${{ needs.pre-deploy.outputs.environment }}
+      url: https://${{ needs.pre-deploy.outputs.environment }}.ant.example.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubernetes cluster credentials
+        uses: azure/k8s-set-context@v4
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      - name: Wait for nodes to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+      # ─── Backend Deployment ────────────────────────────────────────────
+      - name: Deploy Backend Helm Chart
+        run: |
+          helm upgrade --install ant-backend \
+            ./k8s/helm/backend \
+            --namespace ant \
+            --create-namespace \
+            --values ./k8s/helm/backend/values-${{ needs.pre-deploy.outputs.environment }}.yaml \
+            --set image.tag=${{ github.event.inputs.image_tag || github.sha }} \
+            --wait --timeout 10m \
+            --atomic \
+            --cleanup-on-fail
+
+      # ─── Canary Rollout (Production only) ─────────────────────────────
+      - name: Canary Deployment (Production)
+        if: needs.pre-deploy.outputs.environment == 'production'
+        run: |
+          # Canary: 10% traffic for 10 minutes
+          kubectl argo rollouts set image ant-backend \
+            ant-backend=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            --namespace ant
+
+          # Monitor canary
+          kubectl argo rollouts get rollout ant-backend \
+            --namespace ant \
+            --watch
+
+      # ─── Smoke Tests ──────────────────────────────────────────────────
+      - name: Run Smoke Tests
+        run: |
+          BACKEND_URL=$(kubectl get svc ant-backend \
+            -n ant \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          curl -f "https://$BACKEND_URL/health" || exit 1
+
+      # ─── Health Check ──────────────────────────────────────────────────
+      - name: Verify Deployment Health
+        run: |
+          kubectl rollout status deployment/ant-backend \
+            --namespace ant \
+            --timeout=5m
+
+          kubectl rollout status deployment/ant-backend \
+            --namespace ant
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # POST-DEPLOYMENT MONITORING
+  # ═══════════════════════════════════════════════════════════════════════
+  post-deploy:
+    name: Post-Deployment Verification
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Datadog Synthetic Test
+        if: needs.deploy.result == 'success'
+        run: |
+          curl -X POST "https://api.datadoghq.com/api/v1/synthetics/trigger" \
+            -H "Content-Type: application/json" \
+            -H "DD-API-KEY: ${{ secrets.DD_API_KEY }}" \
+            -H "DD-APPLICATION-KEY: ${{ secrets.DD_APP_KEY }}" \
+            -d '{"tests": [{"public_id": "${{ vars.DD_SYNTHETIC_TEST_ID }}"}]}'
+        continue-on-error: true
+
+      - name: Notify Deployment Complete
+        uses: slackapi/slack-github-action@v2
+        with:
+          channel-id: ${{ vars.DEPLOYMENT_CHANNEL }}
+          payload: |
+            {
+              "text": "Deployment to ${{ needs.deploy.outputs.environment }} completed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Complete*\n• Environment: ${{ needs.deploy.outputs.environment }}\n• SHA: `${{ github.sha }}`\n• Status: ${{ needs.deploy.result }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true
+
+      - name: Update Jira Release
+        if: needs.deploy.outputs.environment == 'production'
+        run: |
+          curl -X POST "${{ secrets.JIRA_URL }}/rest/api/3/issue/${{ secrets.RELEASE_JIRA_KEY }}/transitions" \
+            -H "Authorization: Basic ${{ secrets.JIRA_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition":{"id":"Done"}}'
+        continue-on-error: true

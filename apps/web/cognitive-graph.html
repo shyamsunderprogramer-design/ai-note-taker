@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognitive Graph - ANT (AI Note Taker)</title>
+
+  <!-- Base Styles -->
+  <link rel="stylesheet" href="css/base/variables.css">
+  <link rel="stylesheet" href="style.css?v=25">
+
+  <!-- Component Styles -->
+  <link rel="stylesheet" href="css/components/cognitive-graph.css">
+</head>
+<body>
+  <div class="cg-page">
+    <!-- Fixed Header -->
+    <header class="cg-header-fixed">
+      <button class="cg-back-arrow" onclick="window.location.href='index.html'" title="Back to App">←</button>
+      <div class="cg-header-content">
+        <div class="cg-header-title-group">
+          <h1 class="cg-header-title">🧠 Cognitive Graph</h1>
+          <div id="connectionStatus" class="cg-status disconnected">
+            <span class="cg-status-dot"></span>
+            <span id="statusText">Disconnected</span>
+          </div>
+        </div>
+        <nav class="cg-nav">
+          <button class="cg-nav-btn active" data-tab="overview">Overview</button>
+          <button class="cg-nav-btn" data-tab="search">Search</button>
+          <button class="cg-nav-btn" data-tab="companies">Companies</button>
+          <button class="cg-nav-btn" data-tab="skills">Skills</button>
+          <button class="cg-nav-btn" data-tab="extract">Extract</button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Scrollable Content -->
+    <main class="cg-content">
+      <div class="cg-container">
+
+    <!-- Overview Tab -->
+    <section id="tab-overview" class="cg-tab active">
+      <div class="cg-stats-grid">
+        <div class="cg-stat-card cg-animate-in">
+          <div class="cg-stat-value" id="statInterviews">0</div>
+          <div class="cg-stat-label">Total Interviews</div>
+        </div>
+        <div class="cg-stat-card cg-animate-in">
+          <div class="cg-stat-value" id="statQuestions">0</div>
+          <div class="cg-stat-label">Questions Asked</div>
+        </div>
+        <div class="cg-stat-card cg-animate-in">
+          <div class="cg-stat-value" id="statCompanies">0</div>
+          <div class="cg-stat-label">Companies</div>
+        </div>
+        <div class="cg-stat-card cg-animate-in">
+          <div class="cg-stat-value" id="statTopics">0</div>
+          <div class="cg-stat-label">Topics</div>
+        </div>
+      </div>
+
+      <div class="cg-content-grid">
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">Interview Activity</h3>
+          <div id="interviewChart" class="cg-chart-container">
+            <div class="cg-empty">
+              <div class="cg-empty-icon">📈</div>
+              <p>Interview activity will appear here.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">Question Categories</h3>
+          <div id="categoryChart" class="cg-chart-container">
+            <div class="cg-empty">
+              <div class="cg-empty-icon">🥧</div>
+              <p>Category breakdown will appear here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cg-content-grid" style="margin-top: var(--space-5);">
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">Recent Interviews</h3>
+          <div id="recentInterviews" class="cg-results-list">
+            <div class="cg-empty">
+              <div class="cg-empty-icon">📋</div>
+              <div class="cg-empty-title">No interviews yet</div>
+              <div class="cg-empty-subtitle">Start recording to build your graph</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cg-panel">
+          <h3 class="cg-panel-title">Top Companies</h3>
+          <div id="topCompanies" class="cg-company-grid">
+            <div class="cg-empty">
+              <div class="cg-empty-icon">🏢</div>
+              <div class="cg-empty-title">No company data yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Search Tab -->
+    <section id="tab-search" class="cg-tab">
+      <div class="cg-search-section">
+        <!-- Basic Search -->
+        <div class="cg-search-box">
+          <input type="text" id="searchInput" class="cg-search-input" placeholder="Search your interview history (e.g., 'React hooks', 'system design')...">
+          <button id="searchBtn" class="cg-search-btn">Search</button>
+        </div>
+
+        <!-- Advanced Filters -->
+        <div class="cg-advanced-filters">
+          <select id="filterCompany" class="cg-filter-select">
+            <option value="">All Companies</option>
+          </select>
+          <select id="filterCategory" class="cg-filter-select">
+            <option value="">All Categories</option>
+            <option value="technical">Technical</option>
+            <option value="system_design">System Design</option>
+            <option value="behavioral">Behavioral</option>
+            <option value="knowledge">Knowledge</option>
+          </select>
+          <select id="filterDifficulty" class="cg-filter-select">
+            <option value="">All Difficulties</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button id="advancedSearchBtn" class="cg-search-btn">Advanced Search</button>
+          <button id="clearFiltersBtn" class="cg-search-btn secondary">Clear</button>
+        </div>
+
+        <!-- Search Stats -->
+        <div id="searchStats" class="cg-search-stats">
+          <span id="searchStatsText"></span>
+        </div>
+
+        <div id="searchResults" class="cg-results-list">
+          <div class="cg-empty">
+            <div class="cg-empty-icon">🔍</div>
+            <div class="cg-empty-title">Search your interview history</div>
+            <div class="cg-empty-subtitle">Enter keywords to find relevant questions and answers</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Companies Tab -->
+    <section id="tab-companies" class="cg-tab">
+      <div class="cg-panel">
+        <h3 class="cg-panel-title">Company Insights</h3>
+        <div id="companyInsights">
+          <div class="cg-empty">
+            <div class="cg-empty-icon">🏢</div>
+            <div class="cg-empty-title">Select a company</div>
+            <div class="cg-empty-subtitle">View interview patterns and insights</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Skills Tab -->
+    <section id="tab-skills" class="cg-tab">
+      <div class="cg-panel">
+        <h3 class="cg-panel-title">Skills Progression</h3>
+        <div id="skillsList">
+          <div class="cg-empty">
+            <div class="cg-empty-icon">📈</div>
+            <div class="cg-empty-title">No skills data yet</div>
+            <div class="cg-empty-subtitle">Your skill progression will appear here as you conduct more interviews</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Extract Tab -->
+    <section id="tab-extract" class="cg-tab">
+      <div class="cg-panel">
+        <h3 class="cg-panel-title">Entity Extraction</h3>
+        <p style="margin-bottom: var(--space-4); color: var(--text-dim);">
+          Paste interview text to extract companies, skills, topics, and categorize questions.
+        </p>
+        <textarea id="extractText" class="cg-textarea" placeholder="Paste interview transcript here..."></textarea>
+        <button id="extractBtn" class="cg-extract-btn">Extract Entities</button>
+        <div id="extractResult"></div>
+      </div>
+    </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Auth helper patches fetch with JWT token -->
+  <script src="js/core/auth-helper.js"></script>
+  <!-- Entry Point Module -->
+  <script type="module" src="js/cognitive-graph.js"></script>
+</body>
+</html>

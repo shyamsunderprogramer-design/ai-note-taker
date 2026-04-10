@@ -1,0 +1,100 @@
+{
+  "name": "ant-interview-assistant",
+  "displayName": "ANT - Interview Assistant",
+  "description": "AI-powered interview assistance for VSCode",
+  "version": "1.0.0",
+  "publisher": "ant-ai",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Education"
+  ],
+  "keywords": [
+    "interview",
+    "ai",
+    "coding",
+    "assistant"
+  ],
+  "activationEvents": [
+    "onCommand:ant.startInterview",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ant.startInterview",
+        "title": "Start Interview Mode",
+        "category": "ANT"
+      },
+      {
+        "command": "ant.askQuestion",
+        "title": "Ask AI",
+        "category": "ANT"
+      },
+      {
+        "command": "ant.toggleSidebar",
+        "title": "Toggle Sidebar",
+        "category": "ANT"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "ant.startInterview",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      },
+      {
+        "command": "ant.askQuestion",
+        "key": "ctrl+shift+q",
+        "mac": "cmd+shift+q"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "ant.interviewPanel",
+          "name": "Interview Assistant",
+          "when": "ant.enabled"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ant",
+          "title": "ANT",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ANT Interview Assistant",
+      "properties": {
+        "ant.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "ANT backend API URL"
+        },
+        "ant.autoSuggest": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable auto-suggestions while coding"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "^18.x",
+    "typescript": "^4.9.4"
+  }
+}
