@@ -33,7 +33,7 @@ class StudyTask:
     id: str
     title: str
     description: str
-    category: str  # "algorithms", "system_design", "behavioral", "language"
+    category: str  # "algorithms", "system_design", "behavioral", "language", "devops", "cloud", etc.
     difficulty: str  # "easy", "medium", "hard"
     estimated_minutes: int
     resources: List[Dict]
@@ -41,6 +41,9 @@ class StudyTask:
     completed: bool = False
     scheduled_date: Optional[datetime] = None
     confidence_target: float = 0.8
+    parent_area: str = ""       # Which weak area this task belongs to
+    is_focus: bool = False      # Primary task for the day
+    is_stretch: bool = False   # Optional stretch goal
 
 
 @dataclass
@@ -50,6 +53,9 @@ class StudySession:
     tasks: List[StudyTask]
     total_minutes: int
     theme: str  # e.g., "Graph Algorithms", "System Design Fundamentals"
+    day_number: int = 0                  # 1-based day number
+    focus_task_id: Optional[str] = None   # Primary task ID
+    stretch_task_id: Optional[str] = None  # Optional stretch goal ID
 
 
 @dataclass
@@ -70,6 +76,7 @@ class StudyPlan:
     target_company: Optional[str] = None
     skill_gaps: Optional[List[Dict]] = None
     plan_type: str = "generic"  # "personalized" or "generic"
+    personalization_context: Optional[Dict] = None  # Metadata about plan sources
 
 
 class SpacedRepetitionScheduler:
@@ -203,7 +210,7 @@ class JDAnalyzer:
 
         # Sort by confidence ascending (weakest first)
         skills = sorted(seen.values(), key=lambda x: x["confidence"])
-        return skills[:15]  # Cap at 15 skills from JD
+        return skills[:25]  # Cap at 25 skills from JD
 
 
 class StudyPlanGenerator:
@@ -683,9 +690,9 @@ class StudyPlanGenerator:
         # Deduplicate: merge same-named skills, keep lowest confidence
         merged = self._merge_weak_areas(all_weak_areas)
 
-        # Sort by confidence (weakest first) and cap at 7
+        # Sort by confidence (weakest first) and cap at 12
         merged.sort(key=lambda x: x.get("confidence", 0.5))
-        return merged[:7]
+        return merged[:12]
 
     def _compute_skill_gaps(
         self,
@@ -715,60 +722,84 @@ class StudyPlanGenerator:
                 "required": True,
                 "current_level": "known" if already_known else "gap",
                 "gap_score": round(gap_score, 2),
+                "gap_percentage": round(gap_score * 100) if not already_known else 0,
+                "recommended_hours": round(gap_score * 20) if not already_known else 0,
+                "priority": "high" if gap_score >= 0.7 else "medium" if gap_score >= 0.4 else "low",
+                "proficiency": "intermediate" if already_known else "none",
                 "source": "job_description",
             })
 
         # Sort by gap score (biggest gaps first)
         gaps.sort(key=lambda x: x["gap_score"], reverse=True)
-        return gaps[:10]
+        return gaps[:15]
 
     def _get_role_weak_areas(self, role: str) -> List[Dict]:
         """Generate default weak areas based on target role"""
         role_lower = role.lower()
 
-        # Role-to-category mapping
+        # Role-to-category mapping with sub_topics for richer task generation
         role_patterns = {
             "devops": [
-                {"name": "CI/CD Pipelines", "confidence": 0.35, "category": "devops", "source": "role_pattern"},
-                {"name": "Infrastructure as Code", "confidence": 0.4, "category": "devops", "source": "role_pattern"},
-                {"name": "Container Orchestration", "confidence": 0.45, "category": "devops", "source": "role_pattern"},
-                {"name": "Monitoring & Observability", "confidence": 0.5, "category": "devops", "source": "role_pattern"},
+                {"name": "CI/CD Pipelines", "confidence": 0.3, "category": "devops", "source": "role_pattern", "sub_topics": ["Jenkins Pipeline Configuration", "GitHub Actions Workflows", "ArgoCD GitOps Deployment", "Pipeline Security & Secrets"]},
+                {"name": "Infrastructure as Code", "confidence": 0.35, "category": "devops", "source": "role_pattern", "sub_topics": ["Terraform Modules & State", "Ansible Playbooks", "CloudFormation Templates", "IaC Testing Strategies"]},
+                {"name": "Container Orchestration", "confidence": 0.4, "category": "devops", "source": "role_pattern", "sub_topics": ["Kubernetes Pod & Deployment Config", "Helm Charts", "Container Networking (CNI)", "Cluster Autoscaling"]},
+                {"name": "Monitoring & Observability", "confidence": 0.45, "category": "devops", "source": "role_pattern", "sub_topics": ["Prometheus & Grafana Setup", "Distributed Tracing (Jaeger)", "Log Aggregation (ELK Stack)", "SLO/SLI Definition"]},
+                {"name": "Cloud Infrastructure", "confidence": 0.5, "category": "cloud", "source": "role_pattern", "sub_topics": ["AWS VPC & IAM", "GCP Compute & Storage", "Serverless Architecture", "Cost Optimization"]},
+                {"name": "Security & Compliance", "confidence": 0.55, "category": "security", "source": "role_pattern", "sub_topics": ["RBAC & Secrets Management", "Container Image Scanning", "Network Policies & Firewalls", "Compliance Automation"]},
+                {"name": "System Design for Scale", "confidence": 0.4, "category": "system_design", "source": "role_pattern", "sub_topics": ["Load Balancer Strategies", "Caching Patterns", "Database Sharding & Replication", "Message Queue Architecture"]},
+                {"name": "Algorithms & Problem Solving", "confidence": 0.5, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Graph Traversal (BFS/DFS)", "Heap & Priority Queue Patterns", "Dynamic Programming Fundamentals", "String Manipulation Patterns"]},
             ],
             "frontend": [
-                {"name": "React/Vue Performance", "confidence": 0.35, "category": "javascript", "source": "role_pattern"},
-                {"name": "CSS Architecture", "confidence": 0.4, "category": "javascript", "source": "role_pattern"},
-                {"name": "Web Accessibility", "confidence": 0.45, "category": "javascript", "source": "role_pattern"},
-                {"name": "State Management", "confidence": 0.5, "category": "javascript", "source": "role_pattern"},
+                {"name": "React/Vue Performance", "confidence": 0.3, "category": "javascript", "source": "role_pattern", "sub_topics": ["React Hooks Deep Dive", "State Management Patterns", "React Performance Optimization", "Server Components (RSC)"]},
+                {"name": "CSS Architecture", "confidence": 0.35, "category": "javascript", "source": "role_pattern", "sub_topics": ["CSS Grid & Flexbox Mastery", "Responsive Design Patterns", "CSS Custom Properties & Theming", "Animation & Transitions"]},
+                {"name": "Web Accessibility", "confidence": 0.4, "category": "javascript", "source": "role_pattern", "sub_topics": ["ARIA Labels & Roles", "Keyboard Navigation", "Screen Reader Compatibility", "WCAG 2.1 Guidelines"]},
+                {"name": "State Management", "confidence": 0.45, "category": "javascript", "source": "role_pattern", "sub_topics": ["Redux/Zustand Patterns", "Context API Best Practices", "Server State vs Client State", "Optimistic Updates"]},
+                {"name": "TypeScript Mastery", "confidence": 0.5, "category": "javascript", "source": "role_pattern", "sub_topics": ["Generics & Utility Types", "Type Guards & Narrowing", "Module Declaration Files", "Strict Mode Patterns"]},
+                {"name": "Testing & Quality", "confidence": 0.5, "category": "javascript", "source": "role_pattern", "sub_topics": ["Jest Unit Testing", "Cypress E2E Testing", "Testing Library Patterns", "CI/CD for Frontend"]},
+                {"name": "System Design for Frontend", "confidence": 0.4, "category": "system_design", "source": "role_pattern", "sub_topics": ["Component Architecture", "API Design for SPAs", "Caching Strategies (CDN/SW)", "Micro-Frontends"]},
+                {"name": "Algorithms", "confidence": 0.5, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Two Pointer Technique", "Sliding Window Pattern", "Tree Traversal", "Dynamic Programming Basics"]},
             ],
             "backend": [
-                {"name": "System Design", "confidence": 0.3, "category": "system_design", "source": "role_pattern"},
-                {"name": "Database Optimization", "confidence": 0.4, "category": "databases", "source": "role_pattern"},
-                {"name": "API Design", "confidence": 0.45, "category": "api", "source": "role_pattern"},
-                {"name": "Algorithms", "confidence": 0.5, "category": "algorithms", "source": "role_pattern"},
+                {"name": "System Design", "confidence": 0.3, "category": "system_design", "source": "role_pattern", "sub_topics": ["Load Balancing & Proxies", "Database Sharding", "Caching Strategies", "Microservices Communication"]},
+                {"name": "Database Optimization", "confidence": 0.35, "category": "databases", "source": "role_pattern", "sub_topics": ["SQL Query Optimization & EXPLAIN", "Indexing Strategies", "Connection Pooling", "Transaction Isolation Levels"]},
+                {"name": "API Design", "confidence": 0.4, "category": "api", "source": "role_pattern", "sub_topics": ["REST API Best Practices", "GraphQL Schema Design", "API Versioning Strategies", "Rate Limiting & Throttling"]},
+                {"name": "Algorithms", "confidence": 0.45, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Graph Traversal", "Dynamic Programming", "Binary Search Patterns", "Heap & Priority Queue"]},
+                {"name": "Concurrency & Parallelism", "confidence": 0.5, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Thread Safety & Locks", "Async Programming Patterns", "Race Conditions & Deadlocks", "Producer-Consumer Pattern"]},
+                {"name": "Security Fundamentals", "confidence": 0.5, "category": "security", "source": "role_pattern", "sub_topics": ["Authentication Patterns (JWT/OAuth)", "Input Validation & Sanitization", "HTTPS & TLS", "OWASP Top 10 for APIs"]},
+                {"name": "Caching & Performance", "confidence": 0.55, "category": "system_design", "source": "role_pattern", "sub_topics": ["Redis Patterns", "CDN Configuration", "Application-Level Caching", "Query Result Caching"]},
+                {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern", "sub_topics": ["System Design Tradeoffs", "Debugging Production Issues", "Technical Decision Making", "Cross-team Collaboration"]},
             ],
             "fullstack": [
-                {"name": "System Design", "confidence": 0.3, "category": "system_design", "source": "role_pattern"},
-                {"name": "Algorithms", "confidence": 0.4, "category": "algorithms", "source": "role_pattern"},
-                {"name": "API Design", "confidence": 0.45, "category": "api", "source": "role_pattern"},
-                {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern"},
+                {"name": "System Design", "confidence": 0.3, "category": "system_design", "source": "role_pattern", "sub_topics": ["End-to-End Architecture", "Database Sharding & Replication", "Caching Layers", "API Gateway Patterns"]},
+                {"name": "Algorithms", "confidence": 0.35, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Array & String Patterns", "Tree & Graph Traversal", "Dynamic Programming", "Hash Map Techniques"]},
+                {"name": "API Design", "confidence": 0.4, "category": "api", "source": "role_pattern", "sub_topics": ["REST Best Practices", "GraphQL vs REST", "Authentication & Authorization", "Error Handling Patterns"]},
+                {"name": "Frontend Performance", "confidence": 0.45, "category": "javascript", "source": "role_pattern", "sub_topics": ["Bundle Optimization", "Lazy Loading & Code Splitting", "Web Vitals (LCP/FID/CLS)", "SSR vs CSR Tradeoffs"]},
+                {"name": "Database Design", "confidence": 0.45, "category": "databases", "source": "role_pattern", "sub_topics": ["Schema Design", "Indexing Strategies", "Query Optimization", "Data Migration Patterns"]},
+                {"name": "DevOps Basics", "confidence": 0.5, "category": "devops", "source": "role_pattern", "sub_topics": ["Docker Fundamentals", "CI/CD Pipeline Setup", "Basic Kubernetes", "Environment Configuration"]},
+                {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern", "sub_topics": ["STAR Method", "Technical Leadership", "Handling Ambiguity", "Cross-functional Communication"]},
             ],
             "data": [
-                {"name": "SQL Optimization", "confidence": 0.3, "category": "databases", "source": "role_pattern"},
-                {"name": "Statistical Analysis", "confidence": 0.4, "category": "ml", "source": "role_pattern"},
-                {"name": "Data Pipeline Design", "confidence": 0.45, "category": "system_design", "source": "role_pattern"},
-                {"name": "Algorithms", "confidence": 0.5, "category": "algorithms", "source": "role_pattern"},
+                {"name": "SQL Optimization", "confidence": 0.3, "category": "databases", "source": "role_pattern", "sub_topics": ["Window Functions", "CTEs & Subqueries", "Query Optimization & EXPLAIN", "Indexing Strategies"]},
+                {"name": "Statistical Analysis", "confidence": 0.35, "category": "ml", "source": "role_pattern", "sub_topics": ["Hypothesis Testing", "A/B Testing Frameworks", "Regression Analysis", "Probability Distributions"]},
+                {"name": "Data Pipeline Design", "confidence": 0.4, "category": "system_design", "source": "role_pattern", "sub_topics": ["ETL vs ELT Patterns", "Stream Processing (Kafka)", "Data Warehouse Architecture", "Data Quality & Validation"]},
+                {"name": "Python for Data", "confidence": 0.45, "category": "python", "source": "role_pattern", "sub_topics": ["Pandas & NumPy", "Data Visualization (Matplotlib/Seaborn)", "Jupyter Notebook Best Practices", "Async Data Processing"]},
+                {"name": "Algorithms", "confidence": 0.5, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Sorting & Searching", "Dynamic Programming", "Graph Algorithms", "Probability & Combinatorics"]},
+                {"name": "Machine Learning Basics", "confidence": 0.5, "category": "ml", "source": "role_pattern", "sub_topics": ["Supervised vs Unsupervised Learning", "Model Evaluation (Precision/Recall)", "Feature Engineering", "Overfitting & Regularization"]},
             ],
             "security": [
-                {"name": "OWASP Top 10", "confidence": 0.3, "category": "security", "source": "role_pattern"},
-                {"name": "Network Security", "confidence": 0.4, "category": "security", "source": "role_pattern"},
-                {"name": "Cryptography", "confidence": 0.45, "category": "security", "source": "role_pattern"},
-                {"name": "Incident Response", "confidence": 0.5, "category": "security", "source": "role_pattern"},
+                {"name": "OWASP Top 10", "confidence": 0.3, "category": "security", "source": "role_pattern", "sub_topics": ["Injection Attacks", "Broken Authentication", "XSS Prevention", "Security Misconfiguration"]},
+                {"name": "Network Security", "confidence": 0.35, "category": "security", "source": "role_pattern", "sub_topics": ["TCP/IP Fundamentals", "Firewall Configuration", "VPN & Tunneling", "Network Monitoring"]},
+                {"name": "Cryptography", "confidence": 0.4, "category": "security", "source": "role_pattern", "sub_topics": ["Symmetric vs Asymmetric Encryption", "Hashing & Salting", "TLS/SSL Handshake", "Key Management"]},
+                {"name": "Authentication & Authorization", "confidence": 0.45, "category": "security", "source": "role_pattern", "sub_topics": ["OAuth2 & OIDC", "JWT Security", "RBAC vs ABAC", "Session Management"]},
+                {"name": "Cloud Security", "confidence": 0.5, "category": "cloud", "source": "role_pattern", "sub_topics": ["AWS IAM Best Practices", "Cloud Security Posture Management", "Infrastructure Security", "Compliance Frameworks"]},
+                {"name": "Incident Response", "confidence": 0.5, "category": "security", "source": "role_pattern", "sub_topics": ["Threat Modeling", "Forensic Analysis", "Incident Handling Process", "Security Monitoring & Alerting"]},
             ],
             "mobile": [
-                {"name": "Mobile Architecture", "confidence": 0.35, "category": "system_design", "source": "role_pattern"},
-                {"name": "Performance Optimization", "confidence": 0.4, "category": "algorithms", "source": "role_pattern"},
-                {"name": "Platform-Specific APIs", "confidence": 0.45, "category": "algorithms", "source": "role_pattern"},
-                {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern"},
+                {"name": "Mobile Architecture", "confidence": 0.3, "category": "system_design", "source": "role_pattern", "sub_topics": ["App Architecture Patterns (MVVM/MVI)", "Offline-First Design", "Push Notification Architecture", "Deep Linking"]},
+                {"name": "Performance Optimization", "confidence": 0.35, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Memory Management", "Battery Optimization", "Network Caching", "Startup Time Optimization"]},
+                {"name": "Platform-Specific APIs", "confidence": 0.4, "category": "algorithms", "source": "role_pattern", "sub_topics": ["iOS UIKit / SwiftUI", "Android Jetpack Compose", "Platform Channels (Flutter)", "Native Module Integration"]},
+                {"name": "Testing & CI/CD", "confidence": 0.45, "category": "devops", "source": "role_pattern", "sub_topics": ["Unit & Widget Testing", "Integration Testing", "Fastlane Deployment", "Mobile CI/CD Pipelines"]},
+                {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern", "sub_topics": ["Cross-functional Collaboration", "App Store Review Process", "Handling Technical Debt", "User-Centered Design Decisions"]},
             ],
         }
 
@@ -779,9 +810,9 @@ class StudyPlanGenerator:
 
         # Default: return backend pattern for unknown roles
         return [
-            {"name": "System Design", "confidence": 0.3, "category": "system_design", "source": "role_pattern"},
-            {"name": "Algorithms", "confidence": 0.4, "category": "algorithms", "source": "role_pattern"},
-            {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern"},
+            {"name": "System Design", "confidence": 0.3, "category": "system_design", "source": "role_pattern", "sub_topics": ["Load Balancing", "Caching Strategies", "Database Sharding", "Microservices Communication"]},
+            {"name": "Algorithms", "confidence": 0.4, "category": "algorithms", "source": "role_pattern", "sub_topics": ["Two Pointer Technique", "Sliding Window", "BFS/DFS", "Dynamic Programming Basics"]},
+            {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "role_pattern", "sub_topics": ["STAR Method Practice", "Leadership Examples", "Handling Failure Stories", "Technical Decision Making"]},
         ]
 
     def _get_company_focus_areas(self, company: str) -> List[Dict]:
@@ -1158,12 +1189,16 @@ class StudyPlanGenerator:
             Updated StudyPlan
         """
         # Update task completion
+        found = False
         for session in plan.sessions:
             for task in session.tasks:
-                if task.id == completed_task_id:
+                if task.id == completed_task_id and not found:
                     task.completed = True
                     plan.completed_tasks += 1
+                    found = True
                     break
+            if found:
+                break
 
         # Recalculate progress
         plan.progress_percentage = (

@@ -218,8 +218,8 @@ class TestSpeakingPatternAnalysis:
 
     def test_pace_assessment_good(self):
         """Test good pace assessment"""
-        # Medium length sentences = good pace
-        answer = "I implemented the feature. It took about three days. The code works well."
+        # Medium length sentences = good pace (8-25 words per sentence)
+        answer = "I implemented a new caching layer for the database to improve our response times. It took about three days of focused work to complete the implementation. The code works well and passes all of our integration tests."
 
         speaking = self.analyzer.analyze_speaking_patterns(answer)
 
