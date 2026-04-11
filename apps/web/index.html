@@ -129,20 +129,18 @@
             <option value="groq-mixtral-8x7b">Mixtral 8x7B</option>
             <option value="groq-qwen-2-5-72b">Qwen 2.5 72B</option>
           </optgroup>
-          <optgroup label="Ollama (Local)">
-            <option value="qwen2.5:1.5b">Qwen 2.5 1.5B</option>
-            <option value="deepseek-r1:8b">DeepSeek R1 8B</option>
-            <option value="deepseek-r1:latest">DeepSeek R1 Latest</option>
-            <option value="qwen3.5:latest">Qwen 3.5 Latest</option>
+          <optgroup label="Ollama (Local)" id="ollamaLocalGroup">
+            <!-- Populated dynamically by loadLocalOllamaModels() -->
           </optgroup>
           <optgroup label="Ollama Cloud">
             <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
             <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
             <option value="glm-4.7:cloud">GLM 4.7</option>
-            <option value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</option>
-            <option value="rnj-1:8b-cloud">RNJ-1 8B</option>
-            <option value="nemotron-3-super:cloud">Nemotron 3 Super</option>
+            <option value="glm-5.1:cloud">GLM 5.1</option>
             <option value="kimi-k2.5:cloud">Kimi K2.5</option>
+            <option value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</option>
+            <option value="nemotron-3-super:cloud">Nemotron 3 Super</option>
+            <option value="rnj-1:8b-cloud">RNJ-1 8B</option>
             <option value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</option>
           </optgroup>
         </select>
@@ -241,12 +239,23 @@
         <input type="text" id="textInput" placeholder="Type here..." />
       </div>
 
+      <button id="captureBtn" class="capture-btn" type="button" title="Capture screenshot + OCR">
+        <span>&#128247;</span>
+      </button>
+
       <button id="listenBtn" class="action-btn" type="button">
         <span class="mic-icon">&#127908;</span>
         <span id="listenLabel">Start</span>
       </button>
 
       <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
+    </div>
+
+    <!-- OCR preview badge (shown when screenshot is captured) -->
+    <div id="ocrBadge" class="ocr-badge" style="display:none">
+      <span class="ocr-badge-icon">&#128247;</span>
+      <span id="ocrBadgeText" class="ocr-badge-text"></span>
+      <span id="ocrBadgeRemove" class="ocr-badge-remove" title="Remove screenshot">&times;</span>
     </div>
 
     <!-- ===== ROW 4: AI RESPONSE ===== -->
@@ -517,6 +526,10 @@
                   <span class="provider-name">Ollama Cloud</span>
                   <span class="provider-enabled-dot" id="dot-ollama-cloud"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-ollama-cloud" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-ollama-cloud" data-provider="ollama-cloud">&#9881;</button>
               </div>
 
@@ -526,6 +539,10 @@
                   <span class="provider-name">OpenAI</span>
                   <span class="provider-enabled-dot" id="dot-openai"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-openai" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-openai" data-provider="openai">&#9881;</button>
               </div>
 
@@ -535,6 +552,10 @@
                   <span class="provider-name">Anthropic</span>
                   <span class="provider-enabled-dot" id="dot-anthropic"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-anthropic" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-anthropic" data-provider="anthropic">&#9881;</button>
               </div>
 
@@ -544,6 +565,10 @@
                   <span class="provider-name">Google</span>
                   <span class="provider-enabled-dot" id="dot-google"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-google" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-google" data-provider="google">&#9881;</button>
               </div>
 
@@ -553,6 +578,10 @@
                   <span class="provider-name">xAI</span>
                   <span class="provider-enabled-dot" id="dot-xai"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-xai" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-xai" data-provider="xai">&#9881;</button>
               </div>
 
@@ -562,6 +591,10 @@
                   <span class="provider-name">DeepSeek</span>
                   <span class="provider-enabled-dot" id="dot-deepseek"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-deepseek" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-deepseek" data-provider="deepseek">&#9881;</button>
               </div>
 
@@ -571,6 +604,10 @@
                   <span class="provider-name">Groq</span>
                   <span class="provider-enabled-dot" id="dot-groq"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-groq" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-groq" data-provider="groq">&#9881;</button>
               </div>
 
@@ -580,6 +617,10 @@
                   <span class="provider-name">Perplexity</span>
                   <span class="provider-enabled-dot" id="dot-perplexity"></span>
                 </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-perplexity" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
                 <button class="provider-config-btn" id="cfg-perplexity" data-provider="perplexity">&#9881;</button>
               </div>
 
@@ -631,8 +672,17 @@
                 <div class="custom-dropdown-item" data-value="perplexity-sonar">Sonar</div>
                 <div class="custom-dropdown-item" data-value="perplexity-sonar-pro">Sonar Pro</div>
                 <div class="custom-dropdown-group">Ollama Cloud</div>
-                <div class="custom-dropdown-item" data-value="qwen3.5:397b-cloud">Qwen 3.5</div>
+                <div class="custom-dropdown-item" data-value="qwen3.5:397b-cloud">Qwen 3.5 397B</div>
+                <div class="custom-dropdown-item" data-value="minimax-m2.7:cloud">MiniMax M2.7</div>
+                <div class="custom-dropdown-item" data-value="glm-4.7:cloud">GLM 4.7</div>
+                <div class="custom-dropdown-item" data-value="glm-5.1:cloud">GLM 5.1</div>
                 <div class="custom-dropdown-item" data-value="kimi-k2.5:cloud">Kimi K2.5</div>
+                <div class="custom-dropdown-item" data-value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</div>
+                <div class="custom-dropdown-item" data-value="nemotron-3-super:cloud">Nemotron 3 Super</div>
+                <div class="custom-dropdown-item" data-value="rnj-1:8b-cloud">RNJ-1 8B</div>
+                <div class="custom-dropdown-item" data-value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</div>
+                <div id="customModelsContainer"></div>
+                <div class="custom-dropdown-item add-custom-model" data-value="__add_custom__" style="color: #60a5fa; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4px; padding-top: 8px;">+ Add Custom Model</div>
               </div>
             </div>
             <input type="hidden" id="cloudModelSelect" value="auto">
@@ -654,6 +704,18 @@
               <button id="ollamaPullBtn" class="ollama-pull-btn">Pull</button>
             </div>
             <div class="ollama-pull-status" id="ollamaPullStatus"></div>
+          </div>
+        </div>
+
+        <!-- Race Toggle Card — per-model on/off for race participation -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="race-toggles">
+            <span class="settings-card-title">Race Toggles</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="race-toggles">
+            <p style="font-size:11px;color:var(--text-dim);margin:0 0 8px 0;">Toggle models on/off for the AI race. Disabled models are excluded from auto-race.</p>
+            <div id="raceToggleList"></div>
           </div>
         </div>
 
@@ -1148,6 +1210,7 @@
     </div>
   </div>
 
+  <script src="js/core/auth-helper.js"></script>
   <script src="app.js?v=96"></script>
 </body>
 </html>

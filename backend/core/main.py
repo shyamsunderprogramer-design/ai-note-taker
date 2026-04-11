@@ -39,6 +39,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
+from ocr_service import extract_text_from_image
 
 # SECURITY: Import security modules
 from security import (
@@ -180,8 +181,9 @@ app.add_middleware(
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
 
-    # Add security headers
-    headers = SecurityHeaders.get_security_headers()
+    # Add security headers — pass host so HSTS is skipped for localhost
+    request_host = request.headers.get("host", "")
+    headers = SecurityHeaders.get_security_headers(request_host=request_host)
     for key, value in headers.items():
         response.headers[key] = value
 
@@ -214,7 +216,7 @@ RATE_LIMIT_AUTHED = int(os.getenv("RATE_LIMIT_AUTHED", "200"))    # 200/min for 
 RATE_LIMIT_SENSITIVE = int(os.getenv("RATE_LIMIT_SENSITIVE", "20"))  # 20/min for expensive ops
 
 # Paths that are always public (no auth required, lower rate limit)
-PUBLIC_PATHS = {"/", "/health", "/auth/login", "/auth/register", "/docs", "/openapi.json", "/redoc"}
+PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
 # Paths that are expensive/sensitive (lower rate limit even when authed)
 SENSITIVE_PATHS = {"/ask-with-image", "/transcribe", "/transcribe-cloud", "/transcribe-with-speakers",
                    "/voice-clone/create", "/voice-clone/create-rvc"}
@@ -297,8 +299,9 @@ async def https_enforcement_middleware(request: Request, call_next):
 
     response = await call_next(request)
 
-    # Add HSTS header when HTTPS is enabled
-    if HTTPS_REQUIRED:
+    # Add HSTS header when HTTPS is enabled — skip for localhost to prevent
+    # browsers/Electron from forcing HTTPS upgrade on plain HTTP local connections
+    if HTTPS_REQUIRED and not is_localhost:
         response.headers["Strict-Transport-Security"] = f"max-age={HSTS_MAX_AGE}; includeSubDomains"
 
     return response
@@ -335,7 +338,8 @@ AUTH_PUBLIC_PATHS = {
     "/docs", "/openapi.json", "/redoc",
     "/voice-clone/audio/{filename}",  # Audio playback
     "/providers",  # Listing available providers
-    "/mode",  # Mode switching (lightweight)
+    "/set-mode",  # Mode switching (lightweight)
+    "/ocr",  # OCR text extraction from screenshots
 }
 
 # Paths that always require authentication (even in dev mode for sensitive ops)
@@ -665,38 +669,60 @@ def health_check():
     }
 
 
+# Provider key status cache — avoids flooding the key server on every /providers call
+_provider_key_cache: Dict[str, bool] = {}
+_provider_key_cache_time: float = 0.0
+_PROVIDER_KEY_CACHE_TTL = 300  # 5 minutes
+
+
+def _has_provider_key(provider: str, env_var: str) -> bool:
+    """Check if a provider has an API key, using a short-lived cache to avoid key server flooding."""
+    global _provider_key_cache, _provider_key_cache_time
+    now = time.time()
+
+    # Return cached result if still fresh
+    if provider in _provider_key_cache and (now - _provider_key_cache_time) < _PROVIDER_KEY_CACHE_TTL:
+        return _provider_key_cache[provider]
+
+    # Check env var first (fast, no network)
+    if os.getenv(env_var, "").strip():
+        _provider_key_cache[provider] = True
+        _provider_key_cache_time = now
+        return True
+
+    # Then check secure key server
+    try:
+        resp = requests.post(
+            "http://127.0.0.1:18000/get-key",
+            json={"provider": provider},
+            timeout=1
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            result = bool(data.get("apiKey"))
+        else:
+            result = False
+    except Exception:
+        result = False
+
+    _provider_key_cache[provider] = result
+    _provider_key_cache_time = now
+    return result
+
+
 @app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def list_providers(request: Request):
     """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
-    import requests
-
-    def has_key(provider, env_var):
-        # Try secure server first
-        try:
-            resp = requests.post(
-                "http://127.0.0.1:18000/get-key",
-                json={"provider": provider},
-                timeout=1
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("apiKey"):
-                    return True
-        except:
-            pass
-        # Fallback to env
-        return bool(os.getenv(env_var, "").strip())
-
     return {
-        "openai": has_key("openai", "OPENAI_API_KEY"),
-        "anthropic": has_key("anthropic", "ANTHROPIC_API_KEY"),
-        "google": has_key("google", "GOOGLE_API_KEY"),
-        "xai": has_key("xai", "XAI_API_KEY"),
-        "deepseek": has_key("deepseek", "DEEPSEEK_API_KEY"),
-        "groq": has_key("groq", "GROQ_API_KEY"),
-        "ollama-cloud": has_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
-        "perplexity": has_key("perplexity", "PERPLEXITY_API_KEY"),
+        "openai": _has_provider_key("openai", "OPENAI_API_KEY"),
+        "anthropic": _has_provider_key("anthropic", "ANTHROPIC_API_KEY"),
+        "google": _has_provider_key("google", "GOOGLE_API_KEY"),
+        "xai": _has_provider_key("xai", "XAI_API_KEY"),
+        "deepseek": _has_provider_key("deepseek", "DEEPSEEK_API_KEY"),
+        "groq": _has_provider_key("groq", "GROQ_API_KEY"),
+        "ollama-cloud": _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
+        "perplexity": _has_provider_key("perplexity", "PERPLEXITY_API_KEY"),
         "ollama": True  # Ollama is always available if configured
     }
 
@@ -856,6 +882,25 @@ async def transcribe_stream(request: Request):
             logger.error("[transcribe-stream] error: %s", e)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/ocr")
+@rate_limit(requests_per_minute=30)
+async def ocr_image(request: Request):
+    """Extract text from a base64-encoded image using OCR.
+    Tries Ollama vision model first, falls back to pytesseract.
+    Returns: { "text": str, "method": "ollama"|"tesseract"|"none" }
+    """
+    try:
+        body = await request.json()
+        image_b64 = body.get("image_b64", "")
+        if not image_b64:
+            return JSONResponse({"text": "", "method": "none", "error": "No image provided"}, status_code=400)
+        result = extract_text_from_image(image_b64)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("[OCR] Error: %s", e)
+        return JSONResponse({"text": "", "method": "none", "error": str(e)}, status_code=500)
 
 
 @app.post("/overlay-ask")
@@ -1697,64 +1742,49 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
             logger.warning("Failed to parse context JSON")
             pass
 
-    # Secure key checking helper
-    def has_secure_key(provider, env_var):
-        try:
-            resp = requests.post(
-                "http://127.0.0.1:18000/get-key",
-                json={"provider": provider},
-                timeout=1
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("apiKey"):
-                    return True
-        except:
-            pass
-        return bool(os.getenv(env_var, "").strip())
-
+    # Secure key checking — uses cached function to avoid key server flooding
     # Separate cloud and local providers
     cloud_providers = []
     local_providers = []
 
     # If enabled_set from frontend is provided, only use those providers
     if enabled_set:
-        if "openai" in enabled_set and has_secure_key("openai", "OPENAI_API_KEY"):
+        if "openai" in enabled_set and _has_provider_key("openai", "OPENAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-        if "anthropic" in enabled_set and has_secure_key("anthropic", "ANTHROPIC_API_KEY"):
+        if "anthropic" in enabled_set and _has_provider_key("anthropic", "ANTHROPIC_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-        if "google" in enabled_set and has_secure_key("google", "GOOGLE_API_KEY"):
+        if "google" in enabled_set and _has_provider_key("google", "GOOGLE_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-        if "xai" in enabled_set and has_secure_key("xai", "XAI_API_KEY"):
+        if "xai" in enabled_set and _has_provider_key("xai", "XAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-        if "deepseek" in enabled_set and has_secure_key("deepseek", "DEEPSEEK_API_KEY"):
+        if "deepseek" in enabled_set and _has_provider_key("deepseek", "DEEPSEEK_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-        if "groq" in enabled_set and has_secure_key("groq", "GROQ_API_KEY"):
+        if "groq" in enabled_set and _has_provider_key("groq", "GROQ_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-        if "ollama-cloud" in enabled_set and has_secure_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
+        if "ollama-cloud" in enabled_set and _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
             cloud_providers.append("ollama-cloud")
-        if "perplexity" in enabled_set and has_secure_key("perplexity", "PERPLEXITY_API_KEY"):
+        if "perplexity" in enabled_set and _has_provider_key("perplexity", "PERPLEXITY_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("perplexity-")])
         # Only add local ollama if explicitly enabled in frontend
         if "ollama" in enabled_set:
             local_providers.append("ollama")
     else:
         # Legacy: use all cloud providers with API keys, plus ollama as fallback
-        if has_secure_key("openai", "OPENAI_API_KEY"):
+        if _has_provider_key("openai", "OPENAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-        if has_secure_key("anthropic", "ANTHROPIC_API_KEY"):
+        if _has_provider_key("anthropic", "ANTHROPIC_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-        if has_secure_key("google", "GOOGLE_API_KEY"):
+        if _has_provider_key("google", "GOOGLE_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-        if has_secure_key("xai", "XAI_API_KEY"):
+        if _has_provider_key("xai", "XAI_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-        if has_secure_key("deepseek", "DEEPSEEK_API_KEY"):
+        if _has_provider_key("deepseek", "DEEPSEEK_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-        if has_secure_key("groq", "GROQ_API_KEY"):
+        if _has_provider_key("groq", "GROQ_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-        if has_secure_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
+        if _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
             cloud_providers.append("ollama-cloud")
-        if has_secure_key("perplexity", "PERPLEXITY_API_KEY"):
+        if _has_provider_key("perplexity", "PERPLEXITY_API_KEY"):
             cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("perplexity-")])
         # Add local ollama as fallback (always available)
         local_providers.append("ollama")

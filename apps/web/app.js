@@ -1,7 +1,7 @@
 // ==============================
 // STATE
 // ==============================
-const API_BASE = 'http://127.0.0.1:8000'
+var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:8000'
 let isListening = false
 let isStarting = false
 let isBackendReady = false
@@ -96,6 +96,21 @@ const modalSave = document.getElementById("modalSave")
 const modalCancel = document.getElementById("modalCancel")
 const backApiKeyModal = document.getElementById("backApiKeyModal")
 const cloudModelSelect = document.getElementById("cloudModelSelect")
+
+// OCR / capture elements
+const captureBtn = document.getElementById("captureBtn")
+const ocrBadge = document.getElementById("ocrBadge")
+const ocrBadgeText = document.getElementById("ocrBadgeText")
+const ocrBadgeRemove = document.getElementById("ocrBadgeRemove")
+
+// Ollama Pull elements
+const ollamaPullInput = document.getElementById("ollamaPullInput")
+const ollamaPullBtn = document.getElementById("ollamaPullBtn")
+const ollamaPullStatus = document.getElementById("ollamaPullStatus")
+
+// OCR state
+let pendingOcrText = null
+let pendingOcrScreenshot = null
 
 // API Key modal handlers
 if (modalCancel) modalCancel.addEventListener("click", () => apiKeyModal?.classList.remove("open"))
@@ -1941,6 +1956,13 @@ async function streamAIResponse(query) {
     await streamAIRace(query)
     return
   }
+
+  // If the selected model is disabled, warn and fall back to auto-race
+  if (isModelDisabled(selectedModel)) {
+    addErrorMessage(`${selectedModel} is disabled. Falling back to auto-race.`)
+    await streamAIRace(query)
+    return
+  }
   const contextMessages = getContextMessages()
   const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages)
 
@@ -2242,7 +2264,12 @@ async function streamAIRace(query) {
     const stored = await window.api.storeGet("provider_" + p) || {}
     // Check if toggle is enabled AND backend has the API key
     if (stored.enabled && backendProviders[p]) {
-      enabledProviders.push(p)
+      // Check if all models for this provider are disabled
+      const providerModels = (PROVIDER_META[p] || {}).models || []
+      const allModelsDisabled = providerModels.length > 0 && providerModels.every(m => isModelDisabled(m.value))
+      if (!allModelsDisabled) {
+        enabledProviders.push(p)
+      }
     }
   }
   // Always include local ollama as fallback (will be used if all clouds fail)
@@ -2590,8 +2617,20 @@ async function submitText(text) {
 
   await window.api.setMode(getSelectedMode())
 
-  streamMessage("user", text)
-  await streamAIResponse(text)
+  // Combine user text with OCR'd screenshot if available
+  const combinedQuery = buildCombinedQuery(text)
+  const hasScreenshot = !!(pendingOcrScreenshot || pendingOcrText)
+
+  streamMessage("user", text, { hasScreenshot })
+
+  // If we have a screenshot but no OCR text, fall back to vision model
+  if (pendingOcrScreenshot && !pendingOcrText) {
+    await streamAIResponseWithImage(combinedQuery, pendingOcrScreenshot)
+  } else {
+    await streamAIResponse(combinedQuery)
+  }
+
+  clearPendingOcr()
 }
 
 // ==============================
@@ -2607,12 +2646,24 @@ async function submitAudio(blob, screenshotB64 = null) {
     textInput.value = ""
     setProcessingUI(true)
     await window.api.setMode(getSelectedMode())
-    streamMessage("user", streamedText, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
-    if (screenshotB64) {
-      await streamAIResponseWithImage(streamedText, screenshotB64)
+    const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
+    streamMessage("user", streamedText, { hasScreenshot: !!effectiveScreenshot, screenshotB64: effectiveScreenshot })
+    if (effectiveScreenshot) {
+      try {
+        const ocrResult = await runOcr(effectiveScreenshot)
+        if (ocrResult.text && ocrResult.text.trim()) {
+          const combinedQuery = `[Screenshot content]: ${ocrResult.text.trim()}\n\n[Voice transcript]: ${streamedText}`
+          await streamAIResponse(combinedQuery)
+        } else {
+          await streamAIResponseWithImage(streamedText, effectiveScreenshot)
+        }
+      } catch {
+        await streamAIResponseWithImage(streamedText, effectiveScreenshot)
+      }
     } else {
       await streamAIResponse(streamedText)
     }
+    clearPendingOcr()
     return
   }
 
@@ -2662,7 +2713,7 @@ async function submitAudio(blob, screenshotB64 = null) {
   }
 
   // Format message with speaker info if available
-  const messageOptions = { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 }
+  const messageOptions = { hasScreenshot: !!(screenshotB64 || pendingOcrScreenshot), screenshotB64: screenshotB64 || pendingOcrScreenshot }
   if (data.formatted_transcript && speakerDiarizationEnabled) {
     messageOptions.speakerTranscript = data.formatted_transcript
     messageOptions.speakerCount = data.speaker_count
@@ -2670,12 +2721,26 @@ async function submitAudio(blob, screenshotB64 = null) {
 
   streamMessage("user", data.text, messageOptions)
 
-  // If screenshot was captured, use vision endpoint
-  if (screenshotB64) {
-    await streamAIResponseWithImage(data.text, screenshotB64)
+  // Try OCR on screenshot first, then fall back to vision model
+  const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
+  if (effectiveScreenshot) {
+    try {
+      const ocrResult = await runOcr(effectiveScreenshot)
+      if (ocrResult.text && ocrResult.text.trim()) {
+        const combinedQuery = `[Screenshot content]: ${ocrResult.text.trim()}\n\n[Voice transcript]: ${data.text}`
+        await streamAIResponse(combinedQuery)
+      } else {
+        // OCR returned empty — fall back to vision model
+        await streamAIResponseWithImage(data.text, effectiveScreenshot)
+      }
+    } catch {
+      // OCR failed — fall back to vision model
+      await streamAIResponseWithImage(data.text, effectiveScreenshot)
+    }
   } else {
     await streamAIResponse(data.text)
   }
+  clearPendingOcr()
 }
 
 // ==============================
@@ -3347,6 +3412,97 @@ if (autoSSBtn) {
 }
 
 // ==============================
+// SCREENSHOT CAPTURE + OCR
+// ==============================
+// Capture a screenshot, OCR it, and show a preview badge.
+// The extracted text is combined with user input when sending to AI.
+
+async function runOcr(screenshotB64) {
+  try {
+    const resp = await fetch(window.api.getOcrUrl(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_b64: screenshotB64 })
+    })
+    if (resp.ok) {
+      return await resp.json()
+    }
+  } catch (e) {
+    console.warn("[OCR] Failed:", e)
+  }
+  return { text: "", method: "none" }
+}
+
+function clearPendingOcr() {
+  pendingOcrText = null
+  pendingOcrScreenshot = null
+  if (ocrBadge) ocrBadge.style.display = "none"
+}
+
+if (captureBtn) {
+  captureBtn.addEventListener("click", async () => {
+    if (captureBtn.classList.contains("processing")) return
+    captureBtn.classList.add("processing")
+
+    try {
+      // 1. Capture fresh screenshot via Electron IPC
+      const screenshot = await window.api.captureScreenshot()
+      if (!screenshot) {
+        captureBtn.classList.remove("processing")
+        return
+      }
+
+      // 2. Send to /ocr endpoint
+      const ocrResult = await runOcr(screenshot)
+
+      // 3. Store results
+      pendingOcrScreenshot = screenshot
+      pendingOcrText = (ocrResult.text || "").trim()
+
+      // 4. Show badge
+      if (ocrBadge && ocrBadgeText) {
+        if (pendingOcrText) {
+          const preview = pendingOcrText.length > 80
+            ? pendingOcrText.substring(0, 80) + "..."
+            : pendingOcrText
+          ocrBadgeText.textContent = preview
+        } else {
+          ocrBadgeText.textContent = "Screenshot captured (no text detected)"
+        }
+        ocrBadge.style.display = "flex"
+      }
+    } catch (e) {
+      console.error("[Capture+OCR] Error:", e)
+      // Fallback: store screenshot for vision model path
+      try {
+        pendingOcrScreenshot = await window.api.captureScreenshot()
+        pendingOcrText = null
+        if (ocrBadge && ocrBadgeText) {
+          ocrBadgeText.textContent = "Screenshot captured"
+          ocrBadge.style.display = "flex"
+        }
+      } catch {}
+    }
+
+    captureBtn.classList.remove("processing")
+  })
+}
+
+if (ocrBadgeRemove) {
+  ocrBadgeRemove.addEventListener("click", () => {
+    clearPendingOcr()
+  })
+}
+
+// Build combined query from user text + pending OCR
+function buildCombinedQuery(userText) {
+  if (pendingOcrText) {
+    return `[Screenshot content]: ${pendingOcrText}\n\n[User message]: ${userText}`
+  }
+  return userText
+}
+
+// ==============================
 // ALWAYS-ON MIC — auto listen + transcribe + auto-query AI
 // ==============================
 function startAlwaysOnListen() {
@@ -3411,12 +3567,26 @@ async function autoSendToAI(text) {
       } catch {}
     }
 
-    streamMessage("user", text, { hasScreenshot: !!screenshotB64, screenshotB64: screenshotB64 })
-    if (screenshotB64) {
-      await streamAIResponseWithImage(text, screenshotB64)
+    // Also check for manually captured screenshot
+    const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
+    streamMessage("user", text, { hasScreenshot: !!effectiveScreenshot, screenshotB64: effectiveScreenshot })
+
+    if (effectiveScreenshot) {
+      try {
+        const ocrResult = await runOcr(effectiveScreenshot)
+        if (ocrResult.text && ocrResult.text.trim()) {
+          const combinedQuery = `[Screenshot content]: ${ocrResult.text.trim()}\n\n[Voice transcript]: ${text}`
+          await streamAIResponse(combinedQuery)
+        } else {
+          await streamAIResponseWithImage(text, effectiveScreenshot)
+        }
+      } catch {
+        await streamAIResponseWithImage(text, effectiveScreenshot)
+      }
     } else {
       await streamAIResponse(text)
     }
+    clearPendingOcr()
   } catch (e) {
     console.error("autoSendToAI error:", e)
   }
@@ -3614,11 +3784,12 @@ appMenu.addEventListener("click", async (e) => {
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) {
       cloudModelSelect.value = savedCloudModel
-      // Update custom dropdown
+      // Update custom dropdown — check both standard items and custom model entries
       const selectedItem = cloudModelMenu?.querySelector(`.custom-dropdown-item[data-value="${savedCloudModel}"]`)
+        || cloudModelMenu?.querySelector(`.custom-model-entry[data-value="${savedCloudModel}"]`)
       if (selectedItem && cloudModelText) {
         cloudModelText.textContent = selectedItem.textContent
-        cloudModelMenu.querySelectorAll(".custom-dropdown-item").forEach(i => i.classList.remove("selected"))
+        cloudModelMenu.querySelectorAll(".custom-dropdown-item, .custom-model-entry").forEach(i => i.classList.remove("selected"))
         selectedItem.classList.add("selected")
       }
     }
@@ -3939,7 +4110,15 @@ const PROVIDER_META = {
   "ollama-cloud": {
     name: "Ollama Cloud",
     models: [
-      { value: "ollama-cloud", label: "Ollama Cloud (qwen2.5)" },
+      { value: "qwen3.5:397b-cloud", label: "Qwen 3.5 397B" },
+      { value: "minimax-m2.7:cloud", label: "MiniMax M2.7" },
+      { value: "glm-4.7:cloud", label: "GLM 4.7" },
+      { value: "glm-5.1:cloud", label: "GLM 5.1" },
+      { value: "kimi-k2.5:cloud", label: "Kimi K2.5" },
+      { value: "nemotron-3-nano:30b-cloud", label: "Nemotron 3 Nano 30B" },
+      { value: "nemotron-3-super:cloud", label: "Nemotron 3 Super" },
+      { value: "rnj-1:8b-cloud", label: "RNJ-1 8B" },
+      { value: "gemini-3-flash-preview:cloud", label: "Gemini 3 Flash Preview" },
     ]
   },
   perplexity: {
@@ -4276,6 +4455,22 @@ function updateActiveProviders() {
     "perplexity-sonar-pro": "perplexity",
     "perplexity-sonar-reasoning": "perplexity",
     "perplexity-sonar-reasoning-plus": "perplexity",
+    // Ollama Cloud
+    "qwen3.5:397b-cloud": "ollama-cloud",
+    "minimax-m2.7:cloud": "ollama-cloud",
+    "glm-4.7:cloud": "ollama-cloud",
+    "glm-5.1:cloud": "ollama-cloud",
+    "kimi-k2.5:cloud": "ollama-cloud",
+    "nemotron-3-nano:30b-cloud": "ollama-cloud",
+    "nemotron-3-super:cloud": "ollama-cloud",
+    "rnj-1:8b-cloud": "ollama-cloud",
+    "gemini-3-flash-preview:cloud": "ollama-cloud",
+  }
+
+  // Add custom models to activeMap (from localStorage)
+  const customModels = loadCustomModels()
+  for (const cm of customModels) {
+    activeMap[cm.value] = "ollama-cloud"
   }
   const activeKey = activeMap[selected]
 
@@ -4285,6 +4480,462 @@ function updateActiveProviders() {
   // Set .active for the current cloud model provider, or ollama
   const activeCard = document.getElementById("card-" + (activeKey || "ollama"))
   if (activeCard) activeCard.classList.add("active")
+}
+
+// === Custom Cloud Model Management ===
+// Users can add any Ollama Cloud model via "Add Custom Model" in the dropdowns.
+// Custom models are persisted in localStorage and rendered dynamically.
+
+const CUSTOM_MODELS_KEY = "ant_custom_cloud_models"
+const DISABLED_MODELS_KEY = "ant_disabled_models"
+
+// Per-model race toggle — disabled models are excluded from the race
+function getDisabledModels() {
+  try {
+    const saved = localStorage.getItem(DISABLED_MODELS_KEY)
+    return saved ? JSON.parse(saved) : []
+  } catch (e) { return [] }
+}
+
+function setModelDisabled(modelValue, disabled) {
+  let list = getDisabledModels()
+  if (disabled) {
+    if (!list.includes(modelValue)) list.push(modelValue)
+  } else {
+    list = list.filter(m => m !== modelValue)
+  }
+  localStorage.setItem(DISABLED_MODELS_KEY, JSON.stringify(list))
+}
+
+function isModelDisabled(modelValue) {
+  return getDisabledModels().includes(modelValue)
+}
+
+function loadCustomModels() {
+  try {
+    const saved = localStorage.getItem(CUSTOM_MODELS_KEY)
+    return saved ? JSON.parse(saved) : []
+  } catch (e) { return [] }
+}
+
+function saveCustomModels(models) {
+  try {
+    localStorage.setItem(CUSTOM_MODELS_KEY, JSON.stringify(models))
+  } catch (e) { /* ignore */ }
+}
+
+function addCustomModelToDropdowns(name, value) {
+  // Add to toolbar <select>
+  const modelSelect = document.getElementById("modelSelect")
+  if (modelSelect) {
+    const cloudGroup = modelSelect.querySelector('optgroup[label="Ollama Cloud"]')
+    if (cloudGroup && !cloudGroup.querySelector(`option[value="${CSS.escape(value)}"]`)) {
+      const opt = document.createElement("option")
+      opt.value = value
+      const displayName = name.includes("★") ? name : name + " ★"
+	      opt.textContent = displayName
+      cloudGroup.appendChild(opt)
+    }
+  }
+
+  // Add to settings dropdown menu
+  const settingsMenu = document.getElementById("cloudModelMenu")
+  if (settingsMenu) {
+    const container = document.getElementById("customModelsContainer")
+    if (container && !container.querySelector(`[data-value="${value}"]`)) {
+      const item = document.createElement("div")
+      item.className = "custom-model-entry"
+      item.dataset.value = value
+      item.innerHTML = `
+        <span class="custom-model-name">${name}</span>
+        <span class="custom-model-badge">custom</span>
+        <span class="remove-custom-model" data-value="${value}" title="Remove">×</span>
+      `
+      container.appendChild(item)
+
+      // Click to select — update hidden input, display text, and trigger onChange
+      item.addEventListener("click", (e) => {
+        if (e.target.classList.contains("remove-custom-model")) return
+        const hidden = document.getElementById("cloudModelSelect")
+        const textEl = document.getElementById("cloudModelText")
+        const menu = document.getElementById("cloudModelMenu")
+        if (hidden) hidden.value = value
+        if (textEl) textEl.textContent = name
+        if (menu) {
+          menu.querySelectorAll(".custom-dropdown-item, .custom-model-entry").forEach(i => i.classList.remove("selected"))
+        }
+        item.classList.add("selected")
+        // Sync toolbar model select
+        if (modelSelect) modelSelect.value = value
+        window.api.storeSet("cloudModel", value)
+        updateActiveProviders()
+      })
+
+      // Remove button
+      item.querySelector(".remove-custom-model").addEventListener("click", (e) => {
+        e.stopPropagation()
+        removeCustomModel(value)
+      })
+    }
+  }
+}
+
+function removeCustomModel(value) {
+  let models = loadCustomModels()
+  models = models.filter(m => m.value !== value)
+  saveCustomModels(models)
+
+  // Remove from toolbar <select>
+  const modelSelect = document.getElementById("modelSelect")
+  if (modelSelect) {
+    const opt = modelSelect.querySelector(`option[value="${value}"]`)
+    if (opt) opt.remove()
+  }
+
+  // Remove from settings dropdown
+  const container = document.getElementById("customModelsContainer")
+  if (container) {
+    const item = container.querySelector(`[data-value="${value}"]`)
+    if (item) item.remove()
+  }
+}
+
+function initCustomModels() {
+  const models = loadCustomModels()
+  for (const m of models) {
+    addCustomModelToDropdowns(m.name, m.value)
+  }
+
+  // Wire up "Add Custom Model" in settings dropdown
+  const addBtn = document.querySelector('.add-custom-model[data-value="__add_custom__"]')
+  if (addBtn) {
+    addBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      showAddCustomModelDialog()
+    })
+  }
+
+  // Also wire up "Add Custom Model" in toolbar select (via right-click or double-click context)
+  // The toolbar <select> doesn't support custom items natively,
+  // so we add it through addCustomModelToDropdowns above
+}
+
+// === Dynamic Local Ollama Model Detection ===
+// Fetches installed models from /ollama/models and populates the toolbar dropdown + settings list
+
+async function loadLocalOllamaModels() {
+  try {
+    const response = await fetch(`${API_BASE}/ollama/models`)
+    if (!response.ok) {
+      console.warn("[loadLocalOllamaModels] Failed to fetch models:", response.status)
+      return []
+    }
+    const data = await response.json()
+    const models = data.models || []
+
+    // Populate toolbar <select> optgroup
+    const localGroup = document.getElementById("ollamaLocalGroup")
+    if (localGroup) {
+      // Remove existing dynamic options (keep the optgroup itself)
+      localGroup.innerHTML = ""
+      for (const m of models) {
+        const opt = document.createElement("option")
+        opt.value = m.name  // e.g. "qwen2.5:1.5b"
+        opt.textContent = m.name
+        opt.dataset.localModel = "true"
+        localGroup.appendChild(opt)
+      }
+    }
+
+    // Also update settings panel Ollama models list with delete buttons
+    const settingsList = document.getElementById("ollamaModelsList")
+    if (settingsList) {
+      if (models.length === 0) {
+        settingsList.innerHTML = '<div class="ollama-models-loading">No local models found</div>'
+      } else {
+        settingsList.innerHTML = models.map(m => `
+          <div class="ollama-model-item" data-model-name="${m.name}">
+            <span class="ollama-model-name">${m.name}</span>
+            <span class="ollama-model-size">${formatOllamaSize(m.size)}</span>
+            <button class="ollama-model-delete" data-model-name="${m.name}" title="Delete model">&times;</button>
+          </div>
+        `).join("")
+
+        // Wire up delete buttons
+        settingsList.querySelectorAll(".ollama-model-delete").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const modelName = btn.dataset.modelName
+            if (!modelName) return
+            if (!confirm(`Delete local model "${modelName}"? This cannot be undone.`)) return
+            try {
+              await window.api.deleteOllamaModel(modelName)
+              btn.closest(".ollama-model-item").remove()
+              await loadLocalOllamaModels() // Refresh
+            } catch (e) {
+              console.error("[loadLocalOllamaModels] Delete failed:", e)
+            }
+          })
+        })
+      }
+    }
+
+    // Update activeMap with local model entries
+    for (const m of models) {
+      // Local Ollama models map to "ollama" provider
+      // They don't need an activeMap entry since they use the ":" naming convention
+    }
+
+    // Refresh race toggles to include newly detected models
+    if (typeof renderRaceToggles === "function") {
+      renderRaceToggles()
+    }
+
+    return models
+  } catch (e) {
+    console.warn("[loadLocalOllamaModels] Error fetching models:", e)
+    return []
+  }
+}
+
+function formatOllamaSize(bytes) {
+  if (!bytes || bytes === 0) return ""
+  const k = 1024
+  const sizes = ["B", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+}
+
+// Hide cloud model options for providers without API keys
+async function updateCloudModelVisibility() {
+  let backendProviders = {}
+  try {
+    backendProviders = await window.api.getProviders()
+  } catch (e) {
+    console.warn("[updateCloudModelVisibility] Could not fetch providers:", e)
+  }
+
+  // Map of provider key -> prefix used in <option> values
+  const cloudProviderPrefixes = {
+    openai: "openai-",
+    anthropic: "anthropic-",
+    google: "google-",
+    xai: "xai-",
+    deepseek: "deepseek-",
+    groq: "groq-",
+    "ollama-cloud": "",  // handled separately
+    perplexity: "perplexity-",
+  }
+
+  const selectEl = document.getElementById("modelSelect")
+  if (!selectEl) return
+
+  // Process each cloud provider
+  const disabledModels = getDisabledModels()
+
+  for (const [provider, prefix] of Object.entries(cloudProviderPrefixes)) {
+    const hasKey = !!backendProviders[provider]
+    const stored = await window.api.storeGet("provider_" + provider) || {}
+    const isEnabled = hasKey && stored.enabled !== false
+
+    if (provider === "ollama-cloud") {
+      // Ollama Cloud models use :cloud suffix
+      const cloudGroup = selectEl.querySelector('optgroup[label="Ollama Cloud"]')
+      if (cloudGroup) {
+        cloudGroup.querySelectorAll("option").forEach(opt => {
+          const providerDisabled = !isEnabled
+          const modelDisabled = disabledModels.includes(opt.value)
+          opt.hidden = providerDisabled || modelDisabled
+          opt.disabled = providerDisabled || modelDisabled
+        })
+      }
+    } else {
+      // Other providers use dash prefix convention
+      selectEl.querySelectorAll(`option[value^="${prefix}"]`).forEach(opt => {
+        const providerDisabled = !isEnabled
+        const modelDisabled = disabledModels.includes(opt.value)
+        opt.hidden = providerDisabled || modelDisabled
+        opt.disabled = providerDisabled || modelDisabled
+      })
+    }
+  }
+
+  // Also update settings panel provider cards visibility
+  for (const provider of CLOUD_PROVIDERS_WITH_KEY) {
+    const card = document.getElementById("card-" + provider)
+    if (!card) continue
+    const hasKey = !!backendProviders[provider]
+    if (!hasKey) {
+      // Dim but don't hide — user can still click to add a key
+      card.classList.add("provider-no-key")
+    } else {
+      card.classList.remove("provider-no-key")
+    }
+  }
+}
+
+// === Ollama Model Pull Handler ===
+if (ollamaPullBtn) {
+  ollamaPullBtn.addEventListener("click", async () => {
+    const modelName = ollamaPullInput ? ollamaPullInput.value.trim() : ""
+    if (!modelName) return
+
+    ollamaPullBtn.disabled = true
+    ollamaPullBtn.textContent = "Pulling..."
+    if (ollamaPullStatus) {
+      ollamaPullStatus.textContent = `Pulling ${modelName}...`
+      ollamaPullStatus.style.color = "var(--text-dim)"
+    }
+
+    try {
+      const response = await window.api.pullOllamaModel(modelName)
+      const result = await response.json()
+
+      if (ollamaPullStatus) {
+        ollamaPullStatus.textContent = `Successfully pulled ${modelName}`
+        ollamaPullStatus.style.color = "#22c55e"
+      }
+      if (ollamaPullInput) ollamaPullInput.value = ""
+
+      // Refresh local models list
+      await loadLocalOllamaModels()
+    } catch (e) {
+      console.error("[Pull] Failed:", e)
+      if (ollamaPullStatus) {
+        ollamaPullStatus.textContent = `Failed to pull ${modelName}: ${e.message || "Unknown error"}`
+        ollamaPullStatus.style.color = "#ef4444"
+      }
+    } finally {
+      ollamaPullBtn.disabled = false
+      ollamaPullBtn.textContent = "Pull"
+    }
+  })
+}
+
+// === Race Toggle Rendering ===
+// Renders per-model on/off switches in the Race Toggles settings section
+function renderRaceToggles() {
+  const container = document.getElementById("raceToggleList")
+  if (!container) return
+
+  const disabledModels = getDisabledModels()
+  let html = ""
+
+  // Cloud provider models from PROVIDER_META
+  for (const [provider, meta] of Object.entries(PROVIDER_META)) {
+    const isProviderEnabled = provider !== "ollama-cloud" || true  // Always show ollama-cloud toggles
+    for (const model of meta.models) {
+      const isDisabled = disabledModels.includes(model.value)
+      html += `<div class="model-toggle-row ${isDisabled ? 'disabled' : ''}">
+        <span class="model-toggle-name">${model.label}</span>
+        <label class="model-toggle-switch">
+          <input type="checkbox" data-model-value="${model.value}" ${isDisabled ? '' : 'checked'} />
+          <span class="toggle-track"></span>
+        </label>
+      </div>`
+    }
+  }
+
+  // Local Ollama models — read from toolbar optgroup
+  const localGroup = document.getElementById("ollamaLocalGroup")
+  if (localGroup) {
+    const localOptions = localGroup.querySelectorAll("option")
+    if (localOptions.length > 0) {
+      html += `<div style="font-size:11px;color:var(--text-dim);margin:8px 0 4px 0;padding:0 4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">Local Models</div>`
+      for (const opt of localOptions) {
+        const isDisabled = disabledModels.includes(opt.value)
+        html += `<div class="model-toggle-row ${isDisabled ? 'disabled' : ''}">
+          <span class="model-toggle-name">${opt.textContent}</span>
+          <label class="model-toggle-switch">
+            <input type="checkbox" data-model-value="${opt.value}" ${isDisabled ? '' : 'checked'} />
+            <span class="toggle-track"></span>
+          </label>
+        </div>`
+      }
+    }
+  }
+
+  // Custom cloud models from localStorage
+  const customModels = loadCustomModels()
+  if (customModels.length > 0) {
+    html += `<div style="font-size:11px;color:var(--text-dim);margin:8px 0 4px 0;padding:0 4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">Custom Models</div>`
+    for (const cm of customModels) {
+      const isDisabled = disabledModels.includes(cm.value)
+      html += `<div class="model-toggle-row ${isDisabled ? 'disabled' : ''}">
+        <span class="model-toggle-name">${cm.name}</span>
+        <label class="model-toggle-switch">
+          <input type="checkbox" data-model-value="${cm.value}" ${isDisabled ? '' : 'checked'} />
+          <span class="toggle-track"></span>
+        </label>
+      </div>`
+    }
+  }
+
+  container.innerHTML = html
+
+  // Wire up toggle event listeners
+  container.querySelectorAll("input[type='checkbox'][data-model-value]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const modelValue = cb.dataset.modelValue
+      const isDisabled = !cb.checked
+      setModelDisabled(modelValue, isDisabled)
+
+      // Update row styling
+      const row = cb.closest(".model-toggle-row")
+      if (row) {
+        row.classList.toggle("disabled", isDisabled)
+      }
+
+      // Update cloud model visibility in toolbar
+      updateCloudModelVisibility()
+    })
+  })
+}
+
+function showAddCustomModelDialog() {
+  const menu = document.getElementById("cloudModelMenu")
+  if (!menu) return
+
+  // Check if form already exists
+  if (document.getElementById("addCustomModelForm")) return
+
+  const form = document.createElement("div")
+  form.id = "addCustomModelForm"
+  form.className = "add-custom-model-form"
+  form.innerHTML = `
+    <input type="text" id="customModelInput" placeholder="e.g., my-model:cloud" />
+    <button id="customModelAddBtn">Add</button>
+  `
+  menu.appendChild(form)
+
+  const input = document.getElementById("customModelInput")
+  const btn = document.getElementById("customModelAddBtn")
+
+  const doAdd = () => {
+    let val = input.value.trim()
+    if (!val) return
+    // Auto-append :cloud if missing
+    if (!val.includes(":")) val += ":cloud"
+    // Check for duplicates
+    const existing = loadCustomModels()
+    if (existing.find(m => m.value === val)) {
+      input.style.borderColor = "#ef4444"
+      input.placeholder = "Model already exists"
+      return
+    }
+    const name = val.replace(":cloud", "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+    const models = loadCustomModels()
+    models.push({ name, value: val })
+    saveCustomModels(models)
+    addCustomModelToDropdowns(name, val)
+    form.remove()
+  }
+
+  btn.addEventListener("click", doAdd)
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doAdd()
+    if (e.key === "Escape") form.remove()
+  })
+  input.focus()
 }
 
 // Provider config buttons — open inline panel
@@ -4359,7 +5010,10 @@ async function init() {
       tokenLimitSelect.value = savedTokenLimit
     }
 
-    // Model
+    // Model — init custom models first so their <option> elements exist
+    initCustomModels()
+    // Auto-detect local Ollama models and populate toolbar dropdown
+    await loadLocalOllamaModels()
     const savedModel = await window.api.storeGet("model")
     if (savedModel && modelSelect) {
       modelSelect.value = savedModel
@@ -4383,6 +5037,12 @@ async function init() {
 
     // Sync all provider rows on startup
     await syncAllProviderRows()
+
+    // Hide cloud models for providers without API keys
+    await updateCloudModelVisibility()
+
+    // Render per-model race toggles
+    renderRaceToggles()
 
     // Run onboarding check on first launch
     await checkOnboarding()
@@ -5540,6 +6200,8 @@ const cloudModelMenu = document.getElementById("cloudModelMenu")
 
 initCustomDropdown("cloudModelTrigger", "cloudModelMenu", "cloudModelText", "cloudModelSelect", async (value) => {
   await window.api.storeSet("cloudModel", value)
+  // Sync toolbar model select
+  if (modelSelect) modelSelect.value = value
   updateActiveProviders()
 })
 

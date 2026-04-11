@@ -166,76 +166,7 @@
       margin-top: 5px;
     }
 
-    /* Two Column Layout */
-    .study-plan-grid {
-      display: grid;
-      grid-template-columns: 1fr 300px;
-      gap: 24px;
-    }
-
-    @media (max-width: 900px) {
-      .study-plan-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* Today's Session */
-    .today-session {
-      background: var(--bg-secondary, #1a1a1a);
-      border-radius: 12px;
-      padding: 24px;
-      border: 1px solid var(--border-color, #333);
-      margin-bottom: 24px;
-    }
-
-    .today-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .today-title {
-      font-size: 20px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .today-theme {
-      font-size: 14px;
-      color: var(--text-secondary, #888);
-      background: rgba(59, 130, 246, 0.1);
-      padding: 6px 12px;
-      border-radius: 6px;
-    }
-
-    .task-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .task-card {
-      background: rgba(255,255,255,0.03);
-      border-radius: 10px;
-      padding: 16px;
-      border: 1px solid rgba(255,255,255,0.05);
-      transition: all 0.2s;
-      cursor: pointer;
-    }
-
-    .task-card:hover {
-      border-color: rgba(59, 130, 246, 0.3);
-      background: rgba(255,255,255,0.05);
-    }
-
-    .task-card.completed {
-      opacity: 0.6;
-      border-left: 4px solid #10b981;
-    }
-
+    /* Task Card Styles (used inside focus area cards) */
     .task-header {
       display: flex;
       justify-content: space-between;
@@ -248,6 +179,8 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      flex: 1;
+      min-width: 0;
     }
 
     .task-checkbox {
@@ -260,6 +193,7 @@
       align-items: center;
       justify-content: center;
       transition: all 0.2s;
+      flex-shrink: 0;
     }
 
     .task-checkbox:hover {
@@ -272,16 +206,17 @@
     }
 
     .task-checkbox.checked::after {
-      content: "✓";
+      content: "\2713";
       color: white;
       font-size: 12px;
     }
 
     .task-meta {
       display: flex;
-      gap: 12px;
+      gap: 8px;
       align-items: center;
       margin-top: 10px;
+      flex-wrap: wrap;
     }
 
     .task-difficulty {
@@ -342,214 +277,646 @@
       text-decoration: underline;
     }
 
-    /* Weak Areas */
-    .weak-areas {
-      background: var(--bg-secondary, #1a1a1a);
-      border-radius: 12px;
-      padding: 20px;
-      border: 1px solid var(--border-color, #333);
-      margin-bottom: 24px;
+    .task-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
-    .section-title {
+    .focus-badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .stretch-badge {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .task-description {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* Focus Area Stepper */
+    .focus-area-stepper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      padding: 12px 0;
+      margin-bottom: 24px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .focus-area-stepper::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .focus-area-stepper::-webkit-scrollbar-thumb {
+      background: var(--border-color, #333);
+      border-radius: 2px;
+    }
+
+    .stepper-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: default;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+      flex-shrink: 0;
+    }
+
+    .stepper-step.completed {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.3);
+      cursor: pointer;
+    }
+
+    .stepper-step.completed:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    .stepper-step.active {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border-color: rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+    }
+
+    .stepper-step.locked {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-secondary, #555);
+      border-color: var(--border-color, #222);
+    }
+
+    .stepper-connector {
+      width: 20px;
+      height: 2px;
+      background: var(--border-color, #333);
+      flex-shrink: 0;
+    }
+
+    .stepper-connector.completed {
+      background: #10b981;
+    }
+
+    .stepper-icon {
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    /* Focus Area Cards */
+    .focus-area-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .focus-area-card {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      border: 1px solid var(--border-color, #333);
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .focus-area-card.active {
+      border-color: rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+    }
+
+    .focus-area-card.completed {
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .focus-area-card.locked {
+      opacity: 0.5;
+      border-color: var(--border-color, #222);
+    }
+
+    .focus-area-card.locked:hover {
+      opacity: 0.6;
+    }
+
+    .focus-area-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .focus-area-header:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .focus-area-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .focus-area-card.active .focus-area-icon {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+    }
+
+    .focus-area-card.completed .focus-area-icon {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .focus-area-card.locked .focus-area-icon {
+      background: rgba(255, 255, 255, 0.05);
+      color: #555;
+    }
+
+    .focus-area-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .focus-area-name {
       font-size: 16px;
       font-weight: 600;
-      margin-bottom: 15px;
+      color: var(--text-primary, #fff);
+      margin-bottom: 4px;
+    }
+
+    .focus-area-card.locked .focus-area-name {
+      color: var(--text-secondary, #666);
+    }
+
+    .focus-area-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+    }
+
+    .focus-area-meta .task-count {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .focus-area-progress-mini {
+      width: 80px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .focus-area-progress-mini-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    .focus-area-card.active .focus-area-progress-mini-fill {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+
+    .focus-area-card.completed .focus-area-progress-mini-fill {
+      background: #10b981;
+    }
+
+    .focus-area-card.locked .focus-area-progress-mini-fill {
+      background: #444;
+    }
+
+    .focus-area-status-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    .focus-area-card.active .focus-area-status-badge {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+    }
+
+    .focus-area-card.completed .focus-area-status-badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .focus-area-card.locked .focus-area-status-badge {
+      background: rgba(255, 255, 255, 0.03);
+      color: #555;
+    }
+
+    .focus-area-chevron {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      transition: transform 0.3s ease;
+    }
+
+    .focus-area-card.active .focus-area-chevron {
+      transform: rotate(180deg);
+    }
+
+    /* Focus Area Card Body (expanded) */
+    .focus-area-body {
+      padding: 0 24px 24px;
+    }
+
+    .focus-area-confidence-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .focus-area-confidence-label {
+      font-size: 13px;
+      color: var(--text-secondary, #888);
+      white-space: nowrap;
+    }
+
+    .focus-area-confidence-bar {
+      flex: 1;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .focus-area-confidence-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .focus-area-confidence-pct {
+      font-size: 13px;
+      font-weight: 600;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .focus-area-source-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+
+    .focus-area-source-jd {
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+    }
+
+    .focus-area-source-company {
+      background: rgba(139, 92, 246, 0.1);
+      color: #a78bfa;
+    }
+
+    .focus-area-source-role {
+      background: rgba(245, 158, 11, 0.1);
+      color: #f59e0b;
+    }
+
+    .focus-area-source-graph {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+    }
+
+    /* Task list inside focus area cards */
+    .focus-area-task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .focus-area-task-card {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      padding: 14px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .focus-area-task-card:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .focus-area-task-card.completed {
+      opacity: 0.5;
+      border-left: 3px solid #10b981;
+    }
+
+    .focus-area-task-card.completed .task-title {
+      text-decoration: line-through;
+      color: var(--text-secondary, #888);
+    }
+
+    /* Unlock Animation */
+    @keyframes focusAreaUnlock {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .focus-area-card.unlocking {
+      animation: focusAreaUnlock 0.5s ease-out;
+    }
+
+    @keyframes stepperPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+      50% { box-shadow: 0 0 12px 4px rgba(59, 130, 246, 0.2); }
+    }
+
+    .stepper-step.active.pulse {
+      animation: stepperPulse 1s ease-in-out 2;
+    }
+
+    /* Focus area completed celebration */
+    @keyframes completedBounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .focus-area-card.just-completed {
+      animation: completedBounce 0.4s ease;
+    }
+
+    /* Milestone Roadmap */
+    .milestone-roadmap {
+      margin-top: 28px;
+      padding: 24px;
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 16px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .milestone-roadmap-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 0 0 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-primary, #fff);
+    }
+
+    .milestone-roadmap-title span {
+      font-size: 20px;
+    }
+
+    .milestone-timeline-track {
+      position: relative;
+      padding-left: 28px;
+    }
+
+    /* Vertical connecting line */
+    .milestone-timeline-track::before {
+      content: '';
+      position: absolute;
+      left: 9px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(180deg, #10b981 0%, var(--border-color, #333) 100%);
+      border-radius: 1px;
+    }
+
+    .milestone-timeline-track.all-complete::before {
+      background: #10b981;
+    }
+
+    .milestone-node {
+      position: relative;
+      margin-bottom: 20px;
+      padding-left: 16px;
+    }
+
+    .milestone-node:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Circle on the line */
+    .milestone-dot {
+      position: absolute;
+      left: -28px;
+      top: 14px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      z-index: 1;
+      transition: all 0.3s ease;
+    }
+
+    .milestone-dot.completed {
+      background: #10b981;
+      color: #fff;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+    }
+
+    .milestone-dot.upcoming {
+      background: #3b82f6;
+      color: #fff;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+      animation: milestonePulse 2s ease-in-out infinite;
+    }
+
+    .milestone-dot.pending {
+      background: var(--bg-secondary, #1a1a1a);
+      border: 2px solid var(--border-color, #555);
+      color: var(--text-secondary, #666);
+    }
+
+    @keyframes milestonePulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2); }
+      50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1); }
+    }
+
+    .milestone-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 12px;
+      padding: 16px 18px;
+      transition: all 0.2s ease;
+    }
+
+    .milestone-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .milestone-node.completed .milestone-card {
+      border-color: rgba(16, 185, 129, 0.25);
+      background: rgba(16, 185, 129, 0.04);
+    }
+
+    .milestone-node.upcoming .milestone-card {
+      border-color: rgba(59, 130, 246, 0.25);
+      background: rgba(59, 130, 246, 0.04);
+    }
+
+    .milestone-node.completion .milestone-card {
+      border-color: rgba(139, 92, 246, 0.25);
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(139, 92, 246, 0.06));
+    }
+
+    .milestone-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary, #fff);
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    .weak-area-item {
+    .milestone-node.completed .milestone-name {
+      color: #10b981;
+    }
+
+    .milestone-node.upcoming .milestone-name {
+      color: #60a5fa;
+    }
+
+    .milestone-progress-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .milestone-progress-badge.done {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .milestone-progress-badge.in-progress {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+    }
+
+    .milestone-progress-badge.pending {
+      background: rgba(255, 255, 255, 0.05);
+      color: #666;
+    }
+
+    .milestone-desc {
+      font-size: 12px;
+      color: var(--text-secondary, #999);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .milestone-focus-tags {
       display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .milestone-focus-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+    }
+
+    .milestone-meta-row {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      padding: 12px;
-      background: rgba(239, 68, 68, 0.05);
-      border-radius: 8px;
-      margin-bottom: 8px;
-      border-left: 3px solid #ef4444;
-    }
-
-    .weak-area-name {
-      flex: 1;
-      font-weight: 500;
-    }
-
-    .weak-area-confidence {
+      margin-top: 10px;
       font-size: 12px;
       color: var(--text-secondary, #888);
-    }
-
-    .confidence-bar {
-      width: 60px;
-      height: 6px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .confidence-fill {
-      height: 100%;
-      background: #ef4444;
-      border-radius: 3px;
-    }
-
-    /* Milestones */
-    .milestones {
-      background: var(--bg-secondary, #1a1a1a);
-      border-radius: 12px;
-      padding: 20px;
-      border: 1px solid var(--border-color, #333);
-    }
-
-    .milestone-item {
-      display: flex;
-      gap: 12px;
-      padding: 12px;
-      border-left: 3px solid var(--border-color, #333);
-      margin-bottom: 10px;
-      transition: all 0.2s;
-    }
-
-    .milestone-item.completed {
-      border-left-color: #10b981;
-      background: rgba(16, 185, 129, 0.05);
-    }
-
-    .milestone-item.upcoming {
-      border-left-color: #3b82f6;
-    }
-
-    .milestone-icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      flex-shrink: 0;
-    }
-
-    .milestone-icon.completed {
-      background: #10b981;
-      color: white;
-    }
-
-    .milestone-icon.upcoming {
-      background: rgba(59, 130, 246, 0.2);
-      color: #3b82f6;
-    }
-
-    .milestone-icon.pending {
-      background: rgba(255,255,255,0.1);
-      color: var(--text-secondary, #888);
-    }
-
-    .milestone-content {
-      flex: 1;
-    }
-
-    .milestone-name {
-      font-weight: 500;
-      font-size: 14px;
     }
 
     .milestone-date {
-      font-size: 12px;
-      color: var(--text-secondary, #888);
-      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
     .milestone-reward {
       font-size: 11px;
       color: #f59e0b;
-      margin-top: 4px;
-    }
-
-    /* Upcoming Sessions */
-    .upcoming-sessions {
-      background: var(--bg-secondary, #1a1a1a);
-      border-radius: 12px;
-      padding: 24px;
-      border: 1px solid var(--border-color, #333);
-      margin-top: 24px;
-    }
-
-    .session-preview {
       display: flex;
       align-items: center;
-      gap: 15px;
-      padding: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      cursor: pointer;
-      transition: background 0.2s;
+      gap: 4px;
     }
 
-    .session-preview:hover {
-      background: rgba(255,255,255,0.03);
+    .milestone-progress-bar {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      margin-top: 10px;
+      overflow: hidden;
     }
 
-    .session-preview:last-child {
-      border-bottom: none;
+    .milestone-progress-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease;
     }
 
-    .session-date {
-      text-align: center;
-      min-width: 50px;
+    .milestone-node.completed .milestone-progress-bar-fill {
+      background: #10b981;
     }
 
-    .session-day {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--accent-color, #3b82f6);
+    .milestone-node.upcoming .milestone-progress-bar-fill {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
     }
 
-    .session-month {
-      font-size: 11px;
-      color: var(--text-secondary, #888);
-      text-transform: uppercase;
+    .milestone-node.pending .milestone-progress-bar-fill {
+      background: #555;
     }
 
-    .session-info {
-      flex: 1;
+    /* Skill Gap Badges (used inline in focus area cards) */
+    .skill-gap-priority {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 600;
     }
-
-    .session-theme {
-      font-weight: 500;
-      font-size: 14px;
-    }
-
-    .session-meta {
-      font-size: 12px;
-      color: var(--text-secondary, #888);
-      margin-top: 2px;
-    }
-
-    /* Skill Gaps */
-    .skill-gaps-section {
-      background: var(--bg-secondary, #1a1a1a);
-      border-radius: 12px;
-      padding: 20px;
-      border: 1px solid var(--border-color, #333);
-      margin-bottom: 24px;
-      display: none;
-    }
-    .skill-gaps-section.visible { display: block; }
-    .skill-gap-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      background: rgba(255,255,255,0.03);
-      border-radius: 6px;
-      margin-bottom: 6px;
-      font-size: 13px;
-    }
-    .skill-gap-item span:last-child {
-      flex: 1;
-    }
+    .priority-high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .priority-medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .priority-low { background: rgba(16, 185, 129, 0.2); color: #10b981; }
 
     /* Generate Button */
     .generate-btn {
@@ -653,6 +1020,91 @@
       .setup-form { grid-template-columns: 1fr; }
       .setup-section { margin: 70px 16px 30px; padding: 20px; }
     }
+
+    /* Task Badges */
+    .task-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .focus-badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+    .stretch-badge {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+    .task-description {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* Personalization Context */
+    .personalization-context {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 16px 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 20px;
+    }
+    .personalization-context h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      color: var(--text-primary, #fff);
+    }
+    .context-stats {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .context-stats span {
+      font-size: 12px;
+      color: var(--text-secondary, #aaa);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+
+    /* Study Tips */
+    .study-tips-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 16px 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 24px;
+    }
+    .study-tips-section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      color: var(--text-primary, #fff);
+    }
+    .tips-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tips-list li {
+      font-size: 13px;
+      color: var(--text-secondary, #ccc);
+      padding: 6px 0 6px 20px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .tips-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -748,57 +1200,23 @@
             <div class="progress-stat-label">Study Hours</div>
           </div>
         </div>
+        <!-- Milestone Roadmap -->
+        <div class="milestone-roadmap" id="milestoneRoadmap">
+          <div class="milestone-roadmap-title"><span>🏆</span> Milestone Roadmap</div>
+          <div class="milestone-timeline-track" id="milestonesList">
+            <!-- Milestones rendered dynamically -->
+          </div>
+        </div>
       </div>
 
-      <div class="study-plan-grid">
-        <!-- Main Content -->
-        <div class="main-content">
-          <!-- Today's Session -->
-          <div class="today-session">
-            <div class="today-header">
-              <h2 class="today-title">📅 Today's Session</h2>
-              <span class="today-theme" id="todayTheme">Loading...</span>
-            </div>
-            <div class="task-list" id="todayTasks">
-              <!-- Tasks loaded dynamically -->
-            </div>
-          </div>
+      <!-- Focus Area Stepper -->
+      <div class="focus-area-stepper" id="focusAreaStepper">
+        <!-- Steps rendered dynamically -->
+      </div>
 
-          <!-- Upcoming Sessions -->
-          <div class="upcoming-sessions">
-            <h2 class="section-title">📆 Upcoming Sessions</h2>
-            <div id="upcomingList">
-              <!-- Sessions loaded dynamically -->
-            </div>
-          </div>
-        </div>
-
-        <!-- Sidebar -->
-        <div class="sidebar">
-          <!-- Weak Areas -->
-          <div class="weak-areas">
-            <h2 class="section-title">🎯 Focus Areas</h2>
-            <div id="weakAreasList">
-              <!-- Weak areas loaded dynamically -->
-            </div>
-          </div>
-
-          <!-- Skill Gaps -->
-          <div class="skill-gaps-section" id="skillGapsSection">
-            <h2 class="section-title" id="skillGapsHeader" style="display:none;">📊 Skill Gaps</h2>
-            <div id="skillGapsList">
-              <!-- Skill gaps loaded dynamically -->
-            </div>
-          </div>
-
-          <!-- Milestones -->
-          <div class="milestones">
-            <h2 class="section-title">🏆 Milestones</h2>
-            <div id="milestonesList">
-              <!-- Milestones loaded dynamically -->
-            </div>
-          </div>
-        </div>
+      <!-- Focus Area Cards -->
+      <div class="focus-area-cards" id="focusAreaCards">
+        <!-- Cards rendered dynamically -->
       </div>
 
       <!-- Generate New Plan Button -->
@@ -819,7 +1237,6 @@
       </button>
       </div>
     </div>
-      </div>
     </main>
   </div>
 

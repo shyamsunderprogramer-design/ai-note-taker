@@ -170,6 +170,30 @@ class JDAnalyzer:
                           "essential", "mandatory", "you will need"]
     PREFERRED_MARKERS = ["preferred", "nice to have", "bonus", "desired", "plus"]
 
+    # Map skill keywords to specific sub-topics for richer task generation
+    SUB_TOPIC_MAP = {
+        "ci/cd": ["Jenkins Pipeline Configuration", "GitHub Actions Workflows", "ArgoCD GitOps Deployment", "Pipeline Security & Secrets Management"],
+        "docker": ["Dockerfile Best Practices", "Multi-stage Builds", "Docker Compose Networking", "Container Registry Management"],
+        "kubernetes": ["Pod & Deployment Configuration", "Helm Charts & Releases", "K8s Networking (CNI/Service Mesh)", "Cluster Autoscaling & HPA"],
+        "terraform": ["Terraform Modules & State", "Workspaces & Environment Management", "Terraform Testing Strategies", "Provider & Resource Patterns"],
+        "ansible": ["Ansible Playbooks & Roles", "Inventory Management", "Ansible Vault for Secrets", "Idempotent Task Design"],
+        "aws": ["AWS VPC & IAM Setup", "EC2 & Auto Scaling", "S3 & CloudFront CDN", "RDS & DynamoDB"],
+        "gcp": ["GCP Compute Engine & Cloud Run", "BigQuery & Cloud Storage", "GCP IAM & Service Accounts", "GKE Cluster Management"],
+        "azure": ["Azure Virtual Machines & Scale Sets", "Azure Blob & CDN", "Azure AD & RBAC", "Azure Kubernetes Service"],
+        "python": ["Python Type Hints & Generics", "Async/Await Patterns", "Context Managers & Decorators", "Python Package Management"],
+        "javascript": ["JS Event Loop & Promises", "Closures & Scope Chains", "ES6+ Features & Modules", "Node.js Streams & Buffers"],
+        "react": ["React Hooks Deep Dive", "State Management (Redux/Zustand)", "React Performance Optimization", "Server Components (RSC)"],
+        "sql": ["SQL Window Functions", "Query Optimization & EXPLAIN", "Indexing Strategies", "Transaction Isolation Levels"],
+        "redis": ["Redis Data Structures", "Caching Patterns (Cache-Aside)", "Redis Pub/Sub & Streams", "Redis Cluster & Sentinel"],
+        "security": ["OWASP Top 10 Deep Dive", "OAuth2/OIDC Implementation", "Container Image Scanning", "Network Policies & Firewalls"],
+        "system design": ["Load Balancer Strategies", "Caching Patterns (LRU/Write-Through)", "Database Sharding & Replication", "Message Queue Architecture"],
+        "monitoring": ["Prometheus & Grafana Setup", "Distributed Tracing (Jaeger)", "Log Aggregation (ELK Stack)", "SLO/SLI Definition & Alerting"],
+        "git": ["Git Branching Strategies", "Interactive Rebase & Cherry-Pick", "Git Hooks & CI Integration", "Monorepo Management"],
+        "linux": ["Linux Process Management", "Shell Scripting & Automation", "File System & Permissions", "Networking & Troubleshooting"],
+        "networking": ["TCP/IP & DNS Deep Dive", "HTTP/2 & HTTP/3", "Load Balancer Types", "CDN Configuration & Edge Caching"],
+        "testing": ["Unit Testing Best Practices", "Integration Testing Patterns", "E2E Testing with Cypress/Playwright", "Test Doubles & Mocking"],
+    }
+
     def extract_skills(self, jd_text: str) -> List[Dict]:
         """Extract skills from job description text with relevance weighting"""
         if not jd_text:
@@ -198,7 +222,8 @@ class JDAnalyzer:
                         "category": category,
                         "confidence": confidence,
                         "source": "job_description",
-                        "mentions": count
+                        "mentions": count,
+                        "sub_topics": self.SUB_TOPIC_MAP.get(keyword.lower(), []),
                     })
 
         # Deduplicate: keep highest-weight (lowest confidence) entry per category+name
@@ -298,163 +323,253 @@ class StudyPlanGenerator:
 
 
 class ResourceLibrary:
-    """Library of study resources organized by category"""
+    """Library of study resources organized by category and difficulty"""
 
     RESOURCES = {
         "algorithms": {
             "easy": [
-                {
-                    "name": "Two Sum",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/two-sum/",
-                    "description": "Hash map approach - O(n) time complexity"
-                },
-                {
-                    "name": "Valid Parentheses",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/valid-parentheses/",
-                    "description": "Stack-based solution"
-                },
-                {
-                    "name": "Merge Two Sorted Lists",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/merge-two-sorted-lists/",
-                    "description": "Linked list manipulation"
-                }
+                {"name": "Two Sum", "type": "leetcode", "url": "https://leetcode.com/problems/two-sum/", "description": "Hash map approach — O(n) time, fundamental for interview warm-ups"},
+                {"name": "Valid Parentheses", "type": "leetcode", "url": "https://leetcode.com/problems/valid-parentheses/", "description": "Stack-based solution — teaches stack intuition for parsing problems"},
+                {"name": "Merge Two Sorted Lists", "type": "leetcode", "url": "https://leetcode.com/problems/merge-two-sorted-lists/", "description": "Linked list manipulation — pointer-based reasoning"},
+                {"name": "Best Time to Buy and Sell Stock", "type": "leetcode", "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/", "description": "One-pass greedy — sliding window foundation"},
+                {"name": "Palindrome Number", "type": "leetcode", "url": "https://leetcode.com/problems/palindrome-number/", "description": "Math reversal technique — number manipulation basics"},
             ],
             "medium": [
-                {
-                    "name": "Binary Tree Level Order Traversal",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/",
-                    "description": "BFS with queue"
-                },
-                {
-                    "name": "3Sum",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/3sum/",
-                    "description": "Two-pointer technique"
-                },
-                {
-                    "name": "Word Break",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/word-break/",
-                    "description": "Dynamic programming"
-                }
+                {"name": "Binary Tree Level Order Traversal", "type": "leetcode", "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/", "description": "BFS with queue — tree traversal pattern used in many problems"},
+                {"name": "3Sum", "type": "leetcode", "url": "https://leetcode.com/problems/3sum/", "description": "Two-pointer technique after sorting — classic interview question"},
+                {"name": "Word Break", "type": "leetcode", "url": "https://leetcode.com/problems/word-break/", "description": "Dynamic programming with string segmentation — shows DP on strings"},
+                {"name": "Coin Change", "type": "leetcode", "url": "https://leetcode.com/problems/coin-change/", "description": "Classic DP — bottom-up tabulation, essential for unbounded knapsack variants"},
+                {"name": "Number of Islands", "type": "leetcode", "url": "https://leetcode.com/problems/number-of-islands/", "description": "DFS/BFS on grid — graph traversal on 2D matrix"},
+                {"name": "Group Anagrams", "type": "leetcode", "url": "https://leetcode.com/problems/group-anagrams/", "description": "Hash map with sorted keys — grouping pattern"},
+                {"name": "Top K Frequent Elements", "type": "leetcode", "url": "https://leetcode.com/problems/top-k-frequent-elements/", "description": "Heap or bucket sort — frequency counting pattern"},
             ],
             "hard": [
-                {
-                    "name": "Merge k Sorted Lists",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/merge-k-sorted-lists/",
-                    "description": "Divide and conquer / Heap"
-                },
-                {
-                    "name": "LRU Cache",
-                    "type": "leetcode",
-                    "url": "https://leetcode.com/problems/lru-cache/",
-                    "description": "Hash map + Doubly linked list"
-                }
-            ]
+                {"name": "Merge k Sorted Lists", "type": "leetcode", "url": "https://leetcode.com/problems/merge-k-sorted-lists/", "description": "Min-heap or divide-and-conquer — merging pattern with priority queue"},
+                {"name": "LRU Cache", "type": "leetcode", "url": "https://leetcode.com/problems/lru-cache/", "description": "Hash map + doubly linked list — O(1) get/put, system design essential"},
+                {"name": "Trapping Rain Water", "type": "leetcode", "url": "https://leetcode.com/problems/trapping-rain-water/", "description": "Two-pointer with min-height — spatial reasoning and optimization"},
+                {"name": "Word Search II", "type": "leetcode", "url": "https://leetcode.com/problems/word-search-ii/", "description": "Trie + DFS backtracking — combines data structure with search"},
+                {"name": "Median of Two Sorted Arrays", "type": "leetcode", "url": "https://leetcode.com/problems/median-of-two-sorted-arrays/", "description": "Binary search on partition — advanced divide and conquer"},
+            ],
         },
         "system_design": {
             "easy": [
-                {
-                    "name": "Design URL Shortener",
-                    "type": "system_design",
-                    "url": "https://github.com/donnemartin/system-design-primer",
-                    "description": "Hash-based shortening, database sharding"
-                },
-                {
-                    "name": "Design Key-Value Store",
-                    "type": "system_design",
-                    "url": "https://github.com/donnemartin/system-design-primer",
-                    "description": "CAP theorem, consistency patterns"
-                }
+                {"name": "Design URL Shortener", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Hash-based shortening, base62 encoding, database sharding fundamentals"},
+                {"name": "Design Key-Value Store", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "CAP theorem, consistency patterns, write-ahead log"},
+                {"name": "Design Pastebin", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Object storage, rate limiting, expiration policies"},
             ],
             "medium": [
-                {
-                    "name": "Design News Feed",
-                    "type": "system_design",
-                    "url": "https://github.com/donnemartin/system-design-primer",
-                    "description": "Fan-out on write vs read, caching strategies"
-                },
-                {
-                    "name": "Design Rate Limiter",
-                    "type": "system_design",
-                    "url": "https://github.com/donnemartin/system-design-primer",
-                    "description": "Token bucket, sliding window"
-                }
+                {"name": "Design News Feed", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Fan-out on write vs read, caching strategies, ranking algorithms"},
+                {"name": "Design Rate Limiter", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Token bucket, sliding window, distributed rate limiting with Redis"},
+                {"name": "Design Chat System", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "WebSocket vs polling, message ordering, delivery guarantees"},
+                {"name": "Design Notification System", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Multi-channel dispatch, priority queues, deduplication"},
             ],
             "hard": [
-                {
-                    "name": "Design Distributed Message Queue",
-                    "type": "system_design",
-                    "url": "https://github.com/donnemartin/system-design-primer",
-                    "description": "Kafka-like architecture, partitioning"
-                },
-                {
-                    "name": "Design Web Crawler",
-                    "type": "system_design",
-                    "url": "https://github.com/donnemartin/system-design-primer",
-                    "description": "Distributed crawling, politeness"
-                }
-            ]
+                {"name": "Design Distributed Message Queue", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Kafka-like architecture, partitioning, consumer groups, exactly-once delivery"},
+                {"name": "Design Web Crawler", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "Distributed crawling, politeness, URL frontier, deduplication"},
+                {"name": "Design YouTube/Video Streaming", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "CDN, adaptive bitrate, transcoding pipeline, metadata storage"},
+                {"name": "Design Google Drive", "type": "system_design", "url": "https://github.com/donnemartin/system-design-primer", "description": "File sync, conflict resolution, chunked upload, delta encoding"},
+            ],
+        },
+        "devops": {
+            "easy": [
+                {"name": "Docker Getting Started", "type": "tutorial", "url": "https://docs.docker.com/get-started/", "description": "Hands-on Docker basics — images, containers, Dockerfile, and docker-compose"},
+                {"name": "GitHub Actions Quickstart", "type": "tutorial", "url": "https://docs.github.com/en/actions/quickstart", "description": "CI/CD pipeline basics — workflows, runners, and actions"},
+                {"name": "Terraform Basics", "type": "tutorial", "url": "https://developer.hashicorp.com/terraform/tutorials", "description": "IaC fundamentals — providers, resources, state, and modules"},
+                {"name": "Kubectl Cheat Sheet", "type": "reference", "url": "https://kubernetes.io/docs/reference/kubectl/cheatsheet/", "description": "Essential kubectl commands for pod, deployment, and service management"},
+            ],
+            "medium": [
+                {"name": "Jenkins Pipeline Tutorial", "type": "tutorial", "url": "https://www.jenkins.io/doc/pipeline/tour/", "description": "Declarative and scripted pipelines — stages, agents, shared libraries"},
+                {"name": "ArgoCD Getting Started", "type": "tutorial", "url": "https://argo-cd.readthedocs.io/en/stable/getting_started/", "description": "GitOps continuous delivery — app-of-apps, sync waves, and health checks"},
+                {"name": "Helm Charts Guide", "type": "tutorial", "url": "https://helm.sh/docs/topics/charts/", "description": "Chart structure, templates, values, and release management for K8s"},
+                {"name": "Prometheus + Grafana Setup", "type": "tutorial", "url": "https://prometheus.io/docs/tutorials/", "description": "Metrics collection, PromQL queries, Grafana dashboards, and alerting rules"},
+                {"name": "Ansible Best Practices", "type": "tutorial", "url": "https://docs.ansible.com/ansible/latest/user_guide/playbooks_best_practices.html", "description": "Role structure, inventory management, vault encryption, and idempotent tasks"},
+            ],
+            "hard": [
+                {"name": "Kubernetes the Hard Way", "type": "tutorial", "url": "https://github.com/kelseyhightower/kubernetes-the-hard-way", "description": "Bootstrap K8s from scratch — understand every component, certs, and networking"},
+                {"name": "Terraform Module Design", "type": "tutorial", "url": "https://developer.hashicorp.com/terraform/language/modules/develop", "description": "Production module patterns — interfaces, testing, versioning, and registry publishing"},
+                {"name": "Service Mesh with Istio", "type": "tutorial", "url": "https://istio.io/latest/docs/setup/getting-started/", "description": "Traffic management, mutual TLS, observability, and canary deployments"},
+            ],
+        },
+        "cloud": {
+            "easy": [
+                {"name": "AWS Free Tier Setup", "type": "tutorial", "url": "https://aws.amazon.com/free/", "description": "Getting started with AWS — EC2, S3, IAM basics with free tier"},
+                {"name": "GCP Cloud Run Quickstart", "type": "tutorial", "url": "https://cloud.google.com/run/docs/quickstarts", "description": "Serverless containers — deploy and scale without managing infrastructure"},
+                {"name": "Azure Fundamentals", "type": "tutorial", "url": "https://learn.microsoft.com/en-us/training/paths/microsoft-azure-fundamentals/", "description": "Core Azure concepts — compute, storage, networking, and identity"},
+            ],
+            "medium": [
+                {"name": "AWS Well-Architected Framework", "type": "reference", "url": "https://aws.amazon.com/architecture/well-architected/", "description": "5 pillars — operational excellence, security, reliability, performance, cost optimization"},
+                {"name": "GCP Kubernetes Engine", "type": "tutorial", "url": "https://cloud.google.com/kubernetes-engine/docs/how-to", "description": "GKE cluster management — node pools, autoscaling, and workload identity"},
+                {"name": "AWS VPC Design", "type": "tutorial", "url": "https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html", "description": "Subnets, NACLs, route tables, and transit gateway for multi-VPC architectures"},
+                {"name": "Cloud Cost Optimization", "type": "guide", "url": "https://aws.amazon.com/aws-cost-management/", "description": "Reserved instances, spot instances, right-sizing, and budget alerts"},
+            ],
+            "hard": [
+                {"name": "Multi-Region Failover Architecture", "type": "guide", "url": "https://aws.amazon.com/solutions/implementations/multi-region-application/", "description": "Active-active deployment, global load balancing, and data replication strategies"},
+                {"name": "AWS Security Best Practices", "type": "guide", "url": "https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html", "description": "Zero trust, least privilege IAM, encryption at rest/transit, and compliance automation"},
+            ],
+        },
+        "databases": {
+            "easy": [
+                {"name": "SQLBolt Interactive SQL", "type": "tutorial", "url": "https://sqlbolt.com/", "description": "Interactive SQL lessons — SELECT, JOINs, aggregations, and subqueries"},
+                {"name": "MongoDB University Basics", "type": "tutorial", "url": "https://university.mongodb.com/", "description": "Document model, CRUD operations, indexing basics, and aggregation pipeline"},
+                {"name": "Redis.io Commands", "type": "reference", "url": "https://redis.io/commands/", "description": "String, hash, list, set, sorted set operations and patterns"},
+            ],
+            "medium": [
+                {"name": "Use The Index, Luke", "type": "tutorial", "url": "https://use-the-index-luke.com/", "description": "Database indexing explained — B-tree, hash, partial, and composite indexes"},
+                {"name": "PostgreSQL Performance", "type": "guide", "url": "https://www.postgresql.org/docs/current/performance-tips.html", "description": "EXPLAIN ANALYZE, query planning, vacuum, and connection pooling with PgBouncer"},
+                {"name": "Redis University", "type": "tutorial", "url": "https://university.redis.com/", "description": "Caching patterns, pub/sub, streams, and Redis clustering"},
+                {"name": "Database Sharding Patterns", "type": "article", "url": "https://medium.com/system-design-blog/database-sharding", "description": "Hash-based vs range-based sharding, resharding, and hotspot mitigation"},
+            ],
+            "hard": [
+                {"name": "Designing Data-Intensive Applications", "type": "book", "description": "Martin Kleppmann's definitive guide — transactions, replication, partitioning, and consensus"},
+                {"name": "Jepsen.io Analyses", "type": "reference", "url": "https://jepsen.io/", "description": "Distributed systems correctness analysis — partition tolerance, consistency models, and failure modes"},
+            ],
+        },
+        "security": {
+            "easy": [
+                {"name": "OWASP Top 10", "type": "reference", "url": "https://owasp.org/www-project-top-ten/", "description": "Top 10 web application security risks — injection, XSS, broken auth, and misconfig"},
+                {"name": "CIS Benchmarks", "type": "reference", "url": "https://www.cisecurity.org/cis-benchmarks", "description": "Security configuration benchmarks for OS, cloud, and applications"},
+            ],
+            "medium": [
+                {"name": "OWASP Web Security Testing Guide", "type": "tutorial", "url": "https://owasp.org/www-project-web-security-testing-guide/", "description": "Systematic web app testing — authentication, authorization, injection, and session management"},
+                {"name": "OWASP API Security Top 10", "type": "reference", "url": "https://owasp.org/www-project-api-security/", "description": "API-specific risks — broken object-level auth, mass assignment, and rate limiting"},
+                {"name": "Container Security Best Practices", "type": "guide", "url": "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html", "description": "Image scanning, least privilege, network policies, and runtime security"},
+            ],
+            "hard": [
+                {"name": "Threat Modeling with STRIDE", "type": "guide", "url": "https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats", "description": "Systematic threat identification — spoofing, tampering, repudiation, info disclosure, DoS, elevation"},
+                {"name": "NIST Cybersecurity Framework", "type": "reference", "url": "https://www.nist.gov/cyberframework", "description": "Identify, protect, detect, respond, recover — enterprise security governance"},
+            ],
+        },
+        "api": {
+            "easy": [
+                {"name": "RESTful API Design", "type": "guide", "url": "https://restfulapi.net/", "description": "REST principles — resources, verbs, status codes, and HATEOAS"},
+                {"name": "OpenAPI Specification", "type": "reference", "url": "https://swagger.io/specification/", "description": "API description standard — schema, paths, parameters, and responses"},
+            ],
+            "medium": [
+                {"name": "GraphQL Best Practices", "type": "guide", "url": "https://graphql.org/learn/best-practices/", "description": "Schema design, resolver patterns, N+1 problem, and pagination with connections"},
+                {"name": "API Versioning Strategies", "type": "article", "url": "https://www.postman.com/api-platform/api-versioning/", "description": "URL path, header, query param versioning — tradeoffs and migration approaches"},
+                {"name": "gRPC Fundamentals", "type": "tutorial", "url": "https://grpc.io/docs/what-is-grpc/", "description": "Protocol buffers, streaming, interceptors, and service definitions"},
+            ],
+            "hard": [
+                {"name": "Designing Event-Driven APIs", "type": "guide", "url": "https://microservices.io/patterns/data/event-sourcing.html", "description": "Event sourcing, CQRS, saga patterns, and eventual consistency in distributed systems"},
+                {"name": "API Gateway Patterns", "type": "article", "url": "https://microservices.io/patterns/apigateway.html", "description": "Request routing, composition, rate limiting, and authentication at the edge"},
+            ],
         },
         "behavioral": {
             "easy": [
-                {
-                    "name": "Tell me about yourself",
-                    "type": "behavioral",
-                    "description": "2-minute pitch with key achievements"
-                },
-                {
-                    "name": "Why this company?",
-                    "type": "behavioral",
-                    "description": "Research company values and mission"
-                }
+                {"name": "Tell me about yourself", "type": "behavioral", "description": "2-minute pitch with key achievements — present, past, future framework"},
+                {"name": "Why this company?", "type": "behavioral", "description": "Research company values, mission, recent news — connect to your career goals"},
+                {"name": "Greatest strength", "type": "behavioral", "description": "Pick 2-3 relevant strengths with specific evidence — avoid generic answers"},
             ],
             "medium": [
-                {
-                    "name": "Describe a conflict",
-                    "type": "behavioral",
-                    "description": "Use STAR: Situation, Task, Action, Result"
-                },
-                {
-                    "name": "Tell me about a failure",
-                    "type": "behavioral",
-                    "description": "Emphasize learning and growth"
-                }
+                {"name": "Describe a conflict", "type": "behavioral", "description": "STAR method — focus on resolution, compromise, and what you learned about collaboration"},
+                {"name": "Tell me about a failure", "type": "behavioral", "description": "Emphasize learning and growth — show self-awareness and how you changed your approach"},
+                {"name": "Describe a challenging project", "type": "behavioral", "description": "Technical depth + business impact — walk through decisions, tradeoffs, and outcomes"},
+                {"name": "How do you handle deadlines?", "type": "behavioral", "description": "Prioritization frameworks, communication, and trade-off decisions under pressure"},
             ],
             "hard": [
-                {
-                    "name": "Describe leading without authority",
-                    "type": "behavioral",
-                    "description": "Influence through expertise and relationships"
-                },
-                {
-                    "name": "Tell me about a system you built",
-                    "type": "behavioral",
-                    "description": "Technical depth + business impact"
-                }
-            ]
+                {"name": "Describe leading without authority", "type": "behavioral", "description": "Influence through expertise and relationships — building consensus across teams"},
+                {"name": "Tell me about a system you built", "type": "behavioral", "description": "Technical depth + business impact — architecture decisions, scaling challenges, and lessons"},
+                {"name": "Describe a disagreement with your manager", "type": "behavioral", "description": "Professional pushback — data-driven arguments, understanding their perspective, and resolution"},
+            ],
         },
-        "languages": {
-            "python": [
-                {"name": "Python Context Managers", "type": "concept", "description": "with statements, __enter__, __exit__"},
-                {"name": "Python Generators", "type": "concept", "description": "yield, memory efficiency"},
-                {"name": "Python Decorators", "type": "concept", "description": "@syntax, higher-order functions"}
+        "python": {
+            "easy": [
+                {"name": "Python Context Managers", "type": "concept", "description": "with statements, __enter__/__exit__, contextlib utilities for resource management"},
+                {"name": "Python Generators", "type": "concept", "description": "yield, generator expressions, memory-efficient data processing pipelines"},
+                {"name": "Python Decorators", "type": "concept", "description": "@syntax, higher-order functions, functools.wraps, and common patterns"},
             ],
-            "javascript": [
-                {"name": "JS Promises & Async/Await", "type": "concept", "description": "Event loop, microtasks"},
-                {"name": "JS Closures", "type": "concept", "description": "Lexical scoping"},
-                {"name": "JS Prototypes", "type": "concept", "description": "Prototype chain, inheritance"}
+            "medium": [
+                {"name": "Python Async/Await", "type": "concept", "description": "asyncio, event loop, coroutines, and concurrent task patterns"},
+                {"name": "Python Type System", "type": "concept", "description": "Type hints, generics, Protocol, TypeVar, and runtime type checking"},
+                {"name": "Python Testing", "type": "concept", "description": "pytest, fixtures, parametrize, mocking, and test organization patterns"},
             ],
-            "go": [
-                {"name": "Go Concurrency", "type": "concept", "description": "Goroutines, channels, select"},
-                {"name": "Go Interfaces", "type": "concept", "description": "Implicit interfaces, composition"}
-            ]
-        }
+            "hard": [
+                {"name": "Python Metaclasses", "type": "concept", "description": "Class creation hooks, __new__ vs __init__, and metaclass conflicts"},
+                {"name": "Python Concurrency", "type": "concept", "description": "threading vs multiprocessing vs asyncio — GIL implications and when to use each"},
+            ],
+        },
+        "javascript": {
+            "easy": [
+                {"name": "JS Promises & Async/Await", "type": "concept", "description": "Event loop, microtasks vs macrotasks, and error handling patterns"},
+                {"name": "JS Closures", "type": "concept", "description": "Lexical scoping, factory functions, and memory implications"},
+                {"name": "JS Prototypes", "type": "concept", "description": "Prototype chain, inheritance, and __proto__ vs prototype"},
+            ],
+            "medium": [
+                {"name": "React Hooks", "type": "concept", "description": "useState, useEffect, useCallback, useMemo, and custom hooks patterns"},
+                {"name": "TypeScript Generics", "type": "concept", "description": "Generic functions, constraints, conditional types, and mapped types"},
+                {"name": "Node.js Streams", "type": "concept", "description": "Readable, writable, transform streams, and backpressure handling"},
+            ],
+            "hard": [
+                {"name": "JS Engine Internals", "type": "concept", "description": "V8 optimization, hidden classes, inline caching, and garbage collection"},
+                {"name": "Webpack & Bundling", "type": "concept", "description": "Code splitting, tree shaking, lazy loading, and module federation"},
+            ],
+        },
+        "go": {
+            "easy": [
+                {"name": "Go Concurrency", "type": "concept", "description": "Goroutines, channels, select statement, and concurrency patterns"},
+                {"name": "Go Interfaces", "type": "concept", "description": "Implicit interfaces, composition, and the empty interface pattern"},
+            ],
+            "medium": [
+                {"name": "Go Context Package", "type": "concept", "description": "Cancellation, timeouts, values — controlling goroutine lifecycles"},
+                {"name": "Go Testing Patterns", "type": "concept", "description": "table-driven tests, benchmarks, test helpers, and race detection"},
+            ],
+            "hard": [
+                {"name": "Go Memory Model", "type": "concept", "description": "Happens-before, memory ordering, and sync primitives guarantees"},
+            ],
+        },
+        "java": {
+            "easy": [
+                {"name": "Java Collections Framework", "type": "concept", "description": "List, Set, Map implementations — choosing the right collection for the job"},
+                {"name": "Java Streams API", "type": "concept", "description": "Stream operations, collectors, parallel streams, and common patterns"},
+            ],
+            "medium": [
+                {"name": "Java Concurrency", "type": "concept", "description": "ExecutorService, CompletableFuture, concurrent collections, and thread safety"},
+                {"name": "Spring Boot Fundamentals", "type": "concept", "description": "Auto-configuration, dependency injection, actuator, and testing"},
+            ],
+            "hard": [
+                {"name": "JVM Internals", "type": "concept", "description": "Class loading, JIT compilation, garbage collection tuning, and memory model"},
+            ],
+        },
+        "ml": {
+            "easy": [
+                {"name": "Scikit-learn Tutorials", "type": "tutorial", "url": "https://scikit-learn.org/stable/tutorial/", "description": "Supervised learning basics — classification, regression, and model evaluation"},
+                {"name": "Google ML Crash Course", "type": "tutorial", "url": "https://developers.google.com/machine-learning/crash-course", "description": "Foundational ML concepts — loss functions, gradient descent, and regularization"},
+            ],
+            "medium": [
+                {"name": "PyTorch Tutorials", "type": "tutorial", "url": "https://pytorch.org/tutorials/", "description": "Neural network fundamentals — tensors, autograd, training loops, and transfer learning"},
+                {"name": "Feature Engineering", "type": "guide", "url": "https://www.featurerose.com/", "description": "Feature selection, transformation, encoding, and handling missing data"},
+            ],
+            "hard": [
+                {"name": "Transformers from Scratch", "type": "tutorial", "url": "https://jalammar.github.io/illustrated-transformer/", "description": "Self-attention, positional encoding, multi-head attention, and encoder-decoder architecture"},
+                {"name": "MLOps Practices", "type": "guide", "url": "https://ml-ops.org/", "description": "Model versioning, monitoring, A/B testing, and continuous training pipelines"},
+            ],
+        },
+        "cpp": {
+            "easy": [
+                {"name": "C++ Smart Pointers", "type": "concept", "description": "unique_ptr, shared_ptr, weak_ptr — ownership semantics and RAII"},
+                {"name": "C++ STL Containers", "type": "concept", "description": "vector, map, unordered_map — choosing the right container and complexity guarantees"},
+            ],
+            "medium": [
+                {"name": "C++ Move Semantics", "type": "concept", "description": "rvalue references, std::move, perfect forwarding, and return value optimization"},
+                {"name": "C++ Templates", "type": "concept", "description": "Function templates, class templates, SFINAE, and C++20 concepts"},
+            ],
+            "hard": [
+                {"name": "C++ Memory Model", "type": "concept", "description": "Atomics, memory ordering, lock-free programming, and data race prevention"},
+            ],
+        },
+        "rust": {
+            "easy": [
+                {"name": "Rust Ownership", "type": "concept", "description": "Ownership rules, borrowing, lifetimes — the core of Rust's memory safety"},
+                {"name": "Rust Error Handling", "type": "concept", "description": "Result<T,E>, Option<T>, the ? operator, and error propagation patterns"},
+            ],
+            "medium": [
+                {"name": "Rust Traits", "type": "concept", "description": "Trait definitions, implementations, trait objects, and trait bounds"},
+                {"name": "Rust Concurrency", "type": "concept", "description": "Send/Sync traits, channels, async/await with tokio, and fearless concurrency"},
+            ],
+            "hard": [
+                {"name": "Rust Unsafe", "type": "concept", "description": "Unsafe Rust — when you need it, raw pointers, and maintaining safety invariants"},
+            ],
+        },
     }
 
     @classmethod
@@ -465,11 +580,26 @@ class ResourceLibrary:
         count: int = 3
     ) -> List[Dict]:
         """Get random resources for a category/difficulty"""
-        if category in ["python", "javascript", "go", "java", "cpp", "rust"]:
-            # Language-specific
-            resources = cls.RESOURCES.get("languages", {}).get(category, [])
+        cat_data = cls.RESOURCES.get(category, {})
+
+        # Check if this category has difficulty-level structure (dict of lists)
+        if isinstance(cat_data, dict) and difficulty in cat_data:
+            resources = cat_data[difficulty]
+        elif isinstance(cat_data, list):
+            # Flat list (legacy language resources)
+            resources = cat_data
         else:
-            resources = cls.RESOURCES.get(category, {}).get(difficulty, [])
+            resources = []
+
+        # Fallback: try any difficulty for this category
+        if not resources and isinstance(cat_data, dict):
+            for diff in ["easy", "medium", "hard"]:
+                if diff in cat_data and cat_data[diff]:
+                    resources = cat_data[diff]
+                    break
+
+        if not resources:
+            return []
 
         if len(resources) <= count:
             return resources
@@ -539,17 +669,38 @@ class StudyPlanGenerator:
             weak_areas, company_questions, days
         )
 
-        # Schedule tasks using spaced repetition
-        schedule = self.scheduler.generate_review_schedule(tasks, start_date, days)
+        # Distribute tasks into daily sessions (no more "Rest Day" on day 1)
+        sessions = self._build_daily_sessions(tasks, start_date, days, daily_minutes)
 
-        # Group into daily sessions
-        sessions = self._create_sessions(schedule, daily_minutes)
-
-        # Generate milestones
+        # Generate milestones with weekly goals
         milestones = self._generate_milestones(sessions, weak_areas)
 
         # Calculate totals
         total_tasks = len(tasks)
+
+        # Track what data sources informed this plan
+        personalization_context = {
+            "sources": [],
+            "weak_area_count": len(weak_areas),
+            "skill_gap_count": len(skill_gaps),
+            "task_count": total_tasks,
+            "session_count": len(sessions),
+        }
+        if cognitive_graph_data:
+            personalization_context["sources"].append("cognitive_graph")
+        if target_role:
+            personalization_context["sources"].append("target_role")
+            personalization_context["role"] = target_role
+        if job_description:
+            personalization_context["sources"].append("job_description")
+        if target_company:
+            personalization_context["sources"].append("company_focus")
+            personalization_context["company"] = target_company
+        if current_skills:
+            personalization_context["sources"].append("current_skills")
+            personalization_context["known_skills_count"] = len(current_skills)
+        if not personalization_context["sources"]:
+            personalization_context["sources"].append("defaults")
 
         return StudyPlan(
             user_id=user_id,
@@ -566,6 +717,7 @@ class StudyPlanGenerator:
             target_company=target_company,
             skill_gaps=skill_gaps,
             plan_type="personalized" if is_personalized else "generic",
+            personalization_context=personalization_context,
         )
 
     def _identify_weak_areas(
@@ -585,28 +737,8 @@ class StudyPlanGenerator:
                         "mentions": skill.get("mentions", 0),
                         "category": self._categorize_skill(skill.get("name", ""))
                     })
-        else:
-            # Default weak areas if no graph data
-            weak_areas = [
-                {
-                    "name": "Dynamic Programming",
-                    "confidence": 0.3,
-                    "mentions": 2,
-                    "category": "algorithms"
-                },
-                {
-                    "name": "System Design",
-                    "confidence": 0.4,
-                    "mentions": 3,
-                    "category": "system_design"
-                },
-                {
-                    "name": "Behavioral Questions",
-                    "confidence": 0.45,
-                    "mentions": 5,
-                    "category": "behavioral"
-                }
-            ]
+        # If no graph data, return empty — role patterns or JD will fill in
+        # (Generic defaults like "Dynamic Programming" aren't relevant to most roles)
 
         # Sort by confidence (lowest first)
         weak_areas.sort(key=lambda x: x["confidence"])
@@ -648,7 +780,7 @@ class StudyPlanGenerator:
         """
         all_weak_areas = []
 
-        # Source 1: Cognitive graph
+        # Source 1: Cognitive graph (only if real data provided)
         graph_weak = self._identify_weak_areas(cognitive_graph_data)
         for area in graph_weak:
             area["source"] = area.get("source", "cognitive_graph")
@@ -673,8 +805,9 @@ class StudyPlanGenerator:
                 skill["source"] = "job_description"
                 all_weak_areas.append(skill)
 
-        # Source 3: Role-pattern derived defaults (if no JD)
-        if not job_description and target_role:
+        # Source 3: Role-pattern derived defaults — ALWAYS use when role is specified
+        # This ensures role-relevant content even when JD is also provided
+        if target_role:
             role_weak = self._get_role_weak_areas(target_role)
             all_weak_areas.extend(role_weak)
 
@@ -683,12 +816,20 @@ class StudyPlanGenerator:
             company_focus = self._get_company_focus_areas(target_company)
             all_weak_areas.extend(company_focus)
 
-        # If absolutely nothing, use defaults
+        # If absolutely nothing, use generic defaults
         if not all_weak_areas:
-            all_weak_areas = self._identify_weak_areas(None)
+            all_weak_areas = [
+                {"name": "System Design", "confidence": 0.4, "category": "system_design", "source": "defaults"},
+                {"name": "Algorithms", "confidence": 0.5, "category": "algorithms", "source": "defaults"},
+                {"name": "Behavioral Questions", "confidence": 0.5, "category": "behavioral", "source": "defaults"},
+            ]
 
         # Deduplicate: merge same-named skills, keep lowest confidence
         merged = self._merge_weak_areas(all_weak_areas)
+
+        # Filter out skills the user already knows well (confidence >= 0.8)
+        # These shouldn't consume study time
+        merged = [a for a in merged if a.get("confidence", 0) < 0.8]
 
         # Sort by confidence (weakest first) and cap at 12
         merged.sort(key=lambda x: x.get("confidence", 0.5))
@@ -882,53 +1023,143 @@ class StudyPlanGenerator:
                 merged[key] = dict(area)
         return list(merged.values())
 
+    DESCRIPTION_TEMPLATES = {
+        "algorithms": {
+            "easy": "Practice the {topic} pattern — start with 2-3 easy problems, focusing on identifying when to apply this technique.",
+            "medium": "Deep-dive into {topic} — solve 3 medium problems, then explain the time/space tradeoffs for each solution.",
+            "hard": "Master {topic} at interview level — tackle 2 hard problems combining this pattern with other techniques, then mock-explain your approach.",
+        },
+        "system_design": {
+            "easy": "Study {topic} fundamentals — draw architecture diagrams and list the key components, tradeoffs, and failure modes.",
+            "medium": "Design a system emphasizing {topic} — practice whiteboarding a system with this pattern, covering scaling from 1K to 10M users.",
+            "hard": "Design a production-grade system centered on {topic} — address fault tolerance, data consistency, monitoring, and cost optimization.",
+        },
+        "devops": {
+            "easy": "Set up a local {topic} environment — follow a hands-on tutorial, then document the key configuration decisions you made.",
+            "medium": "Build a multi-stage {topic} pipeline — implement this in a side project with proper error handling and rollback strategies.",
+            "hard": "Architect an enterprise {topic} solution — design for multi-team usage, security hardening, and disaster recovery.",
+        },
+        "cloud": {
+            "easy": "Explore {topic} fundamentals — complete a hands-on lab, then summarize the key pricing and scaling considerations.",
+            "medium": "Build a production-ready {topic} setup — implement monitoring, IAM policies, and cost alerts in a side project.",
+            "hard": "Architect a multi-region {topic} deployment — address high availability, failover, and compliance requirements.",
+        },
+        "databases": {
+            "easy": "Practice {topic} basics — write 5 queries, then verify execution plans using EXPLAIN.",
+            "medium": "Optimize {topic} in a real scenario — design a schema, write queries, then benchmark and tune for performance.",
+            "hard": "Design a {topic} strategy for a high-throughput system — handle sharding, replication lag, and failover.",
+        },
+        "security": {
+            "easy": "Review {topic} concepts — study common attack vectors and list 3 mitigation strategies for each.",
+            "medium": "Implement {topic} in a sample application — then run a vulnerability scan and fix all findings.",
+            "hard": "Design a {topic} strategy for an enterprise system — cover threat modeling, detection, and incident response.",
+        },
+        "api": {
+            "easy": "Study {topic} principles — build a simple API endpoint and test it with curl and a REST client.",
+            "medium": "Design a {topic} for a multi-client application — handle versioning, pagination, error formats, and rate limiting.",
+            "hard": "Architect a {topic} for a high-traffic platform — cover authentication, caching, throttling, and backwards compatibility.",
+        },
+        "behavioral": {
+            "easy": "Prepare a STAR-format story demonstrating {topic} — write it out and practice telling it in under 2 minutes.",
+            "medium": "Develop 2-3 stories around {topic} covering different scenarios — practice adapting them to different question phrasings.",
+            "hard": "Mock-interview practice for {topic} — have a friend ask unexpected follow-ups and practice staying composed.",
+        },
+        "python": {
+            "easy": "Practice {topic} in Python — write a small script or module, then review against Python best practices (PEP 8, type hints).",
+            "medium": "Build a Python project using {topic} — add tests, error handling, and document design decisions.",
+            "hard": "Design a production Python system centered on {topic} — address performance, testing, deployment, and observability.",
+        },
+        "javascript": {
+            "easy": "Practice {topic} in JS — build a small component or utility, then review against modern ES6+ patterns.",
+            "medium": "Build a JS project using {topic} — add unit tests, handle edge cases, and optimize for performance.",
+            "hard": "Architect a production JS system centered on {topic} — cover bundling, testing, CI/CD, and monitoring.",
+        },
+    }
+
+    def _generate_actionable_description(self, topic, category, difficulty, parent_area=None):
+        """Generate a specific, actionable description for a study task."""
+        templates = self.DESCRIPTION_TEMPLATES.get(category, self.DESCRIPTION_TEMPLATES.get("algorithms", {}))
+        template = templates.get(difficulty, "Study {topic} at {difficulty} level — focus on understanding core concepts and practical application.")
+        return template.format(topic=topic, difficulty=difficulty)
+
     def _generate_personalized_tasks(
         self,
         weak_areas: List[Dict],
         company_questions: List[Dict],
         days: int
     ) -> List[StudyTask]:
-        """Generate personalized tasks targeting weak areas and company-specific questions"""
+        """Generate personalized tasks with sub-topic decomposition and actionable descriptions"""
         tasks = []
         task_id = 0
+        # Scale task count to plan duration: ~3 tasks/day for short plans, ~2/day for longer
+        target_count = max(days * 3, 20)
+        target_count = min(target_count, 150)  # Cap at 150
 
-        # Part A: Weak area tasks
-        tasks_per_area = max(2, days // max(len(weak_areas), 1) // 3)
-        for area in weak_areas[:5]:
+        # Part A: Weak area tasks with sub-topic decomposition
+        for area in weak_areas[:12]:
             category = area["category"]
             confidence = area["confidence"]
+            area_name = area.get("name", "Unknown")
+            sub_topics = area.get("sub_topics", [])
+            source_tag = ""
+            if area.get("source") == "company_focus":
+                source_tag = f" ({area.get('company', '')})"
 
+            # Determine difficulty progression based on confidence
             if confidence < 0.3:
-                difficulties = ["easy", "easy", "medium"]
+                diff_cycle = ["easy", "easy", "medium", "medium", "hard"]
             elif confidence < 0.5:
-                difficulties = ["easy", "medium", "medium"]
+                diff_cycle = ["easy", "medium", "medium", "hard", "hard"]
             else:
-                difficulties = ["medium", "medium", "hard"]
+                diff_cycle = ["medium", "medium", "hard", "hard", "hard"]
 
-            for difficulty in difficulties[:tasks_per_area]:
-                task_id += 1
-                resources = self.resource_lib.get_resources(category, difficulty, 2)
+            if sub_topics:
+                # One task per sub-topic, cycling difficulties
+                for i, sub_topic in enumerate(sub_topics):
+                    if len(tasks) >= target_count:
+                        break
+                    difficulty = diff_cycle[i % len(diff_cycle)]
+                    task_id += 1
+                    resources = self.resource_lib.get_resources(category, difficulty, 2)
+                    description = self._generate_actionable_description(sub_topic, category, difficulty, area_name)
 
-                # Add role/company context to title if available
-                area_name = area.get("name", "Unknown")
-                source_tag = ""
-                if area.get("source") == "company_focus":
-                    source_tag = f" ({area.get('company', '')})"
+                    tasks.append(StudyTask(
+                        id=f"task_{task_id:03d}",
+                        title=f"{sub_topic}{source_tag}",
+                        description=description,
+                        category=category,
+                        difficulty=difficulty,
+                        estimated_minutes=self._estimate_time(difficulty),
+                        resources=resources,
+                        confidence_target=min(confidence + 0.2, 0.9),
+                        parent_area=area_name,
+                    ))
+            else:
+                # Fallback: generate 5 tasks with difficulty progression
+                for difficulty in diff_cycle[:5]:
+                    if len(tasks) >= target_count:
+                        break
+                    task_id += 1
+                    resources = self.resource_lib.get_resources(category, difficulty, 2)
+                    description = self._generate_actionable_description(area_name, category, difficulty)
 
-                tasks.append(StudyTask(
-                    id=f"task_{task_id:03d}",
-                    title=f"{area_name} - {difficulty.title()} Level{source_tag}",
-                    description=f"Improve {area_name} skills at {difficulty} level",
-                    category=category,
-                    difficulty=difficulty,
-                    estimated_minutes=self._estimate_time(difficulty),
-                    resources=resources,
-                    confidence_target=min(confidence + 0.2, 0.9)
-                ))
+                    tasks.append(StudyTask(
+                        id=f"task_{task_id:03d}",
+                        title=f"{area_name} - {difficulty.title()} Level{source_tag}",
+                        description=description,
+                        category=category,
+                        difficulty=difficulty,
+                        estimated_minutes=self._estimate_time(difficulty),
+                        resources=resources,
+                        confidence_target=min(confidence + 0.2, 0.9),
+                        parent_area=area_name,
+                    ))
 
         # Part B: Company-specific practice questions
         seen_questions = set()
-        for q in company_questions[:5]:
+        for q in company_questions[:8]:
+            if len(tasks) >= target_count:
+                break
             question_text = q.get("question", "")
             if question_text in seen_questions:
                 continue
@@ -940,15 +1171,263 @@ class StudyPlanGenerator:
             tasks.append(StudyTask(
                 id=f"task_{task_id:03d}",
                 title=f"Practice: {question_text[:80]}{'...' if len(question_text) > 80 else ''}",
-                description=f"Company-specific {category} question (likelihood: {q.get('likelihood', 0.5):.0%})",
+                description=f"Company-specific {category} question (likelihood: {q.get('likelihood', 0.5):.0%}). Prepare a structured answer using the STAR method.",
                 category=category,
                 difficulty=difficulty,
                 estimated_minutes=self._estimate_time(difficulty),
                 resources=[],
-                confidence_target=0.8
+                confidence_target=0.8,
+                parent_area=f"{q.get('company', 'Company')} Interview",
             ))
 
+        # Part C: Supplemental tasks if below target — add practice tasks for role-relevant weak areas
+        if len(tasks) < target_count:
+            practice_types = ["Practice Problems", "Review & Recap", "Mock Interview Prep", "Hands-On Lab", "Deep Dive Reading"]
+            # Only generate supplemental tasks for areas we actually need to study (low confidence)
+            priority_areas = [a for a in weak_areas if a.get("confidence", 1.0) < 0.7]
+            for area in priority_areas[:6]:
+                if len(tasks) >= target_count:
+                    break
+                category = area["category"]
+                area_name = area.get("name", "Unknown")
+                sub_topics = area.get("sub_topics", [])
+                # Use sub_topics for specific practice if available
+                if sub_topics:
+                    for st in sub_topics[:2]:
+                        if len(tasks) >= target_count:
+                            break
+                        task_id += 1
+                        difficulty = random.choice(["medium", "hard"])
+                        description = self._generate_actionable_description(st, category, difficulty, area_name)
+                        tasks.append(StudyTask(
+                            id=f"task_{task_id:03d}",
+                            title=f"{st} — Practice Session",
+                            description=description,
+                            category=category,
+                            difficulty=difficulty,
+                            estimated_minutes=self._estimate_time(difficulty),
+                            resources=self.resource_lib.get_resources(category, difficulty, 1),
+                            confidence_target=min(area.get("confidence", 0.5) + 0.3, 0.95),
+                            parent_area=area_name,
+                        ))
+                else:
+                    for pt in practice_types:
+                        if len(tasks) >= target_count:
+                            break
+                        task_id += 1
+                        difficulty = random.choice(["easy", "medium", "hard"])
+                        description = self._generate_actionable_description(f"{area_name} {pt}", category, difficulty, area_name)
+                        tasks.append(StudyTask(
+                            id=f"task_{task_id:03d}",
+                            title=f"{area_name}: {pt}",
+                            description=description,
+                            category=category,
+                            difficulty=difficulty,
+                            estimated_minutes=self._estimate_time(difficulty),
+                            resources=self.resource_lib.get_resources(category, difficulty, 1),
+                            confidence_target=min(area.get("confidence", 0.5) + 0.3, 0.95),
+                            parent_area=area_name,
+                        ))
+
         return tasks
+
+    def _build_daily_sessions(
+        self,
+        tasks: List[StudyTask],
+        start_date: datetime,
+        days: int,
+        daily_minutes: int = 60,
+    ) -> List[StudySession]:
+        """
+        Distribute tasks across days sequentially, ensuring every day has content.
+        Uses time-based budgeting to fit tasks within daily_minutes.
+        """
+        if not tasks:
+            return []
+
+        sessions = []
+        total_tasks = len(tasks)
+        task_idx = 0
+
+        # Calculate how many tasks to aim for per day based on average task duration
+        avg_task_minutes = sum(t.estimated_minutes for t in tasks) / max(total_tasks, 1)
+        tasks_per_day = max(1, min(int(daily_minutes / max(avg_task_minutes, 20)), total_tasks // max(days, 1)))
+
+        for day_num in range(1, days + 1):
+            session_date = start_date + timedelta(days=day_num - 1)
+            day_tasks = []
+            total_minutes = 0
+
+            # Add warm-up review from previous day's focus task (10 min)
+            if day_num > 1 and sessions:
+                prev_session = sessions[-1]
+                if prev_session.tasks:
+                    # Find the focus task from yesterday for review
+                    review_orig = None
+                    for t in prev_session.tasks:
+                        if t.is_focus and not t.id.startswith("review_"):
+                            review_orig = t
+                            break
+                    if not review_orig:
+                        review_orig = [t for t in prev_session.tasks if not t.id.startswith("review_")]
+                        review_orig = review_orig[0] if review_orig else prev_session.tasks[0]
+
+                    review_task = StudyTask(
+                        id=f"review_day{day_num:03d}",
+                        title=f"Review: {review_orig.title}",
+                        description=f"Warm-up review of yesterday's focus area — {review_orig.title}. Spend 5-10 min recalling key concepts without notes.",
+                        category=review_orig.category,
+                        difficulty="easy",
+                        estimated_minutes=10,
+                        resources=[],
+                        parent_area=review_orig.parent_area,
+                    )
+                    day_tasks.append(review_task)
+                    total_minutes += 10
+
+            # Fill the day with tasks until we hit the time budget
+            max_budget = daily_minutes * 1.5  # Allow 150% overflow to fit meaningful tasks
+            has_real_task = any(not t.id.startswith("review_") for t in day_tasks)
+            while task_idx < total_tasks:
+                task = tasks[task_idx]
+                proposed_minutes = total_minutes + task.estimated_minutes
+
+                if proposed_minutes > max_budget:
+                    # Allow ONE task over budget if the day would otherwise be empty
+                    if not has_real_task:
+                        has_real_task = True
+                        # Add this one task and stop
+                        task.scheduled_date = session_date
+                        day_tasks.append(task)
+                        total_minutes += task.estimated_minutes
+                        task_idx += 1
+                        break
+                    else:
+                        break
+
+                task.scheduled_date = session_date
+                day_tasks.append(task)
+                total_minutes += task.estimated_minutes
+                has_real_task = True
+                task_idx += 1
+
+            # Ensure day 1 ALWAYS has content
+            if day_num == 1 and not day_tasks and tasks:
+                first_task = tasks[0]
+                first_task.scheduled_date = session_date
+                day_tasks.append(first_task)
+                total_minutes = first_task.estimated_minutes
+                task_idx = 1
+
+            if day_tasks:
+                # Determine focus and stretch tasks
+                focus_task = None
+                stretch_task = None
+                non_review_tasks = [t for t in day_tasks if not t.id.startswith("review_")]
+                if non_review_tasks:
+                    # Focus: the task with lowest confidence target (most challenging)
+                    non_review_tasks.sort(key=lambda t: t.confidence_target)
+                    focus_task = non_review_tasks[0]
+                    focus_task.is_focus = True
+                    # Stretch: the task with highest difficulty
+                    hard_tasks = [t for t in non_review_tasks if t.difficulty == "hard"]
+                    if hard_tasks and hard_tasks[0] != focus_task:
+                        stretch_task = hard_tasks[0]
+                        stretch_task.is_stretch = True
+
+                theme = self._generate_rich_theme(day_num, non_review_tasks, session_date, days)
+
+                session = StudySession(
+                    date=session_date,
+                    tasks=day_tasks,
+                    total_minutes=total_minutes,
+                    theme=theme,
+                    day_number=day_num,
+                    focus_task_id=focus_task.id if focus_task else None,
+                    stretch_task_id=stretch_task.id if stretch_task else None,
+                )
+                sessions.append(session)
+
+        # If there are remaining tasks that didn't fit, redistribute 1 per session
+        # (only if there's room within the budget)
+        remaining_idx = task_idx
+        if remaining_idx < total_tasks and sessions:
+            for s in sessions:
+                if remaining_idx >= total_tasks:
+                    break
+                task = tasks[remaining_idx]
+                if s.total_minutes + task.estimated_minutes <= daily_minutes * 2.0:
+                    task.scheduled_date = s.date
+                    s.tasks.append(task)
+                    s.total_minutes += task.estimated_minutes
+                    remaining_idx += 1
+
+        return sessions
+
+    def _generate_rich_theme(
+        self,
+        day_index: int,
+        tasks: List[StudyTask],
+        date: datetime,
+        total_days: int,
+    ) -> str:
+        """Generate a descriptive session theme like 'Day 3: Container Orchestration Deep Dive — K8s'"""
+        if not tasks:
+            # Fallback themes by day region
+            if day_index <= total_days * 0.25:
+                return f"Day {day_index}: Foundation Building"
+            elif day_index <= total_days * 0.5:
+                return f"Day {day_index}: Core Concepts Review"
+            elif day_index <= total_days * 0.75:
+                return f"Day {day_index}: Intermediate Practice"
+            else:
+                return f"Day {day_index}: Advanced Topics & Review"
+
+        # Get the primary category and parent areas
+        categories = [t.category for t in tasks if not t.id.startswith("review_")]
+        parent_areas = [t.parent_area for t in tasks if t.parent_area and not t.id.startswith("review_")]
+
+        # Count categories
+        cat_counts = defaultdict(int)
+        for cat in categories:
+            cat_counts[cat] += 1
+
+        primary_cat = max(cat_counts, key=cat_counts.get) if cat_counts else "general"
+
+        # Category display names
+        cat_names = {
+            "algorithms": "Algorithms",
+            "system_design": "System Design",
+            "behavioral": "Behavioral Prep",
+            "python": "Python",
+            "javascript": "JavaScript",
+            "devops": "DevOps & Infrastructure",
+            "cloud": "Cloud Platform",
+            "databases": "Databases",
+            "security": "Security",
+            "api": "API Design",
+            "ml": "Machine Learning",
+            "go": "Go",
+            "java": "Java",
+            "cpp": "C++",
+            "rust": "Rust",
+        }
+
+        # Build theme based on day position and focus
+        cat_display = cat_names.get(primary_cat, primary_cat.title())
+
+        if parent_areas:
+            # Use the first parent area as the specific focus
+            focus = parent_areas[0]
+            if len(set(parent_areas)) > 1:
+                # Multiple areas — show primary + count
+                return f"Day {day_index}: {focus} + {cat_display}"
+            else:
+                return f"Day {day_index}: {focus} — {cat_display}"
+        else:
+            # Just category
+            phase = "Foundation" if day_index <= total_days * 0.3 else "Deep Dive" if day_index <= total_days * 0.7 else "Mastery"
+            return f"Day {day_index}: {cat_display} {phase}"
 
     def _categorize_skill(self, skill_name: str) -> str:
         """Categorize a skill name into a study category"""
@@ -1120,53 +1599,94 @@ class StudyPlanGenerator:
         sessions: List[StudySession],
         weak_areas: List[Dict]
     ) -> List[Dict]:
-        """Generate milestone checkpoints"""
+        """Generate weekly milestone checkpoints with specific focus areas"""
         milestones = []
 
         if not sessions:
             return milestones
 
         total_sessions = len(sessions)
-        quarter = total_sessions // 4
+        days_total = total_sessions  # 1 session per day
 
-        # 25% milestone
-        if quarter > 0:
+        # Group sessions by week (7-day chunks)
+        weeks = defaultdict(list)
+        for s in sessions:
+            week_num = (s.day_number - 1) // 7 + 1 if s.day_number else 0
+            weeks[week_num].append(s)
+
+        # Phase labels based on week position
+        phase_labels = {
+            1: "Foundation & Setup",
+            2: "Core Skills Development",
+            3: "Deep Dive & Practice",
+            4: "Advanced Topics",
+        }
+
+        rewards = {
+            1: "Build your study rhythm — you're on track!",
+            2: "Schedule a mock interview with a friend",
+            3: "You're interview-ready for most topics — keep pushing!",
+            4: "Treat yourself — you've earned it!",
+        }
+
+        # Get top weak area names for focus descriptions
+        top_areas = [a.get("name", "") for a in weak_areas[:4]]
+        top_categories = [a.get("category", "") for a in weak_areas[:4]]
+
+        for week_num, week_sessions in sorted(weeks.items()):
+            if not week_sessions:
+                continue
+
+            # Determine focus areas for this week
+            all_parent_areas = []
+            all_categories = []
+            for s in week_sessions:
+                for t in s.tasks:
+                    if t.parent_area and not t.id.startswith("review_"):
+                        all_parent_areas.append(t.parent_area)
+                    if t.category and not t.id.startswith("review_"):
+                        all_categories.append(t.category)
+
+            # Count and get top focus areas
+            area_counts = defaultdict(int)
+            for a in all_parent_areas:
+                area_counts[a] += 1
+            top_week_areas = sorted(area_counts, key=area_counts.get, reverse=True)[:3]
+
+            cat_counts = defaultdict(int)
+            for c in all_categories:
+                cat_counts[c] += 1
+            top_week_cats = sorted(cat_counts, key=cat_counts.get, reverse=True)[:2]
+
+            # Phase label
+            if week_num <= 4:
+                phase = phase_labels.get(week_num, f"Week {week_num}")
+            elif week_num <= 8:
+                phase = f"Week {week_num}: Continued Practice"
+            else:
+                phase = f"Week {week_num}: Mastery & Review"
+
+            focus_str = ", ".join(top_week_areas) if top_week_areas else ", ".join(top_week_cats) if top_week_cats else "Mixed Review"
+
             milestones.append({
-                "name": f"Foundation Complete",
-                "description": f"Complete first {quarter} study sessions",
-                "target_date": sessions[quarter].date.isoformat(),
-                "type": "progress",
-                "reward": "Unlock intermediate challenges"
+                "name": f"{phase}",
+                "description": f"Focus on {focus_str}. Complete {len(week_sessions)} sessions this week.",
+                "focus_areas": top_week_areas[:3],
+                "week": week_num,
+                "target_date": week_sessions[0].date.isoformat(),
+                "type": "weekly",
+                "reward": rewards.get(week_num, "Keep going — consistency is key!"),
             })
 
-        # 50% milestone
-        if quarter * 2 > 0 and quarter * 2 < total_sessions:
-            milestones.append({
-                "name": f"Halfway Point",
-                "description": "50% of study plan completed",
-                "target_date": sessions[quarter * 2].date.isoformat(),
-                "type": "progress",
-                "reward": "Schedule mock interview"
-            })
-
-        # Area-specific milestones
-        for i, area in enumerate(weak_areas[:3]):
-            if i * 5 + 5 < total_sessions:
-                milestones.append({
-                    "name": f"{area['name']} Mastery",
-                    "description": f"Achieve {area['confidence'] * 100 + 20:.0f}% confidence in {area['name']}",
-                    "target_date": sessions[min(i * 5 + 5, total_sessions - 1)].date.isoformat(),
-                    "type": "skill",
-                    "target_skill": area["name"]
-                })
-
-        # Final milestone
+        # Final completion milestone
         milestones.append({
-            "name": "Study Plan Complete",
-            "description": "All sessions completed!",
+            "name": "Study Plan Complete!",
+            "description": f"All {total_sessions} days completed. You've covered {', '.join(top_areas[:3])} and are ready for your interview!",
+            "focus_areas": [],
+            "week": (total_sessions // 7) + 1,
             "target_date": sessions[-1].date.isoformat(),
             "type": "completion",
-            "reward": "Ready for interviews!"
+            "reward": "You're interview-ready! Go ace it!",
         })
 
         return milestones

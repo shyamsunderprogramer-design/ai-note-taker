@@ -56,3 +56,5 @@ sqlalchemy[asyncio]==2.0.29
 asyncpg==0.29.0
 aiosqlite==0.20.0
 redis==5.0.3
+pytesseract==0.3.13
+Pillow==11.2.1

@@ -128,6 +128,8 @@ const AuthHelper = {
         overlay.remove();
         // Dispatch event so pages know auth succeeded
         window.dispatchEvent(new Event('auth-success'));
+        // Reload page so all initial API calls retry with auth token
+        setTimeout(() => window.location.reload(), 200);
       } catch (e) {
         errorDiv.textContent = 'Invalid username or password';
         errorDiv.style.display = 'block';

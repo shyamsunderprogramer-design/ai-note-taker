@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld("api", {
   // Screenshot capture + multimodal AI
   captureScreenshot: () => ipcRenderer.invoke("window:capture-screenshot"),
   getAskWithImageUrl: () => `${BASE_URL}/ask-with-image`,
+  getOcrUrl: () => `${BASE_URL}/ocr`,
 
   // Screenshot ring buffer (for auto-screenshot)
   overlayGetLatestScreenshot: () => ipcRenderer.invoke("overlay:get-latest-screenshot"),

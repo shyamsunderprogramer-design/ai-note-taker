@@ -14,6 +14,17 @@ log.transports.file.level = "info"
 log.transports.console.level = "debug"
 log.transports.file.maxSize = 5 * 1024 * 1024
 
+// Prevent Chromium from upgrading HTTP→HTTPS on localhost (which causes
+// ERR_SSL_PROTOCOL_ERROR since our dev backend only serves plain HTTP).
+// Must be set BEFORE app.whenReady().
+app.commandLine.appendSwitch("ignore-certificate-errors")
+app.commandLine.appendSwitch("allow-insecure-localhost")
+// Treat http://127.0.0.1:8000 as a secure origin so Chromium won't
+// auto-upgrade it to HTTPS (Chromium's built-in HSTS preload forces HTTPS
+// for localhost/127.0.0.1 since Chrome 89)
+app.commandLine.appendSwitch("unsafely-treat-insecure-origin-as-secure", "http://127.0.0.1:8000")
+app.commandLine.appendSwitch("disable-features", "HttpsUpgrades,HttpsFirstModeV2,HttpsFirstBalancedMode")
+
 // Disable file logging in production for stealth mode
 // Logs only go to console (memory), not to disk
 if (app.isPackaged) {
@@ -866,6 +877,18 @@ ipcMain.handle("apiKey:get", (_event, provider) => {
 const http = require("http")
 const API_KEY_SERVER_PORT = 18000 // Separate port for secure key exchange
 
+// Throttle key server logging — only log once per provider per minute
+const _keyLogTimestamps = {}
+function _shouldLogKeyRequest(provider) {
+  const now = Date.now()
+  const lastLog = _keyLogTimestamps[provider] || 0
+  if (now - lastLog > 60000) { // 1 minute throttle
+    _keyLogTimestamps[provider] = now
+    return true
+  }
+  return false
+}
+
 function startApiKeyServer() {
   const server = http.createServer(async (req, res) => {
     // Enable CORS for localhost only
@@ -888,7 +911,10 @@ function startApiKeyServer() {
           const apiKey = apiKeyStore.get(`apiKey.${provider}`, null)
           res.writeHead(200, { "Content-Type": "application/json" })
           res.end(JSON.stringify({ apiKey }))
-          logger.info(`[API Key Server] Key requested for ${provider}, found: ${!!apiKey}`)
+          // Only log when key is found, or throttle missing-key logs to once per minute per provider
+          if (apiKey || _shouldLogKeyRequest(provider)) {
+            logger.info(`[API Key Server] Key requested for ${provider}, found: ${!!apiKey}`)
+          }
         } catch (err) {
           res.writeHead(400, { "Content-Type": "application/json" })
           res.end(JSON.stringify({ error: err.message }))
@@ -978,16 +1004,46 @@ app.whenReady().then(async () => {
 
     const headers = { ...details.responseHeaders }
 
+    // Strip HSTS header from localhost responses to prevent Chromium from
+    // upgrading HTTP connections to HTTPS (which causes ERR_SSL_PROTOCOL_ERROR
+    // since our dev backend only serves HTTP)
+    if (details.url.includes("127.0.0.1") || details.url.includes("localhost")) {
+      delete headers["Strict-Transport-Security"]
+    }
+
     if (isOwnPage) {
       // T25: CSP for our own Electron desktop app pages
       // 'unsafe-inline' needed for inline <style> blocks and style attributes
       // 'unsafe-eval' needed for some dependencies (hljs, etc.)
-      const csp = `default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      const csp = `default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
       headers["Content-Security-Policy"] = [csp]
     }
 
     // T26: Removed Access-Control-Allow-Origin: ["*"] — backend handles CORS
     callback({ responseHeaders: headers })
+  })
+
+  // Clear HSTS cache for localhost to prevent ERR_SSL_PROTOCOL_ERROR
+  // Chromium caches HSTS directives and will upgrade HTTP→HTTPS even after
+  // the server stops sending the header. This clears that cached state.
+  session.defaultSession.clearStorageData({
+    origins: ["http://127.0.0.1:8000", "https://127.0.0.1:8000",
+              "http://localhost:8000", "https://localhost:8000"],
+    storages: ["hsts"]
+  }).catch(() => {})
+
+  // Intercept HTTPS requests to localhost and redirect them to HTTP.
+  // Chromium's built-in HSTS preload forces HTTPS for 127.0.0.1 and localhost,
+  // causing ERR_SSL_PROTOCOL_ERROR since our backend only serves plain HTTP.
+  // This onBeforeRequest handler catches those upgrades and redirects back to HTTP.
+  session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    const url = details.url
+    if (url.startsWith("https://127.0.0.1:") || url.startsWith("https://localhost:")) {
+      const httpUrl = url.replace(/^https:/, "http:")
+      callback({ redirectURL: httpUrl })
+      return
+    }
+    callback({})
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {

@@ -68,13 +68,12 @@ class SecurityHeaders:
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob:",
         "font-src": "'self'",
-        "connect-src": "'self'",
-        "media-src": "'self' blob:",
+        "connect-src": "'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://localhost:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:*",
+        "media-src": "'self' blob: mediastream:",
         "object-src": "'none'",
         "frame-ancestors": "'none'",
         "form-action": "'self'",
         "base-uri": "'self'",
-        "upgrade-insecure-requests": "",
     }
 
     @classmethod
@@ -83,9 +82,12 @@ class SecurityHeaders:
         return "; ".join(f"{k} {v}".strip() for k, v in cls.CSP_DIRECTIVES.items())
 
     @classmethod
-    def get_security_headers(cls) -> Dict[str, str]:
-        """Get all security headers"""
-        return {
+    def get_security_headers(cls, request_host: str = "") -> Dict[str, str]:
+        """Get all security headers.
+        HSTS is omitted for localhost/127.0.0.1 to prevent SSL protocol errors
+        from Electron/browser clients that connect over plain HTTP in development.
+        """
+        headers = {
             # CSP
             "Content-Security-Policy": cls.get_csp_header(),
 
@@ -98,9 +100,6 @@ class SecurityHeaders:
             # Clickjacking protection
             "X-Frame-Options": "DENY",
 
-            # HSTS (HTTPS Strict Transport Security)
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
-
             # Referrer policy
             "Referrer-Policy": "strict-origin-when-cross-origin",
 
@@ -112,6 +111,14 @@ class SecurityHeaders:
             "Pragma": "no-cache",
             "Expires": "0",
         }
+
+        # Only send HSTS for non-localhost origins to avoid forcing
+        # browsers/Electron to upgrade HTTP connections to HTTPS
+        is_localhost = not request_host or "localhost" in request_host or "127.0.0.1" in request_host or "::1" in request_host
+        if not is_localhost:
+            headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+
+        return headers
 
     @classmethod
     def apply_to_response(cls, response: Any) -> Any:

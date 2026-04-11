@@ -715,6 +715,84 @@ select option {
   display: block;
 }
 
+/* Capture screenshot button */
+.capture-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  font-size: 18px;
+  color: var(--text-muted);
+}
+.capture-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.capture-btn.processing {
+  opacity: 0.6;
+  pointer-events: none;
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* OCR preview badge */
+.ocr-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin: 4px 0 0 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+}
+.ocr-badge-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.ocr-badge-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+  opacity: 0.8;
+}
+.ocr-badge-remove {
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.ocr-badge-remove:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
 /* Auto-screenshot button */
 .auto-ss-btn {
   flex-shrink: 0;
@@ -3019,6 +3097,69 @@ select option {
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
 }
 .ollama-model-delete:active { transform: scale(0.95); }
+
+/* Per-model race toggle switch */
+.model-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: background 0.15s ease;
+}
+.model-toggle-row:hover { background: rgba(255,255,255,0.06); }
+.model-toggle-row .model-toggle-name {
+  font-size: 12px;
+  color: var(--text-main);
+  font-family: 'Fira Code', monospace;
+}
+.model-toggle-row.disabled .model-toggle-name {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.model-toggle-switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.model-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.model-toggle-switch .toggle-track {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  transition: 0.2s;
+}
+.model-toggle-switch .toggle-track:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+.model-toggle-switch input:checked + .toggle-track {
+  background-color: #22c55e;
+}
+.model-toggle-switch input:checked + .toggle-track:before {
+  transform: translateX(14px);
+}
+.model-toggle-switch input:disabled + .toggle-track {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .ollama-models-loading {
   text-align: center;
   padding: 12px;
@@ -5825,6 +5966,105 @@ select option {
 
 .custom-dropdown-item.default-voice {
   font-weight: 500;
+}
+
+/* Custom Model UI */
+.custom-model-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text-main, #e0e0e0);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.custom-model-entry:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.custom-model-entry .custom-model-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-model-entry .custom-model-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.custom-model-entry .remove-custom-model {
+  font-size: 14px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.custom-model-entry .remove-custom-model:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.add-custom-model-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.add-custom-model-form input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-main, #e0e0e0);
+  font-size: 13px;
+  outline: none;
+}
+
+.add-custom-model-form input:focus {
+  border-color: #3b82f6;
+}
+
+.add-custom-model-form input::placeholder {
+  color: var(--text-secondary, #666);
+}
+
+.add-custom-model-form button {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.add-custom-model-form button:hover {
+  opacity: 0.9;
+}
+
+.add-custom-model-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .custom-dropdown-menu::-webkit-scrollbar {
