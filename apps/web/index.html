@@ -743,6 +743,49 @@
           </div>
         </div>
 
+        <!-- Interview Data Import Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="ingestion">
+            <span class="settings-card-title">Interview Data Import</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="ingestion">
+            <div class="ingestion-section">
+              <p class="ingestion-desc">Import interview Q&A and PDF books into the knowledge graph and document search.</p>
+
+              <div class="ingestion-sources">
+                <label class="ingestion-label">GitHub Repos</label>
+                <input type="text" id="ingestionRepoInput" placeholder="e.g. ShyamSunder89/DevOps-Interview-Questions1" class="ingestion-input" />
+                <div id="ingestionRepoTags" class="ingestion-tags"></div>
+              </div>
+
+              <div class="ingestion-options">
+                <label class="ingestion-option">
+                  <input type="radio" name="ingestionMode" value="full" checked /> Full (Graph + RAG)
+                </label>
+                <label class="ingestion-option">
+                  <input type="radio" name="ingestionMode" value="graph_only" /> Graph Only
+                </label>
+                <label class="ingestion-option">
+                  <input type="radio" name="ingestionMode" value="rag_only" /> RAG Only
+                </label>
+              </div>
+
+              <div class="ingestion-actions">
+                <button id="ingestionDryRunBtn" class="ingestion-btn secondary">Dry Run</button>
+                <button id="ingestionStartBtn" class="ingestion-btn primary">Start Import</button>
+              </div>
+
+              <div class="ingestion-status" id="ingestionStatus" style="display:none">
+                <div class="ingestion-progress">
+                  <div class="ingestion-progress-bar" id="ingestionProgressBar"></div>
+                </div>
+                <div class="ingestion-stats" id="ingestionStats"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Analytics Preview Card -->
         <div class="settings-card">
           <div class="settings-card-header" data-collapsible="analytics">

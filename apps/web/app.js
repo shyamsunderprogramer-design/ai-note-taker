@@ -2924,8 +2924,17 @@ function startStreamingTranscription() {
       if (data.type === "partial") {
         partialTranscriptText = data.text
         showPartialTranscript(data.text)
+        // Pass speaker info to agent suggestion pipeline if available
+        if (data.speaker || data.semantic_role) {
+          lastDetectedSpeaker = data.speaker || "Speaker 1"
+          lastSpeakerRole = data.semantic_role || "user"
+        }
       } else if (data.type === "final") {
         confirmPartialTranscript(data.text)
+        // Final message may include speaker list
+        if (data.speakers && Array.isArray(data.speakers)) {
+          console.log("[transcribeWs] Speakers detected:", data.speakers.join(", "))
+        }
       }
     } catch {}
   })
@@ -2997,6 +3006,8 @@ function confirmPartialTranscript(text) {
   textInput.classList.remove("partial-transcript")
   if (text) {
     textInput.value = text
+    // Trigger agent suggestions with speaker info from diarizer
+    processTranscriptForSuggestions(text, lastDetectedSpeaker)
   }
   partialTranscriptText = ""
 }
@@ -5277,6 +5288,176 @@ async function uploadFiles(files) {
 }
 
 // ==============================
+// INTERVIEW DATA INGESTION
+// ==============================
+const ingestionRepoInput = document.getElementById("ingestionRepoInput")
+const ingestionRepoTags = document.getElementById("ingestionRepoTags")
+const ingestionDryRunBtn = document.getElementById("ingestionDryRunBtn")
+const ingestionStartBtn = document.getElementById("ingestionStartBtn")
+const ingestionStatus = document.getElementById("ingestionStatus")
+const ingestionProgressBar = document.getElementById("ingestionProgressBar")
+const ingestionStatsEl = document.getElementById("ingestionStats")
+
+let ingestionRepos = []
+
+function addIngestionRepo(repo) {
+  repo = repo.trim()
+  if (!repo) return
+  // Normalize: accept full URLs or owner/repo format
+  if (repo.startsWith("https://github.com/")) {
+    repo = repo.replace("https://github.com/", "").replace(/\.git$/, "").replace(/\/$/, "")
+  }
+  if (ingestionRepos.includes(repo)) return
+  ingestionRepos.push(repo)
+  renderIngestionTags()
+}
+
+function flushIngestionInput() {
+  // Pick up any text still in the input field
+  if (ingestionRepoInput && ingestionRepoInput.value.trim()) {
+    addIngestionRepo(ingestionRepoInput.value)
+    ingestionRepoInput.value = ""
+  }
+}
+
+function removeIngestionRepo(repo) {
+  ingestionRepos = ingestionRepos.filter((r) => r !== repo)
+  renderIngestionTags()
+}
+
+function renderIngestionTags() {
+  if (!ingestionRepoTags) return
+  ingestionRepoTags.innerHTML = ingestionRepos
+    .map(
+      (repo) =>
+        `<span class="ingestion-tag">${repo}<span class="ingestion-tag-remove" data-repo="${repo}">&times;</span></span>`
+    )
+    .join("")
+  ingestionRepoTags.querySelectorAll(".ingestion-tag-remove").forEach((btn) => {
+    btn.addEventListener("click", () => removeIngestionRepo(btn.dataset.repo))
+  })
+}
+
+function getIngestionMode() {
+  const checked = document.querySelector('input[name="ingestionMode"]:checked')
+  return checked ? checked.value : "full"
+}
+
+function showIngestionStatus(stats, error) {
+  if (!ingestionStatus) return
+  ingestionStatus.style.display = "block"
+  if (error) {
+    ingestionStatsEl.innerHTML = `<div class="ingestion-error">${error}</div>`
+    ingestionProgressBar.style.width = "0%"
+    return
+  }
+  const total = stats.qa_pairs_found + stats.pdfs_processed || 1
+  const loaded = stats.qa_pairs_loaded_graph + stats.qa_pairs_loaded_rag + stats.pdfs_loaded_rag
+  const pct = Math.min(100, Math.round((loaded / total) * 100))
+  ingestionProgressBar.style.width = pct + "%"
+  ingestionStatsEl.innerHTML = `
+    <div class="stat-row"><span class="stat-label">Q&A found</span><span class="stat-value">${stats.qa_pairs_found}</span></div>
+    <div class="stat-row"><span class="stat-label">Q&A → Graph</span><span class="stat-value">${stats.qa_pairs_loaded_graph}</span></div>
+    <div class="stat-row"><span class="stat-label">Q&A → RAG</span><span class="stat-value">${stats.qa_pairs_loaded_rag}</span></div>
+    <div class="stat-row"><span class="stat-label">Q&A cached</span><span class="stat-value">${stats.qa_pairs_cached}</span></div>
+    <div class="stat-row"><span class="stat-label">PDFs processed</span><span class="stat-value">${stats.pdfs_processed}</span></div>
+    <div class="stat-row"><span class="stat-label">PDFs → RAG</span><span class="stat-value">${stats.pdfs_loaded_rag}</span></div>
+    <div class="stat-row"><span class="stat-label">Graph nodes</span><span class="stat-value">${stats.graph_nodes_created}</span></div>
+    <div class="stat-row"><span class="stat-label">RAG chunks</span><span class="stat-value">${stats.rag_chunks_created}</span></div>
+    <div class="stat-row"><span class="stat-label">Errors</span><span class="stat-value">${(stats.errors || []).length}</span></div>
+    <div class="stat-row"><span class="stat-label">Time</span><span class="stat-value">${stats.elapsed_seconds}s</span></div>
+  `
+}
+
+async function startIngestion(dryRun = false) {
+  if (!ingestionStartBtn || !ingestionStatus) return
+  flushIngestionInput()
+  if (ingestionRepos.length === 0) {
+    alert("Add at least one GitHub repo (e.g. ShyamSunder89/DevOps-Interview-Questions1)")
+    return
+  }
+  const mode = getIngestionMode()
+  ingestionStartBtn.disabled = true
+  ingestionDryRunBtn.disabled = true
+  ingestionStatus.style.display = "block"
+  ingestionProgressBar.style.width = "10%"
+  ingestionStatsEl.innerHTML = "Cloning repos..."
+
+  try {
+    // Start ingestion (returns immediately with task_id)
+    const resp = await fetch(`${API_BASE}/agents/ingestion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repos: ingestionRepos,
+        mode: mode,
+        dry_run: dryRun,
+      }),
+    })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err.error?.message || err.detail || `HTTP ${resp.status}`)
+    }
+    const data = await resp.json()
+    if (!data.task_id) {
+      // Old-style sync response
+      showIngestionStatus(data)
+      return
+    }
+
+    // Poll for results
+    const taskId = data.task_id
+    ingestionProgressBar.style.width = "20%"
+    ingestionStatsEl.innerHTML = "Processing..."
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const pollResp = await fetch(`${API_BASE}/agents/ingestion/status?task_id=${taskId}`)
+        const pollData = await pollResp.json()
+        if (pollData.status === "completed") {
+          clearInterval(pollInterval)
+          showIngestionStatus(pollData.result)
+          ingestionStartBtn.disabled = false
+          ingestionDryRunBtn.disabled = false
+        } else if (pollData.status === "failed") {
+          clearInterval(pollInterval)
+          showIngestionStatus(null, pollData.error)
+          ingestionStartBtn.disabled = false
+          ingestionDryRunBtn.disabled = false
+        } else {
+          ingestionProgressBar.style.width = "40%"
+          ingestionStatsEl.innerHTML = "Still processing..."
+        }
+      } catch (e) {
+        clearInterval(pollInterval)
+        showIngestionStatus(null, e.message)
+        ingestionStartBtn.disabled = false
+        ingestionDryRunBtn.disabled = false
+      }
+    }, 3000)
+  } catch (e) {
+    showIngestionStatus(null, e.message)
+    ingestionStartBtn.disabled = false
+    ingestionDryRunBtn.disabled = false
+  }
+}
+
+if (ingestionRepoInput) {
+  ingestionRepoInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      flushIngestionInput()
+    }
+  })
+}
+if (ingestionStartBtn) {
+  ingestionStartBtn.addEventListener("click", () => startIngestion(false))
+}
+if (ingestionDryRunBtn) {
+  ingestionDryRunBtn.addEventListener("click", () => startIngestion(true))
+}
+
+// ==============================
 // SPEAKER DIARIZATION
 // ==============================
 // Note: Speaker diarization is handled server-side during transcription
@@ -6285,15 +6466,90 @@ function initSuggestions() {
   })
 }
 
-// Process transcript for suggestions (called from transcription handler)
+// ==============================
+// AI AGENTS FRAMEWORK (v2)
+// ==============================
+
+let agentSessionId = null
+let agentEventSource = null
+let agentSessionType = "meeting"  // "interview", "sales_call", "meeting"
+let activeAgentTypes = ["interview_coach", "meeting", "sales_coach"]
+let agentSuggestionsEnabled = true
+// Speaker diarization state — updated by WebSocket messages
+let lastDetectedSpeaker = "Speaker 1"  // Raw diarizer label
+let lastSpeakerRole = "user"            // Semantic role (user/interviewer/other)
+
+// Initialize agent session
+async function initAgentSession(sessionType = "meeting", company = "", role = "") {
+  try {
+    const response = await fetch(`${API_BASE}/agents/sessions?session_type=${encodeURIComponent(sessionType)}&active_agents=${encodeURIComponent(activeAgentTypes.join(","))}&company=${encodeURIComponent(company)}&role=${encodeURIComponent(role)}`, {
+      method: "POST"
+    })
+    const data = await response.json()
+    if (data.id) {
+      agentSessionId = data.id
+      agentSessionType = sessionType
+      console.log(`[Agents] Session created: ${data.id.substring(0, 8)} type=${sessionType} agents=${activeAgentTypes.join(",")}`)
+      // Connect SSE stream
+      connectAgentStream(data.id)
+      return data
+    }
+  } catch (error) {
+    console.error("[Agents] Failed to create session:", error)
+  }
+  return null
+}
+
+// Connect SSE stream for real-time agent suggestions
+function connectAgentStream(sessionId) {
+  if (agentEventSource) {
+    agentEventSource.close()
+  }
+  // SSE will be connected when segments are processed
+  // The streaming endpoint is: /agents/sessions/{id}/stream
+}
+
+// Process transcript for suggestions — AGENT FRAMEWORK (v2)
+// Falls back to old /realtime/process if agents unavailable
+// Speaker info comes from the StreamingDiarizer (VibeVoice-ASR or fallback)
 async function processTranscriptForSuggestions(text, speaker) {
   if (!suggestionsEnabled || !text || text.length < 10) return
+
+  // Use detected speaker from diarizer if available, otherwise use the passed speaker
+  // The orchestrator normalizes all speaker labels to user/interviewer/other
+  const effectiveSpeaker = speaker || lastDetectedSpeaker || "Speaker 1"
 
   // Don't process during cooldown
   if (suggestionsCooldown) return
 
+  // Try new agent framework first
+  if (agentSessionId && agentSuggestionsEnabled) {
+    try {
+      const response = await fetch(`${API_BASE}/agents/sessions/${agentSessionId}/segment?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(effectiveSpeaker)}`, {
+        method: "POST"
+      })
+      const data = await response.json()
+
+      if (data.suggestions && data.suggestions.length > 0) {
+        data.suggestions.forEach(suggestion => {
+          displayAgentSuggestion(suggestion)
+          suggestionHistory.push(suggestion)
+        })
+
+        // Set cooldown (shorter for multi-agent)
+        suggestionsCooldown = true
+        setTimeout(() => { suggestionsCooldown = false }, 8000)
+        return
+      }
+      // If no suggestions, try old system as fallback
+    } catch (error) {
+      console.warn("[Agents] Agent framework error, falling back to realtime:", error)
+    }
+  }
+
+  // Fallback to old realtime suggestions
   try {
-    const response = await fetch(`${API_BASE}/realtime/process?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(speaker)}`)
+    const response = await fetch(`${API_BASE}/realtime/process?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(effectiveSpeaker)}`)
     const data = await response.json()
 
     if (data.has_suggestion && data.suggestion) {
@@ -6304,14 +6560,165 @@ async function processTranscriptForSuggestions(text, speaker) {
       suggestionsCooldown = true
       setTimeout(() => {
         suggestionsCooldown = false
-      }, 10000) // 10 second cooldown
+      }, 10000)
     }
   } catch (error) {
     console.error("[Suggestions] Error processing transcript:", error)
   }
 }
 
-// Display a suggestion card
+// Display an agent suggestion (multi-agent aware)
+function displayAgentSuggestion(suggestion) {
+  if (!suggestionsContent) return
+
+  const agentType = suggestion.agent_type || "interview_coach"
+  const agentLabels = {
+    interview_coach: "🎯 Interview Coach",
+    meeting: "📝 Meeting Notes",
+    sales_coach: "💼 Sales Coach"
+  }
+  const agentLabel = agentLabels[agentType] || agentType
+  const categoryLabels = {
+    technical: "Technical",
+    behavioral: "Behavioral",
+    clarification: "Clarify",
+    strategic: "Strategy",
+    stalling: "Stall",
+    action_item: "Action Item",
+    decision: "Decision",
+    question: "Open Question",
+    objection: "Objection",
+    rebuttal: "Rebuttal",
+    talking_point: "Talking Point",
+    general: "Note"
+  }
+
+  const card = document.createElement("div")
+  card.className = `suggestion-card agent-${agentType} ${suggestion.confidence >= 0.8 ? 'high-confidence' : ''}`
+  card.dataset.suggestionId = suggestion.id
+  card.dataset.agentType = agentType
+  card.innerHTML = `
+    <div class="suggestion-header">
+      <span class="agent-type-badge ${agentType}">${agentLabel}</span>
+      <span class="suggestion-category">${categoryLabels[suggestion.category] || suggestion.category}</span>
+      <span class="suggestion-confidence">${Math.round(suggestion.confidence * 100)}%</span>
+    </div>
+    <div class="suggestion-content">${formatSuggestionContent(suggestion.content)}</div>
+    <div class="suggestion-actions">
+      <button class="accept-suggestion-btn" data-id="${suggestion.id}">Accept</button>
+      <button class="dismiss-suggestion-btn" data-id="${suggestion.id}">Dismiss</button>
+    </div>
+  `
+
+  // Wire up accept/dismiss buttons
+  card.querySelector(".accept-suggestion-btn")?.addEventListener("click", () => {
+    acceptAgentSuggestion(suggestion.id)
+    card.classList.add("accepted")
+    setTimeout(() => card.remove(), 500)
+  })
+  card.querySelector(".dismiss-suggestion-btn")?.addEventListener("click", () => {
+    dismissAgentSuggestion(suggestion.id)
+    card.classList.add("dismissed")
+    setTimeout(() => card.remove(), 300)
+  })
+
+  // Insert at top
+  suggestionsContent.insertBefore(card, suggestionsContent.firstChild)
+
+  // Remove empty state
+  const emptyState = suggestionsContent.querySelector('.suggestions-empty')
+  if (emptyState) emptyState.remove()
+
+  // Limit to 15 suggestions
+  const cards = suggestionsContent.querySelectorAll('.suggestion-card')
+  if (cards.length > 15) cards[cards.length - 1].remove()
+
+  // Show notification dot
+  const dot = document.getElementById("suggestionsDot")
+  if (dot) {
+    dot.style.display = "block"
+    setTimeout(() => { dot.style.display = "none" }, 3000)
+  }
+}
+
+// Accept an agent suggestion — records feedback for self-learning
+async function acceptAgentSuggestion(suggestionId) {
+  try {
+    const response = await fetch(`${API_BASE}/agents/suggestions/${suggestionId}/accept`, { method: "POST" })
+    console.log(`[Agents] Accepted suggestion: ${suggestionId}`)
+    // Visual feedback: mark the card as accepted
+    const card = document.querySelector(`[data-suggestion-id="${suggestionId}"]`)
+    if (card) {
+      card.classList.add("accepted")
+      card.classList.remove("dismissed")
+      const actions = card.querySelector(".suggestion-actions")
+      if (actions) actions.innerHTML = '<span class="suggestion-accepted-label">Accepted</span>'
+    }
+  } catch (error) {
+    console.error("[Agents] Accept error:", error)
+  }
+}
+
+// Dismiss an agent suggestion — records feedback for self-learning
+async function dismissAgentSuggestion(suggestionId) {
+  try {
+    const response = await fetch(`${API_BASE}/agents/suggestions/${suggestionId}/dismiss`, { method: "POST" })
+    console.log(`[Agents] Dismissed suggestion: ${suggestionId}`)
+    // Visual feedback: mark the card as dismissed and fade it out
+    const card = document.querySelector(`[data-suggestion-id="${suggestionId}"]`)
+    if (card) {
+      card.classList.add("dismissed")
+      card.classList.remove("accepted")
+      card.style.transition = "opacity 0.3s ease"
+      card.style.opacity = "0.5"
+      setTimeout(() => { card.style.display = "none" }, 2000)
+    }
+  } catch (error) {
+    console.error("[Agents] Dismiss error:", error)
+  }
+}
+
+// End agent session
+async function endAgentSession() {
+  if (!agentSessionId) return
+  try {
+    await fetch(`${API_BASE}/agents/sessions/${agentSessionId}/end`, { method: "POST" })
+    console.log(`[Agents] Session ended: ${agentSessionId.substring(0, 8)}`)
+  } catch (error) {
+    console.error("[Agents] End session error:", error)
+  }
+  agentSessionId = null
+  if (agentEventSource) {
+    agentEventSource.close()
+    agentEventSource = null
+  }
+}
+
+// Toggle agent types
+async function setActiveAgents(agents) {
+  if (!agentSessionId) return
+  activeAgentTypes = agents
+  try {
+    await fetch(`${API_BASE}/agents/sessions/${agentSessionId}/agents?active_agents=${encodeURIComponent(agents.join(","))}`, {
+      method: "POST"
+    })
+    console.log(`[Agents] Active agents updated: ${agents.join(", ")}`)
+  } catch (error) {
+    console.error("[Agents] Update agents error:", error)
+  }
+}
+
+// ==============================
+// END AI AGENTS FRAMEWORK (v2)
+// ==============================
+
+// Format suggestion content for display
+function formatSuggestionContent(content) {
+  // Convert markdown-style bold to HTML
+  return content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+}
+
+// Display a suggestion card (old format, for /realtime/process fallback)
 function displaySuggestion(suggestion) {
   if (!suggestionsContent) return
 
@@ -6319,8 +6726,8 @@ function displaySuggestion(suggestion) {
   card.className = `suggestion-card ${suggestion.confidence >= 0.8 ? 'high-confidence' : ''}`
   card.innerHTML = `
     <div class="suggestion-header">
-      <span class="suggestion-type">${suggestion.type.replace('_', ' ')}</span>
-      <span class="suggestion-confidence">${Math.round(suggestion.confidence * 100)}%</span>
+      <span class="suggestion-type">${(suggestion.type || 'general').replace('_', ' ')}</span>
+      <span class="suggestion-confidence">${Math.round((suggestion.confidence || 0) * 100)}%</span>
     </div>
     <div class="suggestion-content">${formatSuggestionContent(suggestion.content)}</div>
     ${suggestion.context?.company ? `
@@ -6336,15 +6743,11 @@ function displaySuggestion(suggestion) {
 
   // Remove empty state if present
   const emptyState = suggestionsContent.querySelector('.suggestions-empty')
-  if (emptyState) {
-    emptyState.remove()
-  }
+  if (emptyState) emptyState.remove()
 
   // Limit to 10 suggestions
   const cards = suggestionsContent.querySelectorAll('.suggestion-card')
-  if (cards.length > 10) {
-    cards[cards.length - 1].remove()
-  }
+  if (cards.length > 10) cards[cards.length - 1].remove()
 
   // Show notification dot on button
   const dot = document.getElementById("suggestionsDot")
@@ -6352,12 +6755,6 @@ function displaySuggestion(suggestion) {
     dot.style.display = "block"
     setTimeout(() => { dot.style.display = "none" }, 3000)
   }
-}
-
-// Format suggestion content for display
-function formatSuggestionContent(content) {
-  // Convert markdown-style bold to HTML
-  return content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
 }
 
 // Show message in suggestions panel

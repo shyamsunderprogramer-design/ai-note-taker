@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "ANT - AI Note Taker",
-  "version": "1.0.0",
-  "description": "Save jobs and capture meetings for AI Note Taker",
+  "name": "Productivity Helper",
+  "version": "1.1.0",
+  "description": "Productivity tools for meetings and job tracking",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "notifications"
+    "notifications",
+    "tabCapture",
+    "offscreen"
   ],
   "host_permissions": [
     "*://*.linkedin.com/*",
@@ -17,7 +19,12 @@
     "*://*.lever.co/*",
     "*://*.workday.com/*",
     "*://*.icims.com/*",
-    "http://localhost:8000/*"
+    "*://*.zoom.us/*",
+    "*://meet.google.com/*",
+    "*://*.teams.microsoft.com/*",
+    "*://*.webex.com/*",
+    "http://localhost:8000/*",
+    "ws://127.0.0.1:8000/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -34,9 +41,29 @@
         "*://*.indeed.com/*",
         "*://*.glassdoor.com/job-listing/*",
         "*://*.greenhouse.io/*",
-        "*://*.lever.co/*"
+        "*://*.lever.co/*",
+        "*://*.zoom.us/j/*",
+        "*://*.zoom.us/meeting/*",
+        "*://meet.google.com/*",
+        "*://*.teams.microsoft.com/l/meeting/*",
+        "*://*.webex.com/*"
       ],
       "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://boards.greenhouse.io/*",
+        "*://jobs.lever.co/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://careers.*.com/*",
+        "*://*.linkedin.com/jobs/*",
+        "*://*.indeed.com/viewjob*",
+        "*://*.indeed.com/jobs*",
+        "*://*.glassdoor.com/job-listing/*"
+      ],
+      "js": ["resume-copilot-content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
@@ -44,6 +71,21 @@
   "background": {
     "service_worker": "background.js"
   },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["offscreen.html"],
+      "matches": [
+        "*://*.zoom.us/*",
+        "*://meet.google.com/*",
+        "*://*.teams.microsoft.com/*",
+        "*://*.webex.com/*"
+      ]
+    }
+  ],
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",

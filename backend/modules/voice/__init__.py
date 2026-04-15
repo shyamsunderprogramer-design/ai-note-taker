@@ -37,3 +37,9 @@ try:
     _module_imports['speaker_diarization'] = True
 except ImportError:
     _module_imports['speaker_diarization'] = False
+
+try:
+    from .vibevoice_diarizer import *
+    _module_imports['vibevoice_diarizer'] = True
+except ImportError:
+    _module_imports['vibevoice_diarizer'] = False

@@ -229,23 +229,41 @@
                         <div class="score-card">
                             <div class="score-value" id="overallScore">75</div>
                             <div class="score-label">Overall Score</div>
+                            <div id="semanticFit" style="font-size: 14px; color: #8b5cf6; margin-top: 5px; font-weight: 600;"></div>
                         </div>
 
-                        <div class="section-scores" id="sectionScores"></div>
+                        <div class="dashboard-grid">
+                            <!-- AI Rewrites Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">✨ AI Rewrites (XYZ Formula)</div>
+                                <div id="rewritesList"></div>
+                            </div>
 
-                        <div class="result-section">
-                            <div class="result-title">✅ Strengths</div>
-                            <ul class="result-list" id="strengthsList"></ul>
+                            <!-- Keyword Heatmap Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">🔍 Keyword Match</div>
+                                <div class="keyword-grid" id="keywordHeatmap"></div>
+                            </div>
+
+                            <!-- Section Scores Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">📊 Section Analysis</div>
+                                <div class="section-scores" id="sectionScores"></div>
+                            </div>
                         </div>
 
-                        <div class="result-section">
-                            <div class="result-title">🎯 Areas for Improvement</div>
-                            <ul class="result-list" id="improvementsList"></ul>
-                        </div>
+                        <div class="dashboard-grid" style="margin-top: 20px;">
+                            <!-- Strengths Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">✅ Strengths</div>
+                                <ul class="result-list" id="strengthsList"></ul>
+                            </div>
 
-                        <div class="result-section">
-                            <div class="result-title">🔍 Missing Keywords</div>
-                            <ul class="result-list" id="keywordsList"></ul>
+                            <!-- Improvements Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">🎯 Areas for Improvement</div>
+                                <ul class="result-list" id="improvementsList"></ul>
+                            </div>
                         </div>
                     </div>
                 </div>

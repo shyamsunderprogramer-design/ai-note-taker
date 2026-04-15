@@ -131,7 +131,16 @@ class ResumeReview {
 
         } catch (error) {
             console.error('Error analyzing resume:', error);
-            alert('Error analyzing resume: ' + error.message);
+
+            // Extract actual error message if it's an object
+            let errorMessage = error.message;
+            if (error.response && error.response.data && error.response.data.error) {
+                errorMessage = error.response.data.error;
+            } else if (typeof error === 'object' && error !== null) {
+                errorMessage = JSON.stringify(error);
+            }
+
+            alert('Error analyzing resume: ' + errorMessage);
         } finally {
             analyzeBtn.disabled = false;
             analyzeBtn.textContent = 'Analyze Resume';
@@ -142,8 +151,11 @@ class ResumeReview {
     displayResults(data) {
         const analysis = data.analysis;
 
-        // Overall score
+        // Overall score & Semantic Fit
         document.getElementById('overallScore').textContent = analysis.overall_score;
+        document.getElementById('semanticFit').textContent = analysis.semantic_fit
+            ? `AI Match Score: ${analysis.semantic_fit}%`
+            : '';
 
         // Section scores
         const sectionScoresEl = document.getElementById('sectionScores');
@@ -157,6 +169,34 @@ class ResumeReview {
                 `).join('');
         }
 
+        // AI Rewrites (XYZ Formula)
+        const rewritesEl = document.getElementById('rewritesList');
+        if (analysis.rewrites && analysis.rewrites.length > 0) {
+            rewritesEl.innerHTML = analysis.rewrites.map(r => `
+                <div class="rewrite-item">
+                    <div class="rewrite-original">${r.original}</div>
+                    <div class="rewrite-improved">${r.rewritten}</div>
+                    <div class="rewrite-explanation">${r.explanation}</div>
+                    <div class="rewrite-impact">${r.impact}</div>
+                </div>
+            `).join('');
+        } else {
+            rewritesEl.innerHTML = '<p class="file-upload-hint">No specific rewrites suggested.</p>';
+        }
+
+        // Keyword Heatmap
+        const heatmapEl = document.getElementById('keywordHeatmap');
+        const allKeywords = [...analysis.missing_keywords, ... (data.analysis.found_keywords || [])];
+
+        if (allKeywords.length > 0) {
+            heatmapEl.innerHTML = allKeywords.map(kw => {
+                const isMissing = analysis.missing_keywords.includes(kw);
+                return `<span class="keyword-pill ${isMissing ? 'kw-missing' : 'kw-found'}">${kw}</span>`;
+            }).join('');
+        } else {
+            heatmapEl.innerHTML = '<p class="file-upload-hint">No keywords analyzed.</p>';
+        }
+
         // Strengths
         document.getElementById('strengthsList').innerHTML = analysis.strengths
             .map(s => `<li class="result-item"><span class="result-icon strength">✓</span>${s}</li>`)
@@ -165,11 +205,6 @@ class ResumeReview {
         // Improvements
         document.getElementById('improvementsList').innerHTML = analysis.improvements
             .map(i => `<li class="result-item"><span class="result-icon improvement">→</span>${i}</li>`)
-            .join('');
-
-        // Missing keywords
-        document.getElementById('keywordsList').innerHTML = analysis.missing_keywords
-            .map(k => `<li class="result-item"><span class="result-icon missing">+</span>${k}</li>`)
             .join('');
 
         document.getElementById('resultsContent').classList.remove('hidden');

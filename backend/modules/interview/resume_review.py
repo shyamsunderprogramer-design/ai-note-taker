@@ -6,12 +6,20 @@ Analyzes resume against job descriptions and provides feedback.
 
 import json
 import logging
-from typing import List, Dict, Optional
-from dataclasses import dataclass
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass, field
 from datetime import datetime
 
 logger = logging.getLogger("resume_review")
 
+
+@dataclass
+class ResumeRewrite:
+    """Structured rewrite for a resume bullet point"""
+    original: str
+    rewritten: str
+    explanation: str
+    impact_score_increase: str
 
 @dataclass
 class ResumeReview:
@@ -23,6 +31,8 @@ class ResumeReview:
     formatting_issues: List[str]
     section_scores: Dict[str, int]
     tailored_suggestions: List[str]
+    rewrites: List[ResumeRewrite] = field(default_factory=list)
+    semantic_fit_score: float = 0.0
 
 
 class ResumeReviewer:
@@ -84,7 +94,11 @@ class ResumeReviewer:
             missing_keywords=keywords.get('missing', []),
             formatting_issues=formatting,
             section_scores=section_scores,
-            tailored_suggestions=ai_feedback.get('suggestions', []) if ai_feedback else []
+            tailored_suggestions=ai_feedback.get('suggestions', []) if ai_feedback else [],
+            rewrites=[
+                ResumeRewrite(**r) for r in ai_feedback.get('rewrites', [])
+            ] if ai_feedback and 'rewrites' in ai_feedback else [],
+            semantic_fit_score=float(ai_feedback.get('match_score', 0)) if ai_feedback else 0.0
         )
 
         return {
@@ -95,8 +109,14 @@ class ResumeReviewer:
                 "strengths": review.strengths[:5],
                 "improvements": review.improvements[:5],
                 "missing_keywords": review.missing_keywords[:10],
+                "found_keywords": keywords.get('found', []),
                 "formatting_issues": review.formatting_issues,
-                "tailored_suggestions": review.tailored_suggestions
+                "tailored_suggestions": review.tailored_suggestions,
+                "rewrites": [
+                    {"original": r.original, "rewritten": r.rewritten, "explanation": r.explanation, "impact": r.impact_score_increase}
+                    for r in review.rewrites
+                ],
+                "semantic_fit": review.semantic_fit_score
             },
             "ats_compatibility": self._check_ats_compatibility(resume_text),
             "word_count": len(resume_text.split()),
@@ -104,74 +124,109 @@ class ResumeReviewer:
         }
 
     def _extract_sections(self, text: str) -> Dict[str, str]:
-        """Extract resume sections"""
+        """Extract resume sections with improved structural detection"""
         sections = {}
         lines = text.split('\n')
         current_section = None
         current_content = []
 
-        section_headers = [
-            'summary', 'objective', 'experience', 'work', 'employment',
-            'education', 'skills', 'projects', 'certifications', 'awards',
-            'publications', 'languages', 'interests'
-        ]
+        # Expanded headers with common variations
+        section_patterns = {
+            'summary': ['summary', 'objective', 'professional summary', 'profile'],
+            'experience': ['experience', 'work history', 'employment', 'professional experience', 'work experience'],
+            'education': ['education', 'academic background', 'qualifications'],
+            'skills': ['skills', 'technical skills', 'core competencies', 'expertise'],
+            'projects': ['projects', 'personal projects', 'academic projects', 'key projects'],
+            'certifications': ['certifications', 'awards', 'certifications & licenses'],
+            'languages': ['languages', 'linguistic skills']
+        }
 
         for line in lines:
-            line_lower = line.lower().strip()
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
 
-            # Check if line is a section header
+            line_lower = line_stripped.lower()
+
+            # Check if line is a section header (usually short, capitalized or distinct)
             is_header = False
-            for header in section_headers:
-                if header in line_lower and len(line_lower) < 50:
+            for section_key, patterns in section_patterns.items():
+                if any(pattern == line_lower or line_lower.startswith(pattern + ':') for pattern in patterns) and len(line_stripped) < 60:
                     if current_section:
-                        sections[current_section] = '\n'.join(current_content)
-                    current_section = header
+                        sections[current_section] = '\n'.join(current_content).strip()
+                    current_section = section_key
                     current_content = []
                     is_header = True
                     break
 
-            if not is_header and current_section:
-                current_content.append(line)
-            elif not current_section:
-                # Content before first header (usually contact info)
-                if 'summary' not in sections:
-                    current_section = 'header'
-                    current_content = [line]
+            if not is_header:
+                if current_section:
+                    current_content.append(line_stripped)
+                else:
+                    # Initial content (Contact info/Header)
+                    if 'header' not in sections:
+                        current_section = 'header'
+                        current_content = [line_stripped]
 
         if current_section:
-            sections[current_section] = '\n'.join(current_content)
+            sections[current_section] = '\n'.join(current_content).strip()
 
         return sections
 
     def _score_sections(self, sections: Dict[str, str]) -> Dict[str, int]:
-        """Score each resume section"""
-        scores = {}
+        """Score each resume section using a Senior Recruiter's perspective"""
+        if not self.ai_router:
+            # Fallback to original heuristics if AI is unavailable
+            return self._score_sections_heuristic(sections)
 
-        # Experience section
+        # Combine relevant sections for context
+        analysis_text = "\n".join([f"{k}: {v}" for k, v in sections.items()])
+
+        prompt = f"""Persona: Senior Technical Recruiter at a FAANG company.
+Task: Score the following resume sections on a scale of 0-100 based on professional impact, clarity, and technical depth.
+
+Resume Sections:
+{analysis_text}
+
+Provide a JSON response with scores for these keys: 'experience', 'skills', 'education', 'summary'.
+Return ONLY JSON:
+{{
+    "experience": 85,
+    "skills": 70,
+    "education": 90,
+    "summary": 60
+}}"""
+        try:
+            response = self.ai_router.generate(prompt, mode="fast")
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+        except Exception as e:
+            logger.error(f"AI section scoring error: {e}")
+
+        return self._score_sections_heuristic(sections)
+
+    def _score_sections_heuristic(self, sections: Dict[str, str]) -> Dict[str, int]:
+        """Original heuristic scoring fallback"""
+        scores = {}
         if 'experience' in sections or 'work' in sections:
             exp_text = sections.get('experience', sections.get('work', ''))
             scores['experience'] = self._score_experience(exp_text)
         else:
-            scores['experience'] = 20  # Missing experience section
-
-        # Skills section
+            scores['experience'] = 20
         if 'skills' in sections:
             scores['skills'] = self._score_skills(sections['skills'])
         else:
             scores['skills'] = 30
-
-        # Education section
         if 'education' in sections:
-            scores['education'] = 85  # Present
+            scores['education'] = 85
         else:
             scores['education'] = 40
-
-        # Summary/Objective
         if 'summary' in sections or 'objective' in sections:
             scores['summary'] = 75
         else:
             scores['summary'] = 50
-
         return scores
 
     def _score_experience(self, text: str) -> int:
@@ -269,47 +324,42 @@ class ResumeReviewer:
         return unique_keywords[:20]
 
     def _check_keywords(self, text: str, role_type: str, job_description: Optional[str] = None) -> Dict:
-        """Check for important keywords - from JD if provided, otherwise fallback"""
+        """Check for important keywords using semantic-aware matching"""
         text_lower = text.lower()
 
-        # Extract keywords from job description if provided
         if job_description:
             keywords = self._extract_keywords_from_jd(job_description)
         else:
-            # Fallback to generic keywords by role
             keywords_by_role = {
-                'software_engineer': [
-                    'python', 'javascript', 'java', 'c++', 'react', 'node',
-                    'sql', 'aws', 'docker', 'kubernetes', 'git', 'ci/cd',
-                    'agile', 'scrum', 'rest', 'api', 'microservices'
-                ],
-                'data_scientist': [
-                    'python', 'r', 'sql', 'machine learning', 'deep learning',
-                    'tensorflow', 'pytorch', 'pandas', 'numpy', 'scikit-learn',
-                    'statistics', 'visualization', 'tableau', 'power bi'
-                ],
-                'product_manager': [
-                    'roadmap', 'strategy', 'stakeholders', 'metrics', 'kpi',
-                    'user research', 'a/b testing', 'agile', 'scrum',
-                    'prioritization', 'cross-functional', 'data-driven'
-                ]
+                'software_engineer': ['python', 'javascript', 'java', 'c++', 'react', 'node', 'sql', 'aws', 'docker', 'kubernetes', 'git', 'ci/cd', 'agile', 'scrum', 'rest', 'api', 'microservices'],
+                'data_scientist': ['python', 'r', 'sql', 'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'pandas', 'numpy', 'scikit-learn', 'statistics', 'visualization', 'tableau', 'power bi'],
+                'product_manager': ['roadmap', 'strategy', 'stakeholders', 'metrics', 'kpi', 'user research', 'a/b testing', 'agile', 'scrum', 'prioritization', 'cross-functional', 'data-driven']
             }
             keywords = keywords_by_role.get(role_type, keywords_by_role['software_engineer'])
 
-        # Normalize keywords for comparison
         normalized_keywords = [kw.lower().strip() for kw in keywords if len(kw.strip()) > 0]
-
         found = []
         missing = []
 
+        # Enhanced Semantic Matching
         for kw in normalized_keywords:
-            # Check if keyword or close variant exists in resume
+            # Exact or substring match
             if kw in text_lower:
                 found.append(kw)
             else:
-                # Check for partial matches (e.g., "javascript" in "javascript frameworks")
-                partial_match = any(kw in word for word in text_lower.split())
-                if partial_match:
+                # Semantic fallback: use AI to check if the skill is present even if wording differs
+                if self.ai_router:
+                    semantic_prompt = f"Does the following resume text demonstrate a professional skill in '{kw}'? Respond with only 'YES' or 'NO'.\n\nResume: {text[:2000]}"
+                    try:
+                        res = self.ai_router.generate(semantic_prompt, mode="fast").strip().upper()
+                        if 'YES' in res:
+                            found.append(kw)
+                            continue
+                    except:
+                        pass
+
+                # Final fallback: partial word match
+                if any(kw in word for word in text_lower.split()):
                     found.append(kw)
                 else:
                     missing.append(kw)
@@ -395,35 +445,58 @@ class ResumeReviewer:
         }
 
     def _get_ai_analysis(self, resume: str, job_desc: str) -> Optional[Dict]:
-        """Get AI-powered analysis"""
+        """Get professional AI-powered analysis and rewrites"""
         if not self.ai_router:
             return None
 
-        prompt = f"""Analyze this resume against the job description. Provide 3 tailored suggestions for improvement.
+        prompt = f"""Persona: Brutally Honest Senior Technical Recruiter and Executive Resume Writer at a top FAANG company.
+Task: Analyze the resume against the job description. Do not be lenient. Your goal is to make this candidate a 'Top 1%' applicant.
+
+1. Professional Match Score (0-100): Be critical. A score of 80+ means the candidate is a perfect fit.
+2. Tailored Suggestions: Provide 3 high-impact, strategic suggestions to move the resume from 'good' to 'elite'.
+3. Mandatory Rewrites: Identify the 3 most generic or weak bullet points. Even if the resume is strong, find ways to make them more impactful. Rewrite them using the XYZ formula: "Accomplished [X] as measured by [Y], by doing [Z]".
+   - If critical keywords from the JD are missing, use these rewrites to naturally integrate them.
 
 Job Description:
-{job_desc[:1000]}
+{job_desc[:2000]}
 
 Resume:
-{resume[:1500]}
+{resume[:3000]}
 
-Format response as JSON:
+Return the response ONLY as a JSON object with this structure:
 {{
+    "match_score": 85,
     "suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"],
-    "match_score": 75
+    "rewrites": [
+        {{
+            "original": "Original bullet text",
+            "rewritten": "High impact XYZ version",
+            "explanation": "Why this is better (e.g., 'Integrated missing keyword [X] and added metric [Y]')",
+            "impact_score_increase": "+10%"
+        }},
+        ...
+    ]
 }}"""
 
         try:
             response = self.ai_router.generate(prompt, mode="fast")
-            # Parse JSON from response
             import re
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
+            # Aggressive JSON extraction: find the first '{' and last '}'
+            start = response.find('{')
+            end = response.rfind('}')
+            if start != -1 and end != -1:
+                json_str = response[start:end+1]
+                # Remove potential trailing commas in arrays/objects before closing brace
+                json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+                return json.loads(json_str)
         except Exception as e:
             logger.error(f"AI analysis error: {e}")
-
-        return None
+            # Return a safe default so the app doesn't crash
+            return {
+                "match_score": 0,
+                "suggestions": ["AI analysis temporarily unavailable. Please try again."],
+                "rewrites": []
+            }
 
 
 # Global instance

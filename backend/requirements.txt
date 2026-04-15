@@ -57,4 +57,5 @@ asyncpg==0.29.0
 aiosqlite==0.20.0
 redis==5.0.3
 pytesseract==0.3.13
+pdfplumber==0.11.0
 Pillow==11.2.1

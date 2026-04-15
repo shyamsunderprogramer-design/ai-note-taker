@@ -340,6 +340,49 @@ class Document(Base if Base else object):
         }
 
 
+class AgentSession(Base if Base else object):
+    """Unified agent session — persists across all agent types."""
+    __tablename__ = "agent_sessions"
+
+    if HAS_SQLALCHEMY:
+        id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+        user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+        session_type = Column(String(30), nullable=False, index=True)  # "interview", "sales_call", "meeting"
+        state = Column(String(20), default="idle")
+        company = Column(String(100), nullable=True)
+        role = Column(String(100), nullable=True)
+        stage = Column(String(50), nullable=True)
+        active_agents = Column(JSON, default=list)   # ["interview_coach", "meeting", "sales_coach"]
+        config = Column(JSON, default=dict)          # provider, temperature, user_profile, etc.
+        transcript_buffer = Column(JSON, default=list)  # last N segments
+        agent_states = Column(JSON, default=dict)    # per-agent state
+        suggestions = Column(JSON, default=list)     # all suggestions this session
+        entities = Column(JSON, default=dict)        # extracted entities cache
+        started_at = Column(DateTime, default=datetime.utcnow)
+        ended_at = Column(DateTime, nullable=True)
+        duration_seconds = Column(Integer, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id) if hasattr(self, 'id') else None,
+            "user_id": str(self.user_id) if hasattr(self, 'user_id') else None,
+            "session_type": getattr(self, 'session_type', 'meeting'),
+            "state": getattr(self, 'state', 'idle'),
+            "company": getattr(self, 'company', None),
+            "role": getattr(self, 'role', None),
+            "stage": getattr(self, 'stage', None),
+            "active_agents": getattr(self, 'active_agents', []),
+            "config": getattr(self, 'config', {}),
+            "transcript_buffer": getattr(self, 'transcript_buffer', []),
+            "agent_states": getattr(self, 'agent_states', {}),
+            "suggestions": getattr(self, 'suggestions', []),
+            "entities": getattr(self, 'entities', {}),
+            "started_at": getattr(self, 'started_at', None),
+            "ended_at": getattr(self, 'ended_at', None),
+            "duration_seconds": getattr(self, 'duration_seconds', None),
+        }
+
+
 class CRMConfig(Base if Base else object):
     """CRM integration configuration"""
     __tablename__ = "crm_configs"

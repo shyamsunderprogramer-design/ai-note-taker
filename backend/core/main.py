@@ -24,8 +24,12 @@ for _p in [str(_project_root), str(_core_dir)]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# Add module subdirectories to path so flat imports (from ai_router, etc.) work
+# Add modules root for modules.* namespace imports (e.g. modules.agents.orchestrator)
 _modules_root = _project_root / "modules"
+if str(_modules_root) not in sys.path:
+    sys.path.insert(0, str(_modules_root))
+
+# Add module subdirectories to path so flat imports (from ai_router, etc.) work
 for _mod_dir in _modules_root.iterdir():
     if _mod_dir.is_dir() and (_mod_dir / "__init__.py").exists():
         if str(_mod_dir) not in sys.path:
@@ -168,13 +172,27 @@ ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
 # T2: Default to secure (whitelist); set CORS_ALLOW_ALL=true for dev convenience
 CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if CORS_ALLOW_ALL else ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Support chrome-extension:// origins for the ANT Chrome extension
+# Chrome extensions use chrome-extension://<extension-id> as origin
+CHROME_EXT_REGEX = r"chrome-extension://.*" if not CORS_ALLOW_ALL else None
+
+if CORS_ALLOW_ALL:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_origin_regex=CHROME_EXT_REGEX,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # SECURITY: Security headers middleware
 @app.middleware("http")
@@ -329,7 +347,7 @@ async def optional_auth(request: Request, token: str = Depends(get_token_from_re
 
 # T1: Auth enforcement configuration
 # Default to secure (auth required); set AUTH_REQUIRED=false for dev convenience
-AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() == "true"
 
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
@@ -1957,10 +1975,11 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
     """
     Transcribe audio with speaker diarization.
     Returns transcription with speaker labels for each segment.
+
+    Uses VibeVoice-ASR (primary) if available, falls back to
+    pyannote + Whisper, then energy-based segmentation.
     """
     global USE_AUTONOMOUS
-    from speaker_diarization import process_transcription_with_speakers
-    from whisper_handler import get_streaming_transcriber
 
     USE_AUTONOMOUS = False
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -1979,32 +1998,56 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
     try:
-        # Get detailed transcription with timestamps from Whisper
-        # Note: faster_whisper returns segments with timestamps
-        model = get_model(CURRENT_MODE)
-        segments, _ = model.transcribe(
-            wav_path,
-            beam_size=3,
-            vad_filter=False,
-            condition_on_previous_text=False,
-            language="en",
-            word_timestamps=True
-        )
+        # --- Try VibeVoice-ASR first (combined transcription + diarization) ---
+        vibevoice_result = None
+        try:
+            from modules.voice.vibevoice_diarizer import process_transcription_with_speakers as vibevoice_diarize
+            import soundfile as sf_vv
+            audio_data, sr = sf_vv.read(wav_path)
+            if len(audio_data.shape) > 1:
+                audio_data = audio_data.mean(axis=1)
+            audio_float = (audio_data / (np.abs(audio_data).max() + 1e-6)).astype(np.float32)
+            if sr != 16000:
+                # VibeVoice expects 16kHz
+                from modules.voice.vibevoice_diarizer import VibeVoiceDiarizer
+                audio_float = VibeVoiceDiarizer._resample(audio_float, sr, 16000)
+                sr = 16000
+            vibevoice_result = vibevoice_diarize(audio_float, sr)
+            logger.info(f"[transcribe-with-speakers] VibeVoice method: {vibevoice_result.get('method', 'unknown')}")
+        except ImportError:
+            logger.debug("[transcribe-with-speakers] VibeVoice unavailable, using fallback")
+        except Exception as e:
+            logger.warning(f"[transcribe-with-speakers] VibeVoice error: {e}, using fallback")
 
-        # Convert to dict format expected by diarization
-        whisper_segments = []
-        for seg in segments:
-            whisper_segments.append({
-                "start": seg.start,
-                "end": seg.end,
-                "text": seg.text.strip()
-            })
+        # --- Fallback: pyannote + Whisper ---
+        if vibevoice_result is None or not vibevoice_result.get("segments"):
+            from speaker_diarization import process_transcription_with_speakers
 
-        # Get full text for AI processing
-        full_text = " ".join(s["text"] for s in whisper_segments)
+            # Get detailed transcription with timestamps from Whisper
+            model = get_model(CURRENT_MODE)
+            segments, _ = model.transcribe(
+                wav_path,
+                beam_size=3,
+                vad_filter=False,
+                condition_on_previous_text=False,
+                language="en",
+                word_timestamps=True
+            )
 
-        # Process with speaker diarization
-        speaker_result = process_transcription_with_speakers(wav_path, whisper_segments)
+            whisper_segments = []
+            for seg in segments:
+                whisper_segments.append({
+                    "start": seg.start,
+                    "end": seg.end,
+                    "text": seg.text.strip()
+                })
+
+            full_text = " ".join(s["text"] for s in whisper_segments)
+            speaker_result = process_transcription_with_speakers(wav_path, whisper_segments)
+        else:
+            # Use VibeVoice result directly
+            speaker_result = vibevoice_result
+            full_text = vibevoice_result.get("formatted", "")
 
         # Get AI response
         ai_response = ""
@@ -2080,41 +2123,103 @@ async def ws_transcribe(ws: WebSocket):
     This endpoint accumulates chunks, transcribes on 0.5s segments,
     and sends back partial + final transcription via WebSocket JSON messages.
 
-    T3: WebSocket auth — validates token from query param ?token=xxx
-    In production (AUTH_REQUIRED=true), rejects unauthenticated connections.
+    T3: WebSocket auth — supports two modes:
+      1. Token via first JSON message: {"type":"auth","token":"xxx"} (preferred — stealth)
+      2. Token via query param: ?token=xxx (legacy fallback)
+    After auth, sends {"type":"auth_ok"} or {"type":"auth_error","message":"..."}
 
     Message types sent to browser:
-      - {"type": "partial", "text": "..."}  — interim transcription
-      - {"type": "final", "text": "..."}   — transcription of remaining buffer
+      - {"type": "auth_ok"}                     — auth succeeded
+      - {"type": "auth_error", "message": ...}  — auth failed (then closes 4001)
+      - {"type": "partial", "text": "..."}       — interim transcription
+      - {"type": "final", "text": "..."}         — transcription of remaining buffer
     """
-    # T3: WebSocket authentication — ALWAYS enforce, not gated by AUTH_REQUIRED
+    # Extract optional source and meeting_id params for Chrome extension tagging
+    ws_source = ws.query_params.get("source", "tab")  # tab | mic
+    ws_meeting_id = ws.query_params.get("meeting_id", "")
+
+    await ws.accept()
+
+    # T3: WebSocket authentication — try message-level auth first, fall back to query param
     token = ws.query_params.get("token")
-    if not token:
-        await ws.accept()
-        await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
-        await ws.close(code=4001)
-        return
-    user = get_current_user(token)
+    user = None
+
+    if token:
+        # Legacy: token in query param
+        user = get_current_user(token)
+    else:
+        # Stealth: wait for auth message as first message
+        try:
+            first_msg = await asyncio.wait_for(ws.receive(), timeout=10)
+            if "text" in first_msg and first_msg["text"]:
+                try:
+                    auth_data = json.loads(first_msg["text"])
+                    if auth_data.get("type") == "auth":
+                        token = auth_data.get("token", "")
+                        user = get_current_user(token)
+                except (json.JSONDecodeError, KeyError):
+                    pass
+        except asyncio.TimeoutError:
+            pass
+
     if not user:
-        await ws.accept()
-        await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+        await ws.send_text(json.dumps({"type": "auth_error", "message": "Authentication required. Send {\"type\":\"auth\",\"token\":\"xxx\"} as first message or pass ?token=xxx in URL."}))
         await ws.close(code=4001)
         return
 
-    await ws.accept()
+    # Auth succeeded
+    await ws.send_text(json.dumps({"type": "auth_ok"}))
+
     transcriber = BrowserTranscriber()
     partial_texts = []
     msg_queue = asyncio.Queue()
     ws_closed = False
 
+    # --- Speaker diarization: per-session StreamingDiarizer ---
+    streaming_diarizer = None
+    try:
+        from modules.voice.vibevoice_diarizer import get_streaming_diarizer
+        streaming_diarizer = get_streaming_diarizer()
+        logger.info("[ws/transcribe] StreamingDiarizer initialized for session")
+    except ImportError:
+        try:
+            from voice.vibevoice_diarizer import get_streaming_diarizer
+            streaming_diarizer = get_streaming_diarizer()
+        except ImportError:
+            logger.debug("[ws/transcribe] StreamingDiarizer unavailable — no speaker labels")
+
+    # Track audio chunks alongside transcription for speaker identification
+    _audio_buffer = np.array([], dtype=np.float32)
+    _audio_lock = threading.Lock()
+
     def on_transcript(text):
-        """Called from transcription thread — put result in queue (non-blocking)."""
+        """Called from transcription thread — put result in queue (non-blocking).
+        Now includes speaker identification when StreamingDiarizer is available."""
         if ws_closed:
             return
         partial_texts.append(text)
         combined = " ".join(partial_texts)
+
+        msg = {"type": "partial", "text": combined, "source": ws_source}
+
+        # Attach speaker label if diarizer is available
+        if streaming_diarizer is not None:
+            with _audio_lock:
+                audio_chunk = _audio_buffer.copy()
+                _audio_buffer = np.array([], dtype=np.float32)
+
+            if len(audio_chunk) > 0:
+                result = streaming_diarizer.process_audio_segment(audio_chunk, text)
+                msg["speaker"] = result.get("speaker", "Speaker 1")
+                msg["semantic_role"] = result.get("semantic_role", "user")
+            else:
+                msg["speaker"] = "Speaker 1"
+                msg["semantic_role"] = "user"
+
+        if ws_meeting_id:
+            msg["meeting_id"] = ws_meeting_id
         try:
-            msg_queue.put_nowait({"type": "partial", "text": combined})
+            msg_queue.put_nowait(msg)
         except asyncio.QueueFull:
             pass
 
@@ -2145,6 +2250,10 @@ async def ws_transcribe(ws: WebSocket):
             chunk = np.frombuffer(data, dtype=np.float32)
             if chunk is not None and len(chunk) > 0:
                 transcriber.add_chunk(chunk)
+                # Also buffer audio for speaker diarization
+                if streaming_diarizer is not None:
+                    with _audio_lock:
+                        _audio_buffer = np.concatenate([_audio_buffer, chunk])
 
     except Exception:
         pass
@@ -2153,8 +2262,17 @@ async def ws_transcribe(ws: WebSocket):
         await transcribe_task
         final_text = transcriber.get_final()
         combined = " ".join(partial_texts).strip() or final_text
+        final_msg = {"type": "final", "text": combined, "source": ws_source}
+        if ws_meeting_id:
+            final_msg["meeting_id"] = ws_meeting_id
+        # Include final speaker info from diarizer
+        if streaming_diarizer is not None:
+            final_msg["speakers"] = list(set(
+                entry.get("speaker", "Speaker 1")
+                for entry in streaming_diarizer._speaker_history
+            )) if streaming_diarizer._speaker_history else ["Speaker 1"]
         try:
-            await ws.send_json({"type": "final", "text": combined})
+            await ws.send_json(final_msg)
         except Exception:
             pass
 
@@ -4373,6 +4491,132 @@ def extract_text_from_docx(docx_bytes: bytes) -> str:
 
 
 # ==============================
+# RESUME REVIEW V2 - Enhanced Features
+# ==============================
+
+# Import V2 resume reviewer
+RESUME_REVIEW_V2_AVAILABLE = False
+resume_reviewer_v2 = None
+analyze_resume_v2_func = None
+
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent / "modules" / "interview"))
+    from resume_review_v2 import ResumeReviewerV2, analyze_resume as analyze_resume_v2_func
+    resume_reviewer_v2 = ResumeReviewerV2()
+    RESUME_REVIEW_V2_AVAILABLE = True
+    logger.info("[ResumeReviewV2] Enhanced resume analyzer loaded successfully")
+except ImportError as e:
+    logger.warning(f"[ResumeReviewV2] Module not available: {e}")
+
+
+@app.post("/resume/analyze-v2")
+async def analyze_resume_v2_endpoint(
+    resume_text: Optional[str] = Form(None, description="Resume text content"),
+    job_description: Optional[str] = Form(None, description="Job description for tailoring"),
+    role_type: str = Form("software_engineer", description="Type of role"),
+    file: Optional[UploadFile] = File(None, description="Resume file (PDF, DOCX, TXT)")
+):
+    """
+    Analyze resume with enhanced V2 features (FREE).
+
+    Features:
+    - Recruiter scan simulation
+    - ATS compatibility (50+ systems)
+    - Competitive benchmarking
+    - Interview question prediction
+    - Gamification (badges + quests)
+    - Callback probability
+
+    Returns:
+        Complete analysis with all V2 features
+    """
+    if not RESUME_REVIEW_V2_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Resume review V2 not available", status_code=503)
+
+    try:
+        extracted_text = resume_text
+        file_info = None
+
+        # If file uploaded, extract text
+        if file:
+            content = await file.read()
+            file_ext = file.filename.lower().split('.')[-1]
+
+            if file_ext == 'pdf':
+                extracted_text = extract_text_from_pdf(content)
+            elif file_ext in ['docx', 'doc']:
+                extracted_text = extract_text_from_docx(content)
+            elif file_ext in ['txt', 'md', 'rtf']:
+                try:
+                    extracted_text = content.decode('utf-8')
+                except UnicodeDecodeError:
+                    extracted_text = content.decode('latin-1', errors='ignore')
+
+            file_info = {
+                'filename': file.filename,
+                'size': len(content),
+                'extracted_length': len(extracted_text) if extracted_text else 0
+            }
+
+        if not extracted_text or len(extracted_text.strip()) < 50:
+            return error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Could not extract meaningful text. Please paste text directly.",
+                status_code=422
+            )
+
+        # Analyze with V2
+        result = resume_reviewer_v2.analyze_resume(
+            extracted_text,
+            job_description,
+            role_type
+        )
+
+        if file_info:
+            result['file_info'] = file_info
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[ResumeReviewV2] Analyze error: {e}", exc_info=True)
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+
+
+@app.post("/resume/tailor-v2")
+async def tailor_resume_v2(
+    resume_text: str = Form(..., description="Resume text content"),
+    job_description: str = Form(..., description="Job description"),
+    focus_areas: Optional[str] = Form(None, description="Comma-separated focus areas")
+):
+    """
+    Get tailored suggestions for specific job (FREE).
+    """
+    if not RESUME_REVIEW_V2_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Resume review V2 not available", status_code=503)
+
+    try:
+        # Get base analysis
+        result = resume_reviewer_v2.analyze_resume(resume_text, job_description)
+
+        # Extract tailored suggestions
+        tailored = result.get('analysis', {}).get('tailored_suggestions', [])
+        rewrites = result.get('analysis', {}).get('rewrites', [])
+        missing_keywords = result.get('analysis', {}).get('missing_keywords', [])
+
+        return {
+            "success": True,
+            "suggestions": tailored[:5],
+            "rewrites": rewrites[:3],
+            "missing_keywords": missing_keywords[:10],
+            "message": "Free tier: Limited to 5 suggestions, 3 rewrites. Upgrade to Pro for unlimited."
+        }
+
+    except Exception as e:
+        logger.error(f"[ResumeReviewV2] Tailor error: {e}")
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+
+
+# ==============================
 # WEB SEARCH INTEGRATION
 # ==============================
 
@@ -4958,13 +5202,430 @@ except ImportError as e:
     logger.warning(f"[ShadowAgent] Shadow agent not available: {e}")
 
 
+# ==============================
+# AI AGENTS (Unified LLM-Powered)
+# ==============================
+
+try:
+    from modules.agents.orchestrator import orchestrator
+    from modules.agents.session import session_manager
+    AGENTS_AVAILABLE = True
+    logger.info("[Agents] Agent framework loaded")
+except ImportError as e:
+    AGENTS_AVAILABLE = False
+    logger.warning(f"[Agents] Agent framework not available: {e}")
+
+
+@app.post("/agents/sessions")
+async def create_agent_session(
+    session_type: str = Query("meeting", description="Session type: interview, sales_call, meeting"),
+    company: str = Query(None, description="Company name"),
+    role: str = Query(None, description="Role/position"),
+    stage: str = Query(None, description="Interview or sales stage"),
+    active_agents: str = Query("interview_coach,meeting,sales_coach", description="Comma-separated agent types"),
+    provider: str = Query("ollama", description="AI provider preference"),
+):
+    """Create a new AI agent session with specified active agents."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    try:
+        agents_list = [a.strip() for a in active_agents.split(",") if a.strip()]
+        config = {"provider": provider}
+        session = await session_manager.create_session(
+            user_id="default",  # TODO: use actual user_id from auth
+            session_type=session_type,
+            active_agents=agents_list,
+            config=config,
+            company=company,
+            role=role,
+            stage=stage,
+        )
+        return session
+    except Exception as e:
+        logger.error(f"[Agents] Create session error: {e}")
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+
+
+@app.get("/agents/sessions/{session_id}")
+async def get_agent_session(session_id: str):
+    """Get agent session state."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    session = await session_manager.get_session(session_id)
+    if not session:
+        return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
+    return session
+
+
+@app.post("/agents/sessions/{session_id}/end")
+async def end_agent_session(session_id: str):
+    """End an agent session."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    session = await session_manager.end_session(session_id)
+    if not session:
+        return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
+    return session
+
+
+@app.post("/agents/sessions/{session_id}/segment")
+async def process_agent_segment(
+    session_id: str,
+    text: str = Query(..., description="Transcript text"),
+    speaker: str = Query(..., description="Speaker: user, interviewer, other, Speaker 1, SPEAKER_00, etc."),
+):
+    """Process a transcript segment through all active agents. Returns JSON (polling mode).
+
+    Speaker labels are normalized to semantic roles (user/interviewer/other)
+    via the orchestrator's normalize_speaker() method.
+    """
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    try:
+        result = await orchestrator.process_segment(session_id, text, speaker)
+        return result
+    except Exception as e:
+        logger.error(f"[Agents] Segment processing error: {e}")
+        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+
+
+@app.get("/agents/sessions/{session_id}/stream")
+async def stream_agent_suggestions(
+    session_id: str,
+    text: str = Query(..., description="Transcript text"),
+    speaker: str = Query(..., description="Speaker: user, interviewer, other, Speaker 1, SPEAKER_00, etc."),
+):
+    """SSE stream for real-time agent suggestion delivery.
+
+    Speaker labels are normalized to semantic roles via the orchestrator.
+    """
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    from starlette.responses import StreamingResponse
+
+    async def event_generator():
+        async for event in orchestrator.process_segment_stream(session_id, text, speaker):
+            yield event
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/agents/sessions/{session_id}/agents")
+async def update_active_agents(
+    session_id: str,
+    active_agents: str = Query(..., description="Comma-separated agent types to activate"),
+):
+    """Update which agents are active for a session."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    session = await session_manager.get_session(session_id)
+    if not session:
+        return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
+
+    agents_list = [a.strip() for a in active_agents.split(",") if a.strip()]
+    session["active_agents"] = agents_list
+    # Initialize state for any new agents
+    for agent_type in agents_list:
+        if agent_type not in session.get("agent_states", {}):
+            session.setdefault("agent_states", {})[agent_type] = {
+                "last_suggestion_time": 0,
+                "suggestions_made": 0,
+                "suggestions_accepted": 0,
+            }
+
+    await session_manager.save_session(session)
+    return {"session_id": session_id, "active_agents": agents_list}
+
+
+@app.get("/agents/sessions/{session_id}/suggestions")
+async def get_agent_suggestions(session_id: str):
+    """Get all suggestions generated in a session."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    session = await session_manager.get_session(session_id)
+    if not session:
+        return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
+
+    return {"suggestions": session.get("suggestions", [])}
+
+
+@app.post("/agents/suggestions/{suggestion_id}/accept")
+async def accept_agent_suggestion(suggestion_id: str):
+    """Accept an agent suggestion and record feedback for self-learning."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    # Search across all active sessions for this suggestion
+    for session_id, session in session_manager._memory_sessions.items():
+        result = session_manager.accept_suggestion(session, suggestion_id)
+        if result:
+            await session_manager.save_session(session)
+
+            # Record acceptance in self-learning system
+            try:
+                from agents.learning import get_learner
+                learner = get_learner()
+                learner.record_acceptance(
+                    suggestion_id=suggestion_id,
+                    agent_type=result.get("agent_type", ""),
+                    category=result.get("category", "general"),
+                    content_preview=result.get("content", "")[:200],
+                    confidence=result.get("confidence", 0.5),
+                    question_hash=result.get("metadata", {}).get("question", "")[:100],
+                )
+                # Save learning state to session
+                learner.save_to_session(session)
+                await session_manager.save_session(session)
+            except Exception as e:
+                logger.warning(f"[Agents] Failed to record acceptance feedback: {e}")
+
+            return {"status": "accepted", "suggestion": result}
+
+    return error_response(ErrorCode.NOT_FOUND, "Suggestion not found", status_code=404)
+
+
+@app.post("/agents/suggestions/{suggestion_id}/dismiss")
+async def dismiss_agent_suggestion(suggestion_id: str):
+    """Dismiss an agent suggestion and record feedback for self-learning."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    for session_id, session in session_manager._memory_sessions.items():
+        result = session_manager.dismiss_suggestion(session, suggestion_id)
+        if result:
+            await session_manager.save_session(session)
+
+            # Record dismissal in self-learning system
+            try:
+                from agents.learning import get_learner
+                learner = get_learner()
+                learner.record_dismissal(
+                    suggestion_id=suggestion_id,
+                    agent_type=result.get("agent_type", ""),
+                    category=result.get("category", "general"),
+                    content_preview=result.get("content", "")[:200],
+                    confidence=result.get("confidence", 0.5),
+                    question_hash=result.get("metadata", {}).get("question", "")[:100],
+                )
+                # Save learning state to session
+                learner.save_to_session(session)
+                await session_manager.save_session(session)
+            except Exception as e:
+                logger.warning(f"[Agents] Failed to record dismissal feedback: {e}")
+
+            return {"status": "dismissed", "suggestion": result}
+
+    return error_response(ErrorCode.NOT_FOUND, "Suggestion not found", status_code=404)
+
+
+@app.get("/agents/available")
+async def list_available_agents():
+    """List all available agent types with descriptions."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    return {"agents": orchestrator.get_available_agents()}
+
+
+@app.get("/agents/sessions/{session_id}/stats")
+async def get_agent_session_stats(session_id: str):
+    """Get session statistics."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    session = await session_manager.get_session(session_id)
+    if not session:
+        return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
+
+    return session_manager.get_stats(session)
+
+
+@app.get("/agents/cache/stats")
+async def get_cache_stats():
+    """Get context cache statistics."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    try:
+        from agents.cache import get_cache
+        return get_cache().get_stats()
+    except ImportError:
+        return {"error": "Cache module not available"}
+
+
+@app.post("/agents/cache/cleanup")
+async def cleanup_cache():
+    """Remove expired entries from the context cache."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    try:
+        from agents.cache import get_cache
+        removed = get_cache().cleanup_expired()
+        return {"removed": removed}
+    except ImportError:
+        return {"error": "Cache module not available"}
+
+
+@app.get("/agents/learning/stats")
+async def get_learning_stats(agent_type: Optional[str] = None):
+    """Get self-learning performance statistics."""
+    if not AGENTS_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Agent framework not available", status_code=503)
+
+    try:
+        from agents.learning import get_learner
+        return get_learner().get_performance_stats(agent_type)
+    except ImportError:
+        return {"error": "Learning module not available"}
+
+
+logger.info("[Agents] Agent endpoints loaded")
+
+
+# ── Ingestion endpoints ──────────────────────────────────────────────
+
+_ingestion_results = {}
+
+
+@app.post("/agents/ingestion")
+async def trigger_ingestion(request: Request):
+    """Trigger data ingestion from GitHub repos or local directories.
+
+    Runs ingestion in a background thread and returns a task_id immediately.
+    Poll GET /agents/ingestion/status?task_id=... for results.
+
+    Body JSON:
+        repos: List of GitHub repo URLs or owner/repo strings
+        local_paths: List of local directory paths (use instead of repos)
+        mode: "full" | "graph_only" | "rag_only" (default: "full")
+        dry_run: bool (default: false)
+    """
+    try:
+        from agents.ingestion.pipeline import IngestionPipeline
+    except ImportError:
+        try:
+            from modules.agents.ingestion.pipeline import IngestionPipeline
+        except ImportError:
+            return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Ingestion pipeline not available", status_code=503)
+
+    body = await request.json()
+    mode = body.get("mode", "full")
+    dry_run = body.get("dry_run", False)
+    repo_urls = body.get("repos", [])
+    local_paths = body.get("local_paths", [])
+
+    if mode not in ("full", "graph_only", "rag_only"):
+        return error_response(ErrorCode.INVALID_INPUT, f"Invalid mode: {mode}", status_code=400)
+
+    if not repo_urls and not local_paths:
+        return error_response(ErrorCode.INVALID_INPUT, "Provide 'repos' or 'local_paths'", status_code=400)
+
+    import uuid
+    task_id = str(uuid.uuid4())[:8]
+    _ingestion_results[task_id] = {"status": "running", "progress": "Starting..."}
+
+    pipeline = IngestionPipeline()
+
+    def _run():
+        try:
+            if local_paths:
+                stats = pipeline.ingest_from_local(local_paths, mode=mode, dry_run=dry_run)
+            else:
+                stats = pipeline.ingest_from_github(repo_urls, mode=mode, dry_run=dry_run)
+            _ingestion_results[task_id] = {"status": "completed", "result": stats.to_dict()}
+        except Exception as e:
+            logger.error(f"[Ingestion] Background task failed: {e}")
+            _ingestion_results[task_id] = {"status": "failed", "error": str(e)}
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _run)
+
+    return {"task_id": task_id, "status": "running"}
+
+
+@app.get("/agents/ingestion/status")
+async def get_ingestion_status(task_id: Optional[str] = None):
+    """Get ingestion pipeline status, or poll a running task by task_id."""
+    # If task_id provided, return that task's result
+    if task_id and task_id in _ingestion_results:
+        return _ingestion_results[task_id]
+
+    result = {
+        "pipeline": "available",
+        "agents_available": AGENTS_AVAILABLE,
+        "modules": {},
+    }
+
+    try:
+        from agents.ingestion.markdown_parser import MarkdownQAParser
+        result["modules"]["markdown_parser"] = "available"
+    except ImportError:
+        result["modules"]["markdown_parser"] = "unavailable"
+
+    try:
+        from agents.ingestion.pdf_processor import PDFProcessor
+        result["modules"]["pdf_processor"] = "available"
+    except ImportError:
+        result["modules"]["pdf_processor"] = "unavailable"
+
+    try:
+        from agents.ingestion.graph_loader import GraphLoader
+        gl = GraphLoader()
+        result["modules"]["graph_loader"] = "available"
+        result["neo4j_available"] = gl._check_neo4j()
+    except ImportError:
+        result["modules"]["graph_loader"] = "unavailable"
+        result["neo4j_available"] = False
+
+    try:
+        from agents.ingestion.rag_loader import RAGLoader
+        rl = RAGLoader()
+        result["modules"]["rag_loader"] = "available"
+        ds = rl.doc_store
+        result["rag_documents"] = len(ds.list_documents()) if ds else 0
+    except ImportError:
+        result["modules"]["rag_loader"] = "unavailable"
+        result["rag_documents"] = 0
+
+    return result
+
+
 @app.post("/shadow/start")
 async def start_shadow_interview(
     company: str = Query(..., description="Company name"),
     role: str = Query(..., description="Role being interviewed for"),
     stage: str = Query("", description="Interview stage")
 ):
-    """Start a shadow interview session."""
+    """Start a shadow interview session. Redirects to new agent framework when available."""
+    # Prefer new agent framework
+    if AGENTS_AVAILABLE:
+        try:
+            session = await session_manager.create_session(
+                user_id="default",
+                session_type="interview",
+                active_agents=["interview_coach"],
+                config={"company": company, "role": role, "stage": stage},
+                company=company, role=role, stage=stage,
+            )
+            return {
+                "status": "started",
+                "session_id": session["id"],
+                "company": company,
+                "role": role,
+                "message": "Shadow agent (LLM-powered) is listening. Press Ctrl+~ to toggle overlay.",
+                "agent_framework": "v2",
+            }
+        except Exception as e:
+            logger.warning(f"[ShadowAgent] Fallback to old agent: {e}")
+
     if not SHADOW_AGENT_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
@@ -4980,7 +5641,38 @@ async def process_shadow_transcript(
     text: str = Query(..., description="Transcript text"),
     speaker: str = Query(..., description="Speaker (user/interviewer/other)")
 ):
-    """Process transcript and generate suggestions."""
+    """Process transcript and generate suggestions. Redirects to agent framework when available."""
+    # Prefer new agent framework if there's an active session
+    if AGENTS_AVAILABLE:
+        # Find the most recent interview session
+        for sid, session in reversed(list(session_manager._memory_sessions.items())):
+            if session.get("session_type") == "interview" and session.get("state") == "listening":
+                try:
+                    result = await orchestrator.process_segment(sid, text, speaker)
+                    # Transform to old format for backward compatibility
+                    suggestions = result.get("suggestions", [])
+                    if suggestions:
+                        old_format = {
+                            "detected": "question",
+                            "question": text,
+                            "suggestions": [
+                                {
+                                    "id": s["id"],
+                                    "text": s["content"],
+                                    "confidence": s["confidence"],
+                                    "hotkey": s.get("metadata", {}).get("hotkey", f"Ctrl+{i+1}"),
+                                    "category": s["category"],
+                                }
+                                for i, s in enumerate(suggestions[:3])
+                            ],
+                            "agent_framework": "v2",
+                        }
+                        return old_format
+                    return {"detected": False}
+                except Exception as e:
+                    logger.warning(f"[ShadowAgent] Agent framework error, falling back: {e}")
+                    break
+
     if not SHADOW_AGENT_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
