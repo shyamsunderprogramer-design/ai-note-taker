@@ -236,6 +236,11 @@ neo4j/neo4j-community/run/
 .claude/
 
 # =========================
+# ARCHIVED / UNWANTED FILES
+# =========================
+_archive/
+
+# =========================
 # GARBLED FILES
 # =========================
 *rendererstyle.css

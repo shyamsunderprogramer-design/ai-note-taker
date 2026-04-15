@@ -17,6 +17,11 @@
     '''your-32-char-encryption-key''',  # Placeholder in .env.example
     '''your-ollama-cloud-api-key''',   # Placeholder in .env.example
     '''sk-\.\.\.''',                   # Masked API key placeholders
+    '''sk-YOUR-OPENAI-API-KEY-HERE''', # .env.example placeholder
+    '''sk-ant-YOUR-ANTHROPIC-API-KEY-HERE''', # .env.example placeholder
+    '''YOUR-GOOGLE-API-KEY-HERE''',    # .env.example placeholder
+    '''YOUR-GROQ-API-KEY-HERE''',      # .env.example placeholder
+    '''YOUR-GITHUB-TOKEN-HERE''',      # .env.example placeholder
     '''AIza\.\.\.''',                  # Masked Google API key placeholders
     '''ghp_\.\.\.''',                  # Masked GitHub token placeholders
   ]
