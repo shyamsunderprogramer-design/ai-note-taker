@@ -233,9 +233,9 @@ function enable() {
 
     // Note: Protection is applied once - no interval to prevent blinking
 
-    // Re-assert always-on-top
+    // Re-assert always-on-top (must match ensureTopmost level — "monitor" on Windows)
     if (IS_WINDOWS) {
-      _window.setAlwaysOnTop(true, "normal")
+      _window.setAlwaysOnTop(true, "monitor", 2147483647)
     } else if (IS_MAC) {
       _window.setAlwaysOnTop(true, "floating", 999)
     } else {

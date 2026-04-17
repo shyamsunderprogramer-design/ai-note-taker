@@ -11,10 +11,11 @@ T16: Database Migration (JSON -> PostgreSQL)
 """
 
 import os
+import re
 import json
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
@@ -22,7 +23,7 @@ logger = logging.getLogger("database")
 
 # Database configuration
 # T16: Try PostgreSQL first, fall back to SQLite for development
-DEFAULT_POSTGRES_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/ainotetaker"
+DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
 DEFAULT_SQLITE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
 
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_POSTGRES_URL)
@@ -45,7 +46,8 @@ if USE_SQLITE or "sqlite" in DATABASE_URL.lower():
     Path("data").mkdir(exist_ok=True)
     DATABASE_URL = DEFAULT_SQLITE_URL
 
-print(f"[Database] Module loaded. URL: {DATABASE_URL}")
+_redacted_url = re.sub(r'://[^@]+@', '://***@', DATABASE_URL) if DATABASE_URL else "(none)"
+print(f"[Database] Module loaded. URL: {_redacted_url}")
 
 # Try importing SQLAlchemy
 try:
@@ -84,8 +86,8 @@ class User(Base if Base else object):
         hashed_password = Column(String(255), nullable=False)
         is_active = Column(Boolean, default=True)
         is_admin = Column(Boolean, default=False)
-        created_at = Column(DateTime, default=datetime.utcnow)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
         last_login = Column(DateTime, nullable=True)
         api_quota = Column(JSON, default=dict)
         display_name = Column(String(100), nullable=True)
@@ -124,8 +126,8 @@ class Conversation(Base if Base else object):
         title = Column(String(255), nullable=True)
         messages = Column(JSON, default=list)
         meta = Column(JSON, default=dict)
-        created_at = Column(DateTime, default=datetime.utcnow, index=True)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
         message_count = Column(Integer, default=0)
         is_encrypted = Column(Boolean, default=False)
 
@@ -160,8 +162,8 @@ class VoiceModel(Base if Base else object):
         model_file = Column(String(500), nullable=True)
         source = Column(String(20), default="edge_tts")
         edge_voice = Column(String(50), default="")
-        created_at = Column(DateTime, default=datetime.utcnow)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
         # Relationships
         user = relationship("User", back_populates="voice_models")
@@ -196,8 +198,8 @@ class JobApplication(Base if Base else object):
         salary_range = Column(String(100), nullable=True)
         location = Column(String(100), nullable=True)
         remote_status = Column(String(20), nullable=True)
-        created_at = Column(DateTime, default=datetime.utcnow)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
         applied_at = Column(DateTime, nullable=True)
 
         # Relationships
@@ -236,7 +238,7 @@ class InterviewSession(Base if Base else object):
         answers = Column(JSON, default=list)
         evaluations = Column(JSON, default=list)
         overall_score = Column(Float, nullable=True)
-        started_at = Column(DateTime, default=datetime.utcnow)
+        started_at = Column(DateTime, default=datetime.now(timezone.utc))
         completed_at = Column(DateTime, nullable=True)
         duration_seconds = Column(Integer, nullable=True)
 
@@ -269,7 +271,7 @@ class AnalyticsEvent(Base if Base else object):
         session_id = Column(String(100), nullable=True, index=True)
         ip_address = Column(String(45), nullable=True)
         user_agent = Column(String(500), nullable=True)
-        timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+        timestamp = Column(DateTime, default=datetime.now(timezone.utc), index=True)
 
     def to_dict(self):
         return {
@@ -294,7 +296,7 @@ class UserAPIKey(Base if Base else object):
         google_key_encrypted = Column(Text, nullable=True)
         deepseek_key_encrypted = Column(Text, nullable=True)
         grok_key_encrypted = Column(Text, nullable=True)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -321,8 +323,8 @@ class Document(Base if Base else object):
         processing_status = Column(String(20), default="pending")
         file_size = Column(Integer, nullable=True)
         mime_type = Column(String(100), nullable=True)
-        created_at = Column(DateTime, default=datetime.utcnow)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
         # Relationships
         user = relationship("User", back_populates="documents")
@@ -358,7 +360,7 @@ class AgentSession(Base if Base else object):
         agent_states = Column(JSON, default=dict)    # per-agent state
         suggestions = Column(JSON, default=list)     # all suggestions this session
         entities = Column(JSON, default=dict)        # extracted entities cache
-        started_at = Column(DateTime, default=datetime.utcnow)
+        started_at = Column(DateTime, default=datetime.now(timezone.utc))
         ended_at = Column(DateTime, nullable=True)
         duration_seconds = Column(Integer, nullable=True)
 
@@ -397,8 +399,8 @@ class CRMConfig(Base if Base else object):
         sync_frequency = Column(String(20), default="daily")
         last_sync_at = Column(DateTime, nullable=True)
         sync_errors = Column(JSON, default=list)
-        created_at = Column(DateTime, default=datetime.utcnow)
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -427,7 +429,7 @@ class AuditLog(Base if Base else object):
         user_agent = Column(String(500), nullable=True)
         success = Column(Boolean, default=True)
         error_message = Column(Text, nullable=True)
-        timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+        timestamp = Column(DateTime, default=datetime.now(timezone.utc), index=True)
 
     def to_dict(self):
         return {
@@ -642,7 +644,7 @@ class UserRepository:
                     for key, value in kwargs.items():
                         if hasattr(user, key):
                             setattr(user, key, value)
-                    user.updated_at = datetime.utcnow()
+                    user.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(user)
                 return user
@@ -747,7 +749,7 @@ class ConversationRepository:
                 if conv:
                     conv.messages = messages
                     conv.message_count = len(messages)
-                    conv.updated_at = datetime.utcnow()
+                    conv.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(conv)
                 return conv
@@ -854,7 +856,7 @@ class VoiceModelRepository:
                     for key, value in kwargs.items():
                         if hasattr(model, key):
                             setattr(model, key, value)
-                    model.updated_at = datetime.utcnow()
+                    model.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(model)
                 return model
@@ -946,7 +948,7 @@ class JobApplicationRepository:
                     for key, value in kwargs.items():
                         if hasattr(app, key):
                             setattr(app, key, value)
-                    app.updated_at = datetime.utcnow()
+                    app.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(app)
                 return app
@@ -1020,7 +1022,7 @@ class DocumentRepository:
                     for key, value in kwargs.items():
                         if hasattr(doc, key):
                             setattr(doc, key, value)
-                    doc.updated_at = datetime.utcnow()
+                    doc.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(doc)
                 return doc
@@ -1173,7 +1175,7 @@ class UserAPIKeyRepository:
                     # Update existing
                     for col, val in encrypted_keys.items():
                         setattr(api_keys, col, val)
-                    api_keys.updated_at = datetime.utcnow()
+                    api_keys.updated_at = datetime.now(timezone.utc)
                 else:
                     # Create new
                     api_keys = UserAPIKey(user_id=uuid.UUID(user_id), **encrypted_keys)
@@ -1262,7 +1264,7 @@ class UserAPIKeyRepository:
 
                 if api_keys:
                     setattr(api_keys, col_map[provider], None)
-                    api_keys.updated_at = datetime.utcnow()
+                    api_keys.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     return True
                 return False
@@ -1306,7 +1308,7 @@ class DataMigrator:
                         is_admin=user_data.get("is_admin", False),
                         is_active=user_data.get("is_active", True),
                         api_quota=user_data.get("api_quota", {}),
-                        created_at=datetime.fromisoformat(user_data["created_at"]) if user_data.get("created_at") else datetime.utcnow()
+                        created_at=datetime.fromisoformat(user_data["created_at"]) if user_data.get("created_at") else datetime.now(timezone.utc)
                     )
                     if user:
                         id_mapping[old_id] = str(user.id)
@@ -1381,7 +1383,7 @@ class BackupManager:
         """Create a full database backup as JSON"""
         backup_data = {
             "version": "1.0",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "tables": {}
         }
 

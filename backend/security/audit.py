@@ -8,7 +8,7 @@ import os
 import json
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
@@ -87,7 +87,7 @@ def log_audit_event(
 ):
     """Log an audit event to database (primary) + JSONL (fallback) + Python logger"""
     event = AuditEvent(
-        timestamp=datetime.utcnow().isoformat() + "Z",
+        timestamp=datetime.now(timezone.utc).isoformat() + "Z",
         event_type=event_type,
         actor=actor,
         action=action,

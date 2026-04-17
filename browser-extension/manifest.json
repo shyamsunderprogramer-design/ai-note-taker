@@ -39,9 +39,8 @@
         "*://*.workday.com/*",
         "*://*.myworkday.com/*",
         "*://*.ashbyhq.com/*",
-        "*://*/*job*",
-        "*://*/*career*",
-        "*://*/*apply*"
+        "*://*.jobs.net/*",
+        "*://*.bamboohr.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
@@ -50,7 +49,7 @@
   "web_accessible_resources": [
     {
       "resources": ["popup.html"],
-      "matches": ["<all_urls>"]
+      "matches": ["*://*.linkedin.com/*", "*://*.indeed.com/*", "*://*.glassdoor.com/*"]
     }
   ]
 }

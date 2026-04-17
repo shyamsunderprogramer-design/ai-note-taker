@@ -3,6 +3,7 @@ Rate limiting module
 Prevents API abuse and ensures fair usage
 """
 
+import os
 import time
 import asyncio
 from typing import Dict, Optional, Callable, Any
@@ -45,7 +46,7 @@ class RateLimiter:
     def _start_cleanup(self):
         """Start the cleanup background task"""
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if loop.is_running():
                 self._cleanup_task = loop.create_task(self._cleanup_old_entries())
         except RuntimeError:
@@ -136,7 +137,7 @@ class RateLimiter:
 
 # Global rate limiter instance
 rate_limiter = RateLimiter(
-    requests_per_minute=int(__import__('os').getenv("RATE_LIMIT_PER_MINUTE", "100")),
+    requests_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "100")),
     window_seconds=60
 )
 

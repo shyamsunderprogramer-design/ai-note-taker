@@ -9,6 +9,7 @@ when embeddings are unavailable.
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -37,7 +38,7 @@ class SemanticSearchMixin:
         self._node_types: Dict[str, str] = {}  # node_id -> type
         self._index_built = False
         self._similarity_threshold = 0.3
-        self._build_lock = __import__('threading').Lock()
+        self._build_lock = threading.Lock()
 
     def _get_embedding_service(self):
         """Lazily get the embedding service."""

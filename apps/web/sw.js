@@ -3,7 +3,8 @@
  * Provides offline capability and caching
  */
 
-const CACHE_NAME = 'ant-cache-v1';
+const CACHE_VERSION = 'v2';
+const CACHE_NAME = 'ant-cache-' + CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',
   '/index.html',

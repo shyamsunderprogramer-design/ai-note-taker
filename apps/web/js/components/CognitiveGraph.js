@@ -649,24 +649,31 @@ export class CognitiveGraph {
     const container = document.getElementById('skillsList');
     if (!container) return;
 
-    // Mock skills data - could be replaced with API call
-    const skills = [
-      { name: 'JavaScript', count: 12, level: 85 },
-      { name: 'System Design', count: 8, level: 70 },
-      { name: 'React', count: 10, level: 80 },
-      { name: 'Algorithms', count: 15, level: 75 },
-      { name: 'Behavioral', count: 6, level: 90 }
-    ];
+    try {
+      const resp = await fetch(`${API_BASE}/cognitive-graph/stats`);
+      if (resp.ok) {
+        const data = await resp.json();
+        const skills = data.skills || [];
 
-    container.innerHTML = skills.map((skill, idx) => `
-      <div class="cg-skill-item cg-animate-in" style="animation-delay: ${idx * 80}ms">
-        <span class="cg-skill-name">${skill.name}</span>
-        <div class="cg-skill-bar">
-          <div class="cg-skill-progress" style="width: ${skill.level}%"></div>
-        </div>
-        <span class="cg-skill-count">${skill.count}</span>
-      </div>
-    `).join('');
+        if (skills.length > 0) {
+          container.innerHTML = skills.map((skill, idx) => `
+            <div class="cg-skill-item cg-animate-in" style="animation-delay: ${idx * 80}ms">
+              <span class="cg-skill-name">${this.escapeHtml(skill.name)}</span>
+              <div class="cg-skill-bar">
+                <div class="cg-skill-progress" style="width: ${skill.level || skill.count * 5}%"></div>
+              </div>
+              <span class="cg-skill-count">${skill.count}</span>
+            </div>
+          `).join('');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[CognitiveGraph] Could not load skills from API:', e);
+    }
+
+    // Fallback if API is unavailable
+    container.innerHTML = '<div class="cg-empty-state">Connect Neo4j to see skill data</div>';
   }
 
   // Entity Extraction

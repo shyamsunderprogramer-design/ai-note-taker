@@ -6,7 +6,17 @@ const { contextBridge, ipcRenderer } = require("electron")
 // ==============================
 // API CONFIG
 // ==============================
-const BASE_URL = "http://127.0.0.1:8000"
+const BASE_URL = (typeof window !== 'undefined' && window.API_BASE) ? window.API_BASE : 'http://127.0.0.1:8000'
+
+// Auth token helper — reads from localStorage (set by auth-helper.js after login)
+function _authHeaders() {
+  try {
+    const token = localStorage.getItem('ainotetaker_auth_token')
+    return token ? { 'Authorization': `Bearer ${token}` } : {}
+  } catch {
+    return {}
+  }
+}
 
 // ==============================
 // EXPOSE SAFE API TO UI
@@ -44,7 +54,7 @@ contextBridge.exposeInMainWorld("api", {
   getTranscribeUrl: () => `${BASE_URL}/transcribe`,
 
   // Race mode stream URL — fires all providers, fastest wins
-  getRaceUrl: (query, mode = "fast", responseStyle = "concise", context = null, enabledProviders = null) => {
+  getRaceUrl: (query, mode = "race", responseStyle = "concise", context = null, enabledProviders = null) => {
     const encodedQuery = encodeURIComponent(query || "")
     const encodedMode = encodeURIComponent(mode)
     const encodedStyle = encodeURIComponent(responseStyle)
@@ -65,10 +75,10 @@ contextBridge.exposeInMainWorld("api", {
   // Ollama model management
   getOllamaModelsUrl: () => `${BASE_URL}/ollama/models`,
   pullOllamaModel: (model) => {
-    return fetch(`${BASE_URL}/ollama/pull?model=${encodeURIComponent(model)}`, { method: "POST" })
+    return fetch(`${BASE_URL}/ollama/pull?model=${encodeURIComponent(model)}`, { method: "POST", headers: _authHeaders() })
   },
   deleteOllamaModel: (model) => {
-    return fetch(`${BASE_URL}/ollama/models/${encodeURIComponent(model)}`, { method: "DELETE" })
+    return fetch(`${BASE_URL}/ollama/models/${encodeURIComponent(model)}`, { method: "DELETE", headers: _authHeaders() })
   },
 
   // Screenshot capture + multimodal AI
@@ -86,7 +96,7 @@ contextBridge.exposeInMainWorld("api", {
   // Set AI mode on backend
   setMode: async (mode) => {
     const response = await fetch(`${BASE_URL}/set-mode?mode=${encodeURIComponent(mode)}`, {
-      method: "POST"
+      method: "POST", headers: _authHeaders()
     })
     if (!response.ok) throw new Error("Failed to update mode")
     return response.json()
@@ -94,19 +104,8 @@ contextBridge.exposeInMainWorld("api", {
 
   // Get configured providers
   getProviders: async () => {
-    const response = await fetch(`${BASE_URL}/providers`)
+    const response = await fetch(`${BASE_URL}/providers`, { headers: _authHeaders() })
     return response.json()
-  },
-
-  // DEPRECATED: Configure provider API key — DISABLED for security
-  // Use saveApiKey(provider, apiKey) for secure encrypted storage instead
-  configureProvider: async (provider, apiKey) => {
-    console.warn("[Security] configureProvider is deprecated. Use saveApiKey() for secure storage.")
-    // Return error - keys must be saved via secure IPC, not HTTP
-    return {
-      error: "HTTP configuration disabled",
-      message: "Use window.api.saveApiKey(provider, apiKey) for secure encrypted storage"
-    }
   },
 
   // Conversation history
@@ -169,6 +168,11 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("trigger-ai", () => callback())
   },
 
+  // Global Ctrl+Shift+Enter — screen-only AI answer (Cluely stealth answer)
+  onTriggerAIScreen: (callback) => {
+    ipcRenderer.on("trigger-ai-screen", () => callback())
+  },
+
   // Backend process status and restart
   onBackendDead: (callback) => {
     ipcRenderer.on("backend:dead", (_event, data) => callback(data))
@@ -184,17 +188,18 @@ contextBridge.exposeInMainWorld("api", {
   uploadDocument: async (formData) => {
     const response = await fetch(`${BASE_URL}/documents/upload`, {
       method: "POST",
+      headers: _authHeaders(),
       body: formData
     })
     return response.json()
   },
   listDocuments: async () => {
-    const response = await fetch(`${BASE_URL}/documents`)
+    const response = await fetch(`${BASE_URL}/documents`, { headers: _authHeaders() })
     return response.json()
   },
   deleteDocument: async (docId) => {
     const response = await fetch(`${BASE_URL}/documents/${encodeURIComponent(docId)}`, {
-      method: "DELETE"
+      method: "DELETE", headers: _authHeaders()
     })
     return response.json()
   },
@@ -206,7 +211,7 @@ contextBridge.exposeInMainWorld("api", {
   exportConversation: async (data) => {
     const response = await fetch(`${BASE_URL}/conversations/export`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ..._authHeaders() },
       body: JSON.stringify(data)
     })
     return response.json()
@@ -214,6 +219,7 @@ contextBridge.exposeInMainWorld("api", {
   importConversations: async (formData) => {
     const response = await fetch(`${BASE_URL}/conversations/import`, {
       method: "POST",
+      headers: _authHeaders(),
       body: formData
     })
     return response.json()
@@ -223,7 +229,7 @@ contextBridge.exposeInMainWorld("api", {
   detectObjections: async (text) => {
     const response = await fetch(`${BASE_URL}/detect-objections`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ..._authHeaders() },
       body: JSON.stringify({ text })
     })
     return response.json()
@@ -233,19 +239,19 @@ contextBridge.exposeInMainWorld("api", {
   recordAnalytics: async (data) => {
     const response = await fetch(`${BASE_URL}/analytics/record`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ..._authHeaders() },
       body: JSON.stringify(data)
     })
     return response.json()
   },
   getAnalyticsSummary: async (days = 30) => {
-    const response = await fetch(`${BASE_URL}/analytics/summary?days=${days}`)
+    const response = await fetch(`${BASE_URL}/analytics/summary?days=${days}`, { headers: _authHeaders() })
     return response.json()
   },
   exportAnalytics: async (format = "json") => {
     const response = await fetch(`${BASE_URL}/analytics/export`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ..._authHeaders() },
       body: JSON.stringify({ format })
     })
     return response.json()
@@ -255,19 +261,19 @@ contextBridge.exposeInMainWorld("api", {
   sendCRMWebhook: async (crmType, eventType, data) => {
     const response = await fetch(`${BASE_URL}/crm/webhook/${crmType}/${eventType}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ..._authHeaders() },
       body: JSON.stringify(data)
     })
     return response.json()
   },
   getCRMConfig: async () => {
-    const response = await fetch(`${BASE_URL}/crm/config`)
+    const response = await fetch(`${BASE_URL}/crm/config`, { headers: _authHeaders() })
     return response.json()
   },
   saveCRMConfig: async (config) => {
     const response = await fetch(`${BASE_URL}/crm/config`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ..._authHeaders() },
       body: JSON.stringify(config)
     })
     return response.json()

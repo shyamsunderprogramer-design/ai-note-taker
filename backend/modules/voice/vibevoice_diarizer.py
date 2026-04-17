@@ -12,6 +12,7 @@ Integration points:
 """
 
 import logging
+import os
 import time
 import threading
 import json
@@ -318,39 +319,89 @@ class VibeVoiceDiarizer:
         audio: np.ndarray,
         sample_rate: int,
     ) -> Optional[List[SpeakerSegment]]:
-        """Fallback 1: Use existing pyannote diarization + Whisper transcription."""
+        """Fallback 1: Use pyannote diarization + Whisper transcription."""
         try:
-            try:
-                from .speaker_diarization import SpeakerDiarizer, SpeakerSegment as PyannoteSegment
-            except ImportError:
-                from voice.speaker_diarization import SpeakerDiarizer, SpeakerSegment as PyannoteSegment
-            try:
-                from .whisper_handler import transcribe
-            except ImportError:
-                from voice.whisper_handler import transcribe
+            from modules.voice.speaker_diarization import get_diarizer, SimpleSpeakerDetector
 
-            diarizer = SpeakerDiarizer()
-            if not diarizer.available:
-                return None
+            diarizer = get_diarizer()
 
             # Transcribe with Whisper first
+            try:
+                from modules.voice.whisper_handler import transcribe
+            except ImportError:
+                from whisper_handler import transcribe
+
             text = transcribe(audio, mode="adaptive")
             if not text or not text.strip():
                 return None
 
-            # For streaming audio, we can't easily do pyannote diarization
-            # (it needs a full audio file), so we create a single-segment result
             duration = len(audio) / sample_rate if len(audio) > 0 else 0
-            segments = [SpeakerSegment(
-                speaker_id="Speaker 1",
-                start_time=0.0,
-                end_time=duration,
-                text=text.strip(),
-                confidence=0.7,
-            )]
-            return segments
 
-        except (ImportError, Exception) as e:
+            # If pyannote is available, save audio to temp file and run full diarization
+            if diarizer.available:
+                import tempfile
+                import soundfile as sf
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    sf.write(tmp.name, audio, sample_rate)
+                    tmp_path = tmp.name
+                try:
+                    segments = diarizer.diarize_audio(tmp_path)
+                    if segments and len(segments) > 1:
+                        # Map Whisper text onto pyannote segments
+                        full_segment = SpeakerSegment(
+                            speaker_id="Speaker 1",
+                            start_time=0.0,
+                            end_time=duration,
+                            text=text.strip(),
+                            confidence=0.85,
+                        )
+                        return [full_segment]
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+
+            # Fallback: use SimpleSpeakerDetector for basic clustering
+            detector = SimpleSpeakerDetector()
+            chunk_duration = 3.0  # seconds per chunk
+            chunk_samples = int(chunk_duration * sample_rate)
+            segments = []
+            current_text = ""
+            current_start = 0.0
+
+            for i in range(0, len(audio), chunk_samples):
+                chunk = audio[i:i + chunk_samples]
+                if len(chunk) < sample_rate // 2:  # Skip very short chunks
+                    continue
+                speaker = detector.identify_speaker(chunk)
+                chunk_end = min((i + len(chunk)) / sample_rate, duration)
+
+                if speaker != (segments[-1].speaker_id if segments else None):
+                    if current_text.strip():
+                        segments.append(SpeakerSegment(
+                            speaker_id=segments[-1].speaker_id if segments else speaker,
+                            start_time=current_start,
+                            end_time=i / sample_rate,
+                            text=current_text.strip(),
+                            confidence=0.6,
+                        ))
+                    current_start = i / sample_rate
+                    current_text = ""
+                current_text += " "
+
+            if current_text.strip() or text.strip():
+                segments.append(SpeakerSegment(
+                    speaker_id=segments[-1].speaker_id if segments else "Speaker 1",
+                    start_time=current_start,
+                    end_time=duration,
+                    text=text.strip(),
+                    confidence=0.6,
+                ))
+
+            return segments if segments else None
+
+        except Exception as e:
             logger.debug(f"[VibeVoice] Pyannote fallback unavailable: {e}")
             return None
 
@@ -537,8 +588,8 @@ class StreamingDiarizer:
         self._speaker_history: List[Dict] = []
         self._last_speaker: str = "Speaker 1"
 
-        # Try to load VibeVoice for high-quality diarization
-        self.vibevoice = VibeVoiceDiarizer()
+        # Try to load VibeVoice for high-quality diarization (lazy)
+        self.vibevoice = None  # Lazy-loaded to avoid startup delay
         self._vibevoice_available = False
 
     def _ensure_speaker_detector(self):

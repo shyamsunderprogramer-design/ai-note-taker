@@ -130,7 +130,8 @@ class APIClient {
    */
   async getDocuments() {
     try {
-      const response = await fetch(`${API_BASE}/documents`);
+      const headers = this._authHeaders();
+      const response = await fetch(`${API_BASE}/documents`, { headers });
       return response.ok ? await response.json() : [];
     } catch {
       return [];
@@ -143,11 +144,18 @@ class APIClient {
    */
   async getAnalytics() {
     try {
-      const response = await fetch(`${API_BASE}/analytics/summary`);
+      const headers = this._authHeaders();
+      const response = await fetch(`${API_BASE}/analytics/summary`, { headers });
       return response.ok ? await response.json() : {};
     } catch {
       return {};
     }
+  }
+
+  /** Build auth headers from stored token */
+  _authHeaders() {
+    const token = localStorage.getItem('ainotetaker_auth_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
 }
 

@@ -173,13 +173,13 @@ class DocumentStore:
     def _get_embedding_ollama(self, text: str) -> Optional[List[float]]:
         """Get embedding using Ollama's nomic-embed-text or similar model."""
         try:
-            import requests
+            from lib.http_client import sync_client
             from config import OLLAMA_URL
 
-            response = requests.post(
+            response = sync_client.post(
                 f"{OLLAMA_URL}/api/embeddings",
                 json={"model": EMBEDDING_MODEL, "prompt": text},
-                timeout=30
+                timeout=15
             )
 
             if response.status_code == 200:

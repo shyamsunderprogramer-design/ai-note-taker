@@ -156,7 +156,7 @@ jobs:
 
       - name: Run Pytest with coverage
         run: |
-          pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing || true
+          pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
         working-directory: ./backend
         env:
           USE_SQLITE: "true"

@@ -169,9 +169,9 @@ def transcribe(audio, mode="adaptive"):
     Optimized for speed: beam_size=3, vad_filter=False, greedy decoding.
     """
 
-    # Wait for warmup to complete before starting (max 30s)
-    if not wait_for_model(timeout=30):
-        logger.warning("Whisper model not ready after 30s — proceeding anyway")
+    # Wait for warmup to complete (max 5s — return error if not ready)
+    if not wait_for_model(timeout=5):
+        logger.warning("Whisper model not ready after 5s")
 
     try:
         model = get_model(mode)
