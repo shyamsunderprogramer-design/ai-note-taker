@@ -77,7 +77,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             try:
                 messages = json.loads(context)
             except Exception:
-                pass
+                pass  # nosec B110
 
         try:
             # Yield provider/mode info as first event
@@ -399,7 +399,7 @@ async def ask_with_image(
         try:
             messages = json.loads(context)
         except Exception:
-            pass
+            pass  # nosec B110
 
     # No screenshot — regular text streaming
     if not image_b64:
@@ -453,7 +453,7 @@ async def ask_with_image(
         from ai_router import _get_vision_model
         ollama_vision_model = _get_vision_model()
     except Exception:
-        pass
+        pass  # nosec B110
     has_ollama_vision = ollama_vision_model is not None
 
     if not vision_providers and not has_ollama_vision:

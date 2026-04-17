@@ -257,7 +257,7 @@ class MarkdownQAParser:
                     qa_pairs = self.parse_readme(root_readme, "General")
                     all_qa.extend(qa_pairs)
             except Exception:
-                pass
+                pass  # nosec B110
 
         logger.info(f"[MarkdownParser] Parsed {len(all_qa)} total Q&A pairs from {repo_path}")
         return all_qa

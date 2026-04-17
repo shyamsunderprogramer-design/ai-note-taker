@@ -379,7 +379,7 @@ async def search_transcripts_handler(arguments: Dict) -> Dict:
                                 "message_count": len(data.get("messages", [])),
                             })
                 except:
-                    pass
+                    pass  # nosec B110
 
             return {
                 "results": results[:limit],
@@ -420,7 +420,7 @@ async def get_summary_handler(arguments: Dict) -> Dict:
                     "created_at": conv.created_at.isoformat() if conv.created_at else None
                 }
         except ImportError:
-            pass
+            pass  # nosec B110
 
         return {"error": "Conversation not found"}
 

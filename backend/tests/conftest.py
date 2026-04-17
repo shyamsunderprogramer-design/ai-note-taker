@@ -35,7 +35,7 @@ def auth_headers(test_client):
     unique_id = str(uuid.uuid4())[:8]
     username = f"test_{unique_id}"
     email = f"{username}@example.com"
-    password = "TestPass123!"
+    password = "TestPass123!"  # nosec B105 — test credential
 
     # Register using Form data (matching the /auth/register endpoint)
     test_client.post("/auth/register", data={
@@ -62,4 +62,4 @@ def auth_headers(test_client):
 @pytest.fixture
 def api_base_url():
     """Base URL for the API."""
-    return os.getenv("TEST_API_URL", "http://127.0.0.1:8000")
+    return os.getenv("TEST_API_URL", "http://127.0.0.1:8000")  # nosec B106 — test localhost

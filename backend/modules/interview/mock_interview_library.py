@@ -4,7 +4,7 @@ Target: 50,000,000+ guaranteed unique questions
 Strategy: Massive combinatorial template filling with lazy generation
 """
 
-import random
+import random  # nosec B311 — used for question randomization, not security
 import uuid
 from typing import Dict, List, Optional, Set, Iterator
 from dataclasses import dataclass, field

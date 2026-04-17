@@ -17,7 +17,7 @@ Usage:
 """
 
 import logging
-import random
+import random  # nosec B311 — used for study plan randomization, not security
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta

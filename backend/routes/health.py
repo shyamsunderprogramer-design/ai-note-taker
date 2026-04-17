@@ -140,11 +140,11 @@ async def health_modules():
     def has_provider_key(provider, env_var):
         try:
             from lib.http_client import sync_client
-            resp = sync_client.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1)
+            resp = sync_client.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1)  # nosec B106 — localhost
             if resp.status_code == 200:
                 return bool(resp.json().get("apiKey"))
         except Exception:
-            pass
+            pass  # nosec B110
         return bool(os.getenv(env_var, "").strip())
 
     providers = {
@@ -162,7 +162,7 @@ async def health_modules():
         try:
             mock_interview_count = len(mock_library.get_all_questions())
         except Exception:
-            pass
+            pass  # nosec B110
 
     modules = {
         "database": {

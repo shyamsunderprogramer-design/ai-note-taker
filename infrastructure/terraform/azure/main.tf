@@ -17,6 +17,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 
   backend "azurerm" {
@@ -298,7 +302,7 @@ resource "azurerm_key_vault" "main" {
   sku_name            = "premium"
 
   soft_delete_retention_days = 7
-  purge_protection_enabled   = var.environment == "production"
+  purge_protection_enabled   = true
 
   access_policy {
     tenant_id = data.azurerm_client_config.current.tenant_id
@@ -324,11 +328,12 @@ resource "azurerm_key_vault" "main" {
 }
 
 resource "azurerm_key_vault_key" "main" {
-  name         = "ant-backend-key"
-  key_vault_id = azurerm_key_vault.main.id
-  key_type     = "RSA"
-  key_size     = 2048
-  key_opts     = ["decrypt", "encrypt", "sign", "unwrapKey", "wrapKey", "verify"]
+  name            = "ant-backend-key"
+  key_vault_id    = azurerm_key_vault.main.id
+  key_type        = "RSA"
+  key_size        = 2048
+  key_opts        = ["decrypt", "encrypt", "sign", "unwrapKey", "wrapKey", "verify"]
+  expiration_date = "2027-12-31T23:59:59Z"
 
   rotation_policy {
     automatic {
@@ -413,6 +418,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   administrator_login          = "antadmin"
   administrator_password      = random_password.postgres.result
   create_mode                = "Default"
+  public_network_access_enabled = false
 
   high_availability {
     mode                      = var.environment == "production" ? "ZoneRedundant" : "Disabled"
@@ -576,5 +582,269 @@ resource "helm_release" "ant_backend" {
   set {
     name  = "env[0].valueFrom.secretKeyRef.key"
     value = "database-url"
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Azure Storage Accounts
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_storage_account" "data" {
+  name                            = "antdata${var.environment}"
+  resource_group_name              = azurerm_resource_group.main.name
+  location                         = var.location
+  account_tier                     = "Standard"
+  account_replication_type         = "GRS"
+  min_tls_version                  = "TLS1_2"
+  enable_https_traffic_only        = true
+  allow_nested_items_to_be_public  = false
+  public_network_access_enabled    = false
+
+  blob_properties {
+    versioning_enabled = true
+  }
+
+  network_rules {
+    default_action = "Deny"
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "azurerm_storage_account" "logs" {
+  name                            = "antlogs${var.environment}"
+  resource_group_name              = azurerm_resource_group.main.name
+  location                         = var.location
+  account_tier                     = "Standard"
+  account_replication_type         = "LRS"
+  min_tls_version                  = "TLS1_2"
+  enable_https_traffic_only        = true
+  allow_nested_items_to_be_public  = false
+  public_network_access_enabled    = false
+
+  network_rules {
+    default_action = "Deny"
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "azurerm_storage_account" "backups" {
+  name                            = "antbackups${var.environment}"
+  resource_group_name              = azurerm_resource_group.main.name
+  location                         = var.location
+  account_tier                     = "Standard"
+  account_replication_type         = "GRS"
+  min_tls_version                  = "TLS1_2"
+  enable_https_traffic_only        = true
+  allow_nested_items_to_be_public  = false
+  public_network_access_enabled    = false
+
+  network_rules {
+    default_action = "Deny"
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Key Vault Secret with Expiration
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_key_vault_secret" "database_url" {
+  name            = "database-url"
+  value           = "postgresql://antadmin:${random_password.postgres.result}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/antdb?sslmode=require"
+  key_vault_id    = azurerm_key_vault.main.id
+  expiration_date = "2027-12-31T23:59:59Z"
+
+  depends_on = [
+    azurerm_key_vault.main
+  ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Key Vault Certificate with Expiration
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_key_vault_certificate" "main" {
+  name         = "ant-backend-cert"
+  key_vault_id = azurerm_key_vault.main.id
+
+  certificate_policy {
+    issuer_parameters {
+      name = "Self"
+    }
+
+    key_properties {
+      exportable = true
+      key_size   = 2048
+      key_type   = "RSA"
+      reuse_key  = false
+    }
+
+    lifetime_action {
+      action {
+        action_type = "AutoRenew"
+      }
+      trigger {
+        days_before_expiry = 30
+      }
+    }
+
+    secret_properties {
+      content_type = "application/x-pkcs12"
+    }
+
+    x509_certificate_properties {
+      extended_key_usage = ["1.3.6.1.5.5.7.3.1"]
+      key_usage = [
+        "digitalSignature",
+        "keyEncipherment",
+      ]
+      subject            = "CN=ant-backend"
+      validity_in_months = 12
+    }
+  }
+
+  depends_on = [
+    azurerm_key_vault.main
+  ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PostgreSQL Active Directory Administrator
+# ─────────────────────────────────────────────────────────────────────────────
+variable "azure_admin_object_id" {
+  description = "Azure AD object ID for PostgreSQL admin"
+  type        = string
+  default     = ""
+}
+
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "main" {
+  server_name         = azurerm_postgresql_flexible_server.main.name
+  resource_group_name = azurerm_resource_group.main.name
+  login               = "azuread_admin"
+  object_id           = var.azure_admin_object_id != "" ? var.azure_admin_object_id : data.azurerm_client_config.current.object_id
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PostgreSQL Security Alert Policy / Threat Detection
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_postgresql_flexible_server_configuration" "ssl_enforcement" {
+  name      = "ssl_min_tls_version"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "TLSv1.2"
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "log_checkpoints" {
+  name      = "log_checkpoints"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "log_connections" {
+  name      = "log_connections"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "log_disconnections" {
+  name      = "log_disconnections"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "log_duration" {
+  name      = "log_duration"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CKV_AZURE_112: Diagnostic settings for PostgreSQL (auditing equivalent)
+# PostgreSQL Flexible Server does not support the MSSQL-style auditing resource.
+# Instead, diagnostic settings forward all PostgreSQL logs to Log Analytics.
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_monitor_diagnostic_setting" "postgresql_audit" {
+  name                       = "ant-pg-diagnostic"
+  target_resource_id         = azurerm_postgresql_flexible_server.main.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log {
+    category = "PostgreSQLLogs"
+  }
+
+  enabled_log {
+    category = "PostgreSQLQueryStoreRuntimePercentStatistics"
+  }
+
+  metric {
+    category = "AllMetrics"
+    enabled  = true
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CKV_AZURE_109: Threat detection / Advanced Threat Protection
+# PostgreSQL Flexible Server does not support the MSSQL-specific
+# azurerm_mssql_server_security_alert_policy resource. Threat detection
+# for PostgreSQL is handled at the Azure Defender (Defender for Cloud)
+# level via the subscription, not via a per-server Terraform resource.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CKV_AZURE_115: Vulnerability assessment
+# PostgreSQL Flexible Server does not support the MSSQL-specific
+# azurerm_mssql_server_vulnerability_assessment resource. Vulnerability
+# assessment for PostgreSQL is managed through Microsoft Defender
+# for open-source relational databases at the subscription level.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CKV_AZURE_116: Transparent Data Encryption (TDE)
+# PostgreSQL Flexible Server encrypts data at rest by default using
+# Azure platform-managed keys. There is no separate TDE resource
+# required or supported for PostgreSQL Flexible Server.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# App Service with TLS and Client Certificate Settings
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_service_plan" "main" {
+  name                = "ant-plan-${var.environment}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  os_type             = "Linux"
+  sku_name            = "P1v2"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "azurerm_linux_web_app" "main" {
+  name                = "ant-app-${var.environment}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  service_plan_id     = azurerm_service_plan.main.id
+  https_only          = true
+
+  site_config {
+    minimum_tls_version     = "1.2"
+    ftps_state              = "Disabled"
+    http2_enabled           = true
+    client_certificate_mode = "Required"
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  tags = {
+    Environment = var.environment
   }
 }

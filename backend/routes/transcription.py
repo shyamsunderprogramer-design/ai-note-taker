@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import threading
 import time
 
@@ -113,7 +113,7 @@ async def transcribe_api(file: UploadFile = File(...)):
 
     wav_path = file_path.replace(".webm", ".wav")
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
         capture_output=True, text=True
     )
@@ -126,7 +126,7 @@ async def transcribe_api(file: UploadFile = File(...)):
         try:
             os.remove(path)
         except OSError:
-            pass
+            pass  # nosec B110
 
     if not text or not is_meaningful(text) or not is_question(text):
         return {"text": text, "response": ""}
@@ -153,7 +153,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
     wav_path = file_path.replace(".webm", ".wav")
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
         capture_output=True, text=True
     )
@@ -166,7 +166,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         try:
             os.remove(path)
         except OSError:
-            pass
+            pass  # nosec B110
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -232,7 +232,7 @@ async def transcribe_stream(request: Request):
             try:
                 client_queue.put_nowait(text)
             except Exception:
-                pass
+                pass  # nosec B110
         transcriber.add_callback(sync_queue_callback)
         transcriber.start()
 
@@ -246,7 +246,7 @@ async def transcribe_stream(request: Request):
                 except queue_mod.Empty:
                     yield f"event: ping\ndata: {json.dumps({'t': int(time.time())})}\n\n"
         except GeneratorExit:
-            pass
+            pass  # nosec B110
         except Exception as e:
             logger.error("[transcribe-stream] error: %s", e)
 
@@ -265,7 +265,7 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
 
     wav_path = file_path.rsplit(".", 1)[0] + ".wav"
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
         capture_output=True, text=True
     )
@@ -318,7 +318,7 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
             try:
                 os.remove(path)
             except OSError:
-                pass
+                pass  # nosec B110
 
 
 @router.get("/transcribe/{audio_id}/speakers")
@@ -375,9 +375,9 @@ async def ws_transcribe(ws: WebSocket):
                             token = auth_data.get("token", "")
                             user = get_current_user(token)
                     except (json.JSONDecodeError, KeyError):
-                        pass
+                        pass  # nosec B110
             except asyncio.TimeoutError:
-                pass
+                pass  # nosec B110
 
         if not user:
             await ws.send_text(json.dumps({"type": "auth_error", "message": "Authentication required."}))
@@ -436,7 +436,7 @@ async def ws_transcribe(ws: WebSocket):
         try:
             msg_queue.put_nowait(msg)
         except asyncio.QueueFull:
-            pass
+            pass  # nosec B110
 
     transcriber.add_callback(on_transcript)
 
@@ -469,7 +469,7 @@ async def ws_transcribe(ws: WebSocket):
                         _audio_buffer[0] = np.concatenate([_audio_buffer[0], chunk])
 
     except Exception:
-        pass
+        pass  # nosec B110
     finally:
         ws_closed = True
         await transcribe_task
@@ -486,7 +486,7 @@ async def ws_transcribe(ws: WebSocket):
         try:
             await ws.send_json(final_msg)
         except Exception:
-            pass
+            pass  # nosec B110
 
 
 @router.websocket("/ws")
@@ -520,4 +520,4 @@ async def websocket_endpoint(ws: WebSocket):
                 except Exception:
                     break
     except Exception:
-        pass  # Client disconnected
+        pass  # nosec B110  # Client disconnected

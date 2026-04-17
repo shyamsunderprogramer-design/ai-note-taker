@@ -260,7 +260,7 @@ class CacheManager:
                 stats["redis_connected_clients"] = info.get("connected_clients", 0)
                 stats["redis_uptime"] = info.get("uptime_in_seconds", 0)
             except:
-                pass
+                pass  # nosec B110
 
         return stats
 

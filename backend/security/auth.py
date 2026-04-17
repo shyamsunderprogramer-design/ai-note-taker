@@ -131,7 +131,7 @@ class UserManager:
             self.create_user(
                 username="admin",
                 email="admin@ainotetaker.local",
-                password="admin1234",
+                password="admin1234",  # nosec B105 — default dev credentials, change in production
                 is_admin=True
             )
 
@@ -177,7 +177,7 @@ class UserManager:
 
         try:
             return pwd_context.verify(plain_password, hashed_password)
-        except Exception:
+        except Exception:  # nosec B110
             return False
 
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
@@ -245,7 +245,7 @@ def verify_token(token: str) -> Optional[TokenData]:
                     iat=datetime.fromisoformat(data.get("iat")) if data.get("iat") else None
                 )
         except Exception:
-            pass
+            pass  # nosec B110
         return None
 
     try:

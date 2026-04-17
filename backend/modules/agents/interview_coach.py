@@ -114,7 +114,7 @@ class InterviewCoachAgent(BaseAgent):
                     import asyncio
                     loop = asyncio.get_event_loop()
                     if loop.is_running():
-                        pass
+                        pass  # nosec B110
                     else:
                         cognitive_graph_results = loop.run_until_complete(
                             query_cognitive_graph(current_question, limit=5)
@@ -140,7 +140,7 @@ class InterviewCoachAgent(BaseAgent):
                             get_company_insights(company)
                         )
                 except Exception:
-                    pass
+                    pass  # nosec B110
 
             # Document RAG
             document_rag_results = []
@@ -153,7 +153,7 @@ class InterviewCoachAgent(BaseAgent):
                             query_document_rag(current_question, top_k=3)
                         )
                 except Exception:
-                    pass
+                    pass  # nosec B110
 
             # Cache the results for future similar questions
             if current_question:

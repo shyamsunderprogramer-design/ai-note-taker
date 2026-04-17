@@ -134,7 +134,7 @@ class SpeakerDiarizer:
                                 num = int(label.split("_")[1]) + 1
                                 label = f"Speaker {num}"
                             except (ValueError, IndexError):
-                                pass
+                                pass  # nosec B110
                         segments.append(SpeakerSegment(
                             speaker_id=label,
                             start_time=round(seg.get('start', 0), 3),
@@ -150,7 +150,7 @@ class SpeakerDiarizer:
                                 num = int(label.split("_")[1]) + 1
                                 label = f"Speaker {num}"
                             except (ValueError, IndexError):
-                                pass
+                                pass  # nosec B110
                         segments.append(SpeakerSegment(
                             speaker_id=label,
                             start_time=round(turn.start, 3),
@@ -350,7 +350,7 @@ class SpeakerDiarizer:
                     num = int(label.split("_")[1]) + 1
                     label = f"Speaker {num}"
                 except (ValueError, IndexError):
-                    pass
+                    pass  # nosec B110
 
             if label != current_speaker:
                 lines.append(f"\n[{label}]")

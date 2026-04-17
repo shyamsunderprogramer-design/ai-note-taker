@@ -350,15 +350,15 @@ class GraphLoader:
                 os.remove(CACHE_FILE)
                 logger.info("[GraphLoader] Cache cleared after successful import")
             except Exception:
-                pass
+                pass  # nosec B110
 
         return stats
 
     @staticmethod
     def _qa_to_hash(question: str) -> str:
-        """Generate MD5 hash of a normalized question for deduplication."""
+        """Generate hash of a normalized question for deduplication (non-cryptographic)."""
         normalized = " ".join(question.lower().strip().split())
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.md5(normalized.encode()).hexdigest()  # nosec B324 — used for deduplication, not security
 
     def get_loaded_count(self) -> int:
         """Get the total number of Q&A pairs loaded in this session."""

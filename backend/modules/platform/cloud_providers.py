@@ -287,7 +287,7 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
                         if data.get("done", False):
                             break
                     except Exception:
-                        pass
+                        pass  # nosec B110
         else:
             response = sync_client.post(url, headers=headers, json=body, timeout=90)
             if response.status_code == 429:
@@ -545,7 +545,7 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
                             yield _make_content(content)
                             chunk_count += 1
                     except json.JSONDecodeError:
-                        pass
+                        pass  # nosec B110
 
         ms = int((time.time() - start) * 1000)
         logger.debug("Claude stream complete: %d chunks in %dms", chunk_count, ms)
@@ -583,7 +583,7 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
         except Exception as e:
             yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -623,7 +623,7 @@ def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -663,7 +663,7 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -703,7 +703,7 @@ def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", st
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -772,7 +772,7 @@ def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -956,7 +956,7 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
                         if content:
                             yield _make_content(content)
                     except json.JSONDecodeError:
-                        pass
+                        pass  # nosec B110
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
@@ -1016,7 +1016,7 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
                             if text:
                                 yield _make_content(text)
                     except json.JSONDecodeError:
-                        pass
+                        pass  # nosec B110
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
@@ -1064,7 +1064,7 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
@@ -1123,7 +1123,7 @@ def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-p
                         if content:
                             yield _make_content(content)
                     except Exception:
-                        pass
+                        pass  # nosec B110
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
@@ -1212,7 +1212,7 @@ def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud",
                     if data.get("done", False):
                         break
                 except Exception:
-                    pass
+                    pass  # nosec B110
 
     except Exception as e:
         logger.error("Ollama Cloud vision streaming error: %s", e)

@@ -589,7 +589,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                         yield event
                     return
             except Exception:
-                pass
+                pass  # nosec B110
             logger.info("[route_ai_stream] auto → no Ollama Cloud key, falling back to local Ollama")
         except Exception as e:
             logger.error("[route_ai_stream] auto cloud race error: %s", e)

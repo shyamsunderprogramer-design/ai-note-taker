@@ -89,7 +89,7 @@ class MeetingAgent(BaseAgent):
                             query_document_rag(last_text, top_k=2)
                         )
             except Exception:
-                pass
+                pass  # nosec B110
 
         return AgentContext(
             transcript_window=transcript_window,

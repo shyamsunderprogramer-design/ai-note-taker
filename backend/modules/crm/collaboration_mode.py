@@ -268,7 +268,7 @@ class CollaborationManager:
 
     def _generate_join_code(self) -> str:
         """Generate a unique join code"""
-        import random
+        import random  # nosec B311 — used for join code generation, not security
         import string
         while True:
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))

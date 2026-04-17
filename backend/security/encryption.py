@@ -74,12 +74,12 @@ class EncryptionManager:
         # Machine identifier (varies by OS)
         if os.name == 'nt':  # Windows
             try:
-                import subprocess
-                result = subprocess.run(['wmic', 'csproduct', 'get', 'uuid'],
+                import subprocess  # nosec B404
+                result = subprocess.run(['wmic', 'csproduct', 'get', 'uuid'],  # nosec B603 B607
                                     capture_output=True, text=True)
                 identifiers.append(result.stdout.strip())
             except:
-                pass
+                pass  # nosec B110
         else:  # Linux/Mac
             try:
                 # Try to get machine ID from /etc/machine-id or /var/lib/dbus/machine-id
@@ -89,7 +89,7 @@ class EncryptionManager:
                             identifiers.append(f.read().strip())
                             break
             except:
-                pass
+                pass  # nosec B110
 
         # Fallback: Use environment variable or generate random
         if not identifiers or all(not i for i in identifiers):
@@ -159,7 +159,7 @@ class EncryptionManager:
         try:
             os.chmod(self.key_file, 0o600)
         except:
-            pass
+            pass  # nosec B110
 
     def encrypt(self, data: Union[str, bytes]) -> Optional[bytes]:
         """
@@ -194,7 +194,7 @@ class EncryptionManager:
         except InvalidToken:
             logger.error("[Encryption] Invalid token - decryption failed")
             return None
-        except Exception as e:
+        except Exception as e:  # nosec B110
             logger.error(f"[Encryption] Decryption failed: {e}")
             return None
 

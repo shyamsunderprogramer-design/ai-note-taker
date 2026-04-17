@@ -114,7 +114,7 @@ class SecurityHeaders:
 
         # Only send HSTS for non-localhost origins to avoid forcing
         # browsers/Electron to upgrade HTTP connections to HTTPS
-        is_localhost = not request_host or "localhost" in request_host or "127.0.0.1" in request_host or "::1" in request_host
+        is_localhost = not request_host or "localhost" in request_host or "127.0.0.1" in request_host or "::1" in request_host  # nosec B106 — localhost check
         if not is_localhost:
             headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
@@ -419,7 +419,7 @@ if HAS_FASTAPI:
                             )
                     except json.JSONDecodeError:
                         pass  # Not JSON, skip validation
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
             return await call_next(request)

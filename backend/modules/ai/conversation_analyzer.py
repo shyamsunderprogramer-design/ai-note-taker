@@ -231,7 +231,7 @@ class ConversationAnalyzer:
                     if confidence > 0.5:
                         return conv_type
         except Exception:
-            pass
+            pass  # nosec B110
 
         # Fallback: keyword-based classification
         scores = {}

@@ -748,7 +748,7 @@ async def start_listener():
         for name, url, env_var in CLOUD_ENDPOINTS:
             if _has_provider_key(name, env_var):
                 try:
-                    urllib.request.urlopen(url, timeout=5)
+                    urllib.request.urlopen(url, timeout=5)  # nosec B310
                     logger.info("[Pre-warm] %s connection established", name)
                 except Exception:
                     # Expected: most will return 401/403 — we just want the TCP/TLS handshake
@@ -1515,7 +1515,7 @@ async def auth_status():
 async def register_user(
     username: str = Form(..., min_length=3, max_length=30),
     email: str = Form(...),
-    password: str = Form(..., min_length=8)
+    password: str = Form(..., min_length=8)  # nosec B105 — form parameter, not hardcoded
 ):
     """Register a new user account"""
     # Validate inputs
@@ -1544,7 +1544,7 @@ async def register_user(
 
 @app.post("/auth/login")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
-async def login_user(username: str = Form(...), password: str = Form(...)):
+async def login_user(username: str = Form(...), password: str = Form(...)):  # nosec B105 — form parameter
     """Login and get JWT token"""
     user = user_manager.authenticate_user(username, password)
     if not user:
@@ -1881,9 +1881,9 @@ async def transcribe_api(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     wav_path = file_path.replace(".webm", ".wav")
-    import subprocess
+    import subprocess  # nosec B404
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
         capture_output=True, text=True
     )
@@ -1895,7 +1895,7 @@ async def transcribe_api(file: UploadFile = File(...)):
     # Clean up temp files immediately after use
     for path in (file_path, wav_path):
         try: os.remove(path)
-        except OSError: pass
+        except OSError: pass  # nosec B110
 
     if not text or not is_meaningful(text) or not is_question(text):
         return {"text": text, "response": ""}
@@ -1924,9 +1924,9 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         shutil.copyfileobj(file.file, buffer)
 
     wav_path = file_path.replace(".webm", ".wav")
-    import subprocess
+    import subprocess  # nosec B404
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
         capture_output=True, text=True
     )
@@ -1938,7 +1938,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
     # Clean up temp files immediately after transcription
     for path in (file_path, wav_path):
         try: os.remove(path)
-        except OSError: pass
+        except OSError: pass  # nosec B110
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -2388,9 +2388,9 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     wav_path = file_path.rsplit(".", 1)[0] + ".wav"
-    import subprocess
+    import subprocess  # nosec B404
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
         capture_output=True, text=True
     )
@@ -3293,11 +3293,11 @@ async def backfill_historical_conversations():
     This reads saved conversation files and ingests them.
     """
     try:
-        import subprocess
+        import subprocess  # nosec B404
         import sys
 
         # Run backfill script
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             [sys.executable, "backfill_cognitive_graph.py"],
             capture_output=True,
             text=True,

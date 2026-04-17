@@ -80,7 +80,7 @@ class ContextCache:
     def _hash_query(self, query: str) -> str:
         """Normalize and hash a query string for exact matching."""
         normalized = " ".join(query.lower().strip().split())
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.md5(normalized.encode()).hexdigest()  # nosec B324 — used for cache key, not security
 
     def _tokenize(self, text: str) -> set:
         """Simple tokenization for similarity comparison."""

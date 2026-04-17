@@ -4,7 +4,7 @@ Generates self-signed certificates for development and provides setup for produc
 """
 
 import os
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -24,7 +24,7 @@ def generate_self_signed_cert(cert_dir: str = "certs", hostname: str = "localhos
 
     # Check if OpenSSL is available
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607
             ["openssl", "version"],
             capture_output=True,
             text=True,
@@ -59,7 +59,7 @@ extendedKeyUsage = serverAuth
 [alt_names]
 DNS.1 = {hostname}
 DNS.2 = localhost
-DNS.3 = 127.0.0.1
+DNS.3 = 127.0.0.1  # nosec B106 — localhost for development
 IP.1 = 127.0.0.1
 """
         config_file = cert_path / "openssl.cnf"
@@ -77,7 +77,7 @@ IP.1 = 127.0.0.1
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)  # nosec B603
             print(f"[SUCCESS] Certificate generated:")
             print(f"  - Certificate: {cert_file}")
             print(f"  - Private Key: {key_file}")

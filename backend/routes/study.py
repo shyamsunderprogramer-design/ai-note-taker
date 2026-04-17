@@ -154,7 +154,7 @@ async def generate_study_plan(
                 stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # nosec B110
 
         plan = study_planner.generate_plan(
             user_id, days, daily_minutes, graph_data,
@@ -186,7 +186,7 @@ async def generate_personalized_study_plan(
                 stats = cognitive_graph.get_graph_stats(request.user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # nosec B110
 
         plan = study_planner.generate_plan(
             request.user_id, request.days, request.daily_minutes, graph_data,
@@ -215,7 +215,7 @@ async def get_study_plan(user_id: str):
                 stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # nosec B110
 
         plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
         return json.loads(study_planner.export_plan(plan, "json"))

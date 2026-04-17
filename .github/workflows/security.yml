@@ -280,7 +280,7 @@ jobs:
 
       - name: Run Bandit
         run: |
-          bandit -r . -f sarif -o bandit-results.sarif || true
+          bandit -r . -c .bandit -f sarif -o bandit-results.sarif || true
         working-directory: ./backend
 
       - name: Upload Bandit results to Security tab

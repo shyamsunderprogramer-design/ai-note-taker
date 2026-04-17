@@ -1,0 +1,12 @@
+name: Custom CodeQL Configuration
+
+# Exclude test directories and archive from analysis
+paths-ignore:
+  - 'backend/tests/**'
+  - 'backend/core/test_*.py'
+  - '_archive/**'
+  - '**/node_modules/**'
+
+# Only analyze these languages
+queries:
+  - uses: security-and-quality

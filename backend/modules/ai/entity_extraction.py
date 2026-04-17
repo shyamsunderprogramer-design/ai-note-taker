@@ -236,7 +236,7 @@ class EntityExtractor:
                 if classifier:
                     return classifier.classify_question(text)
         except Exception:
-            pass
+            pass  # nosec B110
 
         # Fallback: keyword-based classification
         text_lower = text.lower()
@@ -266,7 +266,7 @@ class EntityExtractor:
                 if classifier:
                     return classifier.classify_difficulty(text)
         except Exception:
-            pass
+            pass  # nosec B110
 
         # Fallback: keyword-based difficulty estimation
         text_lower = text.lower()

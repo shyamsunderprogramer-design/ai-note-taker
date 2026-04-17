@@ -47,7 +47,7 @@ class ResumeReviewer:
             from ai_router import ai_router
             self.ai_router = ai_router
         except ImportError:
-            pass
+            pass  # nosec B110
 
     def analyze_resume(
         self,
@@ -356,7 +356,7 @@ Return ONLY JSON:
                             found.append(kw)
                             continue
                     except:
-                        pass
+                        pass  # nosec B110
 
                 # Final fallback: partial word match
                 if any(kw in word for word in text_lower.split()):

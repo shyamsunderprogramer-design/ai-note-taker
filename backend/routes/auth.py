@@ -64,7 +64,7 @@ router = APIRouter()
 async def register_user(
     username: str = Form(..., min_length=3, max_length=30),
     email: str = Form(...),
-    password: str = Form(..., min_length=8)
+    password: str = Form(..., min_length=8)  # nosec B105 — form parameter
 ):
     """Register a new user account"""
     # Validate inputs
@@ -92,7 +92,7 @@ async def register_user(
 
 
 @router.post("/auth/login")
-async def login_user(username: str = Form(...), password: str = Form(...)):
+async def login_user(username: str = Form(...), password: str = Form(...)):  # nosec B105
     """Login and get JWT token"""
     user = user_manager.authenticate_user(username, password)
     if not user:

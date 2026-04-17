@@ -102,7 +102,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
             text.append(page.extract_text() or '')
         return '\n'.join(text)
     except Exception:
-        pass
+        pass  # nosec B110
 
     try:
         import pdfplumber
@@ -111,7 +111,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
                 text.append(page.extract_text() or '')
             return '\n'.join(text)
     except Exception:
-        pass
+        pass  # nosec B110
 
     text = pdf_bytes.decode('latin-1', errors='ignore')
     text = ''.join(c if c.isprintable() or c in '\n\t' else ' ' for c in text)

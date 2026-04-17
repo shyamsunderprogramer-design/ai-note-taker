@@ -59,7 +59,7 @@ def test_functionality():
         from performance_analyzer import PerformanceAnalyzer
         analyzer = PerformanceAnalyzer()
         result = analyzer.analyze_answer("I worked on React for 3 years.", "behavioral")
-        assert "overall_score" in result
+        assert "overall_score" in result  # nosec B101
         print("✓ PerformanceAnalyzer works")
     except Exception as e:
         errors.append(f"✗ PerformanceAnalyzer: {e}")
@@ -69,7 +69,7 @@ def test_functionality():
         from study_plan_generator import StudyPlanGenerator
         planner = StudyPlanGenerator()
         plan = planner.generate_plan("test_user", days=7)
-        assert plan.user_id == "test_user"
+        assert plan.user_id == "test_user"  # nosec B101
         print("✓ StudyPlanGenerator works")
     except Exception as e:
         errors.append(f"✗ StudyPlanGenerator: {e}")

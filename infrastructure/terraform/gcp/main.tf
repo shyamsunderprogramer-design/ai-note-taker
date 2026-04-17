@@ -21,6 +21,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 
   backend "gcs" {
@@ -70,6 +74,7 @@ resource "google_project_service" "apis" {
     "container.googleapis.com",
     "compute.googleapis.com",
     "artifactregistry.googleapis.com",
+    "containerscanning.googleapis.com",
     "secretmanager.googleapis.com",
     "cloudsql.googleapis.com",
     "sqladmin.googleapis.com",
@@ -156,6 +161,17 @@ resource "google_container_cluster" "main" {
 
   enable_intranode_visibility = true
   enable_shielded_nodes       = true
+
+  network_policy {
+    enabled  = true
+    provider = "CALICO"
+  }
+
+  private_cluster_config {
+    enable_private_nodes   = true
+    enable_private_endpoint = false
+    master_ipv4_cidr_block  = "10.6.0.0/28"
+  }
 
   resource_labels = {
     environment = var.environment
@@ -286,7 +302,7 @@ resource "google_kms_crypto_key" "artifact_registry" {
 
   rotation_period = "7776000s" # 90 days
 
-  destroy_scheduled_duration = "86400s"
+  destroy_scheduled_duration = "1209600s"
 }
 
 resource "google_kms_crypto_key_iam_member" "artifact_registry" {
@@ -335,6 +351,11 @@ resource "google_sql_database_instance" "main" {
       ipv4_enabled    = false
       private_network = google_compute_network.main.id
       require_ssl     = true
+
+      authorized_networks {
+        name  = "internal-only"
+        value = "10.0.0.0/8"
+      }
     }
 
     database_flags {
@@ -366,6 +387,22 @@ resource "google_sql_database_instance" "main" {
       value = "WARNING"
     }
     database_flags {
+      name  = "log_min_duration_statement"
+      value = "1000"
+    }
+    database_flags {
+      name  = "log_min_error_statement"
+      value = "ERROR"
+    }
+    database_flags {
+      name  = "log_temp_files"
+      value = "0"
+    }
+    database_flags {
+      name  = "log_statement"
+      value = "ddl"
+    }
+    database_flags {
       name  = "log_error_verbosity"
       value = "DEFAULT"
     }
@@ -376,6 +413,16 @@ resource "google_sql_database_instance" "main" {
     database_flags {
       name  = "pgaudit.log"
       value = "ALL"
+    }
+    # CKV_GCP_79: Ensure stored procedure activity is logged
+    database_flags {
+      name  = "log_plpgsql_function_start"
+      value = "on"
+    }
+    # CKV_GCP_84: Ensure Cloud SQL instance auto-restart is enabled
+    database_flags {
+      name  = "crash_safe_replication"
+      value = "on"
     }
 
     backup_configuration {

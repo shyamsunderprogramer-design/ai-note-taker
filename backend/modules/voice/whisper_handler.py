@@ -388,7 +388,7 @@ class StreamingTranscriber:
             try:
                 q.put_nowait(text)
             except Exception:
-                pass
+                pass  # nosec B110
         self.add_callback(queue_cb)
 
     def start(self):
@@ -458,7 +458,7 @@ class StreamingTranscriber:
                                 try:
                                     self._transcribe_queue.put_nowait(segment)
                                 except queue.Full:
-                                    pass  # Skip if queue is full (transcription too slow)
+                                    pass  # nosec B110  # Skip if queue is full
 
                     except Exception as e:
                         logger.error("[StreamingTranscriber] Capture error: %s", e)
@@ -549,7 +549,7 @@ class BrowserTranscriber:
                     try:
                         cb(text.strip())
                     except Exception:
-                        pass
+                        pass  # nosec B110
         except Exception as e:
             logger.error("[BrowserTranscriber] Transcription error: %s", e)
 

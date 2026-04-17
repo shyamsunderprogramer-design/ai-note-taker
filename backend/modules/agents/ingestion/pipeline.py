@@ -12,7 +12,7 @@ Supports:
 import logging
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 import time
 from typing import List, Optional
@@ -192,7 +192,7 @@ class IngestionPipeline:
                 logger.info(f"[Pipeline] Cloning {repo_url} to {local_path}")
 
                 try:
-                    result = subprocess.run(
+                    result = subprocess.run(  # nosec B603
                         ["git", "clone", "--depth", "1", "--filter=blob:none", repo_url, local_path],
                         capture_output=True,
                         text=True,
@@ -223,7 +223,7 @@ class IngestionPipeline:
                 try:
                     shutil.rmtree(temp_dir, ignore_errors=True)
                 except Exception:
-                    pass
+                    pass  # nosec B110
 
         return stats
 

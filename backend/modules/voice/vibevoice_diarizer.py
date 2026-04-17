@@ -360,7 +360,7 @@ class VibeVoiceDiarizer:
                     try:
                         os.unlink(tmp_path)
                     except OSError:
-                        pass
+                        pass  # nosec B110
 
             # Fallback: use SimpleSpeakerDetector for basic clustering
             detector = SimpleSpeakerDetector()
@@ -550,7 +550,7 @@ class VibeVoiceDiarizer:
                     speaker_num = int(speaker_label.split("_")[1]) + 1
                     speaker_label = f"Speaker {speaker_num}"
                 except (ValueError, IndexError):
-                    pass
+                    pass  # nosec B110
 
             if speaker_label != current_speaker:
                 lines.append(f"\n[{speaker_label}]")

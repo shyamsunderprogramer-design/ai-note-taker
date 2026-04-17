@@ -17,7 +17,7 @@ try:
     import logging
     logger = logging.getLogger("voice_clone")
 except:
-    pass
+    pass  # nosec B110
 
 
 @dataclass
@@ -350,7 +350,7 @@ class VoiceCloneManager:
                             try:
                                 os.remove(output_file)
                             except OSError:
-                                pass
+                                pass  # nosec B110
                 except Exception as e:
                     last_error = str(e)
                     if logger:
@@ -360,7 +360,7 @@ class VoiceCloneManager:
                         try:
                             os.remove(output_file)
                         except OSError:
-                            pass
+                            pass  # nosec B110
                     continue
 
         except ImportError:
@@ -416,7 +416,7 @@ class VoiceCloneManager:
             if os.path.exists(model.model_path):
                 shutil.rmtree(model.model_path)
         except:
-            pass
+            pass  # nosec B110
 
         del self.models[model_id]
         self._save_models()

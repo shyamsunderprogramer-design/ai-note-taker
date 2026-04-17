@@ -798,7 +798,7 @@ class PredictiveInterview:
                     if results:
                         return company_names[results[0][0]]
         except Exception:
-            pass
+            pass  # nosec B110
 
         return name.capitalize()
 

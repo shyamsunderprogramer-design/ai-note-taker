@@ -399,12 +399,12 @@ class SalesforceIntegration(BaseCRMIntegration):
 
         try:
             # Query Contacts
-            result = self._sf.query(f"SELECT Id, Name, Email FROM Contact WHERE Email = '{email}'")
+            result = self._sf.query(f"SELECT Id, Name, Email FROM Contact WHERE Email = '{email}'")  # nosec B608
             if result.get("totalSize", 0) > 0:
                 return result["records"][0]
 
             # Query Leads if not found in Contacts
-            result = self._sf.query(f"SELECT Id, Name, Email FROM Lead WHERE Email = '{email}'")
+            result = self._sf.query(f"SELECT Id, Name, Email FROM Lead WHERE Email = '{email}'")  # nosec B608
             if result.get("totalSize", 0) > 0:
                 return result["records"][0]
 

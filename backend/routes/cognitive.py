@@ -1,6 +1,6 @@
 """Route module for cognitive graph, entity extraction, and predictive interview APIs."""
 import logging
-import subprocess
+import subprocess  # nosec B404
 import sys
 from datetime import datetime
 from typing import Optional
@@ -199,7 +199,7 @@ async def cognitive_graph_advanced_search(
 async def backfill_historical_conversations():
     """Backfill all historical conversations into cognitive graph."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             [sys.executable, "backfill_cognitive_graph.py"],
             capture_output=True,
             text=True,

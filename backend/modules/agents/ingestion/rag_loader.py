@@ -219,9 +219,9 @@ class RAGLoader:
 
     @staticmethod
     def _content_hash(text: str) -> str:
-        """Generate MD5 hash of content for deduplication."""
+        """Generate hash of content for deduplication (non-cryptographic)."""
         normalized = " ".join(text.lower().strip().split())
-        return hashlib.md5(normalized.encode()).hexdigest()[:16]
+        return hashlib.md5(normalized.encode()).hexdigest()[:16]  # nosec B324 — used for deduplication, not security
 
     def get_loaded_count(self) -> int:
         """Get the total number of items loaded in this session."""

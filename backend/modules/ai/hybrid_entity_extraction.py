@@ -322,7 +322,7 @@ class HybridEntityExtractor:
                     if confidence > 0.6:
                         return (category, confidence)
         except Exception:
-            pass
+            pass  # nosec B110
 
         # Fallback to rule-based
         return self.rule_extractor.categorize_question(text)
@@ -339,7 +339,7 @@ class HybridEntityExtractor:
                     if confidence > 0.6:
                         return (difficulty, confidence)
         except Exception:
-            pass
+            pass  # nosec B110
 
         # Fallback to rule-based
         return self.rule_extractor.estimate_difficulty(text)

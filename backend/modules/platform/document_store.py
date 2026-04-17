@@ -97,8 +97,8 @@ class DocumentStore:
             logger.error(f"Failed to save vector index: {e}")
 
     def _compute_file_hash(self, file_path: Path) -> str:
-        """Compute MD5 hash of file for deduplication."""
-        hash_md5 = hashlib.md5()
+        """Compute hash of file for deduplication (non-cryptographic)."""
+        hash_md5 = hashlib.md5()  # nosec B324 — used for deduplication, not security
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_md5.update(chunk)
@@ -220,7 +220,7 @@ class DocumentStore:
                     if service:
                         return service.embed(text)
             except Exception:
-                pass
+                pass  # nosec B110
 
             if provider == "local":
                 # For local-only mode, skip Ollama and go straight to fallback
