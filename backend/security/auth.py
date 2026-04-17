@@ -3,9 +3,11 @@ JWT Authentication module
 Handles token generation, validation, and user authentication
 """
 
+import hmac
 import os
+import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,9 +23,25 @@ except ImportError:
     print("  Install: pip install python-jose[cryptography] passlib[bcrypt]")
 
 # Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", os.urandom(32).hex())
+_is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+_jwt_secret = os.getenv("JWT_SECRET_KEY", "")
+
+if _is_production and not _jwt_secret:
+    raise RuntimeError(
+        "FATAL: JWT_SECRET_KEY must be set in production. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+
+SECRET_KEY = _jwt_secret if _jwt_secret else os.urandom(32).hex()
+if not _jwt_secret:
+    import logging
+    logging.getLogger("auth").warning(
+        "JWT_SECRET_KEY not set — tokens will invalidate on restart. "
+        "Set JWT_SECRET_KEY for stable authentication."
+    )
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 hours
 
 # Password hashing
 if HAS_JWT:
@@ -45,12 +63,12 @@ class User:
     hashed_password: Optional[str] = None
     is_active: bool = True
     is_admin: bool = False
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     last_login: Optional[str] = None
     api_quota: Dict[str, Any] = field(default_factory=lambda: {
         "requests_today": 0,
         "daily_limit": 1000,
-        "reset_date": datetime.utcnow().strftime("%Y-%m-%d")
+        "reset_date": datetime.now(timezone.utc).strftime("%Y-%m-%d")
     })
 
 
@@ -106,13 +124,14 @@ class UserManager:
             print(f"[WARNING] Failed to save users: {e}")
 
     def _create_default_user(self):
-        """Create default admin user if none exists"""
+        """Create default admin user if none exists.
+        Fixed credentials: admin / admin1234 — change in production."""
         if not self.users:
-            print("[INFO] Creating default admin user: admin / admin123")
+            print("[SETUP] Default admin account: admin / admin1234")
             self.create_user(
                 username="admin",
                 email="admin@ainotetaker.local",
-                password="admin123",
+                password="admin1234",
                 is_admin=True
             )
 
@@ -145,15 +164,16 @@ class UserManager:
         return f"plain:{password}"
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash"""
+        """Verify a password against its hash (constant-time comparison for plaintext fallbacks)"""
         if not HAS_JWT:
-            # Fallback for development
+            # Fallback for development — use constant-time comparison
             expected = hashed_password.replace("plain:", "") if hashed_password else ""
-            return plain_password == expected
+            return hmac.compare_digest(plain_password.encode(), expected.encode())
 
         if hashed_password and hashed_password.startswith("plain:"):
             expected = hashed_password.replace("plain:", "")
-            return plain_password == expected
+            # Use constant-time comparison to prevent timing attacks
+            return hmac.compare_digest(plain_password.encode(), expected.encode())
 
         try:
             return pwd_context.verify(plain_password, hashed_password)
@@ -171,7 +191,7 @@ class UserManager:
             return None
 
         # Update last login
-        user.last_login = datetime.utcnow().isoformat()
+        user.last_login = datetime.now(timezone.utc).isoformat()
         self._save_users()
         return user
 
@@ -192,8 +212,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         import json
 
         to_encode = data.copy()
-        expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
-        to_encode.update({"exp": expire.isoformat(), "iat": datetime.utcnow().isoformat()})
+        expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
+        to_encode.update({"exp": expire.isoformat(), "iat": datetime.now(timezone.utc).isoformat()})
 
         payload = json.dumps(to_encode).encode()
         # Simple encoding - NOT SECURE, just for dev without JWT lib
@@ -201,8 +221,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         return f"dev_{token}"
 
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire, "iat": datetime.utcnow()})
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
 
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

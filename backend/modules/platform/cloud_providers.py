@@ -1,12 +1,11 @@
 import json
 import logging
 import os
-import requests
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logger = logging.getLogger("cloud_providers")
+
+# Use shared httpx client instead of requests to avoid blocking the event loop
+from lib.http_client import sync_client
 
 # ==============================
 # SECURE API KEY FETCHER (P1 Privacy)
@@ -14,16 +13,28 @@ logger = logging.getLogger("cloud_providers")
 # ==============================
 _key_cache = {}
 
+# Shared secret for authenticating with the Electron API key server.
+# Passed via KEY_SERVER_SECRET env var from Electron on startup.
+_KEY_SERVER_SECRET = os.getenv("KEY_SERVER_SECRET", "")
+
 def fetch_key_from_secure_server(provider):
-    """Fetch API key from Electron's secure key server (localhost:18000)"""
+    """Fetch API key from Electron's secure key server (localhost:18000)
+    Requires shared secret for authentication."""
     if provider in _key_cache:
         return _key_cache[provider]
     try:
-        response = requests.post(
+        headers = {}
+        if _KEY_SERVER_SECRET:
+            headers["X-Key-Server-Secret"] = _KEY_SERVER_SECRET
+        response = sync_client.post(
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
+            headers=headers,
             timeout=2
         )
+        if response.status_code == 403:
+            logger.warning(f"[SecureKey] Authentication rejected for {provider}")
+            return None
         if response.status_code == 200:
             data = response.json()
             key = data.get("apiKey")
@@ -45,27 +56,37 @@ def get_key_secure(provider, env_var):
     return key
 
 
-def build_prompt(user_input, mode="adaptive", style="concise", messages=None):
-    """Build prompt for cloud providers"""
-    if style == "concise":
-        style_instruction = "2 sentences max."
-    elif style == "detailed":
-        style_instruction = "2-3 paragraphs. Code if relevant."
-    elif style == "bulletpoint":
-        style_instruction = "4 bullets max."
-    else:
-        style_instruction = "Short."
+# Use full build_prompt from ai_router (with RAG + all mode variants) when available
+try:
+    from ai_router import build_prompt  # noqa: F401
+except ImportError:
+    # Fallback: minimal version without RAG support
+    def build_prompt(user_input, mode="adaptive", style="concise", messages=None, include_rag=False):
+        """Build prompt for cloud providers (fallback without RAG)"""
+        if style == "concise":
+            style_instruction = "2 sentences max."
+        elif style == "detailed":
+            style_instruction = "2-3 paragraphs. Code if relevant."
+        elif style == "bulletpoint":
+            style_instruction = "4 bullets max."
+        else:
+            style_instruction = "Short."
 
-    # Build conversation history context
-    history_block = ""
-    if messages:
-        history_lines = []
-        for msg in messages:
-            role_label = "You" if msg.get("role") == "user" else "Assistant"
-            history_lines.append(f"{role_label}: {msg.get('text', '')}")
-        history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
+        # Build conversation history context
+        history_block = ""
+        if messages:
+            history_lines = []
+            for msg in messages:
+                role_label = "You" if msg.get("role") == "user" else "Assistant"
+                history_lines.append(f"{role_label}: {msg.get('text', '')}")
+            history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
-    return f"""Slack message between two senior engineers.
+        if mode == "race":
+            # Minimal prompt for sub-second first-byte
+            return f"""{history_block}Q: {user_input}
+A:"""
+
+        return f"""Slack message between two senior engineers.
 
 FORBIDDEN:
 - No headers/titles (=== or #)
@@ -90,18 +111,20 @@ Answer:"""
 # ==============================
 
 def _make_meta(model, provider):
-    return f"event: meta\ndata: {{\"type\":\"meta\",\"model\":\"{model}\",\"provider\":\"{provider}\"}}\n\n"
+    from lib.sse_helpers import make_meta
+    return make_meta(model, provider)
 
 def _make_content(chunk):
-    import json
-    return f"event: chunk\ndata: {json.dumps({'type':'chunk','content':chunk})}\n\n"
+    from lib.sse_helpers import make_content
+    return make_content(chunk)
 
 def _make_done(ms):
-    return f"event: done\ndata: {{\"type\":\"done\",\"ms\":{ms}}}\n\n"
+    from lib.sse_helpers import make_done
+    return make_done(ms)
 
 def _make_error(msg):
-    import json
-    return f"event: error\ndata: {json.dumps({'type':'error','message':msg})}\n\n"
+    from lib.sse_helpers import make_error
+    return make_error(msg)
 
 
 # ==============================
@@ -210,8 +233,9 @@ def get_perplexity_key(user_id: str = None):
 # OLLAMA CLOUD (ollama.com)
 # ==============================
 
-def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", style="concise", messages=None):
-    """Ollama Cloud - uses https://ollama.com/api/chat endpoint"""
+def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", style="concise", messages=None, image_b64=None):
+    """Ollama Cloud - uses https://ollama.com/api/chat endpoint.
+    Supports vision models (gemma3, qwen3-vl, etc.) via image_b64 param."""
     import time
     start = time.time()
 
@@ -223,7 +247,12 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
     if messages:
         for msg in messages:
             chat_messages.append({"role": msg.get("role", "user"), "content": msg.get("text", "")})
-    chat_messages.append({"role": "user", "content": prompt})
+
+    # Build user message — with image for vision models
+    user_msg = {"role": "user", "content": prompt}
+    if image_b64:
+        user_msg["images"] = [image_b64]
+    chat_messages.append(user_msg)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -237,29 +266,36 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, stream=stream, timeout=60)
-        if response.status_code != 200:
-            yield _make_error(f"Ollama Cloud error: HTTP {response.status_code}")
-            return
-
         if stream:
-            # Send meta first so frontend knows which model
-            yield _make_meta(model, "ollama-cloud")
-            for line in response.iter_lines():
-                if not line:
-                    continue
-                try:
-                    import json as _json
-                    data = _json.loads(line.decode("utf-8"))
-                    if "message" in data:
-                        content = data["message"].get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    if data.get("done", False):
-                        break
-                except Exception:
-                    pass
+            with sync_client.stream("POST", url, headers=headers, json=body, timeout=90) as response:
+                if response.status_code == 429:
+                    yield _make_error(f"Ollama Cloud rate limited (429). Try again in a moment.")
+                    return
+                if response.status_code != 200:
+                    yield _make_error(f"Ollama Cloud error: HTTP {response.status_code}")
+                    return
+                yield _make_meta(model, "ollama-cloud")
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        if "message" in data:
+                            content = data["message"].get("content", "")
+                            if content:
+                                yield _make_content(content)
+                        if data.get("done", False):
+                            break
+                    except Exception:
+                        pass
         else:
+            response = sync_client.post(url, headers=headers, json=body, timeout=90)
+            if response.status_code == 429:
+                yield _make_error(f"Ollama Cloud rate limited (429). Try again in a moment.")
+                return
+            if response.status_code != 200:
+                yield _make_error(f"Ollama Cloud error: HTTP {response.status_code}")
+                return
             data = response.json()
             yield _make_meta(model, "ollama-cloud")
             if "message" in data:
@@ -272,9 +308,9 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
     yield _make_done(ms)
 
 
-def ask_ollama_cloud_stream(prompt, model="qwen2.5:1.5b", mode="adaptive", style="concise", messages=None):
-    """Streaming version of Ollama Cloud"""
-    yield from ask_ollama_cloud(prompt, model=model, stream=True, mode=mode, style=style, messages=messages)
+def ask_ollama_cloud_stream(prompt, model="qwen2.5:1.5b", mode="adaptive", style="concise", messages=None, image_b64=None):
+    """Streaming version of Ollama Cloud — supports vision via image_b64."""
+    yield from ask_ollama_cloud(prompt, model=model, stream=True, mode=mode, style=style, messages=messages, image_b64=image_b64)
 
 
 # ==============================
@@ -295,7 +331,7 @@ def ask_gpt(prompt, model="gpt-4o-mini", stream=False):
     }
     if stream:
         body["stream"] = True
-    response = requests.post(
+    response = sync_client.post(
         "https://api.openai.com/v1/chat/completions",
         headers=headers,
         json=body,
@@ -314,7 +350,6 @@ def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False):
         "x-api-key": api_key,
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
     }
     body = {
         "model": model,
@@ -324,7 +359,7 @@ def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False):
     }
     if stream:
         body["stream"] = True
-    response = requests.post(
+    response = sync_client.post(
         "https://api.anthropic.com/v1/messages",
         headers=headers,
         json=body,
@@ -346,7 +381,7 @@ def ask_gemini(prompt, model="gemini-2.0-flash", stream=False):
     }
     if stream:
         url += "&alt=sse"
-    response = requests.post(url, json=body, timeout=60)
+    response = sync_client.post(url, json=body, timeout=60)
     if response.status_code != 200:
         raise Exception(f"Gemini error: {response.status_code} - {response.text}")
     return response
@@ -366,7 +401,7 @@ def ask_grok(prompt, model="grok-2-mini", stream=False):
     }
     if stream:
         body["stream"] = True
-    response = requests.post(
+    response = sync_client.post(
         "https://api.x.ai/v1/chat/completions",
         headers=headers,
         json=body,
@@ -392,7 +427,7 @@ def ask_deepseek(prompt, model="deepseek-chat", stream=False):
     }
     if stream:
         body["stream"] = True
-    response = requests.post(
+    response = sync_client.post(
         "https://api.deepseek.com/v1/chat/completions",
         headers=headers,
         json=body,
@@ -418,7 +453,7 @@ def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False):
     }
     if stream:
         body["stream"] = True
-    response = requests.post(
+    response = sync_client.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers=headers,
         json=body,
@@ -481,7 +516,6 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
             "x-api-key": api_key,
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true"
         }
         body = {
             "model": model,
@@ -490,34 +524,28 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
             "max_tokens": 1024,
             "stream": True
         }
-        resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers=headers,
-            json=body,
-            stream=True,
-            timeout=60
-        )
-        if resp.status_code != 200:
-            raise Exception(f"Claude error: {resp.status_code} - {resp.text}")
-        yield _make_meta(model, "anthropic")
+        with sync_client.stream("POST", "https://api.anthropic.com/v1/messages",
+                                headers=headers, json=body, timeout=60) as resp:
+            if resp.status_code != 200:
+                raise Exception(f"Claude error: {resp.status_code} - {resp.text}")
+            yield _make_meta(model, "anthropic")
 
-        chunk_count = 0
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data = decoded[6:]
-                if data == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data)
-                    content = obj.get("delta", {}).get("text", "")
-                    if content:
-                        yield _make_content(content)
-                        chunk_count += 1
-                except json.JSONDecodeError:
-                    pass
+            chunk_count = 0
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        content = obj.get("delta", {}).get("text", "")
+                        if content:
+                            yield _make_content(content)
+                            chunk_count += 1
+                    except json.JSONDecodeError:
+                        pass
 
         ms = int((time.time() - start) * 1000)
         logger.debug("Claude stream complete: %d chunks in %dms", chunk_count, ms)
@@ -539,26 +567,25 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
         "contents": [{"parts": [{"text": final_prompt}]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
     }
-    resp = requests.post(url, json=body, stream=True, timeout=60)
-    if resp.status_code != 200:
-        raise Exception(f"Gemini error: {resp.status_code} - {resp.text}")
-    yield _make_meta(model, "google")
-    try:
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                import json
-                try:
-                    obj = json.loads(decoded[6:])
-                    content = obj.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    if content:
-                        yield _make_content(content)
-                except Exception:
-                    pass
-    except Exception as e:
-        yield _make_error(str(e))
+    with sync_client.stream("POST", url, json=body, timeout=60) as resp:
+        if resp.status_code != 200:
+            raise Exception(f"Gemini error: {resp.status_code} - {resp.text}")
+        yield _make_meta(model, "google")
+        try:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                decoded = line
+                if decoded.startswith("data: "):
+                    try:
+                        obj = json.loads(decoded[6:])
+                        content = obj.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
+        except Exception as e:
+            yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -568,25 +595,35 @@ def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise
     import time
     start = time.time()
     final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
-    resp = ask_grok(final_prompt, model=model, stream=True)
+    api_key = get_xai_key()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": final_prompt}],
+        "temperature": 0.3,
+        "stream": True
+    }
     yield _make_meta(model, "xai")
     try:
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data = decoded[6:]
-                if data == "[DONE]":
-                    break
-                import json
-                try:
-                    obj = json.loads(data)
-                    content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if content:
-                        yield _make_content(content)
-                except Exception:
-                    pass
+        with sync_client.stream("POST", "https://api.x.ai/v1/chat/completions",
+                                headers=headers, json=body, timeout=60) as resp:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -598,25 +635,35 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
     import time
     start = time.time()
     final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
-    resp = ask_deepseek(final_prompt, model=model, stream=True)
+    api_key = get_deepseek_key()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": final_prompt}],
+        "temperature": 0.3,
+        "stream": True
+    }
     yield _make_meta(model, "deepseek")
     try:
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data = decoded[6:]
-                if data == "[DONE]":
-                    break
-                import json
-                try:
-                    obj = json.loads(data)
-                    content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if content:
-                        yield _make_content(content)
-                except Exception:
-                    pass
+        with sync_client.stream("POST", "https://api.deepseek.com/chat/completions",
+                                headers=headers, json=body, timeout=60) as resp:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -628,25 +675,35 @@ def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", st
     import time
     start = time.time()
     final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
-    resp = ask_groq(final_prompt, model=model, stream=True)
+    api_key = get_groq_key()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": final_prompt}],
+        "temperature": 0.3,
+        "stream": True
+    }
     yield _make_meta(model, "groq")
     try:
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data = decoded[6:]
-                if data == "[DONE]":
-                    break
-                import json
-                try:
-                    obj = json.loads(data)
-                    content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if content:
-                        yield _make_content(content)
-                except Exception:
-                    pass
+        with sync_client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
+                                headers=headers, json=body, timeout=60) as resp:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -671,11 +728,10 @@ def ask_perplexity(prompt, model="sonar", stream=False):
     }
     if stream:
         body["stream"] = True
-    response = requests.post(
+    response = sync_client.post(
         "https://api.perplexity.ai/chat/completions",
         headers=headers,
         json=body,
-        stream=stream,
         timeout=60
     )
     if response.status_code != 200:
@@ -688,25 +744,35 @@ def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise
     import time
     start = time.time()
     final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
-    resp = ask_perplexity(final_prompt, model=model, stream=True)
+    api_key = get_perplexity_key()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": final_prompt}],
+        "temperature": 0.3,
+        "stream": True
+    }
     yield _make_meta(model, "perplexity")
     try:
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data = decoded[6:]
-                if data == "[DONE]":
-                    break
-                import json
-                try:
-                    obj = json.loads(data)
-                    content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if content:
-                        yield _make_content(content)
-                except Exception:
-                    pass
+        with sync_client.stream("POST", "https://api.perplexity.ai/chat/completions",
+                                headers=headers, json=body, timeout=60) as resp:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
     except Exception as e:
         yield _make_error(str(e))
     ms = int((time.time() - start) * 1000)
@@ -824,3 +890,333 @@ def get_stream_fn(provider_key):
     elif provider_name == "perplexity":
         return ask_perplexity_stream
     return None
+
+
+# ==============================
+# VISION STREAMING — Cloud providers with image support
+# ==============================
+
+# Vision-capable models per provider
+VISION_PROVIDER_MAP = {
+    "openai": "gpt-4o",
+    "anthropic": "claude-3-5-haiku-20241022",
+    "google": "gemini-2.0-flash",
+    "groq": "llama-3.2-90b-vision-preview",
+    "ollama-cloud": "gemma3:cloud",  # Free vision-capable cloud model
+}
+
+
+def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", style="concise", messages=None):
+    """OpenAI vision streaming (GPT-4o) — yields SSE event strings."""
+    import time
+    start = time.time()
+    try:
+        api_key = get_openai_key()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        # Build message content with image
+        content_parts = [{"type": "text", "text": prompt}]
+        if image_b64:
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{image_b64}", "detail": "low"}
+            })
+
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": content_parts}],
+            "temperature": 0.3,
+            "max_tokens": 512,
+            "stream": True
+        }
+        with sync_client.stream("POST", "https://api.openai.com/v1/chat/completions",
+                                headers=headers, json=body, timeout=30) as resp:
+            if resp.status_code == 429:
+                yield _make_error(f"OpenAI rate limited (429). Try again in a moment or select a different model.")
+                return
+            if resp.status_code != 200:
+                err = resp.text
+                yield _make_error(f"OpenAI vision error: HTTP {resp.status_code}")
+                return
+            yield _make_meta(model, "openai")
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                decoded = line.decode("utf-8", errors="replace")
+                if decoded.startswith("data: "):
+                    data = decoded[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        delta = obj.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    except json.JSONDecodeError:
+                        pass
+
+        ms = int((time.time() - start) * 1000)
+        yield _make_done(ms)
+
+    except ValueError as e:
+        yield _make_error(f"OpenAI key not configured: {e}")
+    except Exception as e:
+        logger.error("OpenAI vision streaming error: %s", e)
+        yield _make_error(f"OpenAI vision error: {str(e)}")
+
+
+def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-20241022", mode="race", style="concise", messages=None):
+    """Anthropic Claude vision streaming — yields SSE event strings."""
+    import time
+    start = time.time()
+    try:
+        api_key = get_anthropic_key()
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+        }
+        # Build message content with image
+        content_parts = []
+        if image_b64:
+            content_parts.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": image_b64}
+            })
+        content_parts.append({"type": "text", "text": prompt})
+
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": content_parts}],
+            "temperature": 0.3,
+            "max_tokens": 512,
+            "stream": True
+        }
+        with sync_client.stream("POST", "https://api.anthropic.com/v1/messages",
+                                headers=headers, json=body, timeout=30) as resp:
+            if resp.status_code == 429:
+                yield _make_error(f"Claude rate limited (429). Try again in a moment or select a different model.")
+                return
+            if resp.status_code != 200:
+                yield _make_error(f"Claude vision error: HTTP {resp.status_code}")
+                return
+            yield _make_meta(model, "anthropic")
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    try:
+                        obj = json.loads(data)
+                        if obj.get("type") == "content_block_delta":
+                            text = obj.get("delta", {}).get("text", "")
+                            if text:
+                                yield _make_content(text)
+                    except json.JSONDecodeError:
+                        pass
+
+        ms = int((time.time() - start) * 1000)
+        yield _make_done(ms)
+
+    except ValueError as e:
+        yield _make_error(f"Anthropic key not configured: {e}")
+    except Exception as e:
+        logger.error("Claude vision streaming error: %s", e)
+        yield _make_error(f"Claude vision error: {str(e)}")
+
+
+def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", mode="race", style="concise", messages=None):
+    """Google Gemini vision streaming — yields SSE event strings."""
+    import time
+    start = time.time()
+    try:
+        api_key = get_google_key()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
+        # Build parts with image
+        parts = []
+        if image_b64:
+            parts.append({"inline_data": {"mime_type": "image/png", "data": image_b64}})
+        parts.append({"text": prompt})
+
+        body = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}
+        }
+        with sync_client.stream("POST", url, json=body, timeout=30) as resp:
+            if resp.status_code == 429:
+                yield _make_error(f"Gemini rate limited (429). Try again in a moment or select a different model.")
+                return
+            if resp.status_code != 200:
+                yield _make_error(f"Gemini vision error: HTTP {resp.status_code}")
+                return
+            yield _make_meta(model, "google")
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                decoded = line
+                if decoded.startswith("data: "):
+                    try:
+                        obj = json.loads(decoded[6:])
+                        content = obj.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
+
+        ms = int((time.time() - start) * 1000)
+        yield _make_done(ms)
+
+    except ValueError as e:
+        yield _make_error(f"Google key not configured: {e}")
+    except Exception as e:
+        logger.error("Gemini vision streaming error: %s", e)
+        yield _make_error(f"Gemini vision error: {str(e)}")
+
+
+def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-preview", mode="race", style="concise", messages=None):
+    """Groq vision streaming (llama-3.2-90b-vision) — yields SSE event strings."""
+    import time
+    start = time.time()
+    try:
+        api_key = get_groq_key()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        # Build message content with image (OpenAI-compatible format)
+        content_parts = [{"type": "text", "text": prompt}]
+        if image_b64:
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{image_b64}"}
+            })
+
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": content_parts}],
+            "temperature": 0.3,
+            "max_tokens": 512,
+            "stream": True
+        }
+        with sync_client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
+                                headers=headers, json=body, timeout=30) as resp:
+            if resp.status_code == 429:
+                yield _make_error(f"Groq rate limited (429). Try again in a moment or select a different model.")
+                return
+            if resp.status_code != 200:
+                yield _make_error(f"Groq vision error: HTTP {resp.status_code}")
+                return
+            yield _make_meta(model, "groq")
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    except Exception:
+                        pass
+
+        ms = int((time.time() - start) * 1000)
+        yield _make_done(ms)
+
+    except ValueError as e:
+        yield _make_error(f"Groq key not configured: {e}")
+    except Exception as e:
+        logger.error("Groq vision streaming error: %s", e)
+        yield _make_error(f"Groq vision error: {str(e)}")
+
+
+def get_vision_stream_fn(provider):
+    """Return the vision stream function for a provider name."""
+    if provider == "openai":
+        return ask_gpt_vision_stream
+    elif provider == "anthropic":
+        return ask_claude_vision_stream
+    elif provider == "google":
+        return ask_gemini_vision_stream
+    elif provider == "groq":
+        return ask_groq_vision_stream
+    elif provider == "ollama-cloud":
+        return ask_ollama_cloud_vision_stream
+    return None
+
+
+# Ollama Cloud vision-capable models (free, no paid API key needed)
+OLLAMA_CLOUD_VISION_MODELS = {
+    "gemma3:cloud": "Gemma 3 (Vision)",
+    "gemma4:cloud": "Gemma 4 (Vision)",
+    "qwen3-vl:235b-cloud": "Qwen3-VL 235B",
+}
+
+
+def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud", mode="race", style="concise", messages=None):
+    """Ollama Cloud vision streaming — for free vision-capable cloud models.
+    Uses the Ollama /api/chat endpoint with images array."""
+    import time
+    start = time.time()
+    try:
+        api_key = get_ollama_cloud_key()
+        if not api_key:
+            yield _make_error("Ollama Cloud key not configured")
+            return
+
+        url = "https://ollama.com/api/chat"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        # Build user message with image
+        user_msg = {"role": "user", "content": prompt}
+        if image_b64:
+            user_msg["images"] = [image_b64]
+
+        chat_messages = []
+        if messages:
+            for msg in messages:
+                chat_messages.append({"role": msg.get("role", "user"), "content": msg.get("text", "")})
+        chat_messages.append(user_msg)
+
+        body = {
+            "model": model,
+            "messages": chat_messages,
+            "stream": True
+        }
+
+        with sync_client.stream("POST", url, headers=headers, json=body, timeout=90) as response:
+            if response.status_code == 429:
+                yield _make_error(f"Ollama Cloud rate limited (429). Try again in a moment.")
+                return
+            if response.status_code != 200:
+                yield _make_error(f"Ollama Cloud vision error: HTTP {response.status_code}")
+                return
+            yield _make_meta(model, "ollama-cloud")
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if "message" in data:
+                        content = data["message"].get("content", "")
+                        if content:
+                            yield _make_content(content)
+                    if data.get("done", False):
+                        break
+                except Exception:
+                    pass
+
+    except Exception as e:
+        logger.error("Ollama Cloud vision streaming error: %s", e)
+        yield _make_error(f"Ollama Cloud vision error: {str(e)}")
+
+    ms = int((time.time() - start) * 1000)
+    yield _make_done(ms)

@@ -8,6 +8,7 @@ var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:80
 
 const AuthHelper = {
   TOKEN_KEY: 'ainotetaker_auth_token',
+  _authRequired: null, // cached auth status
 
   /** Get the stored auth token */
   getToken() {
@@ -27,6 +28,23 @@ const AuthHelper = {
   /** Check if user is authenticated */
   isAuthenticated() {
     return !!this.getToken();
+  },
+
+  /** Check if the backend requires authentication */
+  async isAuthRequired() {
+    // Return cached value if known
+    if (this._authRequired !== null) return this._authRequired;
+    try {
+      const resp = await _originalFetch(`${API_BASE}/auth/status`, { signal: AbortSignal.timeout(3000) });
+      const data = await resp.json();
+      this._authRequired = data.auth_required !== false;
+      return this._authRequired;
+    } catch (e) {
+      // Backend not ready yet — assume auth not required for dev
+      console.warn('[AuthHelper] Backend not ready, assuming auth disabled');
+      this._authRequired = false;
+      return false;
+    }
   },
 
   /** Login and store token */
@@ -109,7 +127,7 @@ const AuthHelper = {
           <input id="auth-login-pass" type="password" style="width:100%;padding:10px 12px;background:#2a2a3a;border:1px solid #444;border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;" placeholder="Enter password">
         </div>
         <div id="auth-login-error" style="color:#ef4444;font-size:12px;margin-bottom:12px;display:none;"></div>
-        <button id="auth-login-btn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Sign In</button>
+        <button id="auth-login-btn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;">Sign In</button>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -137,19 +155,28 @@ const AuthHelper = {
         btn.textContent = 'Sign In';
       }
     };
-
     btn.addEventListener('click', doLogin);
     passInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
     userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') passInput.focus(); });
     userInput.focus();
   },
 
-  /** Try auto-login with saved credentials or dev credentials (dev-only) */
+  /** Check auth and show login only if required */
   async ensureAuth() {
+    // Already authenticated — done
     if (this.isAuthenticated()) {
       return true;
     }
-    // Auto-login with dev credentials only when explicitly enabled
+
+    // Check if backend requires authentication
+    const authRequired = await this.isAuthRequired();
+    if (!authRequired) {
+      console.log('[AuthHelper] Auth disabled, skipping login');
+      window.dispatchEvent(new Event('auth-success'));
+      return true;
+    }
+
+    // Auth required — auto-login with dev credentials if stored
     const devUser = sessionStorage.getItem('ainotetaker_dev_user');
     const devPass = sessionStorage.getItem('ainotetaker_dev_pass');
     if (devUser && devPass) {
@@ -158,10 +185,10 @@ const AuthHelper = {
         return true;
       } catch (e) {
         console.error('[AuthHelper] Dev auto-login failed:', e);
-        return false;
       }
     }
-    // No credentials available — show login overlay
+
+    // Show login overlay
     this.showLoginOverlay();
     return false;
   },
@@ -172,8 +199,6 @@ const _originalFetch = window.fetch.bind(window);
 
 /**
  * Patch global fetch to automatically include auth token on API calls.
- * This ensures ALL fetch calls to the backend include the Authorization header
- * without needing to modify each individual call.
  */
 window.fetch = function patchedFetch(url, options = {}) {
   // Only inject auth header for our API calls
@@ -186,14 +211,31 @@ window.fetch = function patchedFetch(url, options = {}) {
       };
     }
   }
-  return _originalFetch(url, options);
+  // Don't set Content-Type for FormData (browser sets it automatically with boundary)
+  if (options.body instanceof FormData && options.headers) {
+    delete options.headers['Content-Type'];
+  }
+  return _originalFetch(url, options).then(response => {
+    // Auto-reauth on 401: clear stale token and trigger re-login
+    if (response.status === 401 && typeof url === 'string' &&
+        (url.includes('127.0.0.1:8000') || url.includes('localhost:8000'))) {
+      AuthHelper.clearToken();
+      // Check if auth is actually required before showing login
+      AuthHelper.isAuthRequired().then(required => {
+        if (required && !document.getElementById('auth-login-overlay')) {
+          AuthHelper.showLoginOverlay();
+        }
+      });
+    }
+    return response;
+  });
 };
 
 // Make available globally
 if (typeof window !== 'undefined') {
   window.AuthHelper = AuthHelper;
 
-  // Auto-login on load: if no token stored, try dev auto-login or show login form
+  // Auto-check auth on load: skip login if auth disabled
   document.addEventListener('DOMContentLoaded', () => {
     if (!AuthHelper.isAuthenticated()) {
       AuthHelper.ensureAuth();

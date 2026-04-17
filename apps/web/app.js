@@ -127,12 +127,73 @@ window.api.onStealthStateChanged((state) => {
   stealthLabel.textContent = state.undetectable ? "Undetectable" : "Detectable"
 })
 
-// Global Ctrl+Enter — trigger AI from any app
-window.api.onTriggerAI(() => {
-  if (alwaysOnActive && alwaysOnTranscriptionBuffer.trim()) {
-    flushAlwaysOnBuffer()
-  } else if (!isListening && !isProcessing) {
+// Global Ctrl+Enter — trigger AI from any app (Cluely-style: screen + audio context)
+// Sends screenshot directly to vision AI — NO OCR delay
+window.api.onTriggerAI(async () => {
+  if (isProcessing) return
+
+  // Grab latest transcript from always-on buffer
+  const transcript = alwaysOnTranscriptionBuffer.trim()
+  if (alwaysOnActive && transcript) {
+    alwaysOnTranscriptionBuffer = ""
+    alwaysOnLastHeardTime = 0
+  }
+
+  // Grab latest screenshot from ring buffer
+  let screenshotB64 = null
+  try {
+    screenshotB64 = await window.api.overlayGetLatestScreenshot()
+  } catch {}
+
+  // If we have a screenshot, send it directly to vision AI (no OCR step)
+  if (screenshotB64) {
+    const query = transcript
+      ? `The user said: "${transcript}"\n\nAlso, I can see their screen. Help based on both the conversation and what's on screen.`
+      : "Analyze what's on the user's screen and provide helpful context or suggestions."
+    streamMessage("user", transcript ? `🎤 ${transcript.substring(0, 60)}...` : "📷 Screen query", { hasScreenshot: true, screenshotB64 })
+    setProcessingUI(true)
+    try {
+      await streamAIResponseWithImage(query, screenshotB64)
+    } catch (e) {
+      addErrorMessage("Vision AI failed: " + e.message)
+      setProcessingUI(false)
+    }
+    return
+  }
+
+  // No screenshot — just send voice transcript
+  if (transcript) {
+    autoSendToAI(transcript)
+  } else if (!isListening) {
     listenBtn.click()
+  }
+})
+
+// Global Ctrl+Shift+Enter — screen-only AI answer (Cluely stealth answer, no voice)
+// Sends screenshot directly to vision AI — NO OCR delay
+window.api.onTriggerAIScreen(async () => {
+  if (isProcessing) return
+
+  // Grab latest screenshot from ring buffer
+  let screenshotB64 = null
+  try {
+    screenshotB64 = await window.api.overlayGetLatestScreenshot()
+  } catch {}
+
+  if (!screenshotB64) {
+    addErrorMessage("No screenshot available. Make sure auto-screenshot is running.")
+    return
+  }
+
+  // Send screenshot directly to vision model — skip OCR entirely
+  const query = "Analyze what's on the user's screen. Provide helpful context, suggestions, or answers based on what you see."
+  streamMessage("user", "📷 Screen-only query", { hasScreenshot: true, screenshotB64 })
+  setProcessingUI(true)
+  try {
+    await streamAIResponseWithImage(query, screenshotB64)
+  } catch (e) {
+    addErrorMessage("Screen analysis failed: " + e.message)
+    setProcessingUI(false)
   }
 })
 
@@ -192,6 +253,17 @@ window.api.getBackendStatus().then((status) => {
 })
 
 document.addEventListener("keydown", (e) => {
+  // Tab — auto-answer detected question (Cluely-style dynamic action)
+  if (e.key === "Tab") {
+    const tag = document.activeElement.tagName.toLowerCase()
+    if (tag === "input" || tag === "textarea" || tag === "select") return
+    if (activeDynamicAction) {
+      e.preventDefault()
+      triggerDynamicAction()
+      return
+    }
+  }
+
   // Escape — close panels
   if (e.key === "Escape") {
     const tag = document.activeElement.tagName.toLowerCase()
@@ -2114,13 +2186,40 @@ async function streamAIResponseWithImage(query, screenshotB64) {
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const selectedModel = modelSelect ? modelSelect.value : "auto"
-  const provider = selectedModel !== "auto" ? selectedModel : "ollama"
   const contextMessages = getContextMessages()
   const requestStartTime = Date.now()
 
+  // When auto-selected, use race mode to get fastest cloud vision response
+  const provider = selectedModel !== "auto" ? selectedModel : "auto"
+
+  // Get enabled providers for vision race (only vision-capable providers)
+  const VISION_PROVIDERS = ["openai", "anthropic", "google", "groq"]
+  const enabledProviders = []
+
+  let backendProviders = {}
+  try {
+    backendProviders = await window.api.getProviders()
+  } catch (e) {
+    console.warn("Could not fetch providers from backend", e)
+  }
+
+  const storedResults = await Promise.all(
+    VISION_PROVIDERS.map(p => window.api.storeGet("provider_" + p))
+  )
+  for (let i = 0; i < VISION_PROVIDERS.length; i++) {
+    const p = VISION_PROVIDERS[i]
+    const stored = storedResults[i] || {}
+    if (stored.enabled && backendProviders[p]) {
+      enabledProviders.push(p)
+    }
+  }
+  // Always include Ollama as fallback
+  enabledProviders.push("ollama")
+
   const formData = new FormData()
   formData.append("query", query)
-  formData.append("mode", mode)
+  // Force race mode when auto-selected for fastest vision response
+  formData.append("mode", selectedModel === "auto" ? "race" : mode)
   formData.append("style", responseStyle)
   formData.append("provider", provider)
   if (contextMessages) {
@@ -2129,6 +2228,17 @@ async function streamAIResponseWithImage(query, screenshotB64) {
   if (screenshotB64) {
     formData.append("image_b64", screenshotB64)
   }
+  // Pass enabled providers so backend knows which keys are available
+  if (enabledProviders.length > 0) {
+    formData.append("enabled", enabledProviders.join(","))
+  }
+
+  // Add auth headers explicitly
+  const visionHeaders = {}
+  try {
+    const token = localStorage.getItem('ainotetaker_auth_token')
+    if (token) visionHeaders['Authorization'] = `Bearer ${token}`
+  } catch {}
 
   // Create assistant message with loading animation BEFORE fetch
   streamMessage("assistant", "")
@@ -2136,11 +2246,17 @@ async function streamAIResponseWithImage(query, screenshotB64) {
   try {
     const response = await fetch(window.api.getAskWithImageUrl(), {
       method: "POST",
+      headers: visionHeaders,
       body: formData
     })
 
     if (!response.ok) {
-      addErrorMessage("Vision AI stream failed")
+      if (response.status === 401) {
+        addErrorMessage("Session expired. Please log in again.")
+        if (window.AuthHelper) { AuthHelper.clearToken(); AuthHelper.ensureAuth() }
+      } else {
+        addErrorMessage("Vision AI stream failed")
+      }
       setProcessingUI(false)
       return
     }
@@ -2149,6 +2265,9 @@ async function streamAIResponseWithImage(query, screenshotB64) {
     const decoder = new TextDecoder()
     let buffer = ""
     let accumulatedText = ""
+
+    let visionDescription = ""
+    let visionBubble = null
 
     while (true) {
       const { done, value } = await reader.read()
@@ -2173,6 +2292,34 @@ async function streamAIResponseWithImage(query, screenshotB64) {
             latestBotMessage = null
             setProcessingUI(false)
             return
+          }
+
+          // Vision description — Step 1 of two-step pipeline
+          if (data.type === "vision") {
+            visionDescription += data.content
+            // Show vision description in a subtle sub-bubble
+            if (latestBotMessage && latestBotMessage.bubble) {
+              const visionEl = latestBotMessage.bubble.querySelector(".vision-context") || (() => {
+                const el = document.createElement("div")
+                el.className = "vision-context"
+                el.innerHTML = '<span class="vision-label">&#128247; Screen</span><div class="vision-text"></div>'
+                latestBotMessage.bubble.insertBefore(el, latestBotMessage.bubble.firstChild)
+                return el
+              })()
+              const textEl = visionEl.querySelector(".vision-text")
+              if (textEl) textEl.textContent = visionDescription
+              scrollChat()
+            }
+            continue
+          }
+
+          // Vision description complete — Step 1 done, collapse vision section
+          if (data.type === "vision_done") {
+            if (latestBotMessage && latestBotMessage.bubble) {
+              const visionEl = latestBotMessage.bubble.querySelector(".vision-context")
+              if (visionEl) visionEl.classList.add("collapsed")
+            }
+            continue
           }
 
           if (data.type === "meta") {
@@ -2260,8 +2407,13 @@ async function streamAIRace(query) {
     console.warn("Could not fetch providers from backend", e)
   }
 
-  for (const p of CLOUD_PROVIDERS) {
-    const stored = await window.api.storeGet("provider_" + p) || {}
+  // Fetch all provider toggles in parallel (instead of sequential await)
+  const storedResults = await Promise.all(
+    CLOUD_PROVIDERS.map(p => window.api.storeGet("provider_" + p))
+  )
+  for (let i = 0; i < CLOUD_PROVIDERS.length; i++) {
+    const p = CLOUD_PROVIDERS[i]
+    const stored = storedResults[i] || {}
     // Check if toggle is enabled AND backend has the API key
     if (stored.enabled && backendProviders[p]) {
       // Check if all models for this provider are disabled
@@ -2278,7 +2430,8 @@ async function streamAIRace(query) {
   // Build race URL directly in renderer (encodeURIComponent is available here)
   const BASE_URL = API_BASE
   const encodedQuery = encodeURIComponent(query || "")
-  const encodedMode = encodeURIComponent(mode)
+  // Race mode uses minimal prompt for sub-second first-byte — always override to "race"
+  const encodedMode = encodeURIComponent("race")
   const encodedStyle = encodeURIComponent(responseStyle)
   let raceUrl = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}`
   if (contextMessages && Array.isArray(contextMessages) && contextMessages.length > 0) {
@@ -2293,8 +2446,29 @@ async function streamAIRace(query) {
     controller.abort()
   }, 60000)
 
-  // Create assistant message with loading animation BEFORE fetch (immediate feedback)
-  streamMessage("assistant", "")
+  // Create assistant message — use minimal racing indicator instead of loading dots
+  // for instant feedback feel (sub-second first-byte optimization)
+  streamMessage("assistant", "", { racingMode: true })
+
+  // Show race progress indicator — provider badges that highlight the winner
+  let raceIndicator = null
+  if (latestBotMessage && latestBotMessage.element) {
+    const label = latestBotMessage.element.querySelector(".msg-label")
+    if (label) {
+      raceIndicator = document.createElement("span")
+      raceIndicator.className = "race-indicator"
+      // Show badges for each enabled cloud provider (excluding ollama fallback)
+      const cloudRacers = enabledProviders.filter(p => p !== "ollama")
+      if (cloudRacers.length > 1) {
+        raceIndicator.innerHTML = cloudRacers
+          .map(p => `<span class="race-badge" data-provider="${p}">${p}</span>`)
+          .join("")
+        label.appendChild(raceIndicator)
+      } else {
+        raceIndicator = null
+      }
+    }
+  }
 
   try {
     const response = await fetch(raceUrl, { signal: controller.signal })
@@ -2343,6 +2517,16 @@ async function streamAIRace(query) {
               latestBotMessage.modelName = modelDisplay || modelName
               latestBotMessage.modelProvider = modelProvider
               latestBotMessage.modelDisplay = modelDisplay || modelName
+            }
+            // Highlight winner in race indicator
+            if (raceIndicator && modelProvider) {
+              raceIndicator.querySelectorAll(".race-badge").forEach(badge => {
+                if (badge.dataset.provider === modelProvider) {
+                  badge.classList.add("winner")
+                } else {
+                  badge.classList.add("loser")
+                }
+              })
             }
             continue
           }
@@ -2475,25 +2659,30 @@ function streamMessage(role, text, opts = {}) {
 
   // Add loading state for empty assistant messages
   if (role === "assistant" && (!text || text === "")) {
-    msg.classList.add("loading")
-    bubble.innerHTML = '<span class="loading-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>'
+    if (opts.racingMode) {
+      // Racing mode: subtle pulse, no animated dots — instant visual feedback
+      msg.classList.add("loading", "racing")
+      bubble.innerHTML = '<span class="racing-indicator">⚡</span>'
+    } else {
+      msg.classList.add("loading")
+      bubble.innerHTML = '<span class="loading-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>'
+    }
   } else {
     setBubbleText(bubble, text)
   }
 
-  // Show screenshot icon on user message if screenshot was attached
-  if (role === "user" && opts.hasScreenshot && opts.screenshotB64) {
-    const screenshotThumb = document.createElement("div")
-    screenshotThumb.className = "msg-img-indicator"
-    screenshotThumb.title = "Click to view screenshot"
-    screenshotThumb.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
-    screenshotThumb.style.display = "inline-flex"
-    screenshotThumb.style.alignItems = "center"
-    screenshotThumb.style.cursor = "pointer"
-    screenshotThumb.style.opacity = "0.7"
-    screenshotThumb.dataset.fullB64 = opts.screenshotB64
-    screenshotThumb.addEventListener("click", () => showFullScreenshot(opts.screenshotB64))
-    msg.appendChild(screenshotThumb)
+  // Show screenshot indicator on user message
+  if (role === "user" && opts.hasScreenshot) {
+    const ssIndicator = document.createElement("span")
+    ssIndicator.className = "screenshot-indicator"
+    if (opts.screenshotB64) {
+      // With preview — click to view
+      ssIndicator.title = "Click to view screenshot"
+      ssIndicator.dataset.fullB64 = opts.screenshotB64
+      ssIndicator.addEventListener("click", () => showFullScreenshot(opts.screenshotB64))
+    }
+    ssIndicator.textContent = "📷 Sent with screenshot"
+    msg.appendChild(ssIndicator)
   }
 
   // Show speaker transcript toggle if available
@@ -2617,17 +2806,22 @@ async function submitText(text) {
 
   await window.api.setMode(getSelectedMode())
 
-  // Combine user text with OCR'd screenshot if available
-  const combinedQuery = buildCombinedQuery(text)
-  const hasScreenshot = !!(pendingOcrScreenshot || pendingOcrText)
+  // Combine user text with screenshot if available
+  const hasScreenshot = !!pendingOcrScreenshot
 
   streamMessage("user", text, { hasScreenshot })
 
-  // If we have a screenshot but no OCR text, fall back to vision model
-  if (pendingOcrScreenshot && !pendingOcrText) {
-    await streamAIResponseWithImage(combinedQuery, pendingOcrScreenshot)
+  // If we have a screenshot, send it directly to vision AI (skip OCR)
+  if (pendingOcrScreenshot) {
+    const visionQuery = `The user said: "${text}"\n\nAlso, I can see their screen. Help based on both the conversation and what's on screen.`
+    await streamAIResponseWithImage(visionQuery, pendingOcrScreenshot)
   } else {
-    await streamAIResponse(combinedQuery)
+    const selectedModel = modelSelect ? modelSelect.value : "auto"
+    if (selectedModel === "auto") {
+      await streamAIRace(text)
+    } else {
+      await streamAIResponse(text)
+    }
   }
 
   clearPendingOcr()
@@ -2649,17 +2843,9 @@ async function submitAudio(blob, screenshotB64 = null) {
     const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
     streamMessage("user", streamedText, { hasScreenshot: !!effectiveScreenshot, screenshotB64: effectiveScreenshot })
     if (effectiveScreenshot) {
-      try {
-        const ocrResult = await runOcr(effectiveScreenshot)
-        if (ocrResult.text && ocrResult.text.trim()) {
-          const combinedQuery = `[Screenshot content]: ${ocrResult.text.trim()}\n\n[Voice transcript]: ${streamedText}`
-          await streamAIResponse(combinedQuery)
-        } else {
-          await streamAIResponseWithImage(streamedText, effectiveScreenshot)
-        }
-      } catch {
-        await streamAIResponseWithImage(streamedText, effectiveScreenshot)
-      }
+      // Skip OCR — send screenshot directly to vision AI for faster response
+      const visionQuery = `The user said: "${streamedText}"\n\nAlso, I can see their screen. Help based on both the conversation and what's on screen.`
+      await streamAIResponseWithImage(visionQuery, effectiveScreenshot)
     } else {
       await streamAIResponse(streamedText)
     }
@@ -2683,9 +2869,17 @@ async function submitAudio(blob, screenshotB64 = null) {
     transcribeUrl = window.api.getTranscribeWithSpeakersUrl()
   }
 
+  // Add auth headers explicitly (belt-and-suspenders with patchedFetch)
+  const transcribeHeaders = {}
+  try {
+    const token = localStorage.getItem('ainotetaker_auth_token')
+    if (token) transcribeHeaders['Authorization'] = `Bearer ${token}`
+  } catch {}
+
   try {
     response = await fetch(transcribeUrl, {
       method: "POST",
+      headers: transcribeHeaders,
       body: formData
     })
   } catch (e) {
@@ -2695,7 +2889,12 @@ async function submitAudio(blob, screenshotB64 = null) {
   }
 
   if (!response.ok) {
-    addErrorMessage("Transcription failed")
+    if (response.status === 401) {
+      addErrorMessage("Session expired. Please log in again.")
+      if (window.AuthHelper) { AuthHelper.clearToken(); AuthHelper.ensureAuth() }
+    } else {
+      addErrorMessage(`Transcription failed (${response.status})`)
+    }
     setProcessingUI(false)
     return
   }
@@ -2721,22 +2920,11 @@ async function submitAudio(blob, screenshotB64 = null) {
 
   streamMessage("user", data.text, messageOptions)
 
-  // Try OCR on screenshot first, then fall back to vision model
+  // Skip OCR — send screenshot directly to vision AI for faster response
   const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
   if (effectiveScreenshot) {
-    try {
-      const ocrResult = await runOcr(effectiveScreenshot)
-      if (ocrResult.text && ocrResult.text.trim()) {
-        const combinedQuery = `[Screenshot content]: ${ocrResult.text.trim()}\n\n[Voice transcript]: ${data.text}`
-        await streamAIResponse(combinedQuery)
-      } else {
-        // OCR returned empty — fall back to vision model
-        await streamAIResponseWithImage(data.text, effectiveScreenshot)
-      }
-    } catch {
-      // OCR failed — fall back to vision model
-      await streamAIResponseWithImage(data.text, effectiveScreenshot)
-    }
+    const visionQuery = `The user said: "${data.text}"\n\nAlso, I can see their screen. Help based on both the conversation and what's on screen.`
+    await streamAIResponseWithImage(visionQuery, effectiveScreenshot)
   } else {
     await streamAIResponse(data.text)
   }
@@ -2810,14 +2998,12 @@ listenBtn.addEventListener("click", async () => {
       }
 
       setListeningUI(false)
-      // Auto-screenshot: grab latest from ring buffer if active
+      // Always grab latest screenshot from ring buffer (like Cluely)
       let screenshotB64 = null
-      if (autoSSBtn && autoSSBtn.classList.contains("active")) {
-        try {
-          screenshotB64 = await window.api.overlayGetLatestScreenshot()
-        } catch (e) {
-          console.warn("Auto-screenshot buffer read failed:", e)
-        }
+      try {
+        screenshotB64 = await window.api.overlayGetLatestScreenshot()
+      } catch (e) {
+        console.warn("Auto-screenshot buffer read failed:", e)
       }
       await submitAudio(audioBlob, screenshotB64)
     })
@@ -2846,6 +3032,9 @@ function stopListening() {
   } else {
     setListeningUI(false)
   }
+
+  // Auto-generate meeting notes if session was 5+ minutes
+  autoGenerateMeetingNotes()
 }
 
 // ==============================
@@ -2929,6 +3118,8 @@ function startStreamingTranscription() {
           lastDetectedSpeaker = data.speaker || "Speaker 1"
           lastSpeakerRole = data.semantic_role || "user"
         }
+        // Real-time keyword detection (Cluely-style dynamic actions)
+        detectKeywords(data.text, data.speaker || lastDetectedSpeaker)
       } else if (data.type === "final") {
         confirmPartialTranscript(data.text)
         // Final message may include speaker list
@@ -3263,6 +3454,24 @@ summarizeBtn?.addEventListener("click", async () => {
     })
     summaryBlock.querySelector(".summary-block-title").appendChild(copyBtn)
 
+    // Add follow-up email button
+    const emailBtn = document.createElement("button")
+    emailBtn.className = "summary-copy-btn followup-email-btn"
+    emailBtn.textContent = "Follow-up Email"
+    emailBtn.title = "Generate and copy a follow-up email"
+    emailBtn.addEventListener("click", async () => {
+      emailBtn.textContent = "Generating..."
+      const email = await generateFollowUpEmail()
+      if (email) {
+        emailBtn.textContent = "Email Copied!"
+        setTimeout(() => { emailBtn.textContent = "Follow-up Email" }, 2000)
+      } else {
+        emailBtn.textContent = "Failed"
+        setTimeout(() => { emailBtn.textContent = "Follow-up Email" }, 2000)
+      }
+    })
+    summaryBlock.querySelector(".summary-block-title").appendChild(emailBtn)
+
     scrollChat()
   } catch (e) {
     console.error("Summary error:", e)
@@ -3280,6 +3489,97 @@ summarizeBtn?.addEventListener("click", async () => {
     summarizeBtn.querySelector(".summarize-btn-label").textContent = "Summarize"
   }
 })
+
+// ==============================
+// AUTO MEETING NOTES + FOLLOW-UP EMAIL
+// ==============================
+const MEETING_NOTES_MIN_DURATION = 5 * 60 * 1000 // 5 minutes in ms
+
+function autoGenerateMeetingNotes() {
+  // Only auto-generate if session was long enough and we have enough messages
+  if (!sessionStartTime) return
+  const sessionDuration = Date.now() - sessionStartTime
+  if (sessionDuration < MEETING_NOTES_MIN_DURATION) return
+  if (!currentMessages || currentMessages.length < 2) return
+
+  // Don't auto-trigger if a summary block already exists
+  if (document.querySelector(".summary-block")) return
+
+  // Auto-click the summarize button after a short delay
+  setTimeout(() => {
+    if (summarizeBtn && !summarizeBtn.classList.contains("loading")) {
+      summarizeBtn.click()
+    }
+  }, 1000)
+}
+
+async function generateFollowUpEmail() {
+  const summaryBlock = document.querySelector(".summary-block")
+  if (!summaryBlock) return
+
+  const summaryContent = summaryBlock.querySelector(".summary-block-content")
+  if (!summaryContent) return
+
+  const summaryText = summaryContent.textContent || summaryContent.innerText
+
+  // Build conversation transcript for context
+  const transcript = currentMessages.map(m => {
+    const role = m.role === "user" ? "You" : "AI"
+    return `${role}: ${m.text}`
+  }).join("\n\n")
+
+  const query = `Meeting summary:\n${summaryText}\n\nConversation context:\n${transcript.substring(0, 2000)}`
+
+  // Use the AI with follow-up email mode
+  const healthUrl = window.api.getHealthUrl()
+  const base = healthUrl.replace("/health", "")
+  const params = new URLSearchParams({
+    q: query,
+    mode: "followup",
+    style: "detailed",
+    provider: "ollama"
+  })
+  const url = `${base}/stream?${params.toString()}`
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error("Failed to generate follow-up email")
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let accumulated = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop()
+      for (const line of lines) {
+        if (line.startsWith("data:")) {
+          const dataStr = line.slice(5).trim()
+          if (!dataStr) continue
+          try {
+            const data = JSON.parse(dataStr)
+            if (data.type === "chunk" && data.content) {
+              accumulated += data.content
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // Copy to clipboard
+    if (accumulated.trim()) {
+      await window.api.copyToClipboard(accumulated)
+      return accumulated
+    }
+  } catch (e) {
+    console.error("Follow-up email error:", e)
+  }
+  return null
+}
 
 // ==============================
 // HISTORY PANEL
@@ -3508,7 +3808,7 @@ if (ocrBadgeRemove) {
 // Build combined query from user text + pending OCR
 function buildCombinedQuery(userText) {
   if (pendingOcrText) {
-    return `[Screenshot content]: ${pendingOcrText}\n\n[User message]: ${userText}`
+    return `Screen context: ${pendingOcrText}\n\nUser said: ${userText}\n\nAnswer based on both the screen content and what the user said.`
   }
   return userText
 }
@@ -3555,6 +3855,9 @@ function stopAlwaysOnListen() {
     alwaysOnEventSource = null
   }
   alwaysOnTranscriptionBuffer = ""
+
+  // Auto-generate meeting notes if session was 5+ minutes
+  autoGenerateMeetingNotes()
 }
 
 function flushAlwaysOnBuffer() {
@@ -3570,13 +3873,11 @@ async function autoSendToAI(text) {
   if (isProcessing) return  // skip if AI is busy
 
   try {
-    // Get latest screenshot from auto-screenshot buffer if active
+    // Always grab latest screenshot from auto-screenshot ring buffer (like Cluely)
     let screenshotB64 = null
-    if (autoSSBtn && autoSSBtn.classList.contains("active")) {
-      try {
-        screenshotB64 = await window.api.overlayGetLatestScreenshot()
-      } catch {}
-    }
+    try {
+      screenshotB64 = await window.api.overlayGetLatestScreenshot()
+    } catch {}
 
     // Also check for manually captured screenshot
     const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
@@ -3586,13 +3887,20 @@ async function autoSendToAI(text) {
       try {
         const ocrResult = await runOcr(effectiveScreenshot)
         if (ocrResult.text && ocrResult.text.trim()) {
-          const combinedQuery = `[Screenshot content]: ${ocrResult.text.trim()}\n\n[Voice transcript]: ${text}`
-          await streamAIResponse(combinedQuery)
+          const combinedQuery = `Screen context: ${ocrResult.text.trim()}\n\nUser said: ${text}\n\nAnswer based on both the screen content and what the user said.`
+          // Route through race mode when auto-selected
+          const selectedModel = modelSelect ? modelSelect.value : "auto"
+          if (selectedModel === "auto") {
+            await streamAIRace(combinedQuery)
+          } else {
+            await streamAIResponse(combinedQuery)
+          }
         } else {
-          await streamAIResponseWithImage(text, effectiveScreenshot)
+          // OCR found no text — just send voice without screen context
+          await streamAIResponse(text)
         }
       } catch {
-        await streamAIResponseWithImage(text, effectiveScreenshot)
+        await streamAIResponse(text)
       }
     } else {
       await streamAIResponse(text)
@@ -4636,7 +4944,12 @@ function initCustomModels() {
 
 async function loadLocalOllamaModels() {
   try {
-    const response = await fetch(`${API_BASE}/ollama/models`)
+    const headers = {}
+    try {
+      const token = localStorage.getItem('ainotetaker_auth_token')
+      if (token) headers['Authorization'] = `Bearer ${token}`
+    } catch {}
+    const response = await fetch(`${API_BASE}/ollama/models`, { headers })
     if (!response.ok) {
       console.warn("[loadLocalOllamaModels] Failed to fetch models:", response.status)
       return []
@@ -6395,10 +6708,46 @@ async function initFeatures() {
   initObjectionToggle()
   loadAnalyticsPreview()
   loadCRMConfig()
+  // Init voice clone after auth (requires API calls)
+  initVoiceClone()
+  initVoiceCloneRecording()
 }
 
 const originalInit = init
 init = async function() {
+  // Wait for auth before making any API calls
+  // Check token exists AND is valid by making a test call
+  if (window.AuthHelper) {
+    const token = AuthHelper.getToken()
+    if (!token) {
+      // No token — wait for login
+      window.addEventListener('auth-success', async () => {
+        await originalInit()
+        initFeatures()
+      }, { once: true })
+      return
+    }
+    // Token exists — verify it's still valid
+    try {
+      const testResp = await _originalFetch(`${API_BASE}/health`)
+      // health doesn't need auth, but let's test an auth-required endpoint
+      const authTest = await _originalFetch(`${API_BASE}/ollama/models`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (authTest.status === 401) {
+        // Token expired — clear and wait for re-login
+        AuthHelper.clearToken()
+        AuthHelper.ensureAuth()
+        window.addEventListener('auth-success', async () => {
+          await originalInit()
+          initFeatures()
+        }, { once: true })
+        return
+      }
+    } catch (e) {
+      // Backend not ready yet — proceed, it'll retry later
+    }
+  }
   await originalInit()
   initFeatures()
 }
@@ -6424,6 +6773,120 @@ const clearSuggestionsBtn = document.getElementById("clearSuggestionsBtn")
 let suggestionsEnabled = false
 let suggestionsCooldown = false
 let suggestionHistory = []
+
+// ==============================
+// REAL-TIME KEYWORD DETECTION + DYNAMIC ACTION PILLS (Cluely-style)
+// ==============================
+const QUESTION_INDICATORS = [
+  "?", "can you", "how would", "what is", "explain", "tell me", "describe",
+  "why", "when", "where", "could you", "would you", "what are", "how do",
+  "what's", "how's", "walk me", "help me understand", "what do you think",
+  "opinion", "recommend", "suggest", "difference between", "compare"
+]
+
+const OBJECTION_KEYWORDS_JS = {
+  price: { keywords: ["expensive", "too much", "price", "cost", "budget", "cheap", "afford"], label: "Price objection" },
+  competitor: { keywords: ["competitor", "alternative", "vs", "versus", "compare", "better than"], label: "Competitor mention" },
+  timing: { keywords: ["not now", "later", "next quarter", "next year", "not ready", "delay"], label: "Timing objection" },
+  features: { keywords: ["missing", "doesn't have", "lacks", "require", "need"], label: "Feature gap" },
+  security: { keywords: ["security", "privacy", "compliance", "soc2", "gdpr", "hipaa"], label: "Security concern" }
+}
+
+let activeDynamicAction = null
+let dynamicActionPill = null
+
+function detectKeywords(text, speaker) {
+  if (!text || text.length < 15) return
+
+  const lower = text.toLowerCase()
+
+  // Detect questions from interviewer/other speaker
+  const isQuestion = QUESTION_INDICATORS.some(ind => lower.includes(ind)) || lower.trim().endsWith("?")
+  if (isQuestion && speaker && speaker !== "user") {
+    showDynamicAction("Answer: " + text.substring(0, 40) + (text.length > 40 ? "..." : ""), "question", text)
+    return
+  }
+
+  // Detect objections
+  for (const [category, config] of Object.entries(OBJECTION_KEYWORDS_JS)) {
+    if (config.keywords.some(kw => lower.includes(kw))) {
+      showDynamicAction(config.label, "objection", text)
+      return
+    }
+  }
+
+  // Detect user asking for help (coaching opportunity)
+  if (isQuestion && speaker === "user" && lower.length > 20) {
+    showDynamicAction("Suggest answer", "coaching", text)
+  }
+}
+
+function showDynamicAction(label, type, contextText) {
+  // Remove existing pill
+  removeDynamicAction()
+
+  activeDynamicAction = { label, type, contextText }
+
+  dynamicActionPill = document.createElement("div")
+  dynamicActionPill.className = `dynamic-action-pill dynamic-action-${type}`
+  dynamicActionPill.innerHTML = `<span class="dynamic-action-label">${escapeHtml(label)}</span><kbd>Tab</kbd>`
+  dynamicActionPill.title = "Press Tab to trigger"
+
+  // Insert above the chat input area
+  const inputArea = document.querySelector(".chat-input-area") || document.querySelector(".input-area") || textInput?.parentElement
+  if (inputArea) {
+    inputArea.parentElement.insertBefore(dynamicActionPill, inputArea)
+  }
+
+  // Auto-dismiss after 15 seconds
+  setTimeout(removeDynamicAction, 15000)
+}
+
+function removeDynamicAction() {
+  if (dynamicActionPill) {
+    dynamicActionPill.remove()
+    dynamicActionPill = null
+  }
+  activeDynamicAction = null
+}
+
+async function triggerDynamicAction() {
+  if (!activeDynamicAction) return
+
+  const { type, contextText } = activeDynamicAction
+  removeDynamicAction()
+
+  if (isProcessing) return
+
+  // Grab latest screenshot
+  let screenshotB64 = null
+  try {
+    screenshotB64 = await window.api.overlayGetLatestScreenshot()
+  } catch {}
+
+  let query
+  if (screenshotB64) {
+    try {
+      const ocrResult = await runOcr(screenshotB64)
+      const ocrText = (ocrResult.text && ocrResult.text.trim()) ? ocrResult.text.trim() : ""
+      query = ocrText
+        ? `Screen context: ${ocrText}\n\nDetected ${type}: ${contextText}\n\nProvide a relevant answer based on the screen and conversation.`
+        : `Detected ${type}: ${contextText}\n\nProvide a relevant answer.`
+    } catch {
+      query = `Detected ${type}: ${contextText}\n\nProvide a relevant answer.`
+    }
+  } else {
+    query = `Detected ${type}: ${contextText}\n\nProvide a relevant answer.`
+  }
+
+  streamMessage("user", `[⚡ ${type}]: ${contextText.substring(0, 60)}...`, { hasScreenshot: !!screenshotB64, screenshotB64 })
+  const selectedModel = modelSelect ? modelSelect.value : "auto"
+  if (selectedModel === "auto") {
+    await streamAIRace(query)
+  } else {
+    await streamAIResponse(query)
+  }
+}
 
 // Initialize suggestions feature
 function initSuggestions() {
@@ -7890,8 +8353,5 @@ renderSelectedFiles = function() {
   }).join('')
 }
 
-// Initialize recording
-initVoiceCloneRecording()
-
-initVoiceClone()
-console.log("[Voice Clone] Module initialized with live recording")
+// Voice clone init moved to initFeatures() to wait for auth
+console.log("[Voice Clone] Module initialized (will fully init after auth)")

@@ -2,7 +2,8 @@ import json
 import logging
 import re
 
-import requests
+from lib.http_client import sync_client
+import httpx
 
 from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, MODEL_TURBO, TURBO_MAX_TOKENS, INSTANT_MAX_TOKENS
 from utils import clean_ai_output
@@ -41,7 +42,7 @@ def _get_vision_model():
         return _vision_model_cache
 
     try:
-        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=5)
         if resp.status_code == 200:
             models = resp.json().get("models", [])
             logger.info("[_get_vision_model] Available models: %s", [m.get("name") for m in models])
@@ -136,7 +137,7 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None, in
 
     # Retrieve relevant document context if RAG is enabled
     rag_block = ""
-    if include_rag:
+    if include_rag and mode not in ("race", "fast"):
         try:
             from document_store import get_document_store
             doc_store = get_document_store()
@@ -179,6 +180,11 @@ Answer:"""
 
 {history_block}{rag_block}Question: {user_input}
 Answer:"""
+
+    if mode == "race":
+        # Minimal prompt for sub-second first-byte — no FORBIDDEN list, no style rules
+        return f"""{history_block}{rag_block}Q: {user_input}
+A:"""
 
     if mode == "cloud":
         return f"""Senior engineer. Plain text answer.
@@ -230,6 +236,21 @@ Conversation transcript:
 {user_input}
 """
 
+    if mode == "followup":
+        return f"""Write a professional follow-up email based on the meeting summary below.
+
+The email should:
+- Have a clear subject line
+- Thank the participants for their time
+- Summarize key discussion points (2-3 bullets)
+- List action items and owners
+- Propose next steps or a follow-up meeting
+- Be professional but warm
+
+Meeting summary:
+{user_input}
+"""
+
     return base
 
 
@@ -237,7 +258,7 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
     try:
         final_prompt = build_prompt(prompt, mode, style)
 
-        response = requests.post(
+        response = sync_client.post(
             f"{OLLAMA_URL}/api/generate",
             json={
                 "model": model_name or get_ai_model(mode),
@@ -276,62 +297,59 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         is_turbo = mode == "turbo"
         is_instant = mode == "instant"
         num_predict = INSTANT_MAX_TOKENS if is_instant else (TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else (2000 if style == "detailed" else 500))))
-        response = requests.post(
-            f"{OLLAMA_URL}/api/generate",
-            json={
-                "model": model_name or get_ai_model(mode),
-                "prompt": final_prompt,
-                "stream": True,
-                "options": {
-                    "temperature": AI_TEMPERATURE,
-                    "num_predict": num_predict
-                }
-            },
-            stream=True,
-            timeout=AI_TIMEOUT
-        )
 
-        if response.status_code != 200:
-            logger.error("Ollama service returned status %d", response.status_code)
-            yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
-            return
+        payload = {
+            "model": model_name or get_ai_model(mode),
+            "prompt": final_prompt,
+            "stream": True,
+            "options": {
+                "temperature": AI_TEMPERATURE,
+                "num_predict": num_predict
+            }
+        }
 
-        model_display = model_name or get_ai_model(mode)
-        yield _make_meta(model_display, "ollama")
+        with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=AI_TIMEOUT) as response:
+            if response.status_code != 200:
+                logger.error("Ollama service returned status %d", response.status_code)
+                yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
+                return
 
-        chunk_count = 0
-        for line in response.iter_lines():
-            if not line:
-                continue
+            model_display = model_name or get_ai_model(mode)
+            yield _make_meta(model_display, "ollama")
 
-            try:
-                data = json.loads(line.decode("utf-8", errors="replace"))
+            chunk_count = 0
+            for line in response.iter_lines():
+                if not line:
+                    continue
 
-                if "response" in data:
-                    chunk = data["response"]
-                    if chunk.strip():
-                        yield _make_content(chunk)
-                        chunk_count += 1
+                try:
+                    data = json.loads(line)
 
-                if data.get("done", False):
-                    break
+                    if "response" in data:
+                        chunk = data["response"]
+                        if chunk.strip():
+                            yield _make_content(chunk)
+                            chunk_count += 1
 
-            except json.JSONDecodeError as e:
-                logger.warning("Stream JSON decode error: %s, line: %s", e, line[:100])
-                continue
-            except Exception as e:
-                logger.warning("Stream parse error: %s", e)
-                continue
+                    if data.get("done", False):
+                        break
+
+                except json.JSONDecodeError as e:
+                    logger.warning("Stream JSON decode error: %s, line: %s", e, line[:100])
+                    continue
+                except Exception as e:
+                    logger.warning("Stream parse error: %s", e)
+                    continue
 
         ms = int((time.time() - start) * 1000)
         logger.debug("Stream complete: %d chunks in %dms", chunk_count, ms)
         yield _make_done(ms)
 
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         logger.error("Ollama streaming timeout after %ds", AI_TIMEOUT)
         yield _make_error("AI response timeout. Please try again.")
 
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         logger.error("Ollama connection error")
         yield _make_error("Cannot connect to AI service. Is Ollama running?")
 
@@ -380,59 +398,53 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
         logger.info("Vision stream: model=%s, has_image=%s, prompt=%s",
             model_to_use, bool(image_b64), prompt[:80] + "...")
 
-        response = requests.post(
-            f"{OLLAMA_URL}/api/generate",
-            json=payload,
-            stream=True,
-            timeout=120
-        )
+        with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=120) as response:
+            if response.status_code != 200:
+                try:
+                    err_data = response.json()
+                    err_msg = err_data.get("error", "")
+                except Exception:
+                    err_msg = response.text
 
-        if response.status_code != 200:
-            try:
-                err_data = response.json()
-                err_msg = err_data.get("error", "")
-            except Exception:
-                err_msg = response.text
+                logger.error("Ollama vision service returned status %d: %s", response.status_code, err_msg)
 
-            logger.error("Ollama vision service returned status %d: %s", response.status_code, err_msg)
+                if "memory" in err_msg.lower():
+                    yield _make_error(f"Vision model '{model_to_use}' ran out of memory. Try a smaller model: ollama pull moondream")
+                else:
+                    yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
+                return
 
-            if "memory" in err_msg.lower():
-                yield _make_error(f"Vision model '{model_to_use}' ran out of memory. Try a smaller model: ollama pull moondream")
-            else:
-                yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
-            return
+            model_display = model_to_use
+            yield _make_meta(model_display, "ollama")
 
-        model_display = model_to_use
-        yield _make_meta(model_display, "ollama")
-
-        chunk_count = 0
-        for line in response.iter_lines():
-            if not line:
-                continue
-            try:
-                data = json.loads(line.decode("utf-8", errors="replace"))
-                if "response" in data:
-                    chunk = data["response"]
-                    if chunk.strip():
-                        yield _make_content(chunk)
-                        chunk_count += 1
-                if data.get("done", False):
-                    break
-            except json.JSONDecodeError as e:
-                logger.warning("Vision stream JSON decode error: %s", e)
-                continue
-            except Exception as e:
-                logger.warning("Vision stream parse error: %s", e)
-                continue
+            chunk_count = 0
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if "response" in data:
+                        chunk = data["response"]
+                        if chunk.strip():
+                            yield _make_content(chunk)
+                            chunk_count += 1
+                    if data.get("done", False):
+                        break
+                except json.JSONDecodeError as e:
+                    logger.warning("Vision stream JSON decode error: %s", e)
+                    continue
+                except Exception as e:
+                    logger.warning("Vision stream parse error: %s", e)
+                    continue
 
         ms = int((time.time() - start) * 1000)
         logger.debug("Vision stream complete: %d chunks in %dms", chunk_count, ms)
         yield _make_done(ms)
 
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         logger.error("Vision stream timeout after %ds", AI_TIMEOUT)
         yield _make_error("AI response timeout. Please try again.")
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         logger.error("Vision stream connection error")
         yield _make_error("Cannot connect to AI service. Is Ollama running?")
     except Exception as e:
@@ -441,18 +453,20 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
 
 
 def _make_meta(model, provider):
-    return f"event: meta\ndata: {{\"type\":\"meta\",\"model\":\"{model}\",\"provider\":\"{provider}\"}}\n\n"
+    from lib.sse_helpers import make_meta
+    return make_meta(model, provider)
 
 def _make_content(chunk):
-    import json
-    return f"event: chunk\ndata: {json.dumps({'type':'chunk','content':chunk})}\n\n"
+    from lib.sse_helpers import make_content
+    return make_content(chunk)
 
 def _make_done(ms):
-    return f"event: done\ndata: {{\"type\":\"done\",\"ms\":{ms}}}\n\n"
+    from lib.sse_helpers import make_done
+    return make_done(ms)
 
 def _make_error(msg):
-    import json
-    return f"event: error\ndata: {json.dumps({'type':'error','message':msg})}\n\n"
+    from lib.sse_helpers import make_error
+    return make_error(msg)
 
 
 def route_ai(prompt, mode="adaptive", style="concise"):
@@ -517,6 +531,68 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
             logger.error("Ollama stream error: %s", e)
             yield _make_error(f"Ollama error: {e}")
             return
+
+    # "auto" mode — race available cloud providers for fastest response
+    if provider == "auto":
+        try:
+            from cloud_providers import PROVIDER_MODEL_MAP, get_stream_fn
+            import os as _os
+            # Speed priority: groq > google > openai > anthropic
+            SPEED_PRIORITY = [
+                "groq-llama-3-3-70b", "google-gemini-2-0-flash",
+                "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku",
+            ]
+            # Find first fast cloud provider that has a stream function and API key
+            for fast_model in SPEED_PRIORITY:
+                if fast_model in PROVIDER_MODEL_MAP:
+                    provider_prefix, model_name = PROVIDER_MODEL_MAP[fast_model]
+                    stream_fn = get_stream_fn(provider_prefix)
+                    if stream_fn:
+                        # Check if this provider has an API key
+                        key_secret = _os.getenv("KEY_SERVER_SECRET", "")
+                        headers = {}
+                        if key_secret:
+                            headers["X-Key-Server-Secret"] = key_secret
+                        try:
+                            resp = sync_client.post(
+                                "http://127.0.0.1:18000/get-key",
+                                json={"provider": provider_prefix},
+                                headers=headers,
+                                timeout=2
+                            )
+                            has_key = resp.status_code == 200 and bool(resp.json().get("apiKey"))
+                        except Exception:
+                            has_key = False
+
+                        if has_key:
+                            logger.info("[route_ai_stream] auto → %s (%s)", fast_model, provider_prefix)
+                            for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages):
+                                yield event
+                            return
+            logger.info("[route_ai_stream] auto → no paid cloud keys found, trying Ollama Cloud")
+            # Try free Ollama Cloud (gemma3) as fallback
+            try:
+                key_secret = _os.getenv("KEY_SERVER_SECRET", "")
+                headers = {}
+                if key_secret:
+                    headers["X-Key-Server-Secret"] = key_secret
+                resp = sync_client.post(
+                    "http://127.0.0.1:18000/get-key",
+                    json={"provider": "ollama-cloud"},
+                    headers=headers,
+                    timeout=2
+                )
+                if resp.status_code == 200 and bool(resp.json().get("apiKey")):
+                    from cloud_providers import ask_ollama_cloud_stream
+                    logger.info("[route_ai_stream] auto → Ollama Cloud (gemma3:cloud)")
+                    for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages):
+                        yield event
+                    return
+            except Exception:
+                pass
+            logger.info("[route_ai_stream] auto → no Ollama Cloud key, falling back to local Ollama")
+        except Exception as e:
+            logger.error("[route_ai_stream] auto cloud race error: %s", e)
 
     # Cloud providers (OpenAI, Anthropic, Google, etc.) — use cloud_providers module
     if provider and provider != "ollama" and "-" in provider:

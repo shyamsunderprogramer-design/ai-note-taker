@@ -6,14 +6,13 @@ import os
 import platform
 import queue
 import re
-import requests
 import shutil
 import signal
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -55,6 +54,9 @@ from security import (
 )
 from security.auth import user_manager, User
 from generate_ssl import generate_self_signed_cert, get_ssl_context
+
+# Use shared httpx client instead of requests to avoid blocking the event loop
+from lib.http_client import sync_client
 
 # T16: Database migration - PostgreSQL with SQLAlchemy
 try:
@@ -153,6 +155,82 @@ except ImportError:
 sys.stdout.reconfigure(encoding="utf-8")
 
 app = FastAPI()
+
+# ── Route Module Migration ─────────────────────────────────────────────────
+# Route modules in backend/routes/ are the target architecture.
+# They are registered below via app.include_router().
+#
+# MIGRATION STATUS: Route modules are registered but main.py still contains
+# the original endpoint definitions. To complete the migration:
+#   1. Test that route modules work (run the app, hit endpoints)
+#   2. Comment out the duplicate endpoints in main.py
+#   3. Verify all routes work from the modules
+#   4. Delete the endpoint functions from main.py
+#
+# Route modules available:
+#   health, auth, ai, transcription, ollama, conversations,
+#   analytics, cognitive, study, interview, jobs, voice,
+#   agents, admin, crm
+
+# ── Application State ────────────────────────────────────────────────────────
+# Centralized state container — replaces scattered global variables.
+class AppState:
+    """Centralized application state."""
+    def __init__(self):
+        self.current_mode = "auto"
+        self.use_autonomous = False
+        self.always_on_mic_enabled = False
+        self.last_query_time = 0.0
+        self.cooldown_seconds = 5
+        self.is_streaming = False
+        self.race_history = []
+        self.listener_thread = None
+        self.lock = threading.Lock()
+        self.max_race_history = 100
+
+_state = AppState()
+
+from routes import deps as _route_deps
+
+# Wire up shared state so route modules can access it
+_route_deps.state = _state
+_route_deps.DATABASE_AVAILABLE = DATABASE_AVAILABLE
+_route_deps.COGNITIVE_GRAPH_AVAILABLE = COGNITIVE_GRAPH_AVAILABLE
+_route_deps.WHISPER_AVAILABLE = WHISPER_AVAILABLE
+
+# Route module imports — available for migration when endpoints are removed from this file.
+# To activate: remove the duplicate endpoints below, then uncomment these lines.
+# from routes.health import router as health_router
+# from routes.auth import router as auth_router
+# from routes.ai import router as ai_router
+# from routes.transcription import router as transcription_router
+# from routes.ollama import router as ollama_router
+# from routes.conversations import router as conversations_router
+# from routes.analytics import router as analytics_router
+# from routes.cognitive import router as cognitive_router
+# from routes.study import router as study_router
+# from routes.interview import router as interview_router
+# from routes.jobs import router as jobs_router
+# from routes.voice import router as voice_router
+# from routes.agents import router as agents_router
+# from routes.admin import router as admin_router
+# from routes.crm import router as crm_router
+#
+# app.include_router(health_router)
+# app.include_router(auth_router)
+# app.include_router(ai_router)
+# app.include_router(transcription_router)
+# app.include_router(ollama_router)
+# app.include_router(conversations_router)
+# app.include_router(analytics_router)
+# app.include_router(cognitive_router)
+# app.include_router(study_router)
+# app.include_router(interview_router)
+# app.include_router(jobs_router)
+# app.include_router(voice_router)
+# app.include_router(agents_router)
+# app.include_router(admin_router)
+# app.include_router(crm_router)
 
 # T6: Global exception handler for structured APIError
 @app.exception_handler(APIError)
@@ -346,8 +424,8 @@ async def optional_auth(request: Request, token: str = Depends(get_token_from_re
 
 
 # T1: Auth enforcement configuration
-# Default to secure (auth required); set AUTH_REQUIRED=false for dev convenience
-AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() == "true"
+# Auth is required by default (production-safe); set AUTH_REQUIRED=false for dev convenience
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
@@ -545,23 +623,9 @@ def get_ffmpeg_path():
     return "ffmpeg"
 
 
-last_query_time = 0
-CURRENT_MODE = "auto"
-COOLDOWN_SECONDS = 5
-
-USE_AUTONOMOUS = False
-listener_thread = None
-lock = threading.Lock()
-
-STATE = {
-    "is_streaming": False
-}
-
-always_on_mic_enabled = False
-
 
 def autonomous_listener():
-    global last_query_time, USE_AUTONOMOUS, always_on_mic_enabled  # noqa: F824
+    # Note: state is now in _state object, no global declarations needed
 
     from whisper_handler import get_streaming_transcriber, clean_text, is_meaningful, is_question, is_small_talk, is_technical, transcribe
 
@@ -571,7 +635,7 @@ def autonomous_listener():
     min_words = 3
 
     def get_silence_threshold():
-        return 1.8 if CURRENT_MODE == "interview" else silence_threshold
+        return 1.8 if _state.current_mode == "interview" else silence_threshold
 
     transcriber = get_streaming_transcriber()
 
@@ -587,13 +651,13 @@ def autonomous_listener():
     transcriber.start()
 
     try:
-        while USE_AUTONOMOUS and always_on_mic_enabled:
+        while _state.use_autonomous and _state.always_on_mic_enabled:
             try:
-                if STATE["is_streaming"]:
-                    time.sleep(0.2)
+                if _state.is_streaming:
+                    time.sleep(0.05)
                     continue
 
-                time.sleep(0.3)
+                time.sleep(0.1)
 
                 if time.time() - last_heard_time < get_silence_threshold():
                     continue
@@ -616,15 +680,15 @@ def autonomous_listener():
                 if is_small_talk(final_text):
                     continue
 
-                if CURRENT_MODE == "interview" and not is_technical(final_text):
+                if _state.current_mode == "interview" and not is_technical(final_text):
                     continue
 
-                with lock:
-                    if time.time() - last_query_time < COOLDOWN_SECONDS:
+                with _state.lock:
+                    if time.time() - _state._state.last_query_time < _state.cooldown_seconds:
                         continue
-                    last_query_time = time.time()
+                    _state.last_query_time = time.time()
 
-                for _chunk in route_ai_stream(final_text, mode=CURRENT_MODE):
+                for _chunk in route_ai_stream(final_text, mode=_state.current_mode):
                     pass
 
             except Exception as e:
@@ -635,7 +699,7 @@ def autonomous_listener():
 
 @app.on_event("startup")
 async def start_listener():
-    global listener_thread
+    # State is now in _state object
 
     # T16: Initialize PostgreSQL database
     if DATABASE_AVAILABLE:
@@ -668,9 +732,32 @@ async def start_listener():
     except Exception as e:
         logger.warning(f"[Startup] ML warmup skipped: {e}")
 
-    if USE_AUTONOMOUS and listener_thread is None:
-        listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
-        listener_thread.start()
+    # Pre-warm cloud provider connections (DNS + TLS handshake) for sub-second first-byte
+    def prewarm_connections():
+        import urllib.request
+        CLOUD_ENDPOINTS = [
+            ("groq", "https://api.groq.com", "GROQ_API_KEY"),
+            ("google", "https://generativelanguage.googleapis.com", "GOOGLE_API_KEY"),
+            ("openai", "https://api.openai.com", "OPENAI_API_KEY"),
+            ("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"),
+            ("deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+            ("xai", "https://api.x.ai", "XAI_API_KEY"),
+            ("perplexity", "https://api.perplexity.ai", "PERPLEXITY_API_KEY"),
+        ]
+        for name, url, env_var in CLOUD_ENDPOINTS:
+            if _has_provider_key(name, env_var):
+                try:
+                    urllib.request.urlopen(url, timeout=5)
+                    logger.info("[Pre-warm] %s connection established", name)
+                except Exception:
+                    # Expected: most will return 401/403 — we just want the TCP/TLS handshake
+                    logger.debug("[Pre-warm] %s handshake done (non-200 OK)", name)
+
+    threading.Thread(target=prewarm_connections, daemon=True, name="connection-prewarm").start()
+
+    if _state.use_autonomous and _state.listener_thread is None:
+        _state.listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
+        _state.listener_thread.start()
 
 
 @app.get("/")
@@ -678,7 +765,7 @@ def health_check():
     return {
         "status": "ok",
         "service": "ai-backend",
-        "mode": CURRENT_MODE,
+        "mode": _state.current_mode,
         "security": {
             "authentication": "enabled",
             "rate_limiting": "enabled",
@@ -688,32 +775,37 @@ def health_check():
 
 
 # Provider key status cache — avoids flooding the key server on every /providers call
-_provider_key_cache: Dict[str, bool] = {}
-_provider_key_cache_time: float = 0.0
+# Per-provider timestamps so one stale entry doesn't invalidate all others
+_provider_key_cache: Dict[str, tuple] = {}  # provider -> (result: bool, timestamp: float)
 _PROVIDER_KEY_CACHE_TTL = 300  # 5 minutes
 
 
 def _has_provider_key(provider: str, env_var: str) -> bool:
-    """Check if a provider has an API key, using a short-lived cache to avoid key server flooding."""
-    global _provider_key_cache, _provider_key_cache_time
+    """Check if a provider has an API key, using a per-provider cache."""
     now = time.time()
 
     # Return cached result if still fresh
-    if provider in _provider_key_cache and (now - _provider_key_cache_time) < _PROVIDER_KEY_CACHE_TTL:
-        return _provider_key_cache[provider]
+    if provider in _provider_key_cache:
+        cached_result, cached_time = _provider_key_cache[provider]
+        if (now - cached_time) < _PROVIDER_KEY_CACHE_TTL:
+            return cached_result
 
     # Check env var first (fast, no network)
     if os.getenv(env_var, "").strip():
-        _provider_key_cache[provider] = True
-        _provider_key_cache_time = now
+        _provider_key_cache[provider] = (True, now)
         return True
 
-    # Then check secure key server
+    # Then check secure key server (with auth secret)
     try:
-        resp = requests.post(
+        headers = {}
+        key_secret = os.getenv("KEY_SERVER_SECRET", "")
+        if key_secret:
+            headers["X-Key-Server-Secret"] = key_secret
+        resp = sync_client.post(
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
-            timeout=1
+            headers=headers,
+            timeout=2
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -723,24 +815,41 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
     except Exception:
         result = False
 
-    _provider_key_cache[provider] = result
-    _provider_key_cache_time = now
+    _provider_key_cache[provider] = (result, now)
     return result
+
+
+def _batch_check_provider_keys(providers: list) -> Dict[str, bool]:
+    """Check multiple provider keys concurrently using threads. Returns {provider: has_key}."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(providers)) as pool:
+        futures = {
+            pool.submit(_has_provider_key, p, e): p
+            for p, e in providers
+        }
+        for future in as_completed(futures):
+            provider = futures[future]
+            results[provider] = future.result()
+    return results
 
 
 @app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def list_providers(request: Request):
     """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
+    key_status = _batch_check_provider_keys([
+        ("openai", "OPENAI_API_KEY"),
+        ("anthropic", "ANTHROPIC_API_KEY"),
+        ("google", "GOOGLE_API_KEY"),
+        ("xai", "XAI_API_KEY"),
+        ("deepseek", "DEEPSEEK_API_KEY"),
+        ("groq", "GROQ_API_KEY"),
+        ("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
+        ("perplexity", "PERPLEXITY_API_KEY"),
+    ])
     return {
-        "openai": _has_provider_key("openai", "OPENAI_API_KEY"),
-        "anthropic": _has_provider_key("anthropic", "ANTHROPIC_API_KEY"),
-        "google": _has_provider_key("google", "GOOGLE_API_KEY"),
-        "xai": _has_provider_key("xai", "XAI_API_KEY"),
-        "deepseek": _has_provider_key("deepseek", "DEEPSEEK_API_KEY"),
-        "groq": _has_provider_key("groq", "GROQ_API_KEY"),
-        "ollama-cloud": _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
-        "perplexity": _has_provider_key("perplexity", "PERPLEXITY_API_KEY"),
+        **key_status,
         "ollama": True  # Ollama is always available if configured
     }
 
@@ -749,7 +858,7 @@ async def list_providers(request: Request):
 def list_ollama_models():
     """Proxy to Ollama's GET /api/tags — returns installed local models."""
     try:
-        response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
+        response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10)
         if response.status_code == 200:
             return response.json()
         return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
@@ -764,7 +873,7 @@ def pull_ollama_model(model: str = Query(...)):
     def background_pull():
         try:
             logger.info("Starting model pull: %s", model)
-            pull_resp = requests.post(
+            pull_resp = sync_client.post(
                 f"{OLLAMA_URL}/api/pull",
                 json={"name": model},
                 stream=True,
@@ -786,7 +895,7 @@ def pull_ollama_model(model: str = Query(...)):
 def delete_ollama_model(model_name: str):
     """Delete a local Ollama model."""
     try:
-        response = requests.delete(
+        response = sync_client.delete(
             f"{OLLAMA_URL}/api/delete",
             json={"name": model_name},
             timeout=30
@@ -807,15 +916,18 @@ async def ask_with_image(
     style: str = Form("concise"),
     provider: str = Form("ollama"),
     context: str = Form(None),
-    image_b64: str = Form(None)
+    image_b64: str = Form(None),
+    enabled: str = Form(None)
 ):
-    """Accept text + optional base64 screenshot, stream AI response via SSE."""
+    """Accept text + optional base64 screenshot, stream AI response via SSE.
+    When image is present and cloud vision keys are available, races across
+    cloud vision providers (GPT-4o, Claude, Gemini, Groq) for fastest response.
+    Falls back to Ollama vision model if all clouds fail."""
     # SECURITY: Sanitize query input
     query = sanitize_input(query, max_length=10000)
 
-    logger.info("[ask-with-image] received: query=%s, mode=%s, style=%s, image_b64 present=%s", query[:100], mode, style, "Yes" if image_b64 else "No")
-    if image_b64:
-        logger.info("[ask-with-image] image_b64 length=%d, first 50 chars=%s", len(image_b64), image_b64[:50])
+    logger.info("[ask-with-image] query=%s, mode=%s, style=%s, has_image=%s, provider=%s",
+                query[:100], mode, style, "Yes" if image_b64 else "No", provider)
     messages = None
     if context:
         try:
@@ -824,35 +936,205 @@ async def ask_with_image(
         except Exception:
             pass
 
-    # When screenshot is provided, find a vision-capable model
-    # (ignore non-vision provider selection when image is present)
-    model_name = None
-    if image_b64:
-        from ai_router import _get_vision_model
-        model_name = _get_vision_model()
-        logger.info("[ask-with-image] Screenshot provided, vision model: %s", model_name)
-        if not model_name:
-            # No vision model found - return error
-            def error_gen():
-                import json
-                yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision-capable model found. Please pull a vision model like llava:latest with: ollama pull llava:latest'})}\n\n"
-            return StreamingResponse(error_gen(), media_type="text/event-stream")
+    # No screenshot — just do regular text streaming
+    if not image_b64:
+        def text_generator():
+            _state.is_streaming = True
+            try:
+                from ai_router import route_ai_stream
+                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
+                    yield event
+            except Exception as e:
+                import json as _json
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+            finally:
+                _state.is_streaming = False
+        return StreamingResponse(text_generator(), media_type="text/event-stream")
+
+    # === Screenshot provided — Two-Step Vision Pipeline ===
+    # Step 1: Vision model describes the image (cloud race + local Ollama fallback)
+    # Step 2: Main AI takes transcription + vision description → response
+
+    from cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
+    from modules.ai.vision_describer import stream_vision_description
+
+    # Resolve provider: dropdown sends e.g. "google-gemini-2-0-flash"
+    resolved_model = None
+    provider_prefix = None
+
+    if provider and provider != "auto" and provider != "ollama":
+        if provider in PROVIDER_MODEL_MAP:
+            provider_prefix, resolved_model = PROVIDER_MODEL_MAP[provider]
+        elif "-" in provider:
+            provider_prefix = provider.split("-")[0]
+            if provider_prefix in VISION_PROVIDER_MAP:
+                resolved_model = VISION_PROVIDER_MAP[provider_prefix]
+
+    enabled_set = None
+    if enabled:
+        enabled_set = set(enabled.split(","))
+
+    _VISION_PROVIDER_ENV = [
+        ("openai", "OPENAI_API_KEY"),
+        ("anthropic", "ANTHROPIC_API_KEY"),
+        ("google", "GOOGLE_API_KEY"),
+        ("groq", "GROQ_API_KEY"),
+    ]
+
+    # When "auto" is selected, check ALL providers (ignore UI toggles) —
+    # the user chose "auto" for fastest response, so use any available cloud key.
+    # When a specific provider is selected, still check all (user explicitly picked one).
+    if provider in ("auto", "ollama") or not enabled_set:
+        providers_to_check = _VISION_PROVIDER_ENV
     else:
-        logger.info("[ask-with-image] No screenshot, using provider: %s", provider)
+        providers_to_check = [
+            (p, e) for p, e in _VISION_PROVIDER_ENV
+            if p in enabled_set
+        ]
 
-    def generator():
-        STATE["is_streaming"] = True
+    key_status = _batch_check_provider_keys(providers_to_check)
+
+    vision_providers = []
+    for provider_name, has_key in key_status.items():
+        if has_key and provider_name in VISION_PROVIDER_MAP:
+            vision_providers.append(provider_name)
+
+    ollama_vision_model = None
+    try:
+        from ai_router import _get_vision_model
+        ollama_vision_model = _get_vision_model()
+    except Exception:
+        pass
+
+    has_ollama_vision = ollama_vision_model is not None
+
+    # Check if Ollama Cloud has a key (free vision-capable models like gemma3)
+    has_ollama_cloud_key = _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
+
+    # If no paid cloud vision keys, add free Ollama Cloud vision as fallback
+    if not vision_providers and has_ollama_cloud_key:
+        vision_providers.append("ollama-cloud")
+        logger.info("[ask-with-image] No paid vision keys, using free Ollama Cloud vision (gemma3)")
+
+    # No vision providers at all — fall back to text-only with warning
+    if not vision_providers and not has_ollama_vision:
+        def text_only_gen():
+            _state.is_streaming = True
+            try:
+                from ai_router import route_ai_stream
+                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
+                    yield event
+            except Exception as e:
+                import json as _json
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+            finally:
+                _state.is_streaming = False
+        return StreamingResponse(text_only_gen(), media_type="text/event-stream")
+
+    # If only local Ollama vision available (very slow on CPU), skip Step 1
+    # and go directly to Step 2 with text-only to avoid 50-100s delay
+    if not vision_providers and has_ollama_vision:
+        logger.info("[ask-with-image] No cloud vision keys, skipping Step 1 for speed")
+        def skip_vision_gen():
+            _state.is_streaming = True
+            try:
+                from ai_router import route_ai_stream
+                # Just answer the text query without image context
+                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
+                    yield event
+            except Exception as e:
+                import json as _json
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+            finally:
+                _state.is_streaming = False
+        return StreamingResponse(skip_vision_gen(), media_type="text/event-stream")
+
+    # Two-step pipeline generator
+    def two_step_vision_gen():
+        _state.is_streaming = True
+        full_description = ""
+
         try:
-            from ai_router import ask_ollama_vision_stream
-            for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=model_name):
-                yield event
-        except Exception as e:
-            import json
-            yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
-        finally:
-            STATE["is_streaming"] = False
+            # === STEP 1: Vision Description ===
+            # Stream image description from fastest available vision provider
+            for event in stream_vision_description(
+                image_b64=image_b64,
+                vision_providers=vision_providers,
+                ollama_vision_model=ollama_vision_model if has_ollama_vision else None,
+                provider_prefix=provider_prefix,
+                resolved_model=resolved_model,
+                mode=mode,
+                style=style,
+            ):
+                # Collect description text from vision events
+                if '"type":"vision"' in event or '"type": "vision"' in event:
+                    try:
+                        data_line = [l for l in event.split("\n") if l.startswith("data:")][0]
+                        data = json.loads(data_line[5:].strip())
+                        full_description += data.get("content", "")
+                    except (json.JSONDecodeError, IndexError):
+                        pass
+                    yield event  # Stream to frontend in real-time
+                elif '"type":"vision_done"' in event or '"type": "vision_done"' in event:
+                    yield event  # Signal Step 1 complete
+                elif '"type":"error"' in event or '"type": "error"' in event:
+                    yield event
+                    # If Step 1 failed, fall back to text-only
+                    if not full_description:
+                        _state.is_streaming = False
+                        return
+                else:
+                    yield event
 
-    return StreamingResponse(generator(), media_type="text/event-stream")
+            # === STEP 2: Main AI Response ===
+            # Feed transcription + vision description to the main AI
+            if full_description:
+                combined_prompt = (
+                    f"Context from screenshot: {full_description}\n\n"
+                    f"User question: {query}"
+                )
+            else:
+                # No description collected — just answer the text query
+                combined_prompt = query
+
+            # For Step 2, prefer a fast cloud text model over slow local Ollama
+            # If user selected "auto" and we have cloud keys, use a fast cloud model
+            step2_provider = provider
+            if provider == "auto" and vision_providers:
+                # Use the fastest available cloud provider for text
+                # Priority: paid cloud (groq > google > openai > anthropic) > Ollama Cloud
+                from cloud_providers import PROVIDER_MODEL_MAP
+                SPEED_PRIORITY = ["groq-llama-3-3-70b", "google-gemini-2-0-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
+                found_paid = False
+                for fast_model in SPEED_PRIORITY:
+                    if fast_model in PROVIDER_MODEL_MAP:
+                        pfx, _ = PROVIDER_MODEL_MAP[fast_model]
+                        if pfx in vision_providers and pfx != "ollama-cloud":
+                            step2_provider = fast_model
+                            found_paid = True
+                            break
+                # If only Ollama Cloud is available, use a fast Ollama Cloud text model
+                if not found_paid and "ollama-cloud" in vision_providers:
+                    step2_provider = "gemma3:cloud"
+                    logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
+
+            from ai_router import route_ai_stream
+            for event in route_ai_stream(
+                combined_prompt,
+                mode=mode,
+                style=style,
+                provider=step2_provider,
+                messages=messages,
+            ):
+                yield event
+
+        except Exception as e:
+            import json as _json
+            yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+        finally:
+            _state.is_streaming = False
+
+    return StreamingResponse(two_step_vision_gen(), media_type="text/event-stream")
 
 
 @app.get("/transcribe-stream")
@@ -937,7 +1219,7 @@ async def overlay_ask(
     logger.info("[overlay-ask] query=%s, has_screenshot=%s", query, bool(screenshot_b64))
 
     async def generator():
-        STATE["is_streaming"] = True
+        _state.is_streaming = True
         try:
             from ai_router import ask_ollama_vision_stream, _get_vision_model, route_ai_stream
 
@@ -963,7 +1245,7 @@ async def overlay_ask(
             import json
             yield f"event: error\ndata: {json.dumps({'type':'error','message': str(e)})}\n\n"
         finally:
-            STATE["is_streaming"] = False
+            _state.is_streaming = False
 
     return StreamingResponse(generator(), media_type="text/event-stream")
 
@@ -975,10 +1257,10 @@ async def set_always_on_mic(enabled: bool = Form(...)):
     When enabled, the StreamingTranscriber runs continuously and
     transcription events are available via /transcribe-stream SSE.
     """
-    global always_on_mic_enabled, USE_AUTONOMOUS
+    # State is now in _state object
 
-    always_on_mic_enabled = enabled
-    USE_AUTONOMOUS = enabled
+    _state.always_on_mic_enabled = enabled
+    _state.use_autonomous = enabled
     transcriber = get_streaming_transcriber()
 
     if enabled:
@@ -1220,6 +1502,13 @@ async def admin_run_migration(user: User = Depends(require_admin)):
 # SECURITY: AUTHENTICATION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════
 
+@app.get("/auth/status")
+async def auth_status():
+    """Returns whether authentication is required. Frontend uses this
+    to decide whether to show the login screen."""
+    return {"auth_required": AUTH_REQUIRED}
+
+
 @app.post("/auth/register")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def register_user(
@@ -1269,7 +1558,7 @@ async def login_user(username: str = Form(...), password: str = Form(...)):
     # Create access token
     access_token = create_access_token(
         data={"sub": user.id, "username": user.username},
-        expires_delta=__import__('datetime').timedelta(hours=24)
+        expires_delta=timedelta(hours=24)
     )
 
     return {
@@ -1569,20 +1858,20 @@ async def get_rate_limit_status(request: Request):
 
 @app.post("/set-mode")
 def set_mode(mode: str):
-    global CURRENT_MODE
+    # State is now in _state object
 
     if mode not in ["auto", "fast", "cloud", "interview", "universal", "adaptive", "reasoning", "code"]:
         return error_response(ErrorCode.VALIDATION_ERROR, "Invalid mode", status_code=400)
 
-    CURRENT_MODE = mode
-    return {"status": "mode updated", "mode": CURRENT_MODE}
+    _state.current_mode = mode
+    return {"status": "mode updated", "mode": _state.current_mode}
 
 
 @app.post("/transcribe")
 async def transcribe_api(file: UploadFile = File(...)):
-    global USE_AUTONOMOUS
+    # State is now in _state object
 
-    USE_AUTONOMOUS = False
+    _state.use_autonomous = False
     # Use secure filename to prevent path traversal
     secure_name = get_secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, secure_name)
@@ -1600,7 +1889,7 @@ async def transcribe_api(file: UploadFile = File(...)):
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
-    text = transcribe_audio(wav_path, mode=CURRENT_MODE)
+    text = transcribe_audio(wav_path, mode=_state.current_mode)
 
     # Clean up temp files immediately after use
     for path in (file_path, wav_path):
@@ -1610,7 +1899,7 @@ async def transcribe_api(file: UploadFile = File(...)):
     if not text or not is_meaningful(text) or not is_question(text):
         return {"text": text, "response": ""}
 
-    result = route_ai(text, mode=CURRENT_MODE)
+    result = route_ai(text, mode=_state.current_mode)
     return {
         "text": text,
         "response": clean_ai_output(result["response"]),
@@ -1623,9 +1912,9 @@ async def transcribe_api(file: UploadFile = File(...)):
 @rate_limit(requests_per_minute=20)  # T24: Expensive cloud transcription
 async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai", model: str = "gpt-4o-mini"):
     """Transcribe and route to a cloud AI provider"""
-    global USE_AUTONOMOUS
+    # State is now in _state object
 
-    USE_AUTONOMOUS = False
+    _state.use_autonomous = False
     # Use secure filename to prevent path traversal
     secure_name = get_secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, secure_name)
@@ -1643,7 +1932,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
-    text = transcribe_audio(wav_path, mode=CURRENT_MODE)
+    text = transcribe_audio(wav_path, mode=_state.current_mode)
 
     # Clean up temp files immediately after transcription
     for path in (file_path, wav_path):
@@ -1660,7 +1949,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
     try:
         from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
-        prompt = build_prompt(text, CURRENT_MODE)
+        prompt = build_prompt(text, _state.current_mode)
 
         if provider == "openai":
             resp = ask_gpt(prompt, model=model)
@@ -1693,7 +1982,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
     except ValueError as e:
         return {"text": text, "response": "", "error": str(e)}
     except Exception as e:
-        print("[ERROR cloud transcribe]:", e)
+        logger.error("[ERROR cloud transcribe]: %s", e)
         return {"text": text, "response": "", "error": str(e)}
 
 
@@ -1701,7 +1990,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama", context: str = None):
     """SSE stream endpoint — yields event: meta/chunk/done/error"""
     def generator():
-        STATE["is_streaming"] = True
+        _state.is_streaming = True
 
         # Parse context messages from JSON
         messages = None
@@ -1724,23 +2013,25 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
 
         finally:
-            STATE["is_streaming"] = False
+            _state.is_streaming = False
 
     return StreamingResponse(generator(), media_type="text/event-stream")
 
 
 @app.get("/stream-race")
-def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str = None, enabled: str = None):
+def stream_race(q: str, mode: str = "race", style: str = "concise", context: str = None, enabled: str = None):
     """
-    Fire all configured providers in parallel using ThreadPoolExecutor + as_completed.
-    Returns the FIRST successful full response (ignores errors/429s from cloud providers).
-    Falls back to Ollama if all clouds fail.
+    Fire all configured providers in parallel. First to emit a meta/chunk event wins.
+    Winner's response streams in real-time (word-by-word). Losing providers are
+    cancelled to save API tokens. Falls back to Ollama if all clouds fail.
     Only providers specified in 'enabled' param (comma-separated) will be used.
     """
-    from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
-    import concurrent.futures
+    import queue as queue_mod
+    import threading
     import logging
     import time as time_module
+
+    from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
 
     logger = logging.getLogger(__name__)
     race_start = time_module.time()
@@ -1760,59 +2051,61 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
             logger.warning("Failed to parse context JSON")
             pass
 
-    # Secure key checking — uses cached function to avoid key server flooding
+    # Secure key checking — batch-check all providers concurrently to avoid sequential delays
+    _ALL_PROVIDER_ENV = [
+        ("openai", "OPENAI_API_KEY"),
+        ("anthropic", "ANTHROPIC_API_KEY"),
+        ("google", "GOOGLE_API_KEY"),
+        ("xai", "XAI_API_KEY"),
+        ("deepseek", "DEEPSEEK_API_KEY"),
+        ("groq", "GROQ_API_KEY"),
+        ("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
+        ("perplexity", "PERPLEXITY_API_KEY"),
+    ]
+
+    # Filter to only enabled providers if frontend specified them
+    providers_to_check = [
+        (p, e) for p, e in _ALL_PROVIDER_ENV
+        if enabled_set is None or p in enabled_set
+    ]
+
+    # Batch check all keys concurrently (uses per-provider cache + thread pool)
+    key_status = _batch_check_provider_keys(providers_to_check)
+
     # Separate cloud and local providers
     cloud_providers = []
     local_providers = []
 
-    # If enabled_set from frontend is provided, only use those providers
-    if enabled_set:
-        if "openai" in enabled_set and _has_provider_key("openai", "OPENAI_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-        if "anthropic" in enabled_set and _has_provider_key("anthropic", "ANTHROPIC_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-        if "google" in enabled_set and _has_provider_key("google", "GOOGLE_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-        if "xai" in enabled_set and _has_provider_key("xai", "XAI_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-        if "deepseek" in enabled_set and _has_provider_key("deepseek", "DEEPSEEK_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-        if "groq" in enabled_set and _has_provider_key("groq", "GROQ_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-        if "ollama-cloud" in enabled_set and _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
+    _PROVIDER_TO_MODEL_PREFIX = {
+        "openai": "openai-", "anthropic": "anthropic-", "google": "google-",
+        "xai": "xai-", "deepseek": "deepseek-", "groq": "groq-",
+        "perplexity": "perplexity-",
+    }
+
+    for provider, has_key in key_status.items():
+        if not has_key:
+            continue
+        if provider == "ollama-cloud":
             cloud_providers.append("ollama-cloud")
-        if "perplexity" in enabled_set and _has_provider_key("perplexity", "PERPLEXITY_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("perplexity-")])
-        # Only add local ollama if explicitly enabled in frontend
-        if "ollama" in enabled_set:
-            local_providers.append("ollama")
-    else:
-        # Legacy: use all cloud providers with API keys, plus ollama as fallback
-        if _has_provider_key("openai", "OPENAI_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("openai-")])
-        if _has_provider_key("anthropic", "ANTHROPIC_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("anthropic-")])
-        if _has_provider_key("google", "GOOGLE_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("google-")])
-        if _has_provider_key("xai", "XAI_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("xai-")])
-        if _has_provider_key("deepseek", "DEEPSEEK_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("deepseek-")])
-        if _has_provider_key("groq", "GROQ_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("groq-")])
-        if _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"):
-            cloud_providers.append("ollama-cloud")
-        if _has_provider_key("perplexity", "PERPLEXITY_API_KEY"):
-            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith("perplexity-")])
-        # Add local ollama as fallback (always available)
+        elif provider in _PROVIDER_TO_MODEL_PREFIX:
+            prefix = _PROVIDER_TO_MODEL_PREFIX[provider]
+            cloud_providers.extend([k for k in PROVIDER_MODEL_MAP if k.startswith(prefix)])
+
+    # Add local ollama as fallback
+    if enabled_set is None or "ollama" in (enabled_set or set()):
         local_providers.append("ollama")
 
-    # Deduplicate by provider name
+    # Deduplicate by provider prefix (fix: handle compound names like "ollama-cloud")
     def deduplicate(provider_list):
         seen = set()
         result = []
         for pk in provider_list:
-            pname = pk.split("-")[0]
+            if pk == "ollama-cloud":
+                pname = "ollama-cloud"
+            elif pk == "ollama":
+                pname = "ollama"
+            else:
+                pname = pk.split("-")[0]
             if pname not in seen:
                 seen.add(pname)
                 result.append(pk)
@@ -1821,85 +2114,195 @@ def stream_race(q: str, mode: str = "fast", style: str = "concise", context: str
     cloud_providers = deduplicate(cloud_providers)[:4]  # Limit to 4 concurrent
     local_providers = deduplicate(local_providers)
 
+    # Prioritize fast providers: Groq first (sub-200ms typical), then Gemini Flash
+    def sort_for_speed(provider_list):
+        """Sort providers so fastest-to-first-byte providers come first."""
+        SPEED_PRIORITY = {"groq": 0, "google": 1, "openai": 2, "anthropic": 3, "deepseek": 4, "xai": 5, "perplexity": 6, "ollama-cloud": 7}
+        def sort_key(pk):
+            prefix = pk if pk in ("ollama", "ollama-cloud") else pk.split("-")[0]
+            return SPEED_PRIORITY.get(prefix, 99)
+        return sorted(provider_list, key=sort_key)
+
+    cloud_providers = sort_for_speed(cloud_providers)
+
     # Combine: clouds first, then local as fallback
     all_providers = cloud_providers + local_providers
     logger.info("Race mode: clouds=%s, local=%s, combined=%s", cloud_providers, local_providers, all_providers)
 
-    def fetch_events(pk):
-        """Collect all SSE events from a provider. Returns (pk, events_list, error)."""
-        import time as fetch_time
-        fetch_start = fetch_time.time()
+    # Single-provider fast path: skip race overhead
+    if len(all_providers) <= 1:
+        single_pk = all_providers[0] if all_providers else "ollama"
+        def single_generator():
+            _state.is_streaming = True
+            try:
+                if single_pk == "ollama":
+                    from ai_router import ask_ollama_stream
+                    for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages):
+                        yield event
+                else:
+                    resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
+                    model_name = resolved[1]
+                    stream_fn = get_stream_fn(single_pk)
+                    if stream_fn:
+                        for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages):
+                            yield event
+                    else:
+                        yield f'event: error\ndata: {{"type":"error","message":"No stream function for {single_pk}"}}\n\n'
+            finally:
+                _state.is_streaming = False
+        return StreamingResponse(single_generator(), media_type="text/event-stream")
+
+    # === Queue-based first-byte-wins race ===
+    race_queue = queue_mod.Queue()
+    cancel_flags = {pk: threading.Event() for pk in all_providers}
+
+    def stream_provider(pk):
+        """Stream from a provider into the shared queue. Exit early if cancelled."""
+        provider_start = time_module.time()
         logger.info("[PROVIDER START] %s", pk)
         try:
             if pk == "ollama":
                 from ai_router import ask_ollama_stream
-                events = list(ask_ollama_stream(q, mode=mode, style=style, messages=messages))
+                stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages)
             else:
                 resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
                 model_name = resolved[1]
                 stream_fn = get_stream_fn(pk)
                 if stream_fn is None:
-                    return (pk, [], f"No stream function for {pk}")
-                events = list(stream_fn(q, model=model_name, mode=mode, style=style, messages=messages))
-            # Check if events contains an error — but track if any content was yielded first
-            content_yielded = any(("event: chunk" in e or "event: meta" in e) and '"content"' in e for e in events)
-            has_error = any("event: error" in e for e in events)
+                    race_queue.put((pk, "ERROR", f"No stream function for {pk}"))
+                    race_queue.put((pk, "DONE", None))
+                    return
+                stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)
+
+            has_error = False
+            for event in stream_iter:
+                if cancel_flags[pk].is_set():
+                    logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time_module.time() - provider_start)
+                    race_queue.put((pk, "DONE", None))
+                    return
+                # Detect error events from the stream function
+                if "event: error" in event:
+                    has_error = True
+                    race_queue.put((pk, "ERROR", event))
+                else:
+                    race_queue.put((pk, "EVENT", event))
+
             if has_error:
-                if content_yielded:
-                    # Partial content before error — return it rather than discarding
-                    logger.warning("[PROVIDER] %s returned error after content, returning partial (%.1fs)", pk, fetch_time.time() - fetch_start)
-                    return (pk, events, None)
-                for e in events:
-                    if "event: error" in e:
-                        return (pk, [], e)
-                return (pk, [], "Unknown error")
-            logger.info("Provider %s succeeded with %d events (%.1fs)", pk, len(events), fetch_time.time() - fetch_start)
-            return (pk, events, None)
+                logger.info("[PROVIDER ERROR DONE] %s in %.1fs", pk, time_module.time() - provider_start)
+            else:
+                logger.info("[PROVIDER DONE] %s in %.1fs", pk, time_module.time() - provider_start)
+            race_queue.put((pk, "DONE", None))
         except Exception as e:
-            logger.error("Provider %s failed: %s (%.1fs)", pk, e, fetch_time.time() - fetch_start)
-            return (pk, [], str(e))
+            logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time_module.time() - provider_start)
+            race_queue.put((pk, "ERROR", str(e)))
+            race_queue.put((pk, "DONE", None))
+
+    # Start all provider threads
+    threads = []
+    for pk in all_providers:
+        t = threading.Thread(target=stream_provider, args=(pk,), daemon=True)
+        t.start()
+        threads.append(t)
 
     def race_generator():
-        from cloud_providers import MODEL_DISPLAY_NAMES
-        STATE["is_streaming"] = True
-        winner_found = False
+        _state.is_streaming = True
+        winner = None
+        active_count = len(all_providers)
+        done_count = 0
+        winner_first_chunk_time = None
+        winner_done = False
 
-        # Use ThreadPoolExecutor to run providers in parallel
-        # First completed provider with a valid response wins
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_providers)) as executor:
-            # Submit all provider requests
-            future_to_pk = {
-                executor.submit(fetch_events, pk): pk
-                for pk in all_providers
-            }
+        while not winner_done and done_count < active_count:
+            try:
+                pk, event_type, event_data = race_queue.get(timeout=30)
+            except queue_mod.Empty:
+                logger.warning("[RACE] Timeout waiting for providers")
+                break
 
-            # Yield events from the first provider that completes successfully
-            for future in concurrent.futures.as_completed(future_to_pk):
-                pk = future_to_pk[future]
-                try:
-                    result_pk, events, error = future.result()
-                    if error:
-                        logger.warning("[RACE] provider %s returned error: %s", pk, error)
-                        continue
-                    if events:
-                        # Found the winner! Stream their events
-                        logger.info("[RACE] winner: %s", pk)
-                        for event in events:
-                            yield event
-                        winner_found = True
-                        break
-                except Exception as e:
-                    logger.warning("[RACE] provider %s raised exception: %s", pk, e)
-                    continue
+            if event_type == "DONE":
+                done_count += 1
+                if pk == winner:
+                    winner_done = True
+                continue
 
-        if not winner_found:
-            logger.error("All providers failed in race mode")
-            yield f"event: error\ndata: {{\"type\":\"error\",\"message\":\"All providers failed\"}}\n\n"
+            if event_type == "ERROR":
+                logger.warning("[RACE] provider %s error: %s", pk, event_data)
+                continue
 
-        logger.info("[RACE COMPLETE] total_time=%.1fs", time_module.time() - race_start)
-        STATE["is_streaming"] = False
+            if event_type != "EVENT":
+                continue
+
+            # First provider to emit a meta event wins the race
+            if winner is None:
+                if "event: meta" in event_data:
+                    winner = pk
+                    winner_first_chunk_time = time_module.time()
+                    logger.info("[RACE WINNER] %s (first-byte in %.1fs)", pk, time_module.time() - race_start)
+                    # Cancel all other providers to save API tokens
+                    for other_pk in cancel_flags:
+                        if other_pk != winner:
+                            cancel_flags[other_pk].set()
+                    yield event_data  # Stream the meta event immediately
+                # Discard non-meta events before winner is determined
+                continue
+
+            # Only stream the winner's events in real-time
+            if pk == winner:
+                yield event_data
+
+        if winner is None:
+            logger.error("[RACE] All providers failed")
+            yield f'event: error\ndata: {{"type":"error","message":"All providers failed"}}\n\n'
+        else:
+            winner_ms = int((winner_first_chunk_time - race_start) * 1000) if winner_first_chunk_time else 0
+            elapsed = time_module.time() - race_start
+            logger.info("[RACE COMPLETE] winner=%s first_byte=%dms total=%.1fs", winner, winner_ms, elapsed)
+            # Record race stats (use first-byte time, not total streaming time)
+            _state.race_history.append({
+                "winner": winner,
+                "ms": winner_ms,
+                "providers": list(all_providers),
+                "timestamp": time_module.time(),
+            })
+            # Keep last 100 races
+            while len(_state.race_history) > _state.max_race_history:
+                _state.race_history.pop(0)
+
+        _state.is_streaming = False
 
     return StreamingResponse(race_generator(), media_type="text/event-stream")
+
+
+@app.get("/race-stats")
+def race_stats():
+    """Return race performance statistics from recent races."""
+    try:
+        from cloud_providers import MODEL_DISPLAY_NAMES
+    except ImportError:
+        MODEL_DISPLAY_NAMES = {}
+    recent = _state.race_history[-20:]
+    # Convert timestamps to human-readable and remove raw timestamp
+    formatted = []
+    for r in recent:
+        entry = {
+            "winner": r["winner"],
+            "ms": r["ms"],
+            "providers": r["providers"],
+            "display_name": MODEL_DISPLAY_NAMES.get(r["winner"], r["winner"]),
+        }
+        formatted.append(entry)
+
+    # Compute win counts by provider
+    win_counts = {}
+    for r in _state.race_history:
+        w = r["winner"]
+        win_counts[w] = win_counts.get(w, 0) + 1
+
+    return {
+        "total_races": len(_state.race_history),
+        "recent": formatted,
+        "win_counts": win_counts,
+    }
 
 
 # ==============================
@@ -1974,20 +2377,16 @@ async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)
 async def transcribe_with_speakers(file: UploadFile = File(...)):
     """
     Transcribe audio with speaker diarization.
-    Returns transcription with speaker labels for each segment.
-
-    Uses VibeVoice-ASR (primary) if available, falls back to
-    pyannote + Whisper, then energy-based segmentation.
+    Returns transcript + speakers — the frontend handles AI response separately
+    via streaming (no blocking route_ai call here).
     """
-    global USE_AUTONOMOUS
-
-    USE_AUTONOMOUS = False
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    _state.use_autonomous = False
+    file_path = os.path.join(UPLOAD_DIR, get_secure_filename(file.filename))
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    wav_path = file_path.replace(".webm", ".wav")
+    wav_path = file_path.rsplit(".", 1)[0] + ".wav"
     import subprocess
     ffmpeg_path = get_ffmpeg_path()
     result = subprocess.run(
@@ -1998,66 +2397,35 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
     try:
-        # --- Try VibeVoice-ASR first (combined transcription + diarization) ---
-        vibevoice_result = None
-        try:
-            from modules.voice.vibevoice_diarizer import process_transcription_with_speakers as vibevoice_diarize
-            import soundfile as sf_vv
-            audio_data, sr = sf_vv.read(wav_path)
-            if len(audio_data.shape) > 1:
-                audio_data = audio_data.mean(axis=1)
-            audio_float = (audio_data / (np.abs(audio_data).max() + 1e-6)).astype(np.float32)
-            if sr != 16000:
-                # VibeVoice expects 16kHz
-                from modules.voice.vibevoice_diarizer import VibeVoiceDiarizer
-                audio_float = VibeVoiceDiarizer._resample(audio_float, sr, 16000)
-                sr = 16000
-            vibevoice_result = vibevoice_diarize(audio_float, sr)
-            logger.info(f"[transcribe-with-speakers] VibeVoice method: {vibevoice_result.get('method', 'unknown')}")
-        except ImportError:
-            logger.debug("[transcribe-with-speakers] VibeVoice unavailable, using fallback")
-        except Exception as e:
-            logger.warning(f"[transcribe-with-speakers] VibeVoice error: {e}, using fallback")
+        from modules.voice.speaker_diarization import process_transcription_with_speakers
 
-        # --- Fallback: pyannote + Whisper ---
-        if vibevoice_result is None or not vibevoice_result.get("segments"):
-            from speaker_diarization import process_transcription_with_speakers
+        model = get_model(_state.current_mode)
+        # Fast settings: beam_size=1, VAD filter ON
+        segments, _ = model.transcribe(
+            wav_path,
+            beam_size=1,
+            vad_filter=True,
+            condition_on_previous_text=False,
+            word_timestamps=True
+        )
 
-            # Get detailed transcription with timestamps from Whisper
-            model = get_model(CURRENT_MODE)
-            segments, _ = model.transcribe(
-                wav_path,
-                beam_size=3,
-                vad_filter=False,
-                condition_on_previous_text=False,
-                language="en",
-                word_timestamps=True
-            )
+        whisper_segments = []
+        for seg in segments:
+            whisper_segments.append({
+                "start": seg.start,
+                "end": seg.end,
+                "text": seg.text.strip()
+            })
 
-            whisper_segments = []
-            for seg in segments:
-                whisper_segments.append({
-                    "start": seg.start,
-                    "end": seg.end,
-                    "text": seg.text.strip()
-                })
+        full_text = " ".join(s["text"] for s in whisper_segments)
+        speaker_result = process_transcription_with_speakers(wav_path, whisper_segments)
 
-            full_text = " ".join(s["text"] for s in whisper_segments)
-            speaker_result = process_transcription_with_speakers(wav_path, whisper_segments)
-        else:
-            # Use VibeVoice result directly
-            speaker_result = vibevoice_result
-            full_text = vibevoice_result.get("formatted", "")
-
-        # Get AI response
-        ai_response = ""
-        if full_text and is_meaningful(full_text) and is_question(full_text):
-            result = route_ai(full_text, mode=CURRENT_MODE)
-            ai_response = clean_ai_output(result["response"])
+        # NOTE: AI response is handled by the frontend separately via streaming.
+        # Do NOT call route_ai() here — it blocks the event loop and doubles latency.
 
         return {
             "text": full_text,
-            "response": ai_response,
+            "response": "",
             "speakers": speaker_result["segments"],
             "formatted_transcript": speaker_result["formatted"],
             "speaker_count": speaker_result["speaker_count"]
@@ -2068,7 +2436,6 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
 
     finally:
-        # Clean up temp files
         for path in (file_path, wav_path):
             try:
                 os.remove(path)
@@ -2086,8 +2453,8 @@ async def get_transcription_speakers(audio_id: str):
 
 
 def shutdown_handler(*args):
-    global USE_AUTONOMOUS
-    USE_AUTONOMOUS = False
+    # State is now in _state object
+    _state.use_autonomous = False
     # T16: Close database connections on shutdown
     if DATABASE_AVAILABLE:
         try:
@@ -2106,13 +2473,28 @@ signal.signal(signal.SIGTERM, shutdown_handler)
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """FastAPI shutdown handler - closes database connections."""
+    """FastAPI shutdown handler - closes database connections and HTTP clients."""
     if DATABASE_AVAILABLE:
         try:
             await close_database()
             logger.info("[Shutdown] Database connections closed")
         except Exception as e:
             logger.warning(f"[Shutdown] Database close error: {e}")
+
+    # Close shared httpx client
+    try:
+        from lib.http_client import close_client
+        await close_client()
+        logger.info("[Shutdown] HTTP client closed")
+    except Exception:
+        pass
+
+    # Close synchronous httpx client
+    try:
+        from lib.http_client import sync_client
+        sync_client.close()
+    except Exception:
+        pass
 
 
 @app.websocket("/ws/transcribe")
@@ -2140,32 +2522,37 @@ async def ws_transcribe(ws: WebSocket):
 
     await ws.accept()
 
-    # T3: WebSocket authentication — try message-level auth first, fall back to query param
+    # T3: WebSocket authentication — skip in dev mode for Electron convenience
     token = ws.query_params.get("token")
     user = None
 
-    if token:
-        # Legacy: token in query param
-        user = get_current_user(token)
-    else:
-        # Stealth: wait for auth message as first message
-        try:
-            first_msg = await asyncio.wait_for(ws.receive(), timeout=10)
-            if "text" in first_msg and first_msg["text"]:
-                try:
-                    auth_data = json.loads(first_msg["text"])
-                    if auth_data.get("type") == "auth":
-                        token = auth_data.get("token", "")
-                        user = get_current_user(token)
-                except (json.JSONDecodeError, KeyError):
-                    pass
-        except asyncio.TimeoutError:
-            pass
+    if AUTH_REQUIRED:
+        # Production: always require auth
+        if token:
+            user = get_current_user(token)
+        else:
+            # Stealth: wait for auth message as first message
+            try:
+                first_msg = await asyncio.wait_for(ws.receive(), timeout=10)
+                if "text" in first_msg and first_msg["text"]:
+                    try:
+                        auth_data = json.loads(first_msg["text"])
+                        if auth_data.get("type") == "auth":
+                            token = auth_data.get("token", "")
+                            user = get_current_user(token)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+            except asyncio.TimeoutError:
+                pass
 
-    if not user:
-        await ws.send_text(json.dumps({"type": "auth_error", "message": "Authentication required. Send {\"type\":\"auth\",\"token\":\"xxx\"} as first message or pass ?token=xxx in URL."}))
-        await ws.close(code=4001)
-        return
+        if not user:
+            await ws.send_text(json.dumps({"type": "auth_error", "message": "Authentication required. Send {\"type\":\"auth\",\"token\":\"xxx\"} as first message or pass ?token=xxx in URL."}))
+            await ws.close(code=4001)
+            return
+    else:
+        # Dev mode: auth optional — allow unauthenticated connections
+        if token:
+            user = get_current_user(token)
 
     # Auth succeeded
     await ws.send_text(json.dumps({"type": "auth_ok"}))
@@ -2578,26 +2965,27 @@ async def test_crm_connection():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    # T3: WebSocket authentication — ALWAYS enforce, not gated by AUTH_REQUIRED
+    # T3: WebSocket authentication — respect AUTH_REQUIRED setting (skip in dev mode)
     token = ws.query_params.get("token")
-    if not token:
-        await ws.accept()
-        await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
-        await ws.close(code=4001)
-        return
-    user = get_current_user(token)
-    if not user:
-        await ws.accept()
-        await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
-        await ws.close(code=4001)
-        return
+    if AUTH_REQUIRED:
+        if not token:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
+            await ws.close(code=4001)
+            return
+        user = get_current_user(token)
+        if not user:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+            await ws.close(code=4001)
+            return
 
     await ws.accept()
     try:
         while True:
             msg = await ws.receive_text()
             try:
-                result = route_ai(msg, mode=CURRENT_MODE)
+                result = route_ai(msg, mode=_state.current_mode)
                 await ws.send_text(clean_ai_output(result["response"]))
             except Exception as e:
                 logger.error(f"[WS] Error processing message: {e}")
@@ -4656,7 +5044,7 @@ async def web_search(
                 "max_tokens": 500
             }
 
-            response = requests.post(
+            response = sync_client.post(
                 "https://api.perplexity.ai/chat/completions",
                 headers=headers,
                 json=payload,
@@ -4685,7 +5073,7 @@ async def web_search(
                 "X-Subscription-Token": brave_key
             }
 
-            response = requests.get(
+            response = sync_client.get(
                 f"https://api.search.brave.com/res/v1/web/search?q={requests.utils.quote(query)}&count={limit}",
                 headers=headers,
                 timeout=10

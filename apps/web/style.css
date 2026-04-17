@@ -985,6 +985,15 @@ select option {
 .summary-copy-btn:hover {
   background: rgba(34, 197, 94, 0.2);
 }
+.followup-email-btn {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  margin-left: 6px;
+}
+.followup-email-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
 .summary-block-content {
   font-size: 0.857em;
   line-height: 1.6;
@@ -1455,6 +1464,35 @@ select option {
   vertical-align: middle;
 }
 .winner-icon { font-size: 0.9em; }
+
+/* Race indicator — live provider competition badges */
+.race-indicator {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.race-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.55em;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: var(--line-bright, rgba(255,255,255,0.15));
+  color: var(--text-dim, rgba(255,255,255,0.45));
+  transition: all 0.4s ease;
+  text-transform: capitalize;
+}
+.race-badge.winner {
+  background: linear-gradient(135deg, #1a7f37, #2ea043);
+  color: white;
+  box-shadow: 0 0 8px rgba(46, 160, 67, 0.5);
+}
+.race-badge.loser {
+  opacity: 0.25;
+  text-decoration: line-through;
+}
 
 /* Text segment styling */
 .text-segment {
@@ -3619,6 +3657,94 @@ select option {
   transform: scale(1.1);
 }
 
+/* Screenshot context indicator — "Sent with screenshot" tag */
+.screenshot-indicator {
+  display: inline-block;
+  font-size: 0.6em;
+  color: var(--accent, #22c55e);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 6px;
+  cursor: default;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+}
+.screenshot-indicator[title] {
+  cursor: pointer;
+}
+.screenshot-indicator[title]:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+/* Dynamic action pills — Cluely-style keyword detection actions */
+.dynamic-action-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75em;
+  cursor: pointer;
+  margin-bottom: 4px;
+  animation: slideInDynamic 0.3s ease;
+  transition: all 0.2s ease;
+}
+.dynamic-action-pill kbd {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.85em;
+  font-family: inherit;
+  color: rgba(255,255,255,0.6);
+}
+.dynamic-action-label {
+  font-weight: 600;
+}
+.dynamic-action-question {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+.dynamic-action-objection {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+.dynamic-action-coaching {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #a78bfa;
+}
+.dynamic-action-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.2);
+}
+@keyframes slideInDynamic {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Racing mode indicator — minimal, no animation delay */
+.racing-indicator {
+  opacity: 0.5;
+  font-size: 0.85em;
+}
+.chat-message.racing.loading .msg-bubble {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 4px 8px;
+}
+.chat-message.racing .loading-indicator,
+.chat-message.racing .racing-indicator + .loading-indicator {
+  display: none;
+}
+
 /* Full screenshot modal */
 .screenshot-modal {
   position: fixed;
@@ -4310,6 +4436,48 @@ select option {
 
 /* --- Error text --- */
 .error-text { color: var(--danger); font-size: 0.9em; }
+
+/* --- Vision context sub-bubble (two-step pipeline Step 1) --- */
+.vision-context {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  font-size: 0.82em;
+  color: var(--text-muted, #888);
+  line-height: 1.4;
+  max-height: 120px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease, padding 0.3s ease, margin 0.3s ease, opacity 0.3s ease;
+}
+.vision-context .vision-label {
+  display: inline-block;
+  font-size: 0.78em;
+  font-weight: 600;
+  opacity: 0.6;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.vision-context .vision-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.vision-context.collapsed {
+  max-height: 24px;
+  overflow: hidden;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.vision-context.collapsed .vision-text {
+  display: none;
+}
+.vision-context.collapsed:hover {
+  opacity: 0.9;
+}
 
 /* --- Message bubble base --- */
 .msg-bubble { word-break: break-word; overflow-wrap: break-word; }

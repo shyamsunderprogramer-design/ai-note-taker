@@ -3,13 +3,13 @@
 <head>
   <title>ANT (AI Note Taker)</title>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#3b82f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="hljs-github-dark.min.css">
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="style.css?v=27">
   <script src="hljs.min.js"></script>
   <script>
     // Register service worker for PWA (skip in Electron - file:// protocol not supported)
@@ -133,6 +133,9 @@
             <!-- Populated dynamically by loadLocalOllamaModels() -->
           </optgroup>
           <optgroup label="Ollama Cloud">
+            <option value="gemma3:cloud">Gemma 3 (Vision)</option>
+            <option value="gemma4:cloud">Gemma 4 (Vision)</option>
+            <option value="qwen3-vl:235b-cloud">Qwen3-VL 235B (Vision)</option>
             <option value="qwen3.5:397b-cloud">Qwen 3.5 397B</option>
             <option value="minimax-m2.7:cloud">MiniMax M2.7</option>
             <option value="glm-4.7:cloud">GLM 4.7</option>
@@ -384,7 +387,7 @@
             <span class="config-status-badge" id="configStatusBadge">Not configured</span>
           </div>
           <div class="config-inline-body">
-            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" />
+            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" maxlength="256" />
             <button id="configSaveBtn" class="config-inline-save" type="button">Save</button>
           </div>
           <div class="config-inline-result" id="configTestResult"></div>
@@ -451,8 +454,8 @@
             <div class="crm-fields" id="crmFields">
               <input type="url" id="crmWebhookUrl" class="settings-input" placeholder="Webhook URL" style="display:none" />
               <input type="url" id="crmSalesforceUrl" class="settings-input" placeholder="Instance URL" style="display:none" />
-              <input type="password" id="crmSalesforceToken" class="settings-input" placeholder="OAuth Token" style="display:none" />
-              <input type="password" id="crmHubspotKey" class="settings-input" placeholder="API Key" style="display:none" />
+              <input type="password" id="crmSalesforceToken" class="settings-input" placeholder="OAuth Token" style="display:none" maxlength="256" />
+              <input type="password" id="crmHubspotKey" class="settings-input" placeholder="API Key" style="display:none" maxlength="256" />
             </div>
             <div class="crm-options" id="crmOptions" style="display:none">
               <label class="crm-check">
@@ -672,6 +675,9 @@
                 <div class="custom-dropdown-item" data-value="perplexity-sonar">Sonar</div>
                 <div class="custom-dropdown-item" data-value="perplexity-sonar-pro">Sonar Pro</div>
                 <div class="custom-dropdown-group">Ollama Cloud</div>
+                <div class="custom-dropdown-item" data-value="gemma3:cloud">Gemma 3 (Vision)</div>
+                <div class="custom-dropdown-item" data-value="gemma4:cloud">Gemma 4 (Vision)</div>
+                <div class="custom-dropdown-item" data-value="qwen3-vl:235b-cloud">Qwen3-VL 235B (Vision)</div>
                 <div class="custom-dropdown-item" data-value="qwen3.5:397b-cloud">Qwen 3.5 397B</div>
                 <div class="custom-dropdown-item" data-value="minimax-m2.7:cloud">MiniMax M2.7</div>
                 <div class="custom-dropdown-item" data-value="glm-4.7:cloud">GLM 4.7</div>
@@ -972,7 +978,7 @@
         <div class="modal-title">Configure API Key</div>
       </div>
       <div class="modal-provider-name" id="modalProviderName"></div>
-      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." />
+      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." maxlength="256" />
       <div class="modal-actions">
         <button class="settings-btn modal-cancel-btn" id="modalCancel">Cancel</button>
         <button class="settings-btn modal-save-btn" id="modalSave">Save</button>
@@ -1253,7 +1259,7 @@
     </div>
   </div>
 
-  <script src="js/core/auth-helper.js"></script>
-  <script src="app.js?v=96"></script>
+  <script src="js/core/auth-helper.js?v=7"></script>
+  <script src="app.js?v=100"></script>
 </body>
 </html>

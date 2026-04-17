@@ -17,7 +17,8 @@ log.transports.file.maxSize = 5 * 1024 * 1024
 // Prevent Chromium from upgrading HTTP→HTTPS on localhost (which causes
 // ERR_SSL_PROTOCOL_ERROR since our dev backend only serves plain HTTP).
 // Must be set BEFORE app.whenReady().
-app.commandLine.appendSwitch("ignore-certificate-errors")
+// NOTE: Do NOT use "ignore-certificate-errors" globally — it disables TLS
+// verification for ALL requests, not just localhost.
 app.commandLine.appendSwitch("allow-insecure-localhost")
 // Treat http://127.0.0.1:8000 as a secure origin so Chromium won't
 // auto-upgrade it to HTTPS (Chromium's built-in HSTS preload forces HTTPS
@@ -33,18 +34,55 @@ if (app.isPackaged) {
 
 const PLATFORM = process.platform  // 'win32' | 'darwin' | 'linux'
 const logger = log
-const store = new Store()
-
-// Secure API key storage - encrypted using machine-specific key
-const apiKeyStore = new Store({
-  name: "secure-api-keys",
-  encryptionKey: crypto.scryptSync(app.getPath("userData"), "ai-note-taker-salt-v1", 32).slice(0, 16).toString("hex").slice(0, 16)
-})
 
 // appData path is cross-platform via Electron API
-const appDataDir = path.join(app.getPath("userData"), "ai-note-taker-data")
+// IMPORTANT: Set userData BEFORE creating Store instances so they read/write
+// from the correct location.
+const _origUserData = app.getPath("userData")
+const appDataDir = path.join(_origUserData, "ai-note-taker-data")
 app.setPath("userData", appDataDir)
 app.setPath("sessionData", appDataDir)
+
+// Migrate config from old userData location if new location doesn't have it yet
+const _newConfigPath = path.join(appDataDir, "config.json")
+const _oldConfigPath = path.join(_origUserData, "config.json")
+if (!fs.existsSync(_newConfigPath) && fs.existsSync(_oldConfigPath)) {
+  try {
+    fs.copyFileSync(_oldConfigPath, _newConfigPath)
+    logger.info("[Migration] Copied config from old userData to new location")
+  } catch (e) {
+    logger.warn("[Migration] Could not migrate config: %s", e.message)
+  }
+}
+
+const store = new Store()
+
+// Secure API key storage - encrypted using machine-specific key derived with
+// full 32-byte key (not sliced down). Uses unique salt per app instance.
+const _keyDeriveSalt = crypto.scryptSync(app.getPath("userData") + ":ant-key-store", "ai-note-taker-salt-v2", 32)
+let apiKeyStore
+try {
+  apiKeyStore = new Store({
+    name: "secure-api-keys",
+    encryptionKey: _keyDeriveSalt.toString("hex")
+  })
+} catch (e) {
+  // If the store can't be loaded (e.g., old encryption key no longer matches),
+  // delete the corrupted file and recreate with the new key.
+  logger.warn("[API Key Store] Failed to load encrypted store, resetting: %s", e.message)
+  const keyFilePath = path.join(app.getPath("userData"), "secure-api-keys.json")
+  try { fs.unlinkSync(keyFilePath) } catch {}
+  // Also clean up old key file from before the userData path change
+  try {
+    const _oldUserData = path.join(app.getPath("home") || os.homedir(), "AppData", "Roaming", "ai-note-taker")
+    const oldFile = path.join(_oldUserData, "secure-api-keys.json")
+    if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile)
+  } catch {}
+  apiKeyStore = new Store({
+    name: "secure-api-keys",
+    encryptionKey: _keyDeriveSalt.toString("hex")
+  })
+}
 
 const conversationsDir = path.join(appDataDir, "conversations")
 
@@ -96,11 +134,15 @@ function ensureTopmost(w) {
 // ======================================
 let screenshotBuffer = []        // ring buffer of base64 PNGs
 const SCREENSHOT_BUFFER_MAX = 5
-let autoScreenshotEnabled = false
+let autoScreenshotEnabled = true
 let autoScreenshotInterval = null
 
 process.on("uncaughtException", (err) => {
   logger.error("Uncaught exception: %s", err.stack || err.message)
+  // Only crash on truly fatal errors; log and continue for others
+  if (err.code === "ERR_UNHANDLED_ERROR" || err.message?.includes("EPERM")) {
+    process.exit(1)
+  }
 })
 
 process.on("unhandledRejection", (reason) => {
@@ -314,7 +356,7 @@ async function captureAutoScreenshot() {
 }
 
 function startAutoScreenshot(intervalMs) {
-  intervalMs = intervalMs || 5000
+  intervalMs = intervalMs || 3000
   if (autoScreenshotInterval) clearInterval(autoScreenshotInterval)
   autoScreenshotInterval = setInterval(captureAutoScreenshot, intervalMs)
   captureAutoScreenshot()
@@ -469,8 +511,11 @@ async function startBackend() {
     ? path.join(process.resourcesPath, "backend")
     : path.join(__dirname, "..", "backend")
 
-  // Verify backend main.py exists
-  const mainPy = path.join(backendDir, "main.py")
+  // Verify backend main.py exists (check both root and core/ locations)
+  let mainPy = path.join(backendDir, "main.py")
+  if (!fs.existsSync(mainPy)) {
+    mainPy = path.join(backendDir, "core", "main.py")
+  }
   if (!fs.existsSync(mainPy)) {
     logger.error("[Backend] main.py not found at:", mainPy)
     return
@@ -495,12 +540,24 @@ async function startBackend() {
   notifyRendererBackendStatus("starting")
   logger.info(`[Backend] Starting: ${pythonExe} in ${backendDir}`)
 
+  // Determine uvicorn module path based on where main.py was found
+  const isCoreMainPy = mainPy.includes(path.join("core", "main.py"))
+  const uvicornModule = isCoreMainPy ? "core.main:app" : "main:app"
+
   backendProcess = spawn(pythonExe, [
-    "-m", "uvicorn", "main:app",
+    "-m", "uvicorn", uvicornModule,
     "--host", "127.0.0.1",
     "--port", "8000",
     "--log-level", "info"
-  ], spawnOpts)
+  ], {
+    ...spawnOpts,
+    env: {
+      ...process.env,
+      ...spawnOpts.env,
+      KEY_SERVER_SECRET: API_KEY_SERVER_SECRET,
+      AUTH_REQUIRED: "true"
+    }
+  })
 
   backendProcess.stdout.on("data", (data) => {
     logger.info("[Backend] %s", data.toString().trim())
@@ -545,6 +602,21 @@ async function startBackend() {
 
   // Start health check monitoring
   startHealthCheck()
+
+  // Wait for backend health check to pass (max 15s), then window opens
+  const maxWait = 15000
+  const startWait = Date.now()
+  logger.info("[Backend] Waiting for backend to be ready...")
+  while (Date.now() - startWait < maxWait) {
+    if (await isBackendRunning()) {
+      notifyRendererBackendStatus("ready")
+      backendRestartAttempts = 0
+      logger.info("[Backend] Ready! (%dms)", Date.now() - startWait)
+      return
+    }
+    await new Promise(r => setTimeout(r, 200))
+  }
+  logger.warn("[Backend] Not ready after %dms, opening window anyway", maxWait)
 }
 
 // ==============================
@@ -569,6 +641,11 @@ ipcMain.handle("conversation:save", (_event, conversation) => {
 })
 
 ipcMain.handle("conversation:load", (_event, id) => {
+  // Validate id is a safe filename (UUID format) to prevent path traversal
+  if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    logger.warn(`[conversation:load] Rejected invalid id: ${id}`)
+    return null
+  }
   const filePath = path.join(conversationsDir, `${id}.json`)
   if (!fs.existsSync(filePath)) return null
   return JSON.parse(fs.readFileSync(filePath, "utf-8"))
@@ -592,6 +669,11 @@ ipcMain.handle("conversation:list", () => {
 })
 
 ipcMain.handle("conversation:delete", (_event, id) => {
+  // Validate id is a safe filename (UUID format) to prevent path traversal
+  if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    logger.warn(`[conversation:delete] Rejected invalid id: ${id}`)
+    return false
+  }
   const filePath = path.join(conversationsDir, `${id}.json`)
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath)
@@ -688,9 +770,9 @@ ipcMain.handle("window:restore", () => {
   w.focus()
   ensureTopmost(w)
   // Restart auto-screenshot if it was enabled
-  const savedAutoSS = store.get("autoScreenshotEnabled", false)
+  const savedAutoSS = store.get("autoScreenshotEnabled", true)
   if (savedAutoSS && !autoScreenshotInterval) {
-    const interval = store.get("autoScreenshotInterval", 5000)
+    const interval = store.get("autoScreenshotInterval", 3000)
     startAutoScreenshot(interval)
     autoScreenshotEnabled = true
   }
@@ -889,6 +971,10 @@ function _shouldLogKeyRequest(provider) {
   return false
 }
 
+// Generate a shared secret for API key server authentication.
+// The backend must include this secret in the X-Key-Server-Secret header.
+const API_KEY_SERVER_SECRET = crypto.randomBytes(32).toString("hex")
+
 function startApiKeyServer() {
   const server = http.createServer(async (req, res) => {
     // Enable CORS for localhost only
@@ -903,6 +989,18 @@ function startApiKeyServer() {
     }
 
     if (req.method === "POST" && req.url === "/get-key") {
+      // Verify shared secret header to prevent unauthorized key access
+      const clientSecret = req.headers["x-key-server-secret"]
+      if (!clientSecret || !crypto.timingSafeEqual(
+        Buffer.from(clientSecret, "utf8"),
+        Buffer.from(API_KEY_SERVER_SECRET, "utf8")
+      )) {
+        res.writeHead(403, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Unauthorized" }))
+        logger.warn("[API Key Server] Rejected unauthorized key request")
+        return
+      }
+
       let body = ""
       req.on("data", chunk => body += chunk)
       req.on("end", () => {
@@ -926,8 +1024,40 @@ function startApiKeyServer() {
     }
   })
 
+  let retries = 0
+  const maxRetries = 3
+
   server.listen(API_KEY_SERVER_PORT, "127.0.0.1", () => {
     logger.info(`[API Key Server] Running on port ${API_KEY_SERVER_PORT}`)
+  })
+
+  // Handle EADDRINUSE — kill old process on port, retry up to 3 times
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE" && retries < maxRetries) {
+      retries++
+      logger.warn(`[API Key Server] Port ${API_KEY_SERVER_PORT} in use (retry ${retries}/${maxRetries}), killing old process...`)
+      // Kill whatever is using the port on Windows
+      const { execSync } = require("child_process")
+      try {
+        execSync(`netstat -ano | findstr :${API_KEY_SERVER_PORT} | findstr LISTENING`, { encoding: "utf8" })
+          .split("\n").filter(Boolean).forEach(line => {
+            const pid = line.trim().split(/\s+/).pop()
+            if (pid && pid !== process.pid.toString()) {
+              try { execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" }) } catch {}
+            }
+          })
+      } catch {}
+      setTimeout(() => {
+        server.close()
+        server.listen(API_KEY_SERVER_PORT, "127.0.0.1", () => {
+          logger.info(`[API Key Server] Retry succeeded on port ${API_KEY_SERVER_PORT}`)
+        })
+      }, 1500)
+    } else if (err.code === "EADDRINUSE") {
+      logger.error(`[API Key Server] Port ${API_KEY_SERVER_PORT} still in use after ${maxRetries} retries. Key server NOT started. Kill the old process manually: netstat -ano | findstr :${API_KEY_SERVER_PORT}`)
+    } else {
+      logger.error(`[API Key Server] Error: ${err.message}`)
+    }
   })
 }
 
@@ -946,13 +1076,13 @@ ipcMain.handle("overlay:get-latest-screenshot", () => {
 ipcMain.handle("auto-screenshot:set-enabled", (_event, enabled, intervalMs) => {
   autoScreenshotEnabled = enabled
   if (enabled) {
-    startAutoScreenshot(intervalMs || 5000)
+    startAutoScreenshot(intervalMs || 3000)
   } else {
     stopAutoScreenshot()
   }
   store.set("autoScreenshotEnabled", enabled)
-  store.set("autoScreenshotInterval", intervalMs || 5000)
-  return { enabled, intervalMs: enabled ? (intervalMs || 5000) : 0 }
+  store.set("autoScreenshotInterval", intervalMs || 3000)
+  return { enabled, intervalMs: enabled ? (intervalMs || 3000) : 0 }
 })
 
 ipcMain.handle("auto-screenshot:get-status", () => {
@@ -970,6 +1100,9 @@ app.whenReady().then(async () => {
   autoUpdater.logger = logger
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  // Open-source project: no paid code signing cert.
+  // Security relies on GitHub Releases channel integrity (git commit + release hash).
+  // Users verify via the public repo: github.com/shyamsunderprogramer-design/ai-note-taker
 
   autoUpdater.on("update-available", (info) => {
     logger.info("[Updater] update available:", info.version)
@@ -1013,9 +1146,9 @@ app.whenReady().then(async () => {
 
     if (isOwnPage) {
       // T25: CSP for our own Electron desktop app pages
-      // 'unsafe-inline' needed for inline <style> blocks and style attributes
-      // 'unsafe-eval' needed for some dependencies (hljs, etc.)
-      const csp = `default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      // NOTE: 'unsafe-inline' retained for inline <style> blocks (Electron renderer)
+      // 'unsafe-eval' removed — hljs works without eval; if needed, add nonce-based approach
+      const csp = `default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
       headers["Content-Security-Policy"] = [csp]
     }
 
@@ -1081,9 +1214,9 @@ app.whenReady().then(async () => {
   if (savedStealthState) stealth.enable()
 
   // Restore auto-screenshot setting
-  const savedAutoSS = store.get("autoScreenshotEnabled", false)
+  const savedAutoSS = store.get("autoScreenshotEnabled", true)
   if (savedAutoSS) {
-    const interval = store.get("autoScreenshotInterval", 5000)
+    const interval = store.get("autoScreenshotInterval", 3000)
     startAutoScreenshot(interval)
     autoScreenshotEnabled = true
   }
@@ -1143,9 +1276,9 @@ app.whenReady().then(async () => {
       win.focus()
       ensureTopmost(win)
       // Restart auto-screenshot if enabled
-      const savedAutoSS = store.get("autoScreenshotEnabled", false)
+      const savedAutoSS = store.get("autoScreenshotEnabled", true)
       if (savedAutoSS && !autoScreenshotInterval) {
-        const interval = store.get("autoScreenshotInterval", 5000)
+        const interval = store.get("autoScreenshotInterval", 3000)
         startAutoScreenshot(interval)
         autoScreenshotEnabled = true
       }
@@ -1167,6 +1300,13 @@ app.whenReady().then(async () => {
   registerShortcut("CommandOrControl+Enter", "trigger ai", () => {
     if (win?.webContents) {
       win.webContents.send("trigger-ai", {})
+    }
+  })
+
+  // Ctrl+Shift+Enter — screen-only AI answer (Cluely stealth answer, no voice input)
+  registerShortcut("CommandOrControl+Shift+Enter", "trigger ai screen", () => {
+    if (win?.webContents) {
+      win.webContents.send("trigger-ai-screen", {})
     }
   })
 
