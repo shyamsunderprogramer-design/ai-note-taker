@@ -85,7 +85,7 @@ class PerformanceAnalyzer:
             r'\bi\s+decided\b', r'\bi\s+chose\b', r'\bso\s+i\b'
         ],
         "result": [
-            r'\bresult\b', r'\boutcome\b', r'\bended\s+up\b', r'\bachieved\b',
+            r'\bresult(?:ed|s|ing)?\b', r'\boutcome\b', r'\bended\s+up\b', r'\bachieved\b',
             r'\bsuccessfully\b', r'\bimproved\s+by\b', r'\bincreased\b',
             r'\bdecreased\b', r'\bsaved\b', r'\breduced\b', r'\benhanced\b',
             r'\bmetrics\b', r'\bimpact\b', r'\bvalue\b', r'\blearned\b',
