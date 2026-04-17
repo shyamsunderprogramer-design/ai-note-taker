@@ -157,6 +157,12 @@ resource "google_container_cluster" "main" {
   enable_intranode_visibility = true
   enable_shielded_nodes       = true
 
+  resource_labels = {
+    environment = var.environment
+    project     = "ant"
+    managed_by  = "terraform"
+  }
+
   security_posture_config {
     mode = "ENABLED"
   }
@@ -268,6 +274,31 @@ resource "google_project_iam_member" "backend" {
 # ─────────────────────────────────────────────────────────────────────────────
 # Artifact Registry
 # ─────────────────────────────────────────────────────────────────────────────
+resource "google_kms_key_ring" "artifact_registry" {
+  name     = "ant-artifact-registry-keyring"
+  location = var.region
+  project  = var.project
+}
+
+resource "google_kms_crypto_key" "artifact_registry" {
+  name     = "ant-artifact-registry-key"
+  key_ring = google_kms_key_ring.artifact_registry.id
+
+  rotation_period = "7776000s" # 90 days
+
+  destroy_scheduled_duration = "86400s"
+}
+
+resource "google_kms_crypto_key_iam_member" "artifact_registry" {
+  crypto_key_id = google_kms_crypto_key.artifact_registry.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.number.number}@gcp-sa-artifactregistry.iam.gserviceaccount.com"
+}
+
+data "google_project" "number" {
+  project_id = var.project
+}
+
 resource "google_artifact_registry_repository" "main" {
   location      = var.region
   name          = "ant-docker"
@@ -278,6 +309,8 @@ resource "google_artifact_registry_repository" "main" {
   cleanup_policy_dry_run = false
 
   mode = "STANDARD_REPOSITORY"
+
+  encryption_kms_key_name = google_kms_crypto_key.artifact_registry.id
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -285,7 +318,7 @@ resource "google_artifact_registry_repository" "main" {
 # ─────────────────────────────────────────────────────────────────────────────
 resource "google_sql_database_instance" "main" {
   name             = "ant-postgres-${var.environment}"
-  database_version = "POSTGRES_16"
+  database_version = "POSTGRES_17"
   region          = var.region
 
   deletion_protection  = var.environment == "production"
@@ -302,6 +335,47 @@ resource "google_sql_database_instance" "main" {
       ipv4_enabled    = false
       private_network = google_compute_network.main.id
       require_ssl     = true
+    }
+
+    database_flags {
+      name  = "log_duration"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_connections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_disconnections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_checkpoints"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_lock_waits"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_hostname"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_min_messages"
+      value = "WARNING"
+    }
+    database_flags {
+      name  = "log_error_verbosity"
+      value = "DEFAULT"
+    }
+    database_flags {
+      name  = "cloudsql.enable_pgaudit"
+      value = "on"
+    }
+    database_flags {
+      name  = "pgaudit.log"
+      value = "ALL"
     }
 
     backup_configuration {
@@ -401,6 +475,17 @@ resource "google_compute_security_policy" "main" {
       }
     }
     description = "Block SQL Injection"
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1002
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('cve-2021-44228')"
+      }
+    }
+    description = "Block Log4j CVE-2021-44228"
   }
 }
 

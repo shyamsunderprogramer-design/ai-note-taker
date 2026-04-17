@@ -193,6 +193,70 @@ resource "azurerm_subnet" "aks_system" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Network Security Groups
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_network_security_group" "main" {
+  name                = "ant-nsg-${var.environment}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+
+  security_rule {
+    name                       = "Allow-Internal-Inbound"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "10.0.0.0/8"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "Allow-PostgreSQL-Inbound"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range      = "5432"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "Deny-All-Inbound"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "main" {
+  subnet_id                 = azurerm_subnet.main.id
+  network_security_group_id = azurerm_network_security_group.main.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "aks_system" {
+  subnet_id                 = azurerm_subnet.aks_system.id
+  network_security_group_id = azurerm_network_security_group.main.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "database" {
+  subnet_id                 = azurerm_subnet.database.id
+  network_security_group_id = azurerm_network_security_group.main.id
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Azure Container Registry
 # ─────────────────────────────────────────────────────────────────────────────
 resource "azurerm_container_registry" "main" {
@@ -274,6 +338,46 @@ resource "azurerm_key_vault_key" "main" {
       datetime_format = "RFC3339"
       time_before_expiry = "P7D"
     }
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Key Vault Private Endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_private_dns_zone" "key_vault" {
+  name                = "privatelink.vaultcore.azure.net"
+  resource_group_name = azurerm_resource_group.main.name
+
+  depends_on = [azurerm_resource_group.main]
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "key_vault" {
+  name                  = "ant-kv-vnet-link"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.key_vault.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+}
+
+resource "azurerm_private_endpoint" "key_vault" {
+  name                = "ant-kv-pe-${var.environment}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  subnet_id           = azurerm_subnet.aks_system.id
+
+  private_service_connection {
+    name                           = "ant-kv-privateserviceconnection"
+    private_connection_resource_id = azurerm_key_vault.main.id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "ant-kv-dns-zone-group"
+    private_dns_zone_ids = [azurerm_private_dns_zone.key_vault.id]
+  }
+
+  tags = {
+    Environment = var.environment
   }
 }
 
@@ -361,6 +465,46 @@ resource "azurerm_private_dns_zone_virtual_network_link" "main" {
   resource_group_name   = azurerm_resource_group.main.name
   private_dns_zone_name = azurerm_private_dns_zone.main.name
   virtual_network_id    = azurerm_virtual_network.main.id
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PostgreSQL Private Endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_private_dns_zone" "postgresql" {
+  name                = "privatelink.postgres.database.azure.com"
+  resource_group_name = azurerm_resource_group.main.name
+
+  depends_on = [azurerm_resource_group.main]
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "postgresql" {
+  name                  = "ant-pg-vnet-link"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.postgresql.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+}
+
+resource "azurerm_private_endpoint" "postgresql" {
+  name                = "ant-pg-pe-${var.environment}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  subnet_id           = azurerm_subnet.aks_system.id
+
+  private_service_connection {
+    name                           = "ant-pg-privateserviceconnection"
+    private_connection_resource_id = azurerm_postgresql_flexible_server.main.id
+    subresource_names              = ["postgresqlServer"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "ant-pg-dns-zone-group"
+    private_dns_zone_ids = [azurerm_private_dns_zone.postgresql.id]
+  }
+
+  tags = {
+    Environment = var.environment
+  }
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
