@@ -17,7 +17,6 @@ h11==0.16.0
 hf-xet==1.4.2
 httpcore==1.0.9
 httpx==0.28.1
-httpcore==1.0.9
 huggingface_hub==1.7.1
 idna==3.11
 markdown-it-py==4.0.0
@@ -26,8 +25,9 @@ mpmath==1.3.0
 numpy>=1.26.4,<2.0
 # onnxruntime-directml is Windows-only (uses GPU via DirectX).
 # For Linux/Docker, replace with: onnxruntime==1.24.4
-onnxruntime-directml==1.24.4
-tts-with-rvc-onnx
+onnxruntime-directml==1.24.4; sys_platform == "win32"
+tts-with-rvc-onnx; sys_platform == "win32"
+sounddevice==0.5.5; sys_platform == "win32"
 packaging==26.0
 protobuf==7.34.0
 psutil==7.2.2
@@ -42,7 +42,6 @@ requests==2.33.0
 rich==14.3.3
 setuptools==82.0.1
 shellingham==1.5.4
-sounddevice==0.5.5
 soundfile==0.13.1
 starlette==0.52.1
 sympy==1.14.0

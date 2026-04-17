@@ -5,7 +5,7 @@ import shutil
 import time
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 
 from security import rate_limit, ErrorCode, error_response
 from security.auth import User

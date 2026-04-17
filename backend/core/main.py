@@ -11,6 +11,7 @@ import signal
 import sys
 import threading
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -2576,7 +2577,7 @@ async def ws_transcribe(ws: WebSocket):
             logger.debug("[ws/transcribe] StreamingDiarizer unavailable — no speaker labels")
 
     # Track audio chunks alongside transcription for speaker identification
-    _audio_buffer = np.array([], dtype=np.float32)
+    _audio_buffer = [np.array([], dtype=np.float32)]  # mutable list to avoid closure scope issue
     _audio_lock = threading.Lock()
 
     def on_transcript(text):
@@ -2592,8 +2593,8 @@ async def ws_transcribe(ws: WebSocket):
         # Attach speaker label if diarizer is available
         if streaming_diarizer is not None:
             with _audio_lock:
-                audio_chunk = _audio_buffer.copy()
-                _audio_buffer = np.array([], dtype=np.float32)
+                audio_chunk = _audio_buffer[0].copy()
+                _audio_buffer[0] = np.array([], dtype=np.float32)
 
             if len(audio_chunk) > 0:
                 result = streaming_diarizer.process_audio_segment(audio_chunk, text)
@@ -2640,7 +2641,7 @@ async def ws_transcribe(ws: WebSocket):
                 # Also buffer audio for speaker diarization
                 if streaming_diarizer is not None:
                     with _audio_lock:
-                        _audio_buffer = np.concatenate([_audio_buffer, chunk])
+                        _audio_buffer[0] = np.concatenate([_audio_buffer[0], chunk])
 
     except Exception:
         pass
@@ -5074,7 +5075,7 @@ async def web_search(
             }
 
             response = sync_client.get(
-                f"https://api.search.brave.com/res/v1/web/search?q={requests.utils.quote(query)}&count={limit}",
+                f"https://api.search.brave.com/res/v1/web/search?q={urllib.parse.quote(query)}&count={limit}",
                 headers=headers,
                 timeout=10
             )

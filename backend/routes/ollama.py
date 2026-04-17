@@ -39,21 +39,20 @@ async def require_authentication(token: str = Depends(get_token_from_request)):
 
 # Provider key cache
 _provider_key_cache: Dict[str, bool] = {}
-_provider_key_cache_time: float = 0.0
+_provider_key_cache_time: list = [0.0]  # mutable list to avoid closure scope issue
 _PROVIDER_KEY_CACHE_TTL = 300
 
 
 def _has_provider_key(provider: str, env_var: str) -> bool:
     """Check if a provider has an API key, using a short-lived cache."""
-    global _provider_key_cache, _provider_key_cache_time
     now = time.time()
 
-    if provider in _provider_key_cache and (now - _provider_key_cache_time) < _PROVIDER_KEY_CACHE_TTL:
+    if provider in _provider_key_cache and (now - _provider_key_cache_time[0]) < _PROVIDER_KEY_CACHE_TTL:
         return _provider_key_cache[provider]
 
     if os.getenv(env_var, "").strip():
         _provider_key_cache[provider] = True
-        _provider_key_cache_time = now
+        _provider_key_cache_time[0] = now
         return True
 
     try:
@@ -71,7 +70,7 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
         result = False
 
     _provider_key_cache[provider] = result
-    _provider_key_cache_time = now
+    _provider_key_cache_time[0] = now
     return result
 
 
