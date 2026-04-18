@@ -410,21 +410,26 @@ class VibeVoiceDiarizer:
         sample_rate: int,
     ) -> List[SpeakerSegment]:
         """Fallback 2: Simple energy-based segmentation + Whisper transcription."""
-        # Initialize transcribe to None to ensure it's defined
+        # Initialize imports to None to ensure they're defined
         transcribe = None
+        SimpleSpeakerDetector = None
         try:
             try:
-                from .speaker_diarization import SimpleSpeakerDetector
+                from .speaker_diarization import SimpleSpeakerDetector as SSD
+                SimpleSpeakerDetector = SSD
             except ImportError:
-                from voice.speaker_diarization import SimpleSpeakerDetector
+                from voice.speaker_diarization import SimpleSpeakerDetector as SSD
+                SimpleSpeakerDetector = SSD
             try:
-                from .whisper_handler import transcribe
+                from .whisper_handler import transcribe as t
+                transcribe = t
             except ImportError:
-                from voice.whisper_handler import transcribe
+                from voice.whisper_handler import transcribe as t
+                transcribe = t
         except ImportError:
-            pass  # transcribe remains None
+            pass  # imports remain None
 
-        if transcribe is None:
+        if transcribe is None or SimpleSpeakerDetector is None:
             # Absolute minimal fallback — single speaker
             duration = len(audio) / sample_rate if len(audio) > 0 else 0
             return [SpeakerSegment(
@@ -435,7 +440,7 @@ class VibeVoiceDiarizer:
                 confidence=0.5,
             )]
 
-        # transcribe is now guaranteed to be defined
+        # Both imports are now guaranteed to be defined
 
         try:
             detector = SimpleSpeakerDetector()

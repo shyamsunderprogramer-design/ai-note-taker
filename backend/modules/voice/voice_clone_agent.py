@@ -352,7 +352,7 @@ class VoiceCloneManager:
                 except Exception as e:
                     last_error = str(e)
                     if logger:
-                        logger.warning("[VoiceClone] Voice {try_voice} failed: %s, trying next", str(e))
+                        logger.warning("[VoiceClone] Voice %s failed: %s, trying next", try_voice, str(e))
                     # Clean up partial file
                     if os.path.exists(output_file):
                         try:

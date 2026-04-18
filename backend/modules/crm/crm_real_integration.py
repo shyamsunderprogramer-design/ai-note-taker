@@ -216,13 +216,9 @@ class HubSpotIntegration(BaseCRMIntegration):
         if not self._api_client:
             return None
 
-        try:
-            # Would use HubSpot API to search
-            # For now, return mock
-            return None
-        except Exception as e:
-            logger.error("[HubSpot] Find contact failed: %s", str(e))
-            return None
+        # Would use HubSpot API to search
+        # For now, return mock
+        return None
 
     async def log_activity(self, activity: CRMActivity) -> Optional[str]:
         """

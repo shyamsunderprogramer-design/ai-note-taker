@@ -2059,7 +2059,6 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             messages = json.loads(context)
         except json.JSONDecodeError:
             logger.warning("Failed to parse context JSON")
-            pass
 
     # Secure key checking — batch-check all providers concurrently to avoid sequential delays
     _ALL_PROVIDER_ENV = [

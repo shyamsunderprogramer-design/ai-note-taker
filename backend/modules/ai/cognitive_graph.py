@@ -270,20 +270,20 @@ class CognitiveGraph:
                     """
                     session.run(cq_link, q_id=question.id, c_id=company.id)
 
+            # Index new nodes for semantic search (best effort, non-blocking)
+            try:
+                if self._semantic is not None:
+                    self._semantic._index_node("Question", question.id, question.text)
+                    self._semantic._index_node("Answer", answer.id, answer.text)
+                    if company:
+                        self._semantic._index_node("Company", company.id, company.name)
+            except Exception:
+                pass  # nosec B110: Semantic indexing is optional
+
             return True
         except Exception as e:
             logger.error("[CognitiveGraph] Failed to add Q&A: %s", str(e))
             return False
-
-        # Index new nodes for semantic search
-        try:
-            if self._semantic is not None:
-                self._semantic._index_node("Question", question.id, question.text)
-                self._semantic._index_node("Answer", answer.id, answer.text)
-                if company:
-                    self._semantic._index_node("Company", company.id, company.name)
-        except Exception as e:
-            logger.debug("[CognitiveGraph] Failed to index node for semantic search: %s", str(e))
 
     def add_topics_to_question(self, question_id: str, topics: List[TopicNode]) -> bool:
         """Link topics to a question"""
