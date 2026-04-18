@@ -152,7 +152,7 @@ class GraphLoader:
                     stats.cached += 1
 
             except Exception as e:
-                logger.error(f"[GraphLoader] Error loading Q#{qa.number} from {qa.category}: {e}")
+                logger.error("[GraphLoader] Error loading Q#{qa.number} from {qa.category}: %s", str(e))
                 stats.errors += 1
 
         # Save cache if needed
@@ -230,7 +230,7 @@ class GraphLoader:
                 try:
                     cg.add_topics_to_question(question_id, topics[:5])
                 except Exception as e:
-                    logger.debug(f"[GraphLoader] Topic linking failed: {e}")
+                    logger.debug("[GraphLoader] Topic linking failed: %s", str(e))
 
             # Link Skill nodes
             skills = entities.get("skills", [])
@@ -243,12 +243,12 @@ class GraphLoader:
                     # We'll link skills via topics as a workaround
                     cg.add_topics_to_question(question_id, skill_names[:3])
                 except Exception as e:
-                    logger.debug(f"[GraphLoader] Skill linking failed: {e}")
+                    logger.debug("[GraphLoader] Skill linking failed: %s", str(e))
 
             return True
 
         except Exception as e:
-            logger.error(f"[GraphLoader] Neo4j load error: {e}")
+            logger.error("[GraphLoader] Neo4j load error: %s", str(e))
             return False
 
     def _extract_entities(self, qa) -> Dict:
@@ -259,7 +259,7 @@ class GraphLoader:
                 combined_text = f"{qa.question} {qa.answer}"
                 return extractor.extract_all(combined_text)
         except Exception as e:
-            logger.debug(f"[GraphLoader] Entity extraction failed: {e}")
+            logger.debug("[GraphLoader] Entity extraction failed: %s", str(e))
         return {}
 
     def _cache_qa(self, qa, entities: Dict) -> None:
@@ -301,7 +301,7 @@ class GraphLoader:
 
             logger.info(f"[GraphLoader] Saved {len(new_items)} Q&A pairs to cache ({CACHE_FILE})")
         except Exception as e:
-            logger.error(f"[GraphLoader] Cache save failed: {e}")
+            logger.error("[GraphLoader] Cache save failed: %s", str(e))
 
     def load_from_cache(self) -> LoadStats:
         """Load Q&A pairs from the JSON cache into Neo4j.
@@ -319,7 +319,7 @@ class GraphLoader:
             with open(CACHE_FILE, "r") as f:
                 cached_items = json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            logger.error(f"[GraphLoader] Cache read error: {e}")
+            logger.error("[GraphLoader] Cache read error: %s", str(e))
             return LoadStats()
 
         if not cached_items:

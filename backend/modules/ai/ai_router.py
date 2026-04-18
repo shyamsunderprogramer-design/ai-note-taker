@@ -5,7 +5,7 @@ import re
 from lib.http_client import sync_client
 import httpx
 
-from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, MODEL_TURBO, TURBO_MAX_TOKENS, INSTANT_MAX_TOKENS
+from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, TURBO_MAX_TOKENS, INSTANT_MAX_TOKENS
 from utils import clean_ai_output
 
 logger = logging.getLogger("ai_router")
@@ -42,7 +42,7 @@ def _get_vision_model():
         return _vision_model_cache
 
     try:
-        resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=5, skip_ssrf_check=True)
         if resp.status_code == 200:
             models = resp.json().get("models", [])
             logger.info("[_get_vision_model] Available models: %s", [m.get("name") for m in models])
@@ -54,7 +54,7 @@ def _get_vision_model():
                         logger.info("[_get_vision_model] Found vision model: %s", name)
                         return name
     except Exception as e:
-        logger.warning("Could not fetch Ollama models to find vision model: %s", e)
+        logger.warning("Could not fetch Ollama models to find vision model: %s", str(e))
 
     _vision_model_cache = None
     logger.warning("[_get_vision_model] No vision-capable model found")
@@ -145,7 +145,7 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None, in
             if rag_context:
                 rag_block = rag_context
         except Exception as e:
-            logger.debug(f"RAG retrieval failed: {e}")
+            logger.debug("RAG retrieval failed: %s", str(e))
 
     base = f"""Slack message between two senior engineers.
 
@@ -260,6 +260,7 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
 
         response = sync_client.post(
             f"{OLLAMA_URL}/api/generate",
+            skip_ssrf_check=True,  # internal Ollama service
             json={
                 "model": model_name or get_ai_model(mode),
                 "prompt": final_prompt,
@@ -278,7 +279,7 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
         return data.get("response", "").strip()
 
     except Exception as e:
-        logger.error("ask_ollama error: %s", e)
+        logger.error("ask_ollama error: %s", str(e))
         return "AI error"
 
 
@@ -308,7 +309,7 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
             }
         }
 
-        with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=AI_TIMEOUT) as response:
+        with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=AI_TIMEOUT, skip_ssrf_check=True) as response:
             if response.status_code != 200:
                 logger.error("Ollama service returned status %d", response.status_code)
                 yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
@@ -338,7 +339,7 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
                     logger.warning("Stream JSON decode error: %s, line: %s", e, line[:100])
                     continue
                 except Exception as e:
-                    logger.warning("Stream parse error: %s", e)
+                    logger.warning("Stream parse error: %s", str(e))
                     continue
 
         ms = int((time.time() - start) * 1000)
@@ -398,7 +399,7 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
         logger.info("Vision stream: model=%s, has_image=%s, prompt=%s",
             model_to_use, bool(image_b64), prompt[:80] + "...")
 
-        with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=120) as response:
+        with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=120, skip_ssrf_check=True) as response:
             if response.status_code != 200:
                 try:
                     err_data = response.json()
@@ -431,10 +432,10 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
                     if data.get("done", False):
                         break
                 except json.JSONDecodeError as e:
-                    logger.warning("Vision stream JSON decode error: %s", e)
+                    logger.warning("Vision stream JSON decode error: %s", str(e))
                     continue
                 except Exception as e:
-                    logger.warning("Vision stream parse error: %s", e)
+                    logger.warning("Vision stream parse error: %s", str(e))
                     continue
 
         ms = int((time.time() - start) * 1000)
@@ -487,8 +488,8 @@ def route_ai(prompt, mode="adaptive", style="concise"):
 
             last_error = response
         except Exception as e:
-            last_error = str(e)
-            logger.error("route_ai error: %s", e)
+            last_error = "An internal error occurred"
+            logger.error("route_ai error: %s", str(e))
 
     return {
         "response": clean_ai_output(last_error or "AI error"),
@@ -515,7 +516,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 yield event
             return
         except Exception as e:
-            logger.error("Ollama Cloud stream error: %s", e)
+            logger.error("Ollama Cloud stream error: %s", str(e))
             yield _make_error(f"Ollama Cloud error: {e}")
             return
 
@@ -528,7 +529,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 yield event
             return
         except Exception as e:
-            logger.error("Ollama stream error: %s", e)
+            logger.error("Ollama stream error: %s", str(e))
             yield _make_error(f"Ollama error: {e}")
             return
 
@@ -558,7 +559,8 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                                 "http://127.0.0.1:18000/get-key",
                                 json={"provider": provider_prefix},
                                 headers=headers,
-                                timeout=2
+                                timeout=2,
+                                skip_ssrf_check=True,  # internal key server, not user-supplied
                             )
                             has_key = resp.status_code == 200 and bool(resp.json().get("apiKey"))
                         except Exception:
@@ -580,7 +582,8 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                     "http://127.0.0.1:18000/get-key",
                     json={"provider": "ollama-cloud"},
                     headers=headers,
-                    timeout=2
+                    timeout=2,
+                    skip_ssrf_check=True,  # internal key server, not user-supplied
                 )
                 if resp.status_code == 200 and bool(resp.json().get("apiKey")):
                     from cloud_providers import ask_ollama_cloud_stream
@@ -592,7 +595,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 pass  # nosec B110
             logger.info("[route_ai_stream] auto → no Ollama Cloud key, falling back to local Ollama")
         except Exception as e:
-            logger.error("[route_ai_stream] auto cloud race error: %s", e)
+            logger.error("[route_ai_stream] auto cloud race error: %s", str(e))
 
     # Cloud providers (OpenAI, Anthropic, Google, etc.) — use cloud_providers module
     if provider and provider != "ollama" and "-" in provider:
@@ -606,7 +609,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                     yield event
                 return
         except Exception as e:
-            logger.error("Cloud stream error: %s", e)
+            logger.error("Cloud stream error: %s", str(e))
             yield _make_error(f"Cloud AI error: {e}")
             return
 
@@ -628,6 +631,6 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 return
 
         except Exception as e:
-            logger.error("AI stream error: %s", e)
+            logger.error("AI stream error: %s", str(e))
 
     yield _make_error("AI error")

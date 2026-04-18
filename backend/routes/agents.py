@@ -43,7 +43,7 @@ try:
     AGENTS_AVAILABLE = True
 except ImportError as e:
     AGENTS_AVAILABLE = False
-    logger.warning(f"[Agents] Agent framework not available: {e}")
+    logger.warning("[Agents] Agent framework not available: %s", str(e))
 
 # Shadow agent availability
 try:
@@ -127,8 +127,8 @@ async def create_agent_session(
         )
         return session
     except Exception as e:
-        logger.error(f"[Agents] Create session error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Agents] Create session error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/agents/sessions/{session_id}")
@@ -169,8 +169,8 @@ async def process_agent_segment(
         result = await orchestrator.process_segment(session_id, text, speaker)
         return result
     except Exception as e:
-        logger.error(f"[Agents] Segment processing error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Agents] Segment processing error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/agents/sessions/{session_id}/stream")
@@ -257,7 +257,7 @@ async def accept_agent_suggestion(suggestion_id: str):
                 learner.save_to_session(session)
                 await session_manager.save_session(session)
             except Exception as e:
-                logger.warning(f"[Agents] Failed to record acceptance feedback: {e}")
+                logger.warning("[Agents] Failed to record acceptance feedback: %s", str(e))
 
             return {"status": "accepted", "suggestion": result}
 
@@ -289,7 +289,7 @@ async def dismiss_agent_suggestion(suggestion_id: str):
                 learner.save_to_session(session)
                 await session_manager.save_session(session)
             except Exception as e:
-                logger.warning(f"[Agents] Failed to record dismissal feedback: {e}")
+                logger.warning("[Agents] Failed to record dismissal feedback: %s", str(e))
 
             return {"status": "dismissed", "suggestion": result}
 
@@ -396,8 +396,8 @@ async def trigger_ingestion(request: Request):
                 stats = pipeline.ingest_from_github(repo_urls, mode=mode, dry_run=dry_run)
             _ingestion_results[task_id] = {"status": "completed", "result": stats.to_dict()}
         except Exception as e:
-            logger.error(f"[Ingestion] Background task failed: {e}")
-            _ingestion_results[task_id] = {"status": "failed", "error": str(e)}
+            logger.error("[Ingestion] Background task failed: %s", str(e))
+            _ingestion_results[task_id] = {"status": "failed", "error": "An internal error occurred"}
 
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, _run)
@@ -478,7 +478,7 @@ async def start_shadow_interview(
                 "agent_framework": "v2",
             }
         except Exception as e:
-            logger.warning(f"[ShadowAgent] Fallback to old agent: {e}")
+            logger.warning("[ShadowAgent] Fallback to old agent: %s", str(e))
 
     if not SHADOW_AGENT_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
@@ -486,8 +486,8 @@ async def start_shadow_interview(
     try:
         return start_shadow_session(company, role, stage)
     except Exception as e:
-        logger.error(f"[ShadowAgent] Start error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Start error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/shadow/process")
@@ -521,7 +521,7 @@ async def process_shadow_transcript(
                         return old_format
                     return {"detected": False}
                 except Exception as e:
-                    logger.warning(f"[ShadowAgent] Agent framework error, falling back: {e}")
+                    logger.warning("[ShadowAgent] Agent framework error, falling back: %s", str(e))
                     break
 
     if not SHADOW_AGENT_AVAILABLE:
@@ -531,8 +531,8 @@ async def process_shadow_transcript(
         result = process_transcript_segment(text, speaker)
         return result or {"detected": False}
     except Exception as e:
-        logger.error(f"[ShadowAgent] Process error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Process error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/shadow/suggestions")
@@ -544,8 +544,8 @@ async def get_shadow_suggestions_list():
     try:
         return {"suggestions": get_shadow_suggestions()}
     except Exception as e:
-        logger.error(f"[ShadowAgent] Suggestions error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Suggestions error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/shadow/accept")
@@ -558,8 +558,8 @@ async def accept_shadow_suggestion(suggestion_id: str = Query(...)):
         text = accept_suggestion_by_id(suggestion_id)
         return {"text": text} if text else {"error": "Suggestion not found"}
     except Exception as e:
-        logger.error(f"[ShadowAgent] Accept error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Accept error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/shadow/end")
@@ -571,8 +571,8 @@ async def end_shadow_interview():
     try:
         return end_shadow_session()
     except Exception as e:
-        logger.error(f"[ShadowAgent] End error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] End error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/shadow/stats")
@@ -584,8 +584,8 @@ async def get_shadow_statistics():
     try:
         return get_shadow_stats()
     except Exception as e:
-        logger.error(f"[ShadowAgent] Stats error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Stats error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Collaboration Endpoints ---
@@ -603,8 +603,8 @@ async def create_collaboration(
     try:
         return create_collaboration_session(host_name, context)
     except Exception as e:
-        logger.error(f"[Collaboration] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/collaboration/join")
@@ -619,8 +619,8 @@ async def join_collaboration_session(
     try:
         return join_collaboration(join_code, name)
     except Exception as e:
-        logger.error(f"[Collaboration] Join error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Join error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/collaboration/message")
@@ -638,8 +638,8 @@ async def send_collaboration_msg(
     try:
         return send_collaboration_message(session_id, participant_id, text, msg_type, is_private)
     except Exception as e:
-        logger.error(f"[Collaboration] Message error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Message error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/collaboration/messages")
@@ -661,8 +661,8 @@ async def get_collaboration_msgs(
             return {"messages": msgs[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
         return {"messages": msgs}
     except Exception as e:
-        logger.error(f"[Collaboration] Messages error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Messages error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/collaboration/status")
@@ -675,8 +675,8 @@ async def get_collaboration_session_status(session_id: str = Query(...)):
         s = get_collaboration_status(session_id)
         return s or {"error": "Session not found"}
     except Exception as e:
-        logger.error(f"[Collaboration] Status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/collaboration/end")
@@ -691,8 +691,8 @@ async def end_collaboration_session(
     try:
         return end_collaboration(session_id, participant_id)
     except Exception as e:
-        logger.error(f"[Collaboration] End error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] End error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Meeting Templates Endpoints ---
@@ -713,8 +713,8 @@ async def list_meeting_templates(limit: int = Query(50, ge=1, le=500), offset: i
             "offset": offset,
         }
     except Exception as e:
-        logger.error(f"[MeetingTemplates] List error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] List error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/meeting-templates/categories")
@@ -727,8 +727,8 @@ async def list_template_categories():
         categories = get_categories()
         return {"categories": categories}
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Categories error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Categories error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/meeting-templates")
@@ -741,8 +741,8 @@ async def create_meeting_template(body: dict, user: User = Depends(require_authe
         template = create_template(body)
         return template
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/meeting-templates/{template_id}")
@@ -757,8 +757,8 @@ async def get_meeting_template(template_id: str):
             return template
         return error_response(ErrorCode.NOT_FOUND, "Template not found", status_code=404)
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Get error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Get error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.put("/meeting-templates/{template_id}")
@@ -773,8 +773,8 @@ async def update_meeting_template(template_id: str, body: dict):
             return template
         return error_response(ErrorCode.NOT_FOUND, "Template not found or cannot update default templates", status_code=404)
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Update error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Update error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.delete("/meeting-templates/{template_id}")
@@ -789,8 +789,8 @@ async def delete_meeting_template(template_id: str):
             return {"success": True}
         return error_response(ErrorCode.NOT_FOUND, "Template not found or cannot delete default templates", status_code=404)
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Delete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/meeting-templates/search")
@@ -803,8 +803,8 @@ async def search_meeting_templates(query: str = Query(...)):
         results = search_templates(query)
         return {"templates": results}
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Search error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Search error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/meeting-templates/{template_id}/generate")
@@ -817,5 +817,5 @@ async def generate_meeting_notes(template_id: str, body: dict):
         notes = generate_notes(template_id, body)
         return {"notes": notes}
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Generate error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Generate error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

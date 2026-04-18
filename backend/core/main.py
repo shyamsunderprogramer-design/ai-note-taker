@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 import json
 import logging
 import os
@@ -54,7 +53,6 @@ from security import (
     ErrorCode, APIError, error_response,
 )
 from security.auth import user_manager, User
-from generate_ssl import generate_self_signed_cert, get_ssl_context
 
 # Use shared httpx client instead of requests to avoid blocking the event loop
 from lib.http_client import sync_client
@@ -154,6 +152,14 @@ except ImportError:
     logger.warning("[ResumeReview] Module not available")
 
 sys.stdout.reconfigure(encoding="utf-8")
+
+
+def _sanitize_for_log(value: str) -> str:
+    """Remove newlines and control characters from user input before logging to prevent log injection."""
+    if not isinstance(value, str):
+        value = str(value)
+    return value.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+
 
 app = FastAPI()
 
@@ -693,7 +699,7 @@ def autonomous_listener():
                     pass
 
             except Exception as e:
-                logger.error("[ERROR] Listener error: %s", e)
+                logger.error("[ERROR] Listener error: %s", str(e))
     finally:
         transcriber.stop()
 
@@ -708,7 +714,7 @@ async def start_listener():
             await init_database()
             logger.info("[Startup] Database initialized successfully")
         except Exception as e:
-            logger.warning(f"[Startup] Database initialization skipped: {e}")
+            logger.warning("[Startup] Database initialization skipped: %s", str(e))
 
     # Clean up stale temp audio files on startup
     cleanup_temp_audio()
@@ -731,7 +737,7 @@ async def start_listener():
             from modules.ai.smart_classifier import warmup as classifier_warmup
             threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
     except Exception as e:
-        logger.warning(f"[Startup] ML warmup skipped: {e}")
+        logger.warning("[Startup] ML warmup skipped: %s", str(e))
 
     # Pre-warm cloud provider connections (DNS + TLS handshake) for sub-second first-byte
     def prewarm_connections():
@@ -806,7 +812,8 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
             headers=headers,
-            timeout=2
+            timeout=2,
+            skip_ssrf_check=True,  # internal key server, not user-supplied
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -859,12 +866,12 @@ async def list_providers(request: Request):
 def list_ollama_models():
     """Proxy to Ollama's GET /api/tags — returns installed local models."""
     try:
-        response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10)
+        response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10, skip_ssrf_check=True)
         if response.status_code == 200:
             return response.json()
         return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500) | {"models": []}
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500) | {"models": []}
 
 
 @app.post("/ollama/pull")
@@ -873,17 +880,18 @@ def pull_ollama_model(model: str = Query(...)):
     import threading
     def background_pull():
         try:
-            logger.info("Starting model pull: %s", model)
+            logger.info("Starting model pull: %s", _sanitize_for_log(model))
             pull_resp = sync_client.post(
                 f"{OLLAMA_URL}/api/pull",
                 json={"name": model},
                 stream=True,
-                timeout=3600
+                timeout=3600,
+                skip_ssrf_check=True,  # internal Ollama service
             )
             # Read the stream to ensure completion (or failure)
             for line in pull_resp.iter_lines():
                 if line:
-                    logger.info("[Ollama pull] %s", line.decode("utf-8", errors="replace"))
+                    logger.info("[Ollama pull] %s", _sanitize_for_log(line.decode("utf-8", errors="replace")))
             logger.info("Model pull complete: %s", model)
         except Exception as e:
             logger.error("Model pull failed for %s: %s", model, e)
@@ -899,13 +907,14 @@ def delete_ollama_model(model_name: str):
         response = sync_client.delete(
             f"{OLLAMA_URL}/api/delete",
             json={"name": model_name},
-            timeout=30
+            timeout=30,
+            skip_ssrf_check=True,  # internal Ollama service
         )
         if response.status_code == 200:
             return {"status": "deleted", "model": model_name}
         return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Failed to delete model: {response.status_code}", status_code=502)
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/ask-with-image")
@@ -928,7 +937,7 @@ async def ask_with_image(
     query = sanitize_input(query, max_length=10000)
 
     logger.info("[ask-with-image] query=%s, mode=%s, style=%s, has_image=%s, provider=%s",
-                query[:100], mode, style, "Yes" if image_b64 else "No", provider)
+                _sanitize_for_log(query[:100]), _sanitize_for_log(mode), _sanitize_for_log(style), "Yes" if image_b64 else "No", _sanitize_for_log(provider))
     messages = None
     if context:
         try:
@@ -947,7 +956,7 @@ async def ask_with_image(
                     yield event
             except Exception as e:
                 import json as _json
-                yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
             finally:
                 _state.is_streaming = False
         return StreamingResponse(text_generator(), media_type="text/event-stream")
@@ -1027,7 +1036,7 @@ async def ask_with_image(
                     yield event
             except Exception as e:
                 import json as _json
-                yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
             finally:
                 _state.is_streaming = False
         return StreamingResponse(text_only_gen(), media_type="text/event-stream")
@@ -1045,7 +1054,7 @@ async def ask_with_image(
                     yield event
             except Exception as e:
                 import json as _json
-                yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
             finally:
                 _state.is_streaming = False
         return StreamingResponse(skip_vision_gen(), media_type="text/event-stream")
@@ -1131,7 +1140,7 @@ async def ask_with_image(
 
         except Exception as e:
             import json as _json
-            yield f"event: error\ndata: {_json.dumps({'type':'error','message':str(e)})}\n\n"
+            yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
         finally:
             _state.is_streaming = False
 
@@ -1180,7 +1189,7 @@ async def transcribe_stream(request: Request):
         except GeneratorExit:
             pass
         except Exception as e:
-            logger.error("[transcribe-stream] error: %s", e)
+            logger.error("[transcribe-stream] error: %s", str(e))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -1200,8 +1209,8 @@ async def ocr_image(request: Request):
         result = extract_text_from_image(image_b64)
         return JSONResponse(result)
     except Exception as e:
-        logger.error("[OCR] Error: %s", e)
-        return JSONResponse({"text": "", "method": "none", "error": str(e)}, status_code=500)
+        logger.error("[OCR] Error: %s", str(e))
+        return JSONResponse({"text": "", "method": "none", "error": "An internal error occurred"}, status_code=500)
 
 
 @app.post("/overlay-ask")
@@ -1217,7 +1226,7 @@ async def overlay_ask(
 
     Uses fast/concise settings for quick responses.
     """
-    logger.info("[overlay-ask] query=%s, has_screenshot=%s", query, bool(screenshot_b64))
+    logger.info("[overlay-ask] query=%s, has_screenshot=%s", _sanitize_for_log(query), bool(screenshot_b64))
 
     async def generator():
         _state.is_streaming = True
@@ -1226,7 +1235,7 @@ async def overlay_ask(
 
             if screenshot_b64:
                 model_name = _get_vision_model()
-                logger.info("[overlay-ask] Screenshot present, vision model: %s", model_name)
+                logger.info("[overlay-ask] Screenshot present, vision model: %s", _sanitize_for_log(str(model_name)))
                 if not model_name:
                     import json
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
@@ -1244,7 +1253,7 @@ async def overlay_ask(
                     yield event
         except Exception as e:
             import json
-            yield f"event: error\ndata: {json.dumps({'type':'error','message': str(e)})}\n\n"
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
         finally:
             _state.is_streaming = False
 
@@ -1318,7 +1327,7 @@ async def health_database():
         return {
             "available": True,
             "connected": False,
-            "message": f"Database error: {str(e)}"
+            "message": "An internal error occurred"
         }
 
 
@@ -1458,7 +1467,7 @@ async def admin_create_backup(user: User = Depends(require_admin)):
         }
     except Exception as e:
         log_audit_event("admin_backup", user.username, "backup_failed", success=False)
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Backup failed: {str(e)}")
+        return error_response(ErrorCode.INTERNAL_ERROR, "Backup failed")
 
 
 @app.post("/admin/restore")
@@ -1477,7 +1486,7 @@ async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depen
         }
     except Exception as e:
         log_audit_event("admin_restore", user.username, "restore_failed", success=False)
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Restore failed: {str(e)}")
+        return error_response(ErrorCode.INTERNAL_ERROR, "Restore failed")
 
 
 @app.post("/admin/migrate")
@@ -1496,7 +1505,7 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         }
     except Exception as e:
         log_audit_event("admin_migrate", user.username, "migration_failed", success=False)
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Migration failed: {str(e)}")
+        return error_response(ErrorCode.INTERNAL_ERROR, "Migration failed")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1539,7 +1548,7 @@ async def register_user(
         }
     except ValueError as e:
         log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Registration failed")
 
 
 @app.post("/auth/login")
@@ -1701,7 +1710,7 @@ async def configure_provider_key(
             "note": "Your key is stored securely and will be used for AI requests."
         }
     except Exception as e:
-        logger.error(f"[BYOK] Failed to save key: {e}")
+        logger.error("[BYOK] Failed to save key: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to save API key")
 
 
@@ -1833,7 +1842,7 @@ async def test_provider_key(
     except httpx.TimeoutException:
         test_result = {"status": "warning", "provider": provider, "message": "API test timed out", "note": "Key format is valid but could not verify connectivity"}
     except Exception as e:
-        test_result = {"status": "warning", "provider": provider, "message": f"API test error: {str(e)}", "note": "Key format is valid but could not verify connectivity"}
+        test_result = {"status": "warning", "provider": provider, "message": "API test error: An internal error occurred", "note": "Key format is valid but could not verify connectivity"}
 
     log_audit_event("byok_test", user.username, "key_tested", resource=provider, details=test_result, success=test_result.get("status") == "success")
     return test_result
@@ -1981,10 +1990,10 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         }
 
     except ValueError as e:
-        return {"text": text, "response": "", "error": str(e)}
+        return {"text": text, "response": "", "error": "An internal error occurred"}
     except Exception as e:
-        logger.error("[ERROR cloud transcribe]: %s", e)
-        return {"text": text, "response": "", "error": str(e)}
+        logger.error("[ERROR cloud transcribe]: %s", str(e))
+        return {"text": text, "response": "", "error": "An internal error occurred"}
 
 
 @app.get("/stream")
@@ -2011,7 +2020,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
 
         except Exception as e:
             import json
-            yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
 
         finally:
             _state.is_streaming = False
@@ -2036,13 +2045,13 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     logger = logging.getLogger(__name__)
     race_start = time_module.time()
-    logger.info("[RACE START] query='%s' mode=%s style=%s", q[:50], mode, style)
+    logger.info("[RACE START] query='%s' mode=%s style=%s", _sanitize_for_log(q[:50]), _sanitize_for_log(mode), _sanitize_for_log(style))
 
     # Parse enabled providers from frontend
     enabled_set = None
     if enabled:
         enabled_set = set(enabled.split(","))
-        logger.info("Race mode: only using enabled providers from frontend: %s", enabled_set)
+        logger.info("Race mode: only using enabled providers from frontend: %s", _sanitize_for_log(str(enabled_set)))
 
     messages = None
     if context:
@@ -2195,7 +2204,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             race_queue.put((pk, "DONE", None))
         except Exception as e:
             logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time_module.time() - provider_start)
-            race_queue.put((pk, "ERROR", str(e)))
+            race_queue.put((pk, "ERROR", "An internal error occurred"))
             race_queue.put((pk, "DONE", None))
 
     # Start all provider threads
@@ -2227,7 +2236,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                 continue
 
             if event_type == "ERROR":
-                logger.warning("[RACE] provider %s error: %s", pk, event_data)
+                logger.warning("[RACE] provider %s error: %s", _sanitize_for_log(str(pk)), _sanitize_for_log(str(event_data)))
                 continue
 
             if event_type != "EVENT":
@@ -2316,8 +2325,13 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(req
     """Upload a document for RAG context retrieval."""
     from document_store import get_document_store
 
+    # SECURITY: Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    if not safe_filename or "/" in file.filename or "\\" in file.filename or ".." in file.filename:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
     # Save uploaded file temporarily
-    temp_path = os.path.join(UPLOAD_DIR, file.filename)
+    temp_path = os.path.join(UPLOAD_DIR, safe_filename)
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -2333,8 +2347,8 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(req
 
         return result
     except Exception as e:
-        logger.error(f"Document upload failed: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("Document upload failed: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/documents")
@@ -2433,8 +2447,8 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        logger.error(f"Transcription with speakers failed: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("Transcription with speakers failed: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
     finally:
         for path in (file_path, wav_path):
@@ -2480,7 +2494,7 @@ async def shutdown_event():
             await close_database()
             logger.info("[Shutdown] Database connections closed")
         except Exception as e:
-            logger.warning(f"[Shutdown] Database close error: {e}")
+            logger.warning("[Shutdown] Database close error: %s", str(e))
 
     # Close shared httpx client
     try:
@@ -2777,9 +2791,9 @@ async def import_conversations(file: UploadFile = File(...), user: User = Depend
             "count": len(messages)
         }
     except json.JSONDecodeError as e:
-        return error_response(ErrorCode.INVALID_FORMAT, f"Invalid JSON: {str(e)}", status_code=422)
+        return error_response(ErrorCode.INVALID_FORMAT, "Invalid JSON format", status_code=422)
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ==============================
@@ -2989,9 +3003,9 @@ async def websocket_endpoint(ws: WebSocket):
                 result = route_ai(msg, mode=_state.current_mode)
                 await ws.send_text(clean_ai_output(result["response"]))
             except Exception as e:
-                logger.error(f"[WS] Error processing message: {e}")
+                logger.error("[WS] Error processing message: %s", _sanitize_for_log(str(e)))
                 try:
-                    await ws.send_text(json.dumps({"error": str(e)}))
+                    await ws.send_text(json.dumps({"error": "An internal error occurred"}))
                 except Exception:
                     break
     except Exception:
@@ -3022,7 +3036,7 @@ async def cognitive_graph_status():
         except Exception:
             return {"available": True, "connected": False, "error": "Neo4j connection failed"}
     except Exception as e:
-        return {"available": True, "connected": False, "error": str(e)}
+        return {"available": True, "connected": False, "error": "An internal error occurred"}
 
 
 @app.post("/cognitive-graph/initialize")
@@ -3311,7 +3325,7 @@ async def backfill_historical_conversations():
             "errors": result.stderr[-500:] if result.stderr else ""
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/cognitive-graph/stats")
@@ -3350,7 +3364,7 @@ async def get_cognitive_graph_stats():
 
         return {"stats": stats, "connected": bool(cognitive_graph.driver)}
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ======================================
@@ -3368,7 +3382,7 @@ try:
     REALTIME_AVAILABLE = True
 except ImportError as e:
     REALTIME_AVAILABLE = False
-    logger.warning(f"[Realtime] Module not available: {e}")
+    logger.warning("[Realtime] Module not available: %s", str(e))
 
 
 @app.post("/realtime/process")
@@ -3402,8 +3416,8 @@ async def process_realtime_segment(
 
         return {"has_suggestion": False}
     except Exception as e:
-        logger.error(f"[Realtime] Error processing segment: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Realtime] Error processing segment: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/realtime/command")
@@ -3430,8 +3444,8 @@ async def process_voice_command_api(
 
         return {"is_command": False}
     except Exception as e:
-        logger.error(f"[Realtime] Error processing command: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Realtime] Error processing command: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/realtime/suggestion-history")
@@ -3458,7 +3472,7 @@ async def get_suggestion_history(
             "count": len(history)
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/realtime/configure")
@@ -3479,7 +3493,7 @@ async def configure_suggestions(
             "cooldown_seconds": cooldown_seconds
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/realtime/clear")
@@ -3492,7 +3506,7 @@ async def clear_suggestion_state():
         realtime_engine.clear_buffer()
         return {"cleared": True}
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ======================================
@@ -3505,7 +3519,7 @@ try:
     ANALYZER_AVAILABLE = True
 except ImportError as e:
     ANALYZER_AVAILABLE = False
-    logger.warning(f"[Analyzer] Module not available: {e}")
+    logger.warning("[Analyzer] Module not available: %s", str(e))
 
 
 @app.post("/analyze/conversation")
@@ -3523,8 +3537,8 @@ async def analyze_conversation_api(
         analysis = analyze_conversation(conversation)
         return analysis
     except Exception as e:
-        logger.error(f"[Analyzer] Error analyzing conversation: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Analyzer] Error analyzing conversation: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/analyze/batch")
@@ -3552,7 +3566,7 @@ async def analyze_conversations_batch(
             "results": results
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/analyze/types")
@@ -3578,7 +3592,7 @@ async def get_conversation_types():
             ]
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ======================================
@@ -3591,7 +3605,7 @@ try:
     ANALYTICS_AVAILABLE = True
 except ImportError as e:
     ANALYTICS_AVAILABLE = False
-    logger.warning(f"[Analytics] Module not available: {e}")
+    logger.warning("[Analytics] Module not available: %s", str(e))
 
 # Performance Analyzer - Phase 2 Task #32
 try:
@@ -3599,7 +3613,7 @@ try:
     PERFORMANCE_ANALYZER_AVAILABLE = True
 except ImportError as e:
     PERFORMANCE_ANALYZER_AVAILABLE = False
-    logger.warning(f"[PerformanceAnalyzer] Module not available: {e}")
+    logger.warning("[PerformanceAnalyzer] Module not available: %s", str(e))
 
 
 @app.get("/analytics/skill-progression/{user_id}")
@@ -3616,7 +3630,7 @@ async def get_skill_progression_api(
         data = analytics.get_skill_progression(user_id, skill, months)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/analytics/company-comparison")
@@ -3631,7 +3645,7 @@ async def compare_companies(
         data = analytics.get_company_comparison(companies)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/analytics/topic-network/{user_id}")
@@ -3647,7 +3661,7 @@ async def get_topic_network_api(
         data = analytics.get_topic_network(user_id, min_connections)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/analytics/interview-calendar/{user_id}")
@@ -3663,7 +3677,7 @@ async def get_interview_calendar_api(
         data = analytics.get_interview_calendar(user_id, months)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/analytics/performance-trends/{user_id}")
@@ -3678,7 +3692,7 @@ async def get_performance_trends_api(
         data = analytics.get_performance_trends(user_id)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/analytics/dashboard/{user_id}")
@@ -3693,7 +3707,7 @@ async def get_dashboard_summary_api(
         data = analytics.get_dashboard_summary(user_id)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ======================================
@@ -3714,8 +3728,8 @@ async def analyze_answer_performance(
         result = performance_analyzer.analyze_answer(answer_text, question_type)
         return result
     except Exception as e:
-        logger.error(f"[PerformanceAnalyzer] Error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[PerformanceAnalyzer] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/performance/analyze-batch")
@@ -3736,8 +3750,8 @@ async def analyze_batch_answers(
         ]
         return {"results": results, "count": len(results)}
     except Exception as e:
-        logger.error(f"[PerformanceAnalyzer] Batch error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[PerformanceAnalyzer] Batch error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/performance/tiers")
@@ -3791,8 +3805,8 @@ async def get_personalized_checklist(
 
         return {"checklist": checklist, "user_id": user_id}
     except Exception as e:
-        logger.error(f"[PerformanceAnalyzer] Checklist error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[PerformanceAnalyzer] Checklist error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ======================================
@@ -3805,7 +3819,7 @@ try:
     STUDY_PLAN_AVAILABLE = True
 except ImportError as e:
     STUDY_PLAN_AVAILABLE = False
-    logger.warning(f"[StudyPlan] Module not available: {e}")
+    logger.warning("[StudyPlan] Module not available: %s", str(e))
 
 
 @app.post("/study-plan/generate")
@@ -3846,8 +3860,8 @@ async def generate_study_plan(
 
         return _serialize_plan(plan)
     except Exception as e:
-        logger.error(f"[StudyPlan] Generation error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Generation error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 class StudyPlanPersonalizedRequest(BaseModel):
@@ -3890,8 +3904,8 @@ async def generate_personalized_study_plan(
 
         return _serialize_plan(plan)
     except Exception as e:
-        logger.error(f"[StudyPlan] Personalized generation error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Personalized generation error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 def _serialize_plan(plan) -> dict:
@@ -3967,8 +3981,8 @@ async def get_study_plan(user_id: str):
         import json
         return json.loads(study_planner.export_plan(plan, "json"))
     except Exception as e:
-        logger.error(f"[StudyPlan] Get error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Get error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/study-plan/{user_id}/complete-task")
@@ -3996,8 +4010,8 @@ async def complete_study_task(
             )
         }
     except Exception as e:
-        logger.error(f"[StudyPlan] Complete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Complete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/study-plan/{user_id}/today")
@@ -4032,8 +4046,8 @@ async def get_today_session(user_id: str):
 
         return {"message": "No study session scheduled for today", "tasks": []}
     except Exception as e:
-        logger.error(f"[StudyPlan] Today error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Today error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/study-plan/resources/{category}")
@@ -4054,8 +4068,8 @@ async def get_study_resources(
             "resources": resources
         }
     except Exception as e:
-        logger.error(f"[StudyPlan] Resources error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Resources error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/study-plan/{user_id}/export")
@@ -4077,8 +4091,8 @@ async def export_study_plan(
             "content": exported
         }
     except Exception as e:
-        logger.error(f"[StudyPlan] Export error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Export error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ============================================================================
@@ -4103,8 +4117,8 @@ async def interview_simulator_create(
         result = interview_simulator.create_session(company, role, num_questions, user_id, difficulty)
         return result
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/interview-simulator/{session_id}/question")
@@ -4121,8 +4135,8 @@ async def interview_simulator_get_question(session_id: str):
             return {"status": "complete", "message": "Interview complete"}
         return question
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Get question error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Get question error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/interview-simulator/{session_id}/answer")
@@ -4141,8 +4155,8 @@ async def interview_simulator_submit_answer(
         result = interview_simulator.submit_answer(session_id, transcript, duration_ms)
         return result
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Submit answer error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Submit answer error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/interview-simulator/{session_id}/status")
@@ -4159,8 +4173,8 @@ async def interview_simulator_status(session_id: str):
             return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
         return status
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/interview-simulator/{session_id}/finish")
@@ -4175,8 +4189,8 @@ async def interview_simulator_finish(session_id: str):
         result = finish_interview(session_id)
         return result
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Finish error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Finish error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ============================================================================
@@ -4214,8 +4228,8 @@ async def create_job_application(
         )
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/applications")
@@ -4245,8 +4259,8 @@ async def get_job_applications(
             "applications": applications[offset:offset + limit],
         }
     except Exception as e:
-        logger.error(f"[JobTracker] Get applications error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+        logger.error("[JobTracker] Get applications error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred")
 
 
 @app.get("/job-tracker/application/{app_id}")
@@ -4263,8 +4277,8 @@ async def get_job_application(app_id: str):
             return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
         return application
     except Exception as e:
-        logger.error(f"[JobTracker] Get application error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Get application error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/status")
@@ -4284,8 +4298,8 @@ async def update_job_status(
         result = job_tracker.update_status(app_id, status, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Update status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Update status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/interview")
@@ -4308,8 +4322,8 @@ async def add_job_interview(
         )
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add interview error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add interview error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/offer")
@@ -4330,8 +4344,8 @@ async def add_job_offer(
         result = job_tracker.add_offer(app_id, salary, benefits_list, deadline)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add offer error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add offer error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/stats")
@@ -4346,8 +4360,8 @@ async def get_job_tracker_stats(user_id: str = Query("default", description="Use
         stats = job_tracker.get_pipeline_stats(user_id)
         return stats
     except Exception as e:
-        logger.error(f"[JobTracker] Stats error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Stats error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/upcoming-interviews")
@@ -4369,8 +4383,8 @@ async def get_upcoming_job_interviews(
             "interviews": interviews
         }
     except Exception as e:
-        logger.error(f"[JobTracker] Upcoming interviews error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Upcoming interviews error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/company/{company}")
@@ -4385,8 +4399,8 @@ async def get_company_job_insights(company: str):
         insights = job_tracker.get_company_insights(company)
         return insights
     except Exception as e:
-        logger.error(f"[JobTracker] Company insights error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Company insights error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.delete("/job-tracker/application/{app_id}")
@@ -4401,8 +4415,8 @@ async def delete_job_application(app_id: str, user: User = Depends(require_authe
         result = job_tracker.delete_application(app_id)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Delete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/duplicates")
@@ -4417,8 +4431,8 @@ async def find_job_duplicates(user_id: str = Query("default", description="User 
         duplicates = job_tracker.find_duplicates(user_id)
         return duplicates
     except Exception as e:
-        logger.error(f"[JobTracker] Find duplicates error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Find duplicates error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/duplicates/remove")
@@ -4439,8 +4453,8 @@ async def remove_job_duplicates(
         result = job_tracker.remove_duplicates(user_id, keep)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Remove duplicates error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Remove duplicates error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/application/{app_id}/details")
@@ -4458,8 +4472,8 @@ async def get_job_application_details(app_id: str):
             return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
         return details
     except Exception as e:
-        logger.error(f"[JobTracker] Get details error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Get details error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/recruiter")
@@ -4480,8 +4494,8 @@ async def add_recruiter_contact(
         result = job_tracker.add_recruiter(app_id, name, email, phone, is_primary)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add recruiter error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add recruiter error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/communication")
@@ -4503,8 +4517,8 @@ async def add_communication_log(
         result = job_tracker.add_communication(app_id, comm_type, sender, content, direction, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add communication error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add communication error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/background-check")
@@ -4524,8 +4538,8 @@ async def update_background_check_status(
         result = job_tracker.update_background_check(app_id, status, provider, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Background check error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Background check error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/drug-test")
@@ -4546,8 +4560,8 @@ async def update_drug_test_status(
         result = job_tracker.update_drug_test(app_id, status, test_date, location, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Drug test error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Drug test error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/job-tracker/application/{app_id}/onboarding")
@@ -4568,8 +4582,8 @@ async def add_onboarding_info(
         result = job_tracker.add_onboarding_details(app_id, start_date, docs_list, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Onboarding error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Onboarding error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/job-tracker/search")
@@ -4590,8 +4604,8 @@ async def search_job_applications(
         total = len(results)
         return {"results": results[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
     except Exception as e:
-        logger.error(f"[JobTracker] Search error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Search error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ============================================================================
@@ -4712,8 +4726,8 @@ async def analyze_complexity(
             ]
         }
     except Exception as e:
-        logger.error(f"[Complexity] Analysis error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Complexity] Analysis error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ============================================================================
@@ -4736,8 +4750,8 @@ async def analyze_resume_endpoint(
         result = resume_reviewer.analyze_resume(resume_text, job_description, role_type)
         return result
     except Exception as e:
-        logger.error(f"[ResumeReview] Analyze error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Analyze error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/resume/compare")
@@ -4768,11 +4782,11 @@ async def compare_resume_to_job(
             "match_score": analysis.get("analysis", {}).get("overall_score", 0)
         }
     except Exception as e:
-        logger.error(f"[ResumeReview] Compare error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Compare error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
     except Exception as e:
-        logger.error(f"[ResumeReview] Compare error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Compare error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/resume/upload")
@@ -4826,8 +4840,8 @@ async def upload_resume_file(
         return result
 
     except Exception as e:
-        logger.error(f"[ResumeReview] Upload error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Upload error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -4875,7 +4889,7 @@ def extract_text_from_docx(docx_bytes: bytes) -> str:
         paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
         return '\n'.join(paragraphs)
     except Exception as e:
-        logger.warning(f"[ResumeReview] DOCX extraction error: {e}")
+        logger.warning("[ResumeReview] DOCX extraction error: %s", str(e))
         return ""
 
 
@@ -4895,7 +4909,7 @@ try:
     RESUME_REVIEW_V2_AVAILABLE = True
     logger.info("[ResumeReviewV2] Enhanced resume analyzer loaded successfully")
 except ImportError as e:
-    logger.warning(f"[ResumeReviewV2] Module not available: {e}")
+    logger.warning("[ResumeReviewV2] Module not available: %s", str(e))
 
 
 @app.post("/resume/analyze-v2")
@@ -4967,8 +4981,8 @@ async def analyze_resume_v2_endpoint(
         return result
 
     except Exception as e:
-        logger.error(f"[ResumeReviewV2] Analyze error: {e}", exc_info=True)
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReviewV2] Analyze error: %s", str(e), exc_info=True)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/resume/tailor-v2")
@@ -5001,8 +5015,8 @@ async def tailor_resume_v2(
         }
 
     except Exception as e:
-        logger.error(f"[ResumeReviewV2] Tailor error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReviewV2] Tailor error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # ==============================
@@ -5064,7 +5078,7 @@ async def web_search(
                 return result
 
         except Exception as e:
-            logger.warning(f"[WebSearch] Perplexity error: {e}")
+            logger.warning("[WebSearch] Perplexity error: %s", _sanitize_for_log(str(e)))
 
     # Fallback: Try Brave Search API
     brave_key = os.getenv("BRAVE_API_KEY")
@@ -5098,7 +5112,7 @@ async def web_search(
                 }
 
         except Exception as e:
-            logger.warning(f"[WebSearch] Brave error: {e}")
+            logger.warning("[WebSearch] Brave error: %s", _sanitize_for_log(str(e)))
 
     # Final fallback: Return helpful message
     return {
@@ -5147,7 +5161,7 @@ try:
     logger.info("[MockLibrary] Mock interview library loaded")
 except ImportError as e:
     MOCK_LIBRARY_AVAILABLE = False
-    logger.warning(f"[MockLibrary] Library not available: {e}")
+    logger.warning("[MockLibrary] Library not available: %s", str(e))
 
 
 @app.get("/mock-interview/questions")
@@ -5195,8 +5209,8 @@ async def get_mock_questions(
             }
         }
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting questions: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting questions: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/mock-interview/question/random")
@@ -5215,8 +5229,8 @@ async def get_random_mock_question(
             return {"question": vars(question)}
         return error_response(ErrorCode.NOT_FOUND, "No questions found matching criteria", status_code=404)
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting random question: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting random question: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/mock-interview/practice-set")
@@ -5238,8 +5252,8 @@ async def get_practice_question_set(
             "total_time_estimate": sum(q.time_estimate_minutes for q in questions)
         }
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting practice set: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting practice set: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/mock-interview/search")
@@ -5263,8 +5277,8 @@ async def search_mock_questions(
             "offset": offset
         }
     except Exception as e:
-        logger.error(f"[MockLibrary] Error searching questions: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error searching questions: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/mock-interview/stats")
@@ -5276,8 +5290,8 @@ async def get_mock_library_stats():
     try:
         return mock_library.get_stats()
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting stats: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting stats: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/mock-interview/companies")
@@ -5293,8 +5307,8 @@ async def get_companies_with_questions():
                 companies.add(q.company)
         return {"companies": sorted(list(companies))}
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting companies: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting companies: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 logger.info("[MockLibrary] Mock interview endpoints loaded")
@@ -5316,7 +5330,7 @@ try:
     logger.info("[VoiceClone] Voice clone agent loaded")
 except ImportError as e:
     VOICE_CLONE_AVAILABLE = False
-    logger.warning(f"[VoiceClone] Voice clone not available: {e}")
+    logger.warning("[VoiceClone] Voice clone not available: %s", str(e))
 
 try:
     from rvc_gallery import list_gallery, get_gallery_voice
@@ -5324,7 +5338,7 @@ try:
     logger.info("[VoiceClone] RVC gallery loaded")
 except ImportError as e:
     RVC_GALLERY_AVAILABLE = False
-    logger.warning(f"[VoiceClone] RVC gallery not available: {e}")
+    logger.warning("[VoiceClone] RVC gallery not available: %s", str(e))
 
 
 @app.post("/voice-clone/create")
@@ -5346,7 +5360,11 @@ async def create_voice_clone(
         audio_paths = []
         for audio_file in audio_files:
             if audio_file.filename:
-                temp_path = f"data/temp_audio/{audio_file.filename}"
+                # SECURITY: Sanitize filename to prevent path traversal
+                safe_filename = os.path.basename(audio_file.filename)
+                if safe_filename != audio_file.filename or ".." in audio_file.filename:
+                    continue  # Skip files with directory traversal attempts
+                temp_path = os.path.join("data", "temp_audio", safe_filename)
                 os.makedirs("data/temp_audio", exist_ok=True)
                 with open(temp_path, "wb") as f:
                     shutil.copyfileobj(audio_file.file, f)
@@ -5367,8 +5385,8 @@ async def create_voice_clone(
         return result
 
     except Exception as e:
-        logger.error(f"[VoiceClone] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # NOTE: /voice-clone/models routes must come BEFORE /voice-clone/{model_id} routes
@@ -5390,8 +5408,8 @@ async def list_voice_clones(limit: int = Query(50, ge=1, le=500), offset: int = 
             "offset": offset,
         }
     except Exception as e:
-        logger.error(f"[VoiceClone] List error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+        logger.error("[VoiceClone] List error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred")
 
 
 @app.delete("/voice-clone/models/{model_id}")
@@ -5408,8 +5426,8 @@ async def delete_voice_clone(model_id: str, user: User = Depends(require_authent
         else:
             return error_response(ErrorCode.MODEL_NOT_FOUND, "Model not found", status_code=404)
     except Exception as e:
-        logger.error(f"[VoiceClone] Delete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/voice-clone/{model_id}/status")
@@ -5421,8 +5439,8 @@ async def get_voice_clone_status(model_id: str):
     try:
         return get_voice_status(model_id)
     except Exception as e:
-        logger.error(f"[VoiceClone] Status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/voice-clone/{model_id}/synthesize")
@@ -5460,19 +5478,34 @@ async def synthesize_voice_clone(
             "browser_tts": result.get("browser_tts", False),
         }
     except Exception as e:
-        logger.error(f"[VoiceClone] Synthesis error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Synthesis error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/voice-clone/audio/{filename}")
 async def get_voice_audio(filename: str):
     """Serve generated TTS audio files."""
     from fastapi.responses import FileResponse
-    audio_dir = os.path.join("data", "voice_models", "audio")
-    file_path = os.path.join(audio_dir, filename)
+
+    # SECURITY: Validate filename before any path operations to prevent path traversal
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
+    # SECURITY: Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(filename)
+    if not safe_filename or safe_filename != filename:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
+    audio_dir = os.path.abspath(os.path.join("data", "voice_models", "audio"))
+    file_path = os.path.abspath(os.path.join(audio_dir, safe_filename))
+
+    # Ensure the resolved path is still within the audio directory
+    if not file_path.startswith(audio_dir + os.sep):
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
     if not os.path.exists(file_path):
         return error_response(ErrorCode.NOT_FOUND, "Audio file not found", status_code=404)
-    return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
+    return FileResponse(file_path, media_type="audio/mpeg", filename=safe_filename)
 
 
 @app.get("/voice-clone/gallery")
@@ -5563,8 +5596,8 @@ async def create_rvc_voice_model(
         return result
 
     except Exception as e:
-        logger.error(f"[VoiceClone] RVC create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] RVC create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 logger.info("[VoiceClone] Voice clone endpoints loaded")
@@ -5588,7 +5621,7 @@ try:
     logger.info("[ShadowAgent] Shadow agent loaded")
 except ImportError as e:
     SHADOW_AGENT_AVAILABLE = False
-    logger.warning(f"[ShadowAgent] Shadow agent not available: {e}")
+    logger.warning("[ShadowAgent] Shadow agent not available: %s", str(e))
 
 
 # ==============================
@@ -5602,7 +5635,7 @@ try:
     logger.info("[Agents] Agent framework loaded")
 except ImportError as e:
     AGENTS_AVAILABLE = False
-    logger.warning(f"[Agents] Agent framework not available: {e}")
+    logger.warning("[Agents] Agent framework not available: %s", str(e))
 
 
 @app.post("/agents/sessions")
@@ -5632,8 +5665,8 @@ async def create_agent_session(
         )
         return session
     except Exception as e:
-        logger.error(f"[Agents] Create session error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Agents] Create session error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/agents/sessions/{session_id}")
@@ -5678,8 +5711,8 @@ async def process_agent_segment(
         result = await orchestrator.process_segment(session_id, text, speaker)
         return result
     except Exception as e:
-        logger.error(f"[Agents] Segment processing error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Agents] Segment processing error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/agents/sessions/{session_id}/stream")
@@ -5773,7 +5806,7 @@ async def accept_agent_suggestion(suggestion_id: str):
                 learner.save_to_session(session)
                 await session_manager.save_session(session)
             except Exception as e:
-                logger.warning(f"[Agents] Failed to record acceptance feedback: {e}")
+                logger.warning("[Agents] Failed to record acceptance feedback: %s", str(e))
 
             return {"status": "accepted", "suggestion": result}
 
@@ -5807,7 +5840,7 @@ async def dismiss_agent_suggestion(suggestion_id: str):
                 learner.save_to_session(session)
                 await session_manager.save_session(session)
             except Exception as e:
-                logger.warning(f"[Agents] Failed to record dismissal feedback: {e}")
+                logger.warning("[Agents] Failed to record dismissal feedback: %s", str(e))
 
             return {"status": "dismissed", "suggestion": result}
 
@@ -5931,8 +5964,8 @@ async def trigger_ingestion(request: Request):
                 stats = pipeline.ingest_from_github(repo_urls, mode=mode, dry_run=dry_run)
             _ingestion_results[task_id] = {"status": "completed", "result": stats.to_dict()}
         except Exception as e:
-            logger.error(f"[Ingestion] Background task failed: {e}")
-            _ingestion_results[task_id] = {"status": "failed", "error": str(e)}
+            logger.error("[Ingestion] Background task failed: %s", str(e))
+            _ingestion_results[task_id] = {"status": "failed", "error": "An internal error occurred"}
 
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, _run)
@@ -6013,7 +6046,7 @@ async def start_shadow_interview(
                 "agent_framework": "v2",
             }
         except Exception as e:
-            logger.warning(f"[ShadowAgent] Fallback to old agent: {e}")
+            logger.warning("[ShadowAgent] Fallback to old agent: %s", str(e))
 
     if not SHADOW_AGENT_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
@@ -6021,8 +6054,8 @@ async def start_shadow_interview(
     try:
         return start_shadow_session(company, role, stage)
     except Exception as e:
-        logger.error(f"[ShadowAgent] Start error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Start error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/shadow/process")
@@ -6059,7 +6092,7 @@ async def process_shadow_transcript(
                         return old_format
                     return {"detected": False}
                 except Exception as e:
-                    logger.warning(f"[ShadowAgent] Agent framework error, falling back: {e}")
+                    logger.warning("[ShadowAgent] Agent framework error, falling back: %s", str(e))
                     break
 
     if not SHADOW_AGENT_AVAILABLE:
@@ -6069,8 +6102,8 @@ async def process_shadow_transcript(
         result = process_transcript_segment(text, speaker)
         return result or {"detected": False}
     except Exception as e:
-        logger.error(f"[ShadowAgent] Process error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Process error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/shadow/suggestions")
@@ -6082,8 +6115,8 @@ async def get_shadow_suggestions_list():
     try:
         return {"suggestions": get_shadow_suggestions()}
     except Exception as e:
-        logger.error(f"[ShadowAgent] Suggestions error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Suggestions error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/shadow/accept")
@@ -6096,8 +6129,8 @@ async def accept_shadow_suggestion(suggestion_id: str = Query(...)):
         text = accept_suggestion_by_id(suggestion_id)
         return {"text": text} if text else {"error": "Suggestion not found"}
     except Exception as e:
-        logger.error(f"[ShadowAgent] Accept error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Accept error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/shadow/end")
@@ -6109,8 +6142,8 @@ async def end_shadow_interview():
     try:
         return end_shadow_session()
     except Exception as e:
-        logger.error(f"[ShadowAgent] End error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] End error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/shadow/stats")
@@ -6122,8 +6155,8 @@ async def get_shadow_statistics():
     try:
         return get_shadow_stats()
     except Exception as e:
-        logger.error(f"[ShadowAgent] Stats error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ShadowAgent] Stats error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 logger.info("[ShadowAgent] Shadow agent endpoints loaded")
@@ -6147,7 +6180,7 @@ try:
     logger.info("[Collaboration] Collaboration mode loaded")
 except ImportError as e:
     COLLABORATION_AVAILABLE = False
-    logger.warning(f"[Collaboration] Collaboration mode not available: {e}")
+    logger.warning("[Collaboration] Collaboration mode not available: %s", str(e))
 
 
 @app.post("/collaboration/create")
@@ -6163,8 +6196,8 @@ async def create_collaboration(
     try:
         return create_collaboration_session(host_name, context)
     except Exception as e:
-        logger.error(f"[Collaboration] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/collaboration/join")
@@ -6179,8 +6212,8 @@ async def join_collaboration_session(
     try:
         return join_collaboration(join_code, name)
     except Exception as e:
-        logger.error(f"[Collaboration] Join error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Join error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/collaboration/message")
@@ -6198,8 +6231,8 @@ async def send_collaboration_msg(
     try:
         return send_collaboration_message(session_id, participant_id, text, msg_type, is_private)
     except Exception as e:
-        logger.error(f"[Collaboration] Message error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Message error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/collaboration/messages")
@@ -6221,8 +6254,8 @@ async def get_collaboration_msgs(
             return {"messages": msgs[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
         return {"messages": msgs}
     except Exception as e:
-        logger.error(f"[Collaboration] Messages error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Messages error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/collaboration/status")
@@ -6235,8 +6268,8 @@ async def get_collaboration_session_status(session_id: str = Query(...)):
         status = get_collaboration_status(session_id)
         return status or {"error": "Session not found"}
     except Exception as e:
-        logger.error(f"[Collaboration] Status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/collaboration/end")
@@ -6251,8 +6284,8 @@ async def end_collaboration_session(
     try:
         return end_collaboration(session_id, participant_id)
     except Exception as e:
-        logger.error(f"[Collaboration] End error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Collaboration] End error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 logger.info("[Collaboration] Collaboration endpoints loaded")
@@ -6278,7 +6311,7 @@ try:
     logger.info("[MeetingTemplates] Meeting templates loaded")
 except ImportError as e:
     MEETING_TEMPLATES_AVAILABLE = False
-    logger.warning(f"[MeetingTemplates] Meeting templates not available: {e}")
+    logger.warning("[MeetingTemplates] Meeting templates not available: %s", str(e))
 
 
 @app.get("/meeting-templates")
@@ -6297,8 +6330,8 @@ async def list_meeting_templates(limit: int = Query(50, ge=1, le=500), offset: i
             "offset": offset,
         }
     except Exception as e:
-        logger.error(f"[MeetingTemplates] List error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] List error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/meeting-templates/categories")
@@ -6311,8 +6344,8 @@ async def list_template_categories():
         categories = get_categories()
         return {"categories": categories}
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Categories error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Categories error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/meeting-templates")
@@ -6325,8 +6358,8 @@ async def create_meeting_template(body: dict, user: User = Depends(require_authe
         template = create_template(body)
         return template
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/meeting-templates/{template_id}")
@@ -6341,8 +6374,8 @@ async def get_meeting_template(template_id: str):
             return template
         return error_response(ErrorCode.NOT_FOUND, "Template not found", status_code=404)
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Get error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Get error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.put("/meeting-templates/{template_id}")
@@ -6357,8 +6390,8 @@ async def update_meeting_template(template_id: str, body: dict):
             return template
         return error_response(ErrorCode.NOT_FOUND, "Template not found or cannot update default templates", status_code=404)
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Update error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Update error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.delete("/meeting-templates/{template_id}")
@@ -6373,8 +6406,8 @@ async def delete_meeting_template(template_id: str):
             return {"success": True}
         return error_response(ErrorCode.NOT_FOUND, "Template not found or cannot delete default templates", status_code=404)
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Delete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.get("/meeting-templates/search")
@@ -6387,8 +6420,8 @@ async def search_meeting_templates(query: str = Query(...)):
         results = search_templates(query)
         return {"templates": results}
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Search error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Search error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @app.post("/meeting-templates/{template_id}/generate")
@@ -6401,8 +6434,8 @@ async def generate_meeting_notes(template_id: str, body: dict):
         notes = generate_notes(template_id, body)
         return {"notes": notes}
     except Exception as e:
-        logger.error(f"[MeetingTemplates] Generate error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MeetingTemplates] Generate error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 logger.info("[MeetingTemplates] Meeting templates endpoints loaded")

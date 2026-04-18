@@ -7,7 +7,6 @@ import re
 import html
 import hashlib
 from typing import Optional, Dict, Any, List
-from dataclasses import dataclass
 from pathlib import Path
 import json
 

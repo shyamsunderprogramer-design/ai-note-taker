@@ -83,7 +83,7 @@ class EmbeddingService:
                     self._cache = json.load(f)
                 logger.info("[EmbeddingService] Loaded %d cached embeddings", len(self._cache))
         except Exception as e:
-            logger.warning("[EmbeddingService] Failed to load cache: %s", e)
+            logger.warning("[EmbeddingService] Failed to load cache: %s", str(e))
             self._cache = {}
 
     def _save_cache(self):
@@ -93,7 +93,7 @@ class EmbeddingService:
             with open(CACHE_FILE, "w") as f:
                 json.dump(self._cache, f)
         except Exception as e:
-            logger.warning("[EmbeddingService] Failed to save cache: %s", e)
+            logger.warning("[EmbeddingService] Failed to save cache: %s", str(e))
 
     @staticmethod
     def _hash_text(text: str) -> str:
@@ -250,7 +250,7 @@ def get_embedding_service() -> Optional[EmbeddingService]:
                     _service = EmbeddingService()
                     EMBEDDING_AVAILABLE = True
                 except Exception as e:
-                    logger.error("[EmbeddingService] Failed to initialize: %s", e)
+                    logger.error("[EmbeddingService] Failed to initialize: %s", str(e))
                     EMBEDDING_AVAILABLE = False
                     return None
 
@@ -272,7 +272,7 @@ def warmup():
         else:
             EMBEDDING_AVAILABLE = False
     except Exception as e:
-        logger.warning("[EmbeddingService] Warmup failed: %s", e)
+        logger.warning("[EmbeddingService] Warmup failed: %s", str(e))
         EMBEDDING_AVAILABLE = False
     finally:
         _service_ready.set()

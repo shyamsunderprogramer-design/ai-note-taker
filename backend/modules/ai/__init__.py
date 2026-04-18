@@ -6,42 +6,53 @@ ML packages (sentence-transformers, spacy, neo4j) that may not be
 installed in lightweight CI environments.
 """
 
+__all__ = [
+    "analytics_engine",
+    "cache_manager",
+    "cognitive_graph",
+    "entity_extraction",
+    "performance_analyzer",
+    "predictive_interview",
+    "realtime_suggestions",
+    "study_plan_generator",
+]
+
 try:
-    from .analytics_engine import *
+    from . import analytics_engine
 except ImportError:
     pass
 
 try:
-    from .cache_manager import *
+    from . import cache_manager
 except ImportError:
     pass
 
 try:
-    from .cognitive_graph import *
+    from . import cognitive_graph
 except ImportError:
     pass
 
 try:
-    from .entity_extraction import *
+    from . import entity_extraction
 except ImportError:
     pass
 
 try:
-    from .performance_analyzer import *
+    from . import performance_analyzer
 except ImportError:
     pass
 
 try:
-    from .predictive_interview import *
+    from . import predictive_interview
 except ImportError:
     pass
 
 try:
-    from .realtime_suggestions import *
+    from . import realtime_suggestions
 except ImportError:
     pass
 
 try:
-    from .study_plan_generator import *
+    from . import study_plan_generator
 except ImportError:
     pass

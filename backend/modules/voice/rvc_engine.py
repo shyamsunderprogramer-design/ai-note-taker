@@ -30,7 +30,7 @@ def _get_tts_rvc_class():
         _TTS_RVC_CLASS = TTS_RVC
         logger.info("[RVCEngine] tts-with-rvc-onnx loaded successfully")
     except ImportError as e:
-        logger.warning(f"[RVCEngine] tts-with-rvc-onnx not available: {e}")
+        logger.warning("[RVCEngine] tts-with-rvc-onnx not available: %s", str(e))
         _TTS_RVC_CLASS = None
     return _TTS_RVC_CLASS
 
@@ -111,7 +111,7 @@ class RVCEngine:
                        f"(device={self.device}, f0={f0_method})")
             return True
         except Exception as e:
-            logger.error(f"[RVCEngine] Failed to load model {model_id}: {e}")
+            logger.error("[RVCEngine] Failed to load model {model_id}: %s", str(e))
             return False
 
     def unload_model(self, model_id: str):
@@ -162,7 +162,7 @@ class RVCEngine:
                 return self._concatenate_audio(chunk_paths, model_id)
 
         except Exception as e:
-            logger.error(f"[RVCEngine] Synthesis failed for {model_id}: {e}")
+            logger.error("[RVCEngine] Synthesis failed for {model_id}: %s", str(e))
             return None
 
     async def _run_in_executor(self, instance, text, pitch, index_rate,
@@ -183,7 +183,7 @@ class RVCEngine:
                 )
                 return result
             except Exception as e:
-                logger.error(f"[RVCEngine] Inference call failed: {e}")
+                logger.error("[RVCEngine] Inference call failed: %s", str(e))
                 return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
@@ -244,7 +244,7 @@ class RVCEngine:
             return output_path
 
         except Exception as e:
-            logger.error(f"[RVCEngine] Audio concatenation failed: {e}")
+            logger.error("[RVCEngine] Audio concatenation failed: %s", str(e))
             return audio_paths[0] if audio_paths else None
 
 

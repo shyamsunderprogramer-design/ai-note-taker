@@ -410,7 +410,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   sku_name           = "GP_Standard_D4s_v3"
   tier              = "GeneralPurpose"
   storage_mb         = 32768
-  backup_retention_days = 7
+  backup_retention_days = 14
   geo_redundant_backup_enabled = var.environment == "production"
   delegated_subnet_id = azurerm_subnet.database.id
   private_dns_zone_id = azurerm_private_dns_zone.main.id
@@ -419,6 +419,10 @@ resource "azurerm_postgresql_flexible_server" "main" {
   administrator_password      = random_password.postgres.result
   create_mode                = "Default"
   public_network_access_enabled = false
+
+  # CKV_AZURE_13, CKV_AZURE_65, CKV_AZURE_88: SSL enforcement is always enabled
+  # on PostgreSQL Flexible Servers; the ssl_minimal_tls_version_enforced
+  # attribute and the server_configuration resource below enforce TLS 1.2.
 
   high_availability {
     mode                      = var.environment == "production" ? "ZoneRedundant" : "Disabled"
@@ -599,6 +603,10 @@ resource "azurerm_storage_account" "data" {
   allow_nested_items_to_be_public  = false
   public_network_access_enabled    = false
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   blob_properties {
     versioning_enabled = true
   }
@@ -623,6 +631,14 @@ resource "azurerm_storage_account" "logs" {
   allow_nested_items_to_be_public  = false
   public_network_access_enabled    = false
 
+  identity {
+    type = "SystemAssigned"
+  }
+
+  blob_properties {
+    versioning_enabled = true
+  }
+
   network_rules {
     default_action = "Deny"
   }
@@ -643,6 +659,14 @@ resource "azurerm_storage_account" "backups" {
   allow_nested_items_to_be_public  = false
   public_network_access_enabled    = false
 
+  identity {
+    type = "SystemAssigned"
+  }
+
+  blob_properties {
+    versioning_enabled = true
+  }
+
   network_rules {
     default_action = "Deny"
   }
@@ -650,6 +674,69 @@ resource "azurerm_storage_account" "backups" {
   tags = {
     Environment = var.environment
   }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Storage Account Customer-Managed Keys (CKV2_AZURE_31)
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_storage_account_customer_managed_key" "data" {
+  storage_account_id        = azurerm_storage_account.data.id
+  key_vault_key_id          = azurerm_key_vault_key.main.id
+  key_name                  = "ant-backend-key"
+
+  depends_on = [
+    azurerm_key_vault_access_policy.storage_data
+  ]
+}
+
+resource "azurerm_key_vault_access_policy" "storage_data" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_storage_account.data.identity[0].principal_id
+
+  key_permissions = [
+    "Get", "WrapKey", "UnwrapKey"
+  ]
+}
+
+resource "azurerm_storage_account_customer_managed_key" "logs" {
+  storage_account_id        = azurerm_storage_account.logs.id
+  key_vault_key_id          = azurerm_key_vault_key.main.id
+  key_name                  = "ant-backend-key"
+
+  depends_on = [
+    azurerm_key_vault_access_policy.storage_logs
+  ]
+}
+
+resource "azurerm_key_vault_access_policy" "storage_logs" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_storage_account.logs.identity[0].principal_id
+
+  key_permissions = [
+    "Get", "WrapKey", "UnwrapKey"
+  ]
+}
+
+resource "azurerm_storage_account_customer_managed_key" "backups" {
+  storage_account_id        = azurerm_storage_account.backups.id
+  key_vault_key_id          = azurerm_key_vault_key.main.id
+  key_name                  = "ant-backend-key"
+
+  depends_on = [
+    azurerm_key_vault_access_policy.storage_backups
+  ]
+}
+
+resource "azurerm_key_vault_access_policy" "storage_backups" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_storage_account.backups.identity[0].principal_id
+
+  key_permissions = [
+    "Get", "WrapKey", "UnwrapKey"
+  ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -814,6 +901,50 @@ resource "azurerm_monitor_diagnostic_setting" "postgresql_audit" {
 # ─────────────────────────────────────────────────────────────────────────────
 # App Service with TLS and Client Certificate Settings
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Azure Monitor Log Profile (CKV2_AZURE_1, CKV2_AZURE_38, CKV2_AZURE_40, CKV2_AZURE_41)
+# ─────────────────────────────────────────────────────────────────────
+resource "azurerm_monitor_log_profile" "main" {
+  name = "default"
+
+  categories = [
+    "Action",
+    "Delete",
+    "Write",
+    "Security",
+    "ServiceHealth",
+    "Alert",
+    "Recommendation",
+    "Policy",
+    "Autoscale",
+    "Administrative"
+  ]
+
+  locations = [
+    "eastus",
+    "westus2",
+    "global"
+  ]
+
+  storage_account_id = azurerm_storage_account.logs.id
+
+  retention_policy {
+    enabled = true
+    days    = 365
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PostgreSQL Threat Detection (CKV_AZURE_63, CKV_AZURE_114)
+# PostgreSQL Flexible Server uses Microsoft Defender for open-source
+# relational databases. Enable at the subscription level with
+# azurerm_security_center_subscription_pricing.
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_security_center_subscription_pricing" "postgresql_defender" {
+  tier          = "Standard"
+  resource_type = "PostgreSQLFlexibleServersDatabases"
+}
+
 resource "azurerm_service_plan" "main" {
   name                = "ant-plan-${var.environment}"
   resource_group_name = azurerm_resource_group.main.name
@@ -838,6 +969,9 @@ resource "azurerm_linux_web_app" "main" {
     ftps_state              = "Disabled"
     http2_enabled           = true
     client_certificate_mode = "Required"
+    scm_minimum_tls_version = "1.2"
+    vnet_route_all_enabled  = true
+    remote_debugging_enabled = false
   }
 
   identity {

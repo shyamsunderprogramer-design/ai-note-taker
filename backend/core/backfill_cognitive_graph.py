@@ -34,7 +34,7 @@ try:
     from entity_extraction import entity_extractor
     COGNITIVE_GRAPH_AVAILABLE = True
 except ImportError as e:
-    logger.error(f"Failed to import cognitive graph: {e}")
+    logger.error("Failed to import cognitive graph: %s", str(e))
     COGNITIVE_GRAPH_AVAILABLE = False
     sys.exit(1)
 
@@ -71,9 +71,9 @@ def load_conversation_files(conversations_dir: Path) -> List[Dict]:
                 data['_file'] = file_path.name
                 conversations.append(data)
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse {file_path}: {e}")
+            logger.warning("Failed to parse {file_path}: %s", str(e))
         except Exception as e:
-            logger.warning(f"Failed to read {file_path}: {e}")
+            logger.warning("Failed to read {file_path}: %s", str(e))
 
     return conversations
 
@@ -112,7 +112,7 @@ def process_conversation(conversation: Dict) -> bool:
         return success
 
     except Exception as e:
-        logger.error(f"Failed to process conversation: {e}")
+        logger.error("Failed to process conversation: %s", str(e))
         return False
 
 

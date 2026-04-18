@@ -371,7 +371,7 @@ class InterviewSimulator:
                     strengths.extend(ai_feedback.get("strengths", []))
                     improvements.extend(ai_feedback.get("improvements", []))
             except Exception as e:
-                logger.error(f"[InterviewSimulator] AI feedback error: {e}")
+                logger.error("[InterviewSimulator] AI feedback error: %s", str(e))
 
         return AnswerEvaluation(
             completeness_score=round(completeness, 1),
@@ -607,7 +607,7 @@ Format as JSON:
             if json_match:
                 return json.loads(json_match.group())
         except Exception as e:
-            logger.error(f"[InterviewSimulator] AI feedback parsing error: {e}")
+            logger.error("[InterviewSimulator] AI feedback parsing error: %s", str(e))
 
         return None
 
@@ -749,7 +749,7 @@ Format as JSON:
             return True
 
         except Exception as e:
-            logger.error(f"[InterviewSimulator] Failed to save to graph: {e}")
+            logger.error("[InterviewSimulator] Failed to save to graph: %s", str(e))
             return False
 
     def cleanup_old_sessions(self, max_age_hours: int = 24) -> int:

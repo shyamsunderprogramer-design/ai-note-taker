@@ -139,9 +139,9 @@ async def import_conversations(file: UploadFile = File(...), user: User = Depend
             "count": len(messages)
         }
     except json.JSONDecodeError as e:
-        return error_response(ErrorCode.INVALID_FORMAT, f"Invalid JSON: {str(e)}", status_code=422)
+        return error_response(ErrorCode.INVALID_FORMAT, "Invalid JSON format", status_code=422)
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/documents/upload")
@@ -149,7 +149,12 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(req
     """Upload a document for RAG context retrieval."""
     from document_store import get_document_store
 
-    temp_path = os.path.join(UPLOAD_DIR, file.filename)
+    # SECURITY: Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    if not safe_filename or "/" in file.filename or "\\" in file.filename or ".." in file.filename:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
+    temp_path = os.path.join(UPLOAD_DIR, safe_filename)
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -164,8 +169,8 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(req
 
         return result
     except Exception as e:
-        logger.error(f"Document upload failed: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("Document upload failed: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/documents")

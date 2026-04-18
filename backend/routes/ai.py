@@ -1,5 +1,4 @@
 """Route module for AI streaming, race, search, and configuration endpoints."""
-import asyncio
 import json
 import logging
 import os
@@ -8,12 +7,19 @@ import threading
 import time
 
 from fastapi import APIRouter, Form, Query, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 from security import sanitize_input, rate_limit, ErrorCode, error_response
 
 logger = logging.getLogger("routes.ai")
+
+
+def _sanitize_for_log(value: str) -> str:
+    """Remove newlines and control characters from user input before logging to prevent log injection."""
+    if not isinstance(value, str):
+        value = str(value)
+    return value.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
 
 # Shared state — set by main.py at include time or via module-level defaults
 CURRENT_MODE = "auto"
@@ -47,7 +53,8 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
         resp = sync_client.post(
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
-            timeout=1
+            timeout=1,
+            skip_ssrf_check=True,  # internal key server, not user-supplied
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -87,7 +94,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
                 yield event
 
         except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
 
         finally:
             STATE["is_streaming"] = False
@@ -106,13 +113,13 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
 
     race_start = time.time()
-    logger.info("[RACE START] query='%s' mode=%s style=%s", q[:50], mode, style)
+    logger.info("[RACE START] query='%s' mode=%s style=%s", _sanitize_for_log(q[:50]), _sanitize_for_log(mode), _sanitize_for_log(style))
 
     # Parse enabled providers from frontend
     enabled_set = None
     if enabled:
         enabled_set = set(enabled.split(","))
-        logger.info("Race mode: only using enabled providers from frontend: %s", enabled_set)
+        logger.info("Race mode: only using enabled providers from frontend: %s", _sanitize_for_log(str(enabled_set)))
 
     messages = None
     if context:
@@ -194,7 +201,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     cloud_providers = sort_for_speed(cloud_providers)
     all_providers = cloud_providers + local_providers
-    logger.info("Race mode: clouds=%s, local=%s, combined=%s", cloud_providers, local_providers, all_providers)
+    logger.info("Race mode: clouds=%s, local=%s, combined=%s", _sanitize_for_log(str(cloud_providers)), _sanitize_for_log(str(local_providers)), _sanitize_for_log(str(all_providers)))
 
     # Single-provider fast path
     if len(all_providers) <= 1:
@@ -260,7 +267,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             race_queue.put((pk, "DONE", None))
         except Exception as e:
             logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time.time() - provider_start)
-            race_queue.put((pk, "ERROR", str(e)))
+            race_queue.put((pk, "ERROR", "An internal error occurred"))
             race_queue.put((pk, "DONE", None))
 
     # Start all provider threads
@@ -393,7 +400,7 @@ async def ask_with_image(
     query = sanitize_input(query, max_length=10000)
 
     logger.info("[ask-with-image] query=%s, mode=%s, style=%s, has_image=%s, provider=%s",
-                query[:100], mode, style, "Yes" if image_b64 else "No", provider)
+                _sanitize_for_log(query[:100]), _sanitize_for_log(mode), _sanitize_for_log(style), "Yes" if image_b64 else "No", _sanitize_for_log(provider))
     messages = None
     if context:
         try:
@@ -410,7 +417,7 @@ async def ask_with_image(
                 for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
                     yield event
             except Exception as e:
-                yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
             finally:
                 STATE["is_streaming"] = False
         return StreamingResponse(text_generator(), media_type="text/event-stream")
@@ -472,7 +479,7 @@ async def ask_with_image(
                     for event in stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages):
                         yield event
                 except Exception as e:
-                    yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
+                    yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
                 finally:
                     STATE["is_streaming"] = False
             return StreamingResponse(single_vision_gen(), media_type="text/event-stream")
@@ -487,7 +494,7 @@ async def ask_with_image(
                     for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=ollama_vision_model):
                         yield event
                 except Exception as e:
-                    yield f"event: error\ndata: {json.dumps({'type':'error','message':str(e)})}\n\n"
+                    yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
                 finally:
                     STATE["is_streaming"] = False
             return StreamingResponse(ollama_vision_gen(), media_type="text/event-stream")
@@ -538,7 +545,7 @@ async def ask_with_image(
                     race_queue.put((provider_name, "EVENT", event))
             race_queue.put((provider_name, "DONE", None))
         except Exception as e:
-            race_queue.put((provider_name, "ERROR", str(e)))
+            race_queue.put((provider_name, "ERROR", "An internal error occurred"))
             race_queue.put((provider_name, "DONE", None))
 
     for vp in all_vision:
@@ -586,7 +593,7 @@ async def overlay_ask(
 ):
     """Quick Q&A from overlay window with optional screenshot context."""
     query = sanitize_input(query, max_length=5000)
-    logger.info("[overlay-ask] query=%s, has_screenshot=%s", query, bool(screenshot_b64))
+    logger.info("[overlay-ask] query=%s, has_screenshot=%s", _sanitize_for_log(query), bool(screenshot_b64))
 
     async def generator():
         STATE["is_streaming"] = True
@@ -595,7 +602,7 @@ async def overlay_ask(
 
             if screenshot_b64:
                 model_name = _get_vision_model()
-                logger.info("[overlay-ask] Screenshot present, vision model: %s", model_name)
+                logger.info("[overlay-ask] Screenshot present, vision model: %s", _sanitize_for_log(str(model_name)))
                 if not model_name:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
@@ -611,7 +618,7 @@ async def overlay_ask(
                 for event in route_ai_stream(query, mode="fast", style="concise"):
                     yield event
         except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'type':'error','message': str(e)})}\n\n"
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
         finally:
             STATE["is_streaming"] = False
 
@@ -768,7 +775,7 @@ async def web_search(
                 }
                 return result
         except Exception as e:
-            logger.warning(f"[WebSearch] Perplexity error: {e}")
+            logger.warning("[WebSearch] Perplexity error: %s", _sanitize_for_log(str(e)))
 
     # Fallback: Brave Search
     brave_key = os.getenv("BRAVE_API_KEY")
@@ -797,7 +804,7 @@ async def web_search(
                     "timestamp": time.time()
                 }
         except Exception as e:
-            logger.warning(f"[WebSearch] Brave error: {e}")
+            logger.warning("[WebSearch] Brave error: %s", _sanitize_for_log(str(e)))
 
     return {
         "source": "none",

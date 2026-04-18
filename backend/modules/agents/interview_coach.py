@@ -15,12 +15,9 @@ from agents.base import (
 )
 from agents.context_builder import (
     query_cognitive_graph, query_document_rag, extract_entities,
-    get_company_insights, get_skill_progression,
     format_graph_results, format_rag_results, format_company_insights,
 )
 from agents.prompts import INTERVIEW_COACH_PROMPT, INTERVIEW_COACH_PROMPT_MINIMAL
-from agents.session import AgentSessionManager
-from agents.cache import get_cache
 
 logger = logging.getLogger("agents.interview_coach")
 

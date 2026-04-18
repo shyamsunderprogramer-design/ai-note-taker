@@ -28,7 +28,7 @@ try:
     SPACY_AVAILABLE = True
     logger.info("[HybridEntity] spaCy NER loaded successfully")
 except ImportError as e:
-    logger.warning(f"[HybridEntity] spaCy not available: {e}")
+    logger.warning("[HybridEntity] spaCy not available: %s", str(e))
     nlp = None
 
 # Import existing rule-based extractor

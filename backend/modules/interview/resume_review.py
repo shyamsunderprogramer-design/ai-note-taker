@@ -203,7 +203,7 @@ Return ONLY JSON:
             if json_match:
                 return json.loads(json_match.group())
         except Exception as e:
-            logger.error(f"AI section scoring error: {e}")
+            logger.error("AI section scoring error: %s", str(e))
 
         return self._score_sections_heuristic(sections)
 
@@ -490,7 +490,7 @@ Return the response ONLY as a JSON object with this structure:
                 json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
                 return json.loads(json_str)
         except Exception as e:
-            logger.error(f"AI analysis error: {e}")
+            logger.error("AI analysis error: %s", str(e))
             # Return a safe default so the app doesn't crash
             return {
                 "match_score": 0,

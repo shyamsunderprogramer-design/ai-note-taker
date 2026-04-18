@@ -111,12 +111,12 @@ class PDFProcessor:
                 else:
                     logger.debug(f"[PDFProcessor] Extracted {len(content.text)} chars from {pdf_file} via {content.extraction_method}")
             except Exception as e:
-                logger.error(f"[PDFProcessor] Error processing {pdf_file}: {e}")
+                logger.error("[PDFProcessor] Error processing {pdf_file}: %s", str(e))
                 contents.append(PDFContent(
                     file_name=pdf_file,
                     file_path=file_path,
                     text="",
-                    error=str(e),
+                    error="An internal error occurred",
                 ))
 
         successful = sum(1 for c in contents if not c.is_empty)
@@ -140,7 +140,7 @@ class PDFProcessor:
         except ImportError:
             return "", 0, ""
         except Exception as e:
-            logger.debug(f"[PDFProcessor] pdfplumber failed: {e}")
+            logger.debug("[PDFProcessor] pdfplumber failed: %s", str(e))
             return "", 0, ""
 
     def _extract_with_pypdf2(self, file_path: str) -> tuple:
@@ -160,7 +160,7 @@ class PDFProcessor:
         except ImportError:
             return "", 0, ""
         except Exception as e:
-            logger.debug(f"[PDFProcessor] PyPDF2 failed: {e}")
+            logger.debug("[PDFProcessor] PyPDF2 failed: %s", str(e))
             return "", 0, ""
 
     def _extract_raw(self, file_path: str) -> tuple:
@@ -183,5 +183,5 @@ class PDFProcessor:
 
             return "\n".join(lines), 0, "raw_decode"
         except Exception as e:
-            logger.debug(f"[PDFProcessor] Raw decode failed: {e}")
+            logger.debug("[PDFProcessor] Raw decode failed: %s", str(e))
             return "", 0, ""

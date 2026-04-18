@@ -1,7 +1,6 @@
 """Route module for analytics, conversation analysis, and performance insights."""
 import logging
 import time
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, Query
 
@@ -22,7 +21,7 @@ try:
     ANALYTICS_AVAILABLE = True
 except ImportError as e:
     ANALYTICS_AVAILABLE = False
-    logger.warning(f"[Analytics] Module not available: {e}")
+    logger.warning("[Analytics] Module not available: %s", str(e))
 
 # Conversation analyzer availability
 try:
@@ -30,7 +29,7 @@ try:
     ANALYZER_AVAILABLE = True
 except ImportError as e:
     ANALYZER_AVAILABLE = False
-    logger.warning(f"[Analyzer] Module not available: {e}")
+    logger.warning("[Analyzer] Module not available: %s", str(e))
 
 # Performance analyzer availability
 try:
@@ -38,7 +37,7 @@ try:
     PERFORMANCE_ANALYZER_AVAILABLE = True
 except ImportError as e:
     PERFORMANCE_ANALYZER_AVAILABLE = False
-    logger.warning(f"[PerformanceAnalyzer] Module not available: {e}")
+    logger.warning("[PerformanceAnalyzer] Module not available: %s", str(e))
 
 # Cognitive graph for performance checklists
 try:
@@ -153,7 +152,7 @@ async def get_skill_progression_api(
         data = analytics.get_skill_progression(user_id, skill, months)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/analytics/company-comparison")
@@ -168,7 +167,7 @@ async def compare_companies(
         data = analytics.get_company_comparison(companies)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/analytics/topic-network/{user_id}")
@@ -184,7 +183,7 @@ async def get_topic_network_api(
         data = analytics.get_topic_network(user_id, min_connections)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/analytics/interview-calendar/{user_id}")
@@ -200,7 +199,7 @@ async def get_interview_calendar_api(
         data = analytics.get_interview_calendar(user_id, months)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/analytics/performance-trends/{user_id}")
@@ -215,7 +214,7 @@ async def get_performance_trends_api(
         data = analytics.get_performance_trends(user_id)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/analytics/dashboard/{user_id}")
@@ -230,7 +229,7 @@ async def get_dashboard_summary_api(
         data = analytics.get_dashboard_summary(user_id)
         return data
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Conversation Analyzer Endpoints ---
@@ -247,8 +246,8 @@ async def analyze_conversation_api(
         analysis = analyze_conversation(conversation)
         return analysis
     except Exception as e:
-        logger.error(f"[Analyzer] Error analyzing conversation: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Analyzer] Error analyzing conversation: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/analyze/batch")
@@ -276,7 +275,7 @@ async def analyze_conversations_batch(
             "results": results
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/analyze/types")
@@ -302,7 +301,7 @@ async def get_conversation_types():
             ]
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Performance Analyzer Endpoints ---
@@ -320,8 +319,8 @@ async def analyze_answer_performance(
         result = performance_analyzer.analyze_answer(answer_text, question_type)
         return result
     except Exception as e:
-        logger.error(f"[PerformanceAnalyzer] Error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[PerformanceAnalyzer] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/performance/analyze-batch")
@@ -342,8 +341,8 @@ async def analyze_batch_answers(
         ]
         return {"results": results, "count": len(results)}
     except Exception as e:
-        logger.error(f"[PerformanceAnalyzer] Batch error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[PerformanceAnalyzer] Batch error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/performance/tiers")
@@ -395,5 +394,5 @@ async def get_personalized_checklist(
 
         return {"checklist": checklist, "user_id": user_id}
     except Exception as e:
-        logger.error(f"[PerformanceAnalyzer] Checklist error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[PerformanceAnalyzer] Checklist error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

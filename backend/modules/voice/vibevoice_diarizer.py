@@ -15,9 +15,8 @@ import logging
 import os
 import time
 import threading
-import json
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -142,7 +141,7 @@ class VibeVoiceDiarizer:
         except ImportError:
             logger.info("[VibeVoice] transformers/torch not available — will use fallback diarization")
         except Exception as e:
-            logger.warning(f"[VibeVoice] Failed to load model: {e} — will use fallback diarization")
+            logger.warning("[VibeVoice] Failed to load model: %s — will use fallback diarization", str(e))
 
     def transcribe_with_diarization(
         self,
@@ -235,7 +234,7 @@ class VibeVoiceDiarizer:
             return None
 
         except Exception as e:
-            logger.warning(f"[VibeVoice] Inference failed: {e}")
+            logger.warning("[VibeVoice] Inference failed: %s", str(e))
             return None
 
     def _parse_vibevoice_output(
@@ -402,7 +401,7 @@ class VibeVoiceDiarizer:
             return segments if segments else None
 
         except Exception as e:
-            logger.debug(f"[VibeVoice] Pyannote fallback unavailable: {e}")
+            logger.debug("[VibeVoice] Pyannote fallback unavailable: %s", str(e))
             return None
 
     def _transcribe_simple_fallback(
@@ -492,13 +491,14 @@ class VibeVoiceDiarizer:
             return merged
 
         except Exception as e:
-            logger.warning(f"[VibeVoice] Simple fallback error: {e}")
+            logger.warning("[VibeVoice] Simple fallback error: %s", str(e))
             duration = len(audio) / sample_rate if len(audio) > 0 else 0
+            fallback_text = text.strip() if 'text' in dir() and text else ""
             return [SpeakerSegment(
                 speaker_id="Speaker 1",
                 start_time=0.0,
                 end_time=duration,
-                text=text.strip() if text else "",
+                text=fallback_text,
                 confidence=0.3,
             )]
 

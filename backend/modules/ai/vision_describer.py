@@ -39,7 +39,8 @@ def _has_ollama_cloud_key():
             "http://127.0.0.1:18000/get-key",
             json={"provider": "ollama-cloud"},
             headers=headers,
-            timeout=2
+            timeout=2,
+            skip_ssrf_check=True,  # internal key server, not user-supplied
         )
         return resp.status_code == 200 and bool(resp.json().get("apiKey"))
     except Exception:
@@ -179,7 +180,7 @@ def _ollama_description(image_b64, model_name):
         yield make_vision_done(ms, "ollama")
 
     except Exception as e:
-        logger.error("[VisionDescriber] Ollama description error: %s", e)
+        logger.error("[VisionDescriber] Ollama description error: %s", str(e))
         yield make_error(f"Vision description failed: {e}")
 
 
@@ -252,7 +253,7 @@ def _race_description(image_b64, vision_providers, ollama_vision_model):
 
         except Exception as e:
             logger.error("[VISION DESC ERROR] %s: %s", provider_name, e)
-            race_queue.put((provider_name, "ERROR", str(e)))
+            race_queue.put((provider_name, "ERROR", "An internal error occurred"))
             race_queue.put((provider_name, "DONE", None))
 
     # Start all provider threads

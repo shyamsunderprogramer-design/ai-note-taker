@@ -1,6 +1,9 @@
 """
 CRM Modules - Job Tracking, Collaboration
 """
-from .job_tracker import *
-from .meeting_templates import *
-from .crm_integration import *
+
+__all__ = ["job_tracker", "meeting_templates", "crm_integration"]
+
+from . import job_tracker
+from . import meeting_templates
+from . import crm_integration

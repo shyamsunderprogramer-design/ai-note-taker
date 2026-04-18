@@ -95,8 +95,8 @@ class SpeakerDiarizer:
             )
             self._load_error = "pyannote not installed"
         except Exception as e:
-            logger.warning(f"[Diarization] Failed to load pyannote: {e}")
-            self._load_error = str(e)
+            logger.warning("[Diarization] Failed to load pyannote: %s", str(e))
+            self._load_error = "An internal error occurred"
 
     def diarize_audio(self, audio_path: str, num_speakers: Optional[int] = None) -> List[SpeakerSegment]:
         """
@@ -166,7 +166,7 @@ class SpeakerDiarizer:
                             f"{len(set(s.speaker_id for s in segments))} speakers")
                 return segments
             except Exception as e:
-                logger.warning(f"[Diarization] pyannote failed: {e}, using fallback")
+                logger.warning("[Diarization] pyannote failed: %s, using fallback", str(e))
 
         # Fallback: return empty — the caller should use Whisper word timestamps
         # for better segmentation than a single-segment guess
@@ -189,7 +189,7 @@ class SpeakerDiarizer:
             logger.debug("[Diarization] soundfile not available for audio preload")
             return None
         except Exception as e:
-            logger.debug(f"[Diarization] Audio preload failed: {e}")
+            logger.debug("[Diarization] Audio preload failed: %s", str(e))
             return None
 
     def diarize_and_transcribe(self, audio_path: str, transcription_segments: List[Dict]) -> List[SpeakerSegment]:
@@ -271,7 +271,7 @@ class SpeakerDiarizer:
                 audio = audio.mean(axis=1)
             audio = audio.astype(np.float32)
         except Exception as e:
-            logger.warning(f"[Diarization] Could not read audio for clustering: {e}")
+            logger.warning("[Diarization] Could not read audio for clustering: %s", str(e))
             # Last resort: label everything as Speaker 1
             full_text = " ".join(seg.get("text", "") for seg in transcription_segments)
             return [SpeakerSegment(

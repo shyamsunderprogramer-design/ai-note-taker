@@ -75,7 +75,11 @@ async def create_voice_clone(
         audio_paths = []
         for audio_file in audio_files:
             if audio_file.filename:
-                temp_path = f"data/temp_audio/{audio_file.filename}"
+                # SECURITY: Sanitize filename to prevent path traversal
+                safe_filename = os.path.basename(audio_file.filename)
+                if safe_filename != audio_file.filename or ".." in audio_file.filename:
+                    continue  # Skip files with directory traversal attempts
+                temp_path = os.path.join("data", "temp_audio", safe_filename)
                 os.makedirs("data/temp_audio", exist_ok=True)
                 with open(temp_path, "wb") as f:
                     shutil.copyfileobj(audio_file.file, f)
@@ -94,8 +98,8 @@ async def create_voice_clone(
         return result
 
     except Exception as e:
-        logger.error(f"[VoiceClone] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/voice-clone/models")
@@ -114,8 +118,8 @@ async def list_voice_clones(limit: int = Query(50, ge=1, le=500), offset: int = 
             "offset": offset,
         }
     except Exception as e:
-        logger.error(f"[VoiceClone] List error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+        logger.error("[VoiceClone] List error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred")
 
 
 @router.delete("/voice-clone/models/{model_id}")
@@ -132,8 +136,8 @@ async def delete_voice_clone(model_id: str, user: User = Depends(require_authent
         else:
             return error_response(ErrorCode.MODEL_NOT_FOUND, "Model not found", status_code=404)
     except Exception as e:
-        logger.error(f"[VoiceClone] Delete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/voice-clone/{model_id}/status")
@@ -145,8 +149,8 @@ async def get_voice_clone_status(model_id: str):
     try:
         return get_voice_status(model_id)
     except Exception as e:
-        logger.error(f"[VoiceClone] Status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/voice-clone/{model_id}/synthesize")
@@ -182,19 +186,37 @@ async def synthesize_voice_clone(
             "browser_tts": result.get("browser_tts", False),
         }
     except Exception as e:
-        logger.error(f"[VoiceClone] Synthesis error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] Synthesis error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/voice-clone/audio/{filename}")
 async def get_voice_audio(filename: str):
     """Serve generated TTS audio files."""
     from fastapi.responses import FileResponse
-    audio_dir = os.path.join("data", "voice_models", "audio")
-    file_path = os.path.join(audio_dir, filename)
+
+    # SECURITY: Validate filename before any path operations to prevent path traversal
+    # Reject paths with directory separators or parent directory references
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
+    # SECURITY: Sanitize filename to prevent path traversal
+    # Strip directory components and validate the result
+    safe_filename = os.path.basename(filename)
+    if not safe_filename or safe_filename != filename:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
+    # SECURITY: Resolve absolute paths and ensure the file is within the audio directory
+    audio_dir = os.path.abspath(os.path.join("data", "voice_models", "audio"))
+    file_path = os.path.abspath(os.path.join(audio_dir, safe_filename))
+
+    # Ensure the resolved path is still within the audio directory
+    if not file_path.startswith(audio_dir + os.sep):
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+
     if not os.path.exists(file_path):
         return error_response(ErrorCode.NOT_FOUND, "Audio file not found", status_code=404)
-    return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
+    return FileResponse(file_path, media_type="audio/mpeg", filename=safe_filename)
 
 
 @router.get("/voice-clone/gallery")
@@ -258,7 +280,10 @@ async def create_rvc_voice_model(
         model_dir = os.path.join("data", "voice_models", model_id)
         os.makedirs(model_dir, exist_ok=True)
 
-        model_ext = os.path.splitext(model_file.filename)[1] or ".onnx"
+        # SECURITY: Validate file extension to prevent path traversal
+        model_ext = os.path.splitext(os.path.basename(model_file.filename))[1] or ".onnx"
+        if model_ext not in (".onnx", ".pth", ".pt"):
+            return error_response(ErrorCode.VALIDATION_ERROR, "Invalid model file extension. Only .onnx, .pth, .pt allowed.", status_code=400)
         model_path = os.path.join(model_dir, f"model{model_ext}")
         with open(model_path, "wb") as f:
             shutil.copyfileobj(model_file.file, f)
@@ -280,5 +305,5 @@ async def create_rvc_voice_model(
         return result
 
     except Exception as e:
-        logger.error(f"[VoiceClone] RVC create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[VoiceClone] RVC create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

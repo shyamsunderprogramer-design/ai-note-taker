@@ -303,10 +303,10 @@ class ResumeReviewerV2:
             }
 
         except Exception as e:
-            logger.error(f"Resume analysis error: {e}", exc_info=True)
+            logger.error("Resume analysis error: %s", str(e), exc_info=True)
             return {
                 "success": False,
-                "error": str(e),
+                "error": "An internal error occurred",
                 "error_type": "analysis_failed"
             }
 
@@ -395,7 +395,7 @@ Return ONLY JSON:
             if json_match:
                 return json.loads(json_match.group())
         except Exception as e:
-            logger.error(f"AI section scoring error: {e}")
+            logger.error("AI section scoring error: %s", str(e))
 
         return self._score_sections_heuristic(sections)
 
@@ -1246,7 +1246,7 @@ Return JSON only."""
             if start != -1 and end != -1:
                 return json.loads(response[start:end+1])
         except Exception as e:
-            logger.error(f"AI analysis error: {e}")
+            logger.error("AI analysis error: %s", str(e))
 
         return None
 

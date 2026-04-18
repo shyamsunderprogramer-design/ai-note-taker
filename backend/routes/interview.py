@@ -89,7 +89,7 @@ try:
     resume_reviewer_v2 = ResumeReviewerV2()
     RESUME_REVIEW_V2_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"[ResumeReviewV2] Module not available: {e}")
+    logger.warning("[ResumeReviewV2] Module not available: %s", str(e))
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -126,7 +126,7 @@ def extract_text_from_docx(docx_bytes: bytes) -> str:
         paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
         return '\n'.join(paragraphs)
     except Exception as e:
-        logger.warning(f"[ResumeReview] DOCX extraction error: {e}")
+        logger.warning("[ResumeReview] DOCX extraction error: %s", str(e))
         return ""
 
 
@@ -192,8 +192,8 @@ async def interview_simulator_create(
         result = interview_simulator.create_session(company, role, num_questions, user_id, difficulty)
         return result
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/interview-simulator/{session_id}/question")
@@ -208,8 +208,8 @@ async def interview_simulator_get_question(session_id: str):
             return {"status": "complete", "message": "Interview complete"}
         return question
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Get question error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Get question error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/interview-simulator/{session_id}/answer")
@@ -226,8 +226,8 @@ async def interview_simulator_submit_answer(
         result = interview_simulator.submit_answer(session_id, transcript, duration_ms)
         return result
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Submit answer error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Submit answer error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/interview-simulator/{session_id}/status")
@@ -242,8 +242,8 @@ async def interview_simulator_status(session_id: str):
             return error_response(ErrorCode.NOT_FOUND, "Session not found", status_code=404)
         return s
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/interview-simulator/{session_id}/finish")
@@ -256,8 +256,8 @@ async def interview_simulator_finish(session_id: str):
         result = finish_interview(session_id)
         return result
     except Exception as e:
-        logger.error(f"[InterviewSimulator] Finish error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[InterviewSimulator] Finish error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Mock Interview Library Endpoints ---
@@ -298,8 +298,8 @@ async def get_mock_questions(
             "filters": {"role": role, "category": category, "difficulty": difficulty, "company": company}
         }
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting questions: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting questions: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/mock-interview/question/random")
@@ -318,8 +318,8 @@ async def get_random_mock_question(
             return {"question": vars(question)}
         return error_response(ErrorCode.NOT_FOUND, "No questions found matching criteria", status_code=404)
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting random question: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting random question: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/mock-interview/practice-set")
@@ -339,8 +339,8 @@ async def get_practice_question_set(
             "total_time_estimate": sum(q.time_estimate_minutes for q in questions)
         }
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting practice set: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting practice set: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/mock-interview/search")
@@ -364,8 +364,8 @@ async def search_mock_questions(
             "offset": offset
         }
     except Exception as e:
-        logger.error(f"[MockLibrary] Error searching questions: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error searching questions: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/mock-interview/stats")
@@ -377,8 +377,8 @@ async def get_mock_library_stats():
     try:
         return mock_library.get_stats()
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting stats: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting stats: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/mock-interview/companies")
@@ -394,8 +394,8 @@ async def get_companies_with_questions():
                 companies.add(q.company)
         return {"companies": sorted(list(companies))}
     except Exception as e:
-        logger.error(f"[MockLibrary] Error getting companies: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[MockLibrary] Error getting companies: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Resume Review Endpoints ---
@@ -414,8 +414,8 @@ async def analyze_resume_endpoint(
         result = resume_reviewer.analyze_resume(resume_text, job_description, role_type)
         return result
     except Exception as e:
-        logger.error(f"[ResumeReview] Analyze error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Analyze error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/resume/compare")
@@ -443,8 +443,8 @@ async def compare_resume_to_job(
             "match_score": analysis.get("analysis", {}).get("overall_score", 0)
         }
     except Exception as e:
-        logger.error(f"[ResumeReview] Compare error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Compare error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/resume/upload")
@@ -490,8 +490,8 @@ async def upload_resume_file(
         return result
 
     except Exception as e:
-        logger.error(f"[ResumeReview] Upload error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReview] Upload error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/resume/analyze-v2")
@@ -540,8 +540,8 @@ async def analyze_resume_v2_endpoint(
         return result
 
     except Exception as e:
-        logger.error(f"[ResumeReviewV2] Analyze error: {e}", exc_info=True)
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReviewV2] Analyze error: %s", str(e), exc_info=True)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/resume/tailor-v2")
@@ -570,8 +570,8 @@ async def tailor_resume_v2(
         }
 
     except Exception as e:
-        logger.error(f"[ResumeReviewV2] Tailor error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[ResumeReviewV2] Tailor error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Complexity Analysis Endpoint ---
@@ -610,5 +610,5 @@ async def analyze_complexity(
             ]
         }
     except Exception as e:
-        logger.error(f"[Complexity] Analysis error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Complexity] Analysis error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

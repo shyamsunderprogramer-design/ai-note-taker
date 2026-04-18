@@ -96,7 +96,7 @@ def warmup():
         model_ready.set()
         _warmup_done = True
     except Exception as e:
-        logger.warning("[Warmup] Failed: %s", e)
+        logger.warning("[Warmup] Failed: %s", str(e))
         model_ready.set()  # unblock waiters even on failure
         _warmup_done = True
 
@@ -190,7 +190,7 @@ def transcribe(audio, mode="adaptive"):
         return text.strip()
 
     except Exception as e:
-        logger.error("Transcription error: %s", e)
+        logger.error("Transcription error: %s", str(e))
         return ""
 
 
@@ -349,7 +349,7 @@ def transcribe_audio(file_path, mode="adaptive"):
         return transcribe(audio, mode)
 
     except Exception as e:
-        logger.error("File transcription error: %s", e)
+        logger.error("File transcription error: %s", str(e))
         return ""
 
 
@@ -461,11 +461,11 @@ class StreamingTranscriber:
                                     pass  # nosec B110  # Skip if queue is full
 
                     except Exception as e:
-                        logger.error("[StreamingTranscriber] Capture error: %s", e)
+                        logger.error("[StreamingTranscriber] Capture error: %s", str(e))
                         time.sleep(0.5)
 
         except Exception as e:
-            logger.error("[StreamingTranscriber] Stream open error: %s", e)
+            logger.error("[StreamingTranscriber] Stream open error: %s", str(e))
 
     def _transcribe_worker(self):
         """Thread that pulls segments from queue and transcribes them."""
@@ -480,9 +480,9 @@ class StreamingTranscriber:
                         try:
                             cb(text.strip())
                         except Exception as e:
-                            logger.error("[StreamingTranscriber] Callback error: %s", e)
+                            logger.error("[StreamingTranscriber] Callback error: %s", str(e))
             except Exception as e:
-                logger.error("[StreamingTranscriber] Transcription error: %s", e)
+                logger.error("[StreamingTranscriber] Transcription error: %s", str(e))
 
 
 # ==============================
@@ -551,7 +551,7 @@ class BrowserTranscriber:
                     except Exception:
                         pass  # nosec B110
         except Exception as e:
-            logger.error("[BrowserTranscriber] Transcription error: %s", e)
+            logger.error("[BrowserTranscriber] Transcription error: %s", str(e))
 
     def get_final(self) -> str:
         """Transcribe any remaining audio in the buffer. Called when session ends."""
@@ -566,5 +566,5 @@ class BrowserTranscriber:
         try:
             return transcribe(segment, mode="adaptive").strip()
         except Exception as e:
-            logger.error("[BrowserTranscriber] Final transcription error: %s", e)
+            logger.error("[BrowserTranscriber] Final transcription error: %s", str(e))
             return ""

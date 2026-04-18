@@ -7,17 +7,15 @@ Uses RVC (Retrieval-based Voice Conversion) + TTS
 import os
 import json
 import time
-import asyncio
-import concurrent.futures
 from typing import Optional, Dict, List
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 
 logger = None
 try:
     import logging
     logger = logging.getLogger("voice_clone")
-except:
-    pass  # nosec B110
+except ImportError:
+    pass
 
 
 @dataclass
@@ -99,7 +97,7 @@ class VoiceCloneManager:
                                 logger.warning(f"Skipping model with incompatible data: {model_data.get('id', 'unknown')}")
             except Exception as e:
                 if logger:
-                    logger.error(f"Failed to load voice models: {e}")
+                    logger.error("Failed to load voice models: %s", str(e))
 
     def _save_models(self):
         """Save models metadata to disk"""
@@ -110,7 +108,7 @@ class VoiceCloneManager:
                 json.dump(data, f, indent=2)
         except Exception as e:
             if logger:
-                logger.error(f"Failed to save voice models: {e}")
+                logger.error("Failed to save voice models: %s", str(e))
 
     def _infer_edge_voice(self, name: str) -> str:
         """Map model name keywords to Edge TTS voice."""
@@ -300,7 +298,7 @@ class VoiceCloneManager:
                     }
             except Exception as e:
                 if logger:
-                    logger.warning(f"[VoiceClone] RVC synthesis failed, falling back to edge-tts: {e}")
+                    logger.warning("[VoiceClone] RVC synthesis failed, falling back to edge-tts: %s", str(e))
 
         # Fall back to edge-tts
         try:
@@ -354,7 +352,7 @@ class VoiceCloneManager:
                 except Exception as e:
                     last_error = str(e)
                     if logger:
-                        logger.warning(f"[VoiceClone] Voice {try_voice} failed: {e}, trying next")
+                        logger.warning("[VoiceClone] Voice {try_voice} failed: %s, trying next", str(e))
                     # Clean up partial file
                     if os.path.exists(output_file):
                         try:
@@ -376,8 +374,8 @@ class VoiceCloneManager:
             }
         except Exception as e:
             if logger:
-                logger.error(f"[VoiceClone] TTS synthesis error: {e}")
-            return {"error": str(e)}
+                logger.error("[VoiceClone] TTS synthesis error: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     @staticmethod
     async def _generate_tts(communicate, output_file):
@@ -415,7 +413,7 @@ class VoiceCloneManager:
             import shutil
             if os.path.exists(model.model_path):
                 shutil.rmtree(model.model_path)
-        except:
+        except Exception:
             pass  # nosec B110
 
         del self.models[model_id]

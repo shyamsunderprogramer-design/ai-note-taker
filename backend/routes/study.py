@@ -41,7 +41,7 @@ try:
     STUDY_PLAN_AVAILABLE = True
 except ImportError as e:
     STUDY_PLAN_AVAILABLE = False
-    logger.warning(f"[StudyPlan] Module not available: {e}")
+    logger.warning("[StudyPlan] Module not available: %s", str(e))
 
 # Cognitive graph for study plan context
 try:
@@ -61,7 +61,7 @@ try:
     REALTIME_AVAILABLE = True
 except ImportError as e:
     REALTIME_AVAILABLE = False
-    logger.warning(f"[Realtime] Module not available: {e}")
+    logger.warning("[Realtime] Module not available: %s", str(e))
 
 router = APIRouter()
 
@@ -166,8 +166,8 @@ async def generate_study_plan(
 
         return _serialize_plan(plan)
     except Exception as e:
-        logger.error(f"[StudyPlan] Generation error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Generation error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/study-plan/generate-personalized")
@@ -198,8 +198,8 @@ async def generate_personalized_study_plan(
 
         return _serialize_plan(plan)
     except Exception as e:
-        logger.error(f"[StudyPlan] Personalized generation error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Personalized generation error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/study-plan/{user_id}")
@@ -220,8 +220,8 @@ async def get_study_plan(user_id: str):
         plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
         return json.loads(study_planner.export_plan(plan, "json"))
     except Exception as e:
-        logger.error(f"[StudyPlan] Get error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Get error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/study-plan/{user_id}/complete-task")
@@ -247,8 +247,8 @@ async def complete_study_task(
             )
         }
     except Exception as e:
-        logger.error(f"[StudyPlan] Complete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Complete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/study-plan/{user_id}/today")
@@ -282,8 +282,8 @@ async def get_today_session(user_id: str):
 
         return {"message": "No study session scheduled for today", "tasks": []}
     except Exception as e:
-        logger.error(f"[StudyPlan] Today error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Today error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/study-plan/resources/{category}")
@@ -304,8 +304,8 @@ async def get_study_resources(
             "resources": resources
         }
     except Exception as e:
-        logger.error(f"[StudyPlan] Resources error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Resources error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/study-plan/{user_id}/export")
@@ -327,8 +327,8 @@ async def export_study_plan(
             "content": exported
         }
     except Exception as e:
-        logger.error(f"[StudyPlan] Export error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[StudyPlan] Export error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Realtime Suggestions Endpoints ---
@@ -361,8 +361,8 @@ async def process_realtime_segment(
 
         return {"has_suggestion": False}
     except Exception as e:
-        logger.error(f"[Realtime] Error processing segment: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Realtime] Error processing segment: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/realtime/command")
@@ -386,8 +386,8 @@ async def process_voice_command_api(
 
         return {"is_command": False}
     except Exception as e:
-        logger.error(f"[Realtime] Error processing command: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[Realtime] Error processing command: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/realtime/suggestion-history")
@@ -414,7 +414,7 @@ async def get_suggestion_history(
             "count": len(history)
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/realtime/configure")
@@ -435,7 +435,7 @@ async def configure_suggestions(
             "cooldown_seconds": cooldown_seconds
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/realtime/clear")
@@ -448,4 +448,4 @@ async def clear_suggestion_state():
         realtime_engine.clear_buffer()
         return {"cleared": True}
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

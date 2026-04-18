@@ -176,7 +176,7 @@ class RealtimeSuggestionEngine:
             if not similar:
                 return None
         except Exception as e:
-            logger.error(f"[RealtimeSuggestions] Error querying graph: {e}")
+            logger.error("[RealtimeSuggestions] Error querying graph: %s", str(e))
             return None
 
         # Get top match
@@ -335,7 +335,7 @@ class VoiceCommandProcessor:
                         "results": results
                     }
                 except Exception as e:
-                    logger.error(f"[VoiceCommand] Search error: {e}")
+                    logger.error("[VoiceCommand] Search error: %s", str(e))
                     return {"action": "error", "message": "Search failed"}
 
         # Check for suggestion request

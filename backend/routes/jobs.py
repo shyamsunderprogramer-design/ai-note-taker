@@ -71,8 +71,8 @@ async def create_job_application(
         )
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Create error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Create error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/applications")
@@ -100,8 +100,8 @@ async def get_job_applications(
             "applications": applications[offset:offset + limit],
         }
     except Exception as e:
-        logger.error(f"[JobTracker] Get applications error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+        logger.error("[JobTracker] Get applications error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred")
 
 
 @router.get("/job-tracker/application/{app_id}")
@@ -116,8 +116,8 @@ async def get_job_application(app_id: str):
             return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
         return application
     except Exception as e:
-        logger.error(f"[JobTracker] Get application error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Get application error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/status")
@@ -135,8 +135,8 @@ async def update_job_status(
         result = job_tracker.update_status(app_id, status, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Update status error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Update status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/interview")
@@ -157,8 +157,8 @@ async def add_job_interview(
         )
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add interview error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add interview error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/offer")
@@ -177,8 +177,8 @@ async def add_job_offer(
         result = job_tracker.add_offer(app_id, salary, benefits_list, deadline)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add offer error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add offer error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/stats")
@@ -191,8 +191,8 @@ async def get_job_tracker_stats(user_id: str = Query("default", description="Use
         stats = job_tracker.get_pipeline_stats(user_id)
         return stats
     except Exception as e:
-        logger.error(f"[JobTracker] Stats error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Stats error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/upcoming-interviews")
@@ -212,8 +212,8 @@ async def get_upcoming_job_interviews(
             "interviews": interviews
         }
     except Exception as e:
-        logger.error(f"[JobTracker] Upcoming interviews error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Upcoming interviews error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/company/{company}")
@@ -226,8 +226,8 @@ async def get_company_job_insights(company: str):
         insights = job_tracker.get_company_insights(company)
         return insights
     except Exception as e:
-        logger.error(f"[JobTracker] Company insights error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Company insights error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.delete("/job-tracker/application/{app_id}")
@@ -240,8 +240,8 @@ async def delete_job_application(app_id: str, user: User = Depends(require_authe
         result = job_tracker.delete_application(app_id)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Delete error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/duplicates")
@@ -254,8 +254,8 @@ async def find_job_duplicates(user_id: str = Query("default", description="User 
         duplicates = job_tracker.find_duplicates(user_id)
         return duplicates
     except Exception as e:
-        logger.error(f"[JobTracker] Find duplicates error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Find duplicates error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/duplicates/remove")
@@ -274,8 +274,8 @@ async def remove_job_duplicates(
         result = job_tracker.remove_duplicates(user_id, keep)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Remove duplicates error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Remove duplicates error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/application/{app_id}/details")
@@ -290,8 +290,8 @@ async def get_job_application_details(app_id: str):
             return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
         return details
     except Exception as e:
-        logger.error(f"[JobTracker] Get details error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Get details error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/recruiter")
@@ -310,8 +310,8 @@ async def add_recruiter_contact(
         result = job_tracker.add_recruiter(app_id, name, email, phone, is_primary)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add recruiter error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add recruiter error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/communication")
@@ -331,8 +331,8 @@ async def add_communication_log(
         result = job_tracker.add_communication(app_id, comm_type, sender, content, direction, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Add communication error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Add communication error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/background-check")
@@ -350,8 +350,8 @@ async def update_background_check_status(
         result = job_tracker.update_background_check(app_id, status, provider, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Background check error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Background check error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/drug-test")
@@ -370,8 +370,8 @@ async def update_drug_test_status(
         result = job_tracker.update_drug_test(app_id, status, test_date, location, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Drug test error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Drug test error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/job-tracker/application/{app_id}/onboarding")
@@ -390,8 +390,8 @@ async def add_onboarding_info(
         result = job_tracker.add_onboarding_details(app_id, start_date, docs_list, notes)
         return result
     except Exception as e:
-        logger.error(f"[JobTracker] Onboarding error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Onboarding error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/job-tracker/search")
@@ -410,5 +410,5 @@ async def search_job_applications(
         total = len(results)
         return {"results": results[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
     except Exception as e:
-        logger.error(f"[JobTracker] Search error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[JobTracker] Search error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

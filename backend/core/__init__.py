@@ -1,5 +1,8 @@
 """
 Core Backend - Database, Config
 """
-from .config import *
-from .database import *
+
+__all__ = ["config", "database"]
+
+from . import config
+from . import database

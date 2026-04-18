@@ -88,7 +88,7 @@ async def register_user(
         }
     except ValueError as e:
         log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Registration failed")
 
 
 @router.post("/auth/login")

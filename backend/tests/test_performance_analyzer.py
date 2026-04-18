@@ -185,7 +185,7 @@ def process_data(data):
         result = transform(data)
         return result
     except ValueError as e:
-        logger.error(f"Error: {e}")
+        logger.error("Error: %s", str(e))
         return None
         ```
         """

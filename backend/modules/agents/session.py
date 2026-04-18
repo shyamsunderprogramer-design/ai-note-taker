@@ -110,7 +110,7 @@ class AgentSessionManager:
             try:
                 await self._db_create(session_data)
             except Exception as e:
-                logger.warning(f"[AgentSessionManager] DB create failed, using memory: {e}")
+                logger.warning("[AgentSessionManager] DB create failed, using memory: %s", str(e))
                 self._memory_sessions[session_id] = session_data
         else:
             self._memory_sessions[session_id] = session_data
@@ -137,7 +137,7 @@ class AgentSessionManager:
                     self._cache_timestamps[session_id] = time.time()
                     return session_data
             except Exception as e:
-                logger.warning(f"[AgentSessionManager] DB get failed: {e}")
+                logger.warning("[AgentSessionManager] DB get failed: %s", str(e))
 
         # Memory fallback
         if session_id in self._memory_sessions:
@@ -163,7 +163,7 @@ class AgentSessionManager:
                 self._memory_sessions[session_id] = session
                 return
             except Exception as e:
-                logger.warning(f"[AgentSessionManager] DB save failed: {e}")
+                logger.warning("[AgentSessionManager] DB save failed: %s", str(e))
 
         # Memory fallback
         self._memory_sessions[session_id] = session
@@ -340,7 +340,7 @@ class AgentSessionManager:
                 db.add(db_session)
                 await db.commit()
         except Exception as e:
-            logger.error(f"[AgentSessionManager] DB create error: {e}")
+            logger.error("[AgentSessionManager] DB create error: %s", str(e))
             raise
 
     async def _db_get(self, session_id: str) -> Optional[Dict]:
@@ -357,7 +357,7 @@ class AgentSessionManager:
                     return row.to_dict()
             return None
         except Exception as e:
-            logger.error(f"[AgentSessionManager] DB get error: {e}")
+            logger.error("[AgentSessionManager] DB get error: %s", str(e))
             raise
 
     async def _db_update(self, session: Dict):
@@ -382,7 +382,7 @@ class AgentSessionManager:
                     row.duration_seconds = session.get("duration_seconds")
                     await db.commit()
         except Exception as e:
-            logger.error(f"[AgentSessionManager] DB update error: {e}")
+            logger.error("[AgentSessionManager] DB update error: %s", str(e))
             raise
 
 

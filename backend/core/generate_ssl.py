@@ -6,7 +6,6 @@ Generates self-signed certificates for development and provides setup for produc
 import os
 import subprocess  # nosec B404
 from pathlib import Path
-from datetime import datetime, timedelta
 
 
 def generate_self_signed_cert(cert_dir: str = "certs", hostname: str = "localhost") -> tuple[str, str]:

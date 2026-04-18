@@ -201,7 +201,7 @@ class SmartClassifier:
             category = QUESTION_LABEL_MAP.get(result["top_label"], "general")
             return (category, result["top_score"])
         except Exception as e:
-            logger.debug("[SmartClassifier] classify_question failed: %s", e)
+            logger.debug("[SmartClassifier] classify_question failed: %s", str(e))
             return self._fallback_classify_question(text)
 
     def classify_content(self, text: str) -> List[str]:
@@ -219,7 +219,7 @@ class SmartClassifier:
                     categories.append(CONTENT_LABEL_MAP.get(label, label))
             return categories if categories else ["behavioral_only"]
         except Exception as e:
-            logger.debug("[SmartClassifier] classify_content failed: %s", e)
+            logger.debug("[SmartClassifier] classify_content failed: %s", str(e))
             return ["behavioral_only"]
 
     def classify_difficulty(self, text: str) -> Tuple[str, float]:
@@ -233,7 +233,7 @@ class SmartClassifier:
             level = DIFFICULTY_LABEL_MAP.get(result["top_label"], "medium")
             return (level, result["top_score"])
         except Exception as e:
-            logger.debug("[SmartClassifier] classify_difficulty failed: %s", e)
+            logger.debug("[SmartClassifier] classify_difficulty failed: %s", str(e))
             return self._fallback_classify_difficulty(text)
 
     def classify_conversation_type(self, title: str, text_sample: str) -> Tuple[str, float]:
@@ -248,7 +248,7 @@ class SmartClassifier:
             conv_type = CONVERSATION_TYPE_LABEL_MAP.get(result["top_label"], "practice_session")
             return (conv_type, result["top_score"])
         except Exception as e:
-            logger.debug("[SmartClassifier] classify_conversation_type failed: %s", e)
+            logger.debug("[SmartClassifier] classify_conversation_type failed: %s", str(e))
             return ("practice_session", 0.5)
 
     def classify_company(self, text: str) -> Optional[str]:
@@ -275,7 +275,7 @@ class SmartClassifier:
                 if score >= 0.5:
                     return self.COMPANY_NAMES[idx]
         except Exception as e:
-            logger.debug("[SmartClassifier] classify_company failed: %s", e)
+            logger.debug("[SmartClassifier] classify_company failed: %s", str(e))
 
         return None
 
@@ -329,7 +329,7 @@ def get_classifier() -> Optional[SmartClassifier]:
                     _classifier = SmartClassifier()
                     CLASSIFIER_AVAILABLE = True
                 except Exception as e:
-                    logger.error("[SmartClassifier] Failed to initialize: %s", e)
+                    logger.error("[SmartClassifier] Failed to initialize: %s", str(e))
                     CLASSIFIER_AVAILABLE = False
                     return None
 
@@ -351,7 +351,7 @@ def warmup():
         else:
             CLASSIFIER_AVAILABLE = False
     except Exception as e:
-        logger.warning("[SmartClassifier] Warmup failed: %s", e)
+        logger.warning("[SmartClassifier] Warmup failed: %s", str(e))
         CLASSIFIER_AVAILABLE = False
     finally:
         _classifier_ready.set()

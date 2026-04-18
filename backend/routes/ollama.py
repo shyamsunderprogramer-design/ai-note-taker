@@ -59,7 +59,8 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
         resp = sync_client.post(
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
-            timeout=1
+            timeout=1,
+            skip_ssrf_check=True,  # internal key server, not user-supplied
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -99,12 +100,12 @@ router = APIRouter()
 def list_ollama_models():
     """Proxy to Ollama's GET /api/tags — returns installed local models."""
     try:
-        response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10)
+        response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10, skip_ssrf_check=True)
         if response.status_code == 200:
             return response.json()
         return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500) | {"models": []}
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500) | {"models": []}
 
 
 @router.post("/ollama/pull")
@@ -117,7 +118,8 @@ def pull_ollama_model(model: str = Query(...)):
                 f"{OLLAMA_URL}/api/pull",
                 json={"name": model},
                 stream=True,
-                timeout=3600
+                timeout=3600,
+                skip_ssrf_check=True,  # internal Ollama service
             )
             for line in pull_resp.iter_lines():
                 if line:
@@ -137,13 +139,14 @@ def delete_ollama_model(model_name: str):
         response = sync_client.delete(
             f"{OLLAMA_URL}/api/delete",
             json={"name": model_name},
-            timeout=30
+            timeout=30,
+            skip_ssrf_check=True,  # internal Ollama service
         )
         if response.status_code == 200:
             return {"status": "deleted", "model": model_name}
         return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Failed to delete model: {response.status_code}", status_code=502)
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/providers")
@@ -221,7 +224,7 @@ async def configure_provider_key(
             "note": "Your key is stored securely and will be used for AI requests."
         }
     except Exception as e:
-        logger.error(f"[BYOK] Failed to save key: {e}")
+        logger.error("[BYOK] Failed to save key: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to save API key")
 
 
@@ -356,7 +359,7 @@ async def test_provider_key(
     except httpx.TimeoutException:
         test_result = {"status": "warning", "provider": provider, "message": "API test timed out", "note": "Key format is valid but could not verify connectivity"}
     except Exception as e:
-        test_result = {"status": "warning", "provider": provider, "message": f"API test error: {str(e)}", "note": "Key format is valid but could not verify connectivity"}
+        test_result = {"status": "warning", "provider": provider, "message": "API test error: An internal error occurred", "note": "Key format is valid but could not verify connectivity"}
 
     log_audit_event("byok_test", user.username, "key_tested", resource=provider, details=test_result, success=test_result.get("status") == "success")
     return test_result

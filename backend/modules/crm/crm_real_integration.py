@@ -155,7 +155,7 @@ class HubSpotIntegration(BaseCRMIntegration):
             logger.info("[HubSpot] Client initialized")
             return True
         except Exception as e:
-            logger.error(f"[HubSpot] Initialization failed: {e}")
+            logger.error("[HubSpot] Initialization failed: %s", str(e))
             return False
 
     async def test_connection(self) -> bool:
@@ -169,7 +169,7 @@ class HubSpotIntegration(BaseCRMIntegration):
             logger.info("[HubSpot] Connection test successful")
             return True
         except Exception as e:
-            logger.error(f"[HubSpot] Connection test failed: {e}")
+            logger.error("[HubSpot] Connection test failed: %s", str(e))
             return False
 
     async def create_contact(self, contact: CRMContact) -> Optional[str]:
@@ -208,7 +208,7 @@ class HubSpotIntegration(BaseCRMIntegration):
                 return new_id
 
         except Exception as e:
-            logger.error(f"[HubSpot] Create contact failed: {e}")
+            logger.error("[HubSpot] Create contact failed: %s", str(e))
             return None
 
     async def find_contact_by_email(self, email: str) -> Optional[Dict]:
@@ -221,7 +221,7 @@ class HubSpotIntegration(BaseCRMIntegration):
             # For now, return mock
             return None
         except Exception as e:
-            logger.error(f"[HubSpot] Find contact failed: {e}")
+            logger.error("[HubSpot] Find contact failed: %s", str(e))
             return None
 
     async def log_activity(self, activity: CRMActivity) -> Optional[str]:
@@ -268,7 +268,7 @@ class HubSpotIntegration(BaseCRMIntegration):
             return activity_id
 
         except Exception as e:
-            logger.error(f"[HubSpot] Log activity failed: {e}")
+            logger.error("[HubSpot] Log activity failed: %s", str(e))
             return None
 
     async def sync_contacts(self, contacts: List[CRMContact]) -> Dict[str, Any]:
@@ -292,7 +292,7 @@ class HubSpotIntegration(BaseCRMIntegration):
                     results["created"] += 1
             except Exception as e:
                 results["failed"] += 1
-                results["errors"].append(str(e))
+                results["errors"].append("An internal error occurred")
 
         return results
 
@@ -303,7 +303,7 @@ class HubSpotIntegration(BaseCRMIntegration):
             logger.info(f"[HubSpot] Updated contact: {contact_id}")
             return True
         except Exception as e:
-            logger.error(f"[HubSpot] Update failed: {e}")
+            logger.error("[HubSpot] Update failed: %s", str(e))
             return False
 
 
@@ -336,7 +336,7 @@ class SalesforceIntegration(BaseCRMIntegration):
             logger.info("[Salesforce] Client initialized")
             return True
         except Exception as e:
-            logger.error(f"[Salesforce] Initialization failed: {e}")
+            logger.error("[Salesforce] Initialization failed: %s", str(e))
             return False
 
     async def test_connection(self) -> bool:
@@ -350,7 +350,7 @@ class SalesforceIntegration(BaseCRMIntegration):
             logger.info("[Salesforce] Connection test successful")
             return True
         except Exception as e:
-            logger.error(f"[Salesforce] Connection test failed: {e}")
+            logger.error("[Salesforce] Connection test failed: %s", str(e))
             return False
 
     async def create_contact(self, contact: CRMContact) -> Optional[str]:
@@ -389,7 +389,7 @@ class SalesforceIntegration(BaseCRMIntegration):
                 return new_id
 
         except Exception as e:
-            logger.error(f"[Salesforce] Create contact failed: {e}")
+            logger.error("[Salesforce] Create contact failed: %s", str(e))
             return None
 
     async def find_contact_by_email(self, email: str) -> Optional[Dict]:
@@ -398,19 +398,22 @@ class SalesforceIntegration(BaseCRMIntegration):
             return None
 
         try:
+            # SECURITY: Escape email to prevent SOQL injection
+            safe_email = email.replace("'", "\\'").replace("\\", "\\\\") if email else ""
+
             # Query Contacts
-            result = self._sf.query(f"SELECT Id, Name, Email FROM Contact WHERE Email = '{email}'")  # nosec B608
+            result = self._sf.query(f"SELECT Id, Name, Email FROM Contact WHERE Email = '{safe_email}'")
             if result.get("totalSize", 0) > 0:
                 return result["records"][0]
 
             # Query Leads if not found in Contacts
-            result = self._sf.query(f"SELECT Id, Name, Email FROM Lead WHERE Email = '{email}'")  # nosec B608
+            result = self._sf.query(f"SELECT Id, Name, Email FROM Lead WHERE Email = '{safe_email}'")
             if result.get("totalSize", 0) > 0:
                 return result["records"][0]
 
             return None
         except Exception as e:
-            logger.error(f"[Salesforce] Find contact failed: {e}")
+            logger.error("[Salesforce] Find contact failed: %s", str(e))
             return None
 
     async def log_activity(self, activity: CRMActivity) -> Optional[str]:
@@ -442,7 +445,7 @@ class SalesforceIntegration(BaseCRMIntegration):
             return task_id
 
         except Exception as e:
-            logger.error(f"[Salesforce] Log activity failed: {e}")
+            logger.error("[Salesforce] Log activity failed: %s", str(e))
             return None
 
     async def sync_contacts(self, contacts: List[CRMContact]) -> Dict[str, Any]:
@@ -466,7 +469,7 @@ class SalesforceIntegration(BaseCRMIntegration):
                     results["created"] += 1
             except Exception as e:
                 results["failed"] += 1
-                results["errors"].append(str(e))
+                results["errors"].append("An internal error occurred")
 
         return results
 
@@ -477,7 +480,7 @@ class SalesforceIntegration(BaseCRMIntegration):
             logger.info(f"[Salesforce] Updated contact: {contact_id}")
             return True
         except Exception as e:
-            logger.error(f"[Salesforce] Update failed: {e}")
+            logger.error("[Salesforce] Update failed: %s", str(e))
             return False
 
 

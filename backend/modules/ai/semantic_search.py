@@ -48,7 +48,7 @@ class SemanticSearchMixin:
                 if EMBEDDING_AVAILABLE:
                     self._embedding_service = get_embedding_service()
             except Exception as e:
-                logger.debug("[SemanticSearch] Embedding service unavailable: %s", e)
+                logger.debug("[SemanticSearch] Embedding service unavailable: %s", str(e))
         return self._embedding_service
 
     def _load_persisted_embeddings(self):
@@ -63,7 +63,7 @@ class SemanticSearchMixin:
                 logger.info("[SemanticSearch] Loaded %d persisted embeddings", len(self._node_embeddings))
                 return len(self._node_embeddings) > 0
         except Exception as e:
-            logger.warning("[SemanticSearch] Failed to load persisted embeddings: %s", e)
+            logger.warning("[SemanticSearch] Failed to load persisted embeddings: %s", str(e))
         return False
 
     def _persist_embeddings(self):
@@ -78,7 +78,7 @@ class SemanticSearchMixin:
             with open(GRAPH_EMBEDDINGS_FILE, "w") as f:
                 json.dump(data, f)
         except Exception as e:
-            logger.warning("[SemanticSearch] Failed to persist embeddings: %s", e)
+            logger.warning("[SemanticSearch] Failed to persist embeddings: %s", str(e))
 
     def _build_index(self):
         """Fetch all nodes from Neo4j and compute embeddings. Called once on first search."""
@@ -141,7 +141,7 @@ class SemanticSearchMixin:
                 return True
 
             except Exception as e:
-                logger.error("[SemanticSearch] Failed to build index: %s", e)
+                logger.error("[SemanticSearch] Failed to build index: %s", str(e))
                 return False
 
     def _index_node(self, node_type: str, node_id: str, text: str):
@@ -291,5 +291,5 @@ class SemanticSearchMixin:
                 result = session.run(cypher, keyword=query.lower(), limit=limit)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error("[SemanticSearch] Fallback search failed: %s", e)
+            logger.error("[SemanticSearch] Fallback search failed: %s", str(e))
             return []

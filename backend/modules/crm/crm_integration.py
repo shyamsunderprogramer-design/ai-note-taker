@@ -64,7 +64,7 @@ class CRMIntegration:
                     data = json.load(f)
                     self.config = CRMConfig.from_dict(data)
             except Exception as e:
-                logger.warning(f"Failed to load CRM config: {e}")
+                logger.warning("Failed to load CRM config: %s", str(e))
 
     def _save_config(self):
         """Save CRM configuration."""
@@ -72,7 +72,7 @@ class CRMIntegration:
             with open(CRM_CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.config.to_dict(), f, indent=2)
         except Exception as e:
-            logger.error(f"Failed to save CRM config: {e}")
+            logger.error("Failed to save CRM config: %s", str(e))
 
     def configure(self, config: Dict) -> bool:
         """Update CRM configuration."""
@@ -81,7 +81,7 @@ class CRMIntegration:
             self._save_config()
             return True
         except Exception as e:
-            logger.error(f"Failed to configure CRM: {e}")
+            logger.error("Failed to configure CRM: %s", str(e))
             return False
 
     def get_config(self) -> Dict:
@@ -114,7 +114,7 @@ class CRMIntegration:
 
             return response.status_code in (200, 201, 202)
         except Exception as e:
-            logger.error(f"Webhook failed: {e}")
+            logger.error("Webhook failed: %s", str(e))
             return False
 
     def _log_to_salesforce(self, event_type: str, data: Dict) -> bool:
@@ -149,7 +149,7 @@ class CRMIntegration:
 
             return True
         except Exception as e:
-            logger.error(f"Salesforce API failed: {e}")
+            logger.error("Salesforce API failed: %s", str(e))
             return False
 
     def _log_to_hubspot(self, event_type: str, data: Dict) -> bool:
@@ -187,7 +187,7 @@ class CRMIntegration:
 
             return True
         except Exception as e:
-            logger.error(f"HubSpot API failed: {e}")
+            logger.error("HubSpot API failed: %s", str(e))
             return False
 
     def _format_conversation_description(self, data: Dict) -> str:
@@ -294,7 +294,7 @@ class CRMIntegration:
             return {"status": "unknown", "message": "Unknown provider"}
 
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "An internal error occurred"}
 
 
 # Global CRM instance

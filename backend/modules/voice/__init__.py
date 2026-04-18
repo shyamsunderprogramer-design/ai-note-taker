@@ -8,38 +8,47 @@ installed in lightweight CI environments.
 
 _module_imports = {}
 
+__all__ = [
+    "voice_agent",
+    "voice_clone_agent",
+    "rvc_engine",
+    "whisper_handler",
+    "speaker_diarization",
+    "vibevoice_diarizer",
+]
+
 try:
-    from .voice_agent import *
+    from . import voice_agent
     _module_imports['voice_agent'] = True
 except ImportError:
     _module_imports['voice_agent'] = False
 
 try:
-    from .voice_clone_agent import *
+    from . import voice_clone_agent
     _module_imports['voice_clone_agent'] = True
 except ImportError:
     _module_imports['voice_clone_agent'] = False
 
 try:
-    from .rvc_engine import *
+    from . import rvc_engine
     _module_imports['rvc_engine'] = True
 except ImportError:
     _module_imports['rvc_engine'] = False
 
 try:
-    from .whisper_handler import *
+    from . import whisper_handler
     _module_imports['whisper_handler'] = True
 except ImportError:
     _module_imports['whisper_handler'] = False
 
 try:
-    from .speaker_diarization import *
+    from . import speaker_diarization
     _module_imports['speaker_diarization'] = True
 except ImportError:
     _module_imports['speaker_diarization'] = False
 
 try:
-    from .vibevoice_diarizer import *
+    from . import vibevoice_diarizer
     _module_imports['vibevoice_diarizer'] = True
 except ImportError:
     _module_imports['vibevoice_diarizer'] = False

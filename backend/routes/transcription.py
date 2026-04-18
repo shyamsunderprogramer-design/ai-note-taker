@@ -208,10 +208,10 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         }
 
     except ValueError as e:
-        return {"text": text, "response": "", "error": str(e)}
+        return {"text": text, "response": "", "error": "An internal error occurred"}
     except Exception as e:
-        logger.error("[ERROR cloud transcribe]: %s", e)
-        return {"text": text, "response": "", "error": str(e)}
+        logger.error("[ERROR cloud transcribe]: %s", str(e))
+        return {"text": text, "response": "", "error": "An internal error occurred"}
 
 
 @router.get("/transcribe-stream")
@@ -248,7 +248,7 @@ async def transcribe_stream(request: Request):
         except GeneratorExit:
             pass  # nosec B110
         except Exception as e:
-            logger.error("[transcribe-stream] error: %s", e)
+            logger.error("[transcribe-stream] error: %s", str(e))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -310,8 +310,8 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        logger.error(f"Transcription with speakers failed: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("Transcription with speakers failed: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
     finally:
         for path in (file_path, wav_path):
@@ -339,8 +339,8 @@ async def ocr_image(request: Request):
         result = extract_text_from_image(image_b64)
         return JSONResponse(result)
     except Exception as e:
-        logger.error("[OCR] Error: %s", e)
-        return JSONResponse({"text": "", "method": "none", "error": str(e)}, status_code=500)
+        logger.error("[OCR] Error: %s", str(e))
+        return JSONResponse({"text": "", "method": "none", "error": "An internal error occurred"}, status_code=500)
 
 
 @router.websocket("/ws/transcribe")
@@ -514,9 +514,9 @@ async def websocket_endpoint(ws: WebSocket):
                 result = route_ai(msg, mode=CURRENT_MODE)
                 await ws.send_text(clean_ai_output(result["response"]))
             except Exception as e:
-                logger.error(f"[WS] Error processing message: {e}")
+                logger.error("[WS] Error processing message: %s", str(e))
                 try:
-                    await ws.send_text(json.dumps({"error": str(e)}))
+                    await ws.send_text(json.dumps({"error": "An internal error occurred"}))
                 except Exception:
                     break
     except Exception:

@@ -139,7 +139,7 @@ class CacheManager:
                 logger.info("[Cache] Redis connected successfully")
                 self._initialized = True
             except Exception as e:
-                logger.warning(f"[Cache] Redis connection failed, using memory cache: {e}")
+                logger.warning("[Cache] Redis connection failed, using memory cache: %s", str(e))
                 self._enabled = False
                 self._redis = None
         else:
@@ -181,7 +181,7 @@ class CacheManager:
             # Fallback to memory
             return self._memory.get(key)
         except Exception as e:
-            logger.error(f"[Cache] Get error: {e}")
+            logger.error("[Cache] Get error: %s", str(e))
             return self._memory.get(key)
 
     async def set(self, key: str, value: Any, ttl: int = None):
@@ -196,7 +196,7 @@ class CacheManager:
                 serialized = json.dumps(value) if not isinstance(value, (str, bytes)) else value
                 await self._redis.setex(key, ttl, serialized)
         except Exception as e:
-            logger.error(f"[Cache] Set error: {e}")
+            logger.error("[Cache] Set error: %s", str(e))
 
     async def delete(self, key: str):
         """Delete key from cache"""
@@ -205,7 +205,7 @@ class CacheManager:
             if self._redis:
                 await self._redis.delete(key)
         except Exception as e:
-            logger.error(f"[Cache] Delete error: {e}")
+            logger.error("[Cache] Delete error: %s", str(e))
 
     async def clear_pattern(self, pattern: str):
         """Clear all keys matching pattern"""
@@ -224,7 +224,7 @@ class CacheManager:
                     if cursor == 0:
                         break
         except Exception as e:
-            logger.error(f"[Cache] Clear pattern error: {e}")
+            logger.error("[Cache] Clear pattern error: %s", str(e))
 
     async def get_provider_status(self, provider: str) -> Optional[Dict]:
         """Get cached provider status"""

@@ -10,9 +10,8 @@ Predicts likely interview questions based on:
 This is Phase 1 of the Predictive Interview Intelligence feature.
 """
 
-import json
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from datetime import datetime
 from collections import Counter
 
@@ -378,7 +377,7 @@ COMMON_QUESTIONS_DB = {
             {"question": "Tell me about music and culture", "difficulty": "medium", "frequency": 0.9},
         ]
     },
-    "Netflix": {
+    "Netflix_Extended": {
         "technical": [
             {"question": "Design a video recommendation system", "difficulty": "hard", "frequency": 0.95},
             {"question": "Implement A/B testing framework", "difficulty": "hard", "frequency": 0.85},

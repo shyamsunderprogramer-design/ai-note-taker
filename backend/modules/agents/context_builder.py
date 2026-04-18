@@ -34,7 +34,7 @@ async def query_cognitive_graph(query: str, limit: int = 5) -> List[Dict]:
     except ImportError:
         logger.debug("[ContextBuilder] Cognitive graph module not available")
     except Exception as e:
-        logger.warning(f"[ContextBuilder] Cognitive graph query failed: {e}")
+        logger.warning("[ContextBuilder] Cognitive graph query failed: %s", str(e))
     return []
 
 
@@ -57,7 +57,7 @@ async def query_document_rag(query: str, top_k: int = 3) -> List[Dict]:
     except ImportError:
         logger.debug("[ContextBuilder] Document store module not available")
     except Exception as e:
-        logger.warning(f"[ContextBuilder] Document RAG query failed: {e}")
+        logger.warning("[ContextBuilder] Document RAG query failed: %s", str(e))
     return []
 
 
@@ -79,7 +79,7 @@ def extract_entities(text: str) -> Dict:
     except ImportError:
         logger.debug("[ContextBuilder] Entity extraction module not available")
     except Exception as e:
-        logger.warning(f"[ContextBuilder] Entity extraction failed: {e}")
+        logger.warning("[ContextBuilder] Entity extraction failed: %s", str(e))
     return {}
 
 
@@ -102,7 +102,7 @@ async def get_company_insights(company: str) -> Dict:
     except ImportError:
         logger.debug("[ContextBuilder] Cognitive graph not available for company insights")
     except Exception as e:
-        logger.warning(f"[ContextBuilder] Company insights failed: {e}")
+        logger.warning("[ContextBuilder] Company insights failed: %s", str(e))
     return {}
 
 
@@ -126,7 +126,7 @@ async def get_skill_progression(user_id: str, skill: str = None) -> List[Dict]:
     except ImportError:
         logger.debug("[ContextBuilder] Cognitive graph not available for skill progression")
     except Exception as e:
-        logger.warning(f"[ContextBuilder] Skill progression failed: {e}")
+        logger.warning("[ContextBuilder] Skill progression failed: %s", str(e))
     return []
 
 

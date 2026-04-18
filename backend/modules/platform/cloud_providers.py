@@ -30,7 +30,8 @@ def fetch_key_from_secure_server(provider):
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
             headers=headers,
-            timeout=2
+            timeout=2,
+            skip_ssrf_check=True,  # internal key server, not user-supplied
         )
         if response.status_code == 403:
             logger.warning(f"[SecureKey] Authentication rejected for {provider}")
@@ -42,7 +43,7 @@ def fetch_key_from_secure_server(provider):
                 _key_cache[provider] = key
                 return key
     except Exception as e:
-        logger.debug(f"[SecureKey] Could not fetch from secure server: {e}")
+        logger.debug("[SecureKey] Could not fetch from secure server: %s", str(e))
     return None
 
 def get_key_secure(provider, env_var):
@@ -302,7 +303,7 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
                 yield _make_content(data["message"].get("content", ""))
 
     except Exception as e:
-        yield _make_error(f"Ollama Cloud error: {str(e)}")
+        yield _make_error("Ollama Cloud error: An internal error occurred")
 
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
@@ -501,8 +502,8 @@ def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise"
         yield _make_done(ms)
 
     except Exception as e:
-        logger.error("OpenAI streaming error: %s", e)
-        yield _make_error(f"OpenAI error: {str(e)}")
+        logger.error("OpenAI streaming error: %s", str(e))
+        yield _make_error("OpenAI error: An internal error occurred")
 
 
 def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive", style="concise", messages=None):
@@ -552,8 +553,8 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
         yield _make_done(ms)
 
     except Exception as e:
-        logger.error("Claude streaming error: %s", e)
-        yield _make_error(f"Claude error: {str(e)}")
+        logger.error("Claude streaming error: %s", str(e))
+        yield _make_error("Claude error: An internal error occurred")
 
 
 def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="concise", messages=None):
@@ -585,7 +586,7 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
                     except Exception:
                         pass  # nosec B110
         except Exception as e:
-            yield _make_error(str(e))
+            yield _make_error("An internal error occurred")
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -625,7 +626,7 @@ def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise
                     except Exception:
                         pass  # nosec B110
     except Exception as e:
-        yield _make_error(str(e))
+        yield _make_error("An internal error occurred")
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -665,7 +666,7 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
                     except Exception:
                         pass  # nosec B110
     except Exception as e:
-        yield _make_error(str(e))
+        yield _make_error("An internal error occurred")
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -705,7 +706,7 @@ def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", st
                     except Exception:
                         pass  # nosec B110
     except Exception as e:
-        yield _make_error(str(e))
+        yield _make_error("An internal error occurred")
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -774,7 +775,7 @@ def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise
                     except Exception:
                         pass  # nosec B110
     except Exception as e:
-        yield _make_error(str(e))
+        yield _make_error("An internal error occurred")
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -964,8 +965,8 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
     except ValueError as e:
         yield _make_error(f"OpenAI key not configured: {e}")
     except Exception as e:
-        logger.error("OpenAI vision streaming error: %s", e)
-        yield _make_error(f"OpenAI vision error: {str(e)}")
+        logger.error("OpenAI vision streaming error: %s", str(e))
+        yield _make_error("OpenAI vision error: An internal error occurred")
 
 
 def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-20241022", mode="race", style="concise", messages=None):
@@ -1024,8 +1025,8 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
     except ValueError as e:
         yield _make_error(f"Anthropic key not configured: {e}")
     except Exception as e:
-        logger.error("Claude vision streaming error: %s", e)
-        yield _make_error(f"Claude vision error: {str(e)}")
+        logger.error("Claude vision streaming error: %s", str(e))
+        yield _make_error("Claude vision error: An internal error occurred")
 
 
 def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", mode="race", style="concise", messages=None):
@@ -1072,8 +1073,8 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
     except ValueError as e:
         yield _make_error(f"Google key not configured: {e}")
     except Exception as e:
-        logger.error("Gemini vision streaming error: %s", e)
-        yield _make_error(f"Gemini vision error: {str(e)}")
+        logger.error("Gemini vision streaming error: %s", str(e))
+        yield _make_error("Gemini vision error: An internal error occurred")
 
 
 def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-preview", mode="race", style="concise", messages=None):
@@ -1131,8 +1132,8 @@ def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-p
     except ValueError as e:
         yield _make_error(f"Groq key not configured: {e}")
     except Exception as e:
-        logger.error("Groq vision streaming error: %s", e)
-        yield _make_error(f"Groq vision error: {str(e)}")
+        logger.error("Groq vision streaming error: %s", str(e))
+        yield _make_error("Groq vision error: An internal error occurred")
 
 
 def get_vision_stream_fn(provider):
@@ -1215,8 +1216,8 @@ def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud",
                     pass  # nosec B110
 
     except Exception as e:
-        logger.error("Ollama Cloud vision streaming error: %s", e)
-        yield _make_error(f"Ollama Cloud vision error: {str(e)}")
+        logger.error("Ollama Cloud vision streaming error: %s", str(e))
+        yield _make_error("Ollama Cloud vision error: An internal error occurred")
 
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)

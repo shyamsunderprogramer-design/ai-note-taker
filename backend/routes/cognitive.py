@@ -71,7 +71,7 @@ async def cognitive_graph_status():
         except Exception:
             return {"available": True, "connected": False, "error": "Neo4j connection failed"}
     except Exception as e:
-        return {"available": True, "connected": False, "error": str(e)}
+        return {"available": True, "connected": False, "error": "An internal error occurred"}
 
 
 @router.post("/cognitive-graph/initialize")
@@ -213,7 +213,7 @@ async def backfill_historical_conversations():
             "errors": result.stderr[-500:] if result.stderr else ""
         }
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/cognitive-graph/stats")
@@ -244,7 +244,7 @@ async def get_cognitive_graph_stats():
 
         return {"stats": stats, "connected": bool(cognitive_graph.driver)}
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 # --- Entity Extraction Endpoints ---

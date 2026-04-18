@@ -103,7 +103,7 @@ class RAGLoader:
                     stats.errors += 1
                     logger.debug(f"[RAGLoader] Failed to load Q#{qa.number}: {result}")
             except Exception as e:
-                logger.error(f"[RAGLoader] Error loading Q#{qa.number} from {qa.category}: {e}")
+                logger.error("[RAGLoader] Error loading Q#{qa.number} from {qa.category}: %s", str(e))
                 stats.errors += 1
 
         stats.elapsed_seconds = time.time() - start_time
@@ -156,7 +156,7 @@ class RAGLoader:
                     stats.errors += 1
                     logger.debug(f"[RAGLoader] Failed to load PDF {pdf.file_name}: {result}")
             except Exception as e:
-                logger.error(f"[RAGLoader] Error loading PDF {pdf.file_name}: {e}")
+                logger.error("[RAGLoader] Error loading PDF {pdf.file_name}: %s", str(e))
                 stats.errors += 1
 
         stats.elapsed_seconds = time.time() - start_time
@@ -205,8 +205,8 @@ class RAGLoader:
             result = ds.add_document(tmp_path)
             return result
         except Exception as e:
-            logger.error(f"[RAGLoader] Error adding document {doc_name}: {e}")
-            return {"error": str(e)}
+            logger.error("[RAGLoader] Error adding document {doc_name}: %s", str(e))
+            return {"error": "An internal error occurred"}
         finally:
             # Clean up temp file (best-effort on Windows)
             try:

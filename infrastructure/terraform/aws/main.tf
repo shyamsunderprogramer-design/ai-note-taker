@@ -142,9 +142,10 @@ module "eks" {
         xvda = {
           device_name = "/dev/xvda"
           ebs = {
-            volume_size = 50
-            volume_type = "gp3"
-            encrypted   = true
+            volume_size           = 50
+            volume_type           = "gp3"
+            encrypted             = true
+            kms_key_id            = aws_kms_key.ebs.arn
           }
         }
       }
@@ -240,8 +241,8 @@ resource "aws_iam_policy" "aws_lb_controller" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
+        Effect   = "Allow"
+        Action   = [
           "iam:CreateServiceLinkedRole",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeImages",
@@ -252,6 +253,7 @@ resource "aws_iam_policy" "aws_lb_controller" {
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeTargetGroups"
         ]
+        Resource = "*"
       }
     ]
   })
@@ -306,8 +308,8 @@ resource "aws_iam_policy" "cluster_autoscaler" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
+        Effect   = "Allow"
+        Action   = [
           "autoscaling:DescribeAutoScalingGroups",
           "autoscaling:DescribeAutoScalingInstances",
           "autoscaling:DescribeLaunchConfigurations",
@@ -315,6 +317,7 @@ resource "aws_iam_policy" "cluster_autoscaler" {
           "autoscaling:DescribeTags",
           "ec2:DescribeLaunchTemplateVersions"
         ]
+        Resource = "*"
       }
     ]
   })
@@ -434,6 +437,7 @@ module "rds" {
   allocated_storage     = 100
   max_allocated_storage = 500
   storage_encrypted     = true
+  kms_key_id            = aws_kms_key.rds.arn
   storage_type          = "gp3"
 
   db_name  = "antdb"
@@ -526,7 +530,7 @@ resource "aws_s3_bucket_versioning" "data" {
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption" "data" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
   bucket = aws_s3_bucket.data.id
 
   rule {
@@ -557,6 +561,11 @@ resource "aws_kms_key" "s3" {
         Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
         Action    = "kms:*"
         Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
       },
       {
         Sid       = "Allow S3 Service"
@@ -564,6 +573,14 @@ resource "aws_kms_key" "s3" {
         Principal = { Service = "s3.amazonaws.com" }
         Action    = ["kms:Decrypt", "kms:GenerateDataKey", "kms:GenerateDataKeyWithoutPlaintext"]
         Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = aws_s3_bucket.data.arn
+          }
+        }
       },
       {
         Sid       = "Allow SNS Service"
@@ -571,6 +588,11 @@ resource "aws_kms_key" "s3" {
         Principal = { Service = "sns.amazonaws.com" }
         Action    = ["kms:Decrypt", "kms:GenerateDataKey"]
         Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
       }
     ]
   })
@@ -599,7 +621,7 @@ resource "aws_s3_bucket_versioning" "logs" {
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption" "logs" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
   bucket = aws_s3_bucket.logs.id
 
   rule {
@@ -734,7 +756,7 @@ resource "aws_s3_bucket_versioning" "replication" {
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption" "replication" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "replication" {
   provider = aws.replication
   bucket   = aws_s3_bucket.replication.id
 
@@ -860,6 +882,11 @@ resource "aws_kms_key" "s3_replication" {
         Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
         Action    = "kms:*"
         Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
       },
       {
         Sid       = "Allow S3 Service"
@@ -867,6 +894,94 @@ resource "aws_kms_key" "s3_replication" {
         Principal = { Service = "s3.amazonaws.com" }
         Action    = ["kms:Decrypt", "kms:GenerateDataKey", "kms:GenerateDataKeyWithoutPlaintext"]
         Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = aws_s3_bucket.replication.arn
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EBS Encryption by Default (CKV_AWS_136, CKV_AWS_51)
+# ─────────────────────────────────────────────────────────────────────────────
+resource "aws_ebs_encryption_by_default" "main" {
+  enabled = true
+}
+
+resource "aws_kms_key" "ebs" {
+  description             = "KMS key for ANT EBS volume encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Enable IAM User Permissions"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "Allow EBS Service"
+        Effect    = "Allow"
+        Principal = { Service = "ec2.amazonaws.com" }
+        Action    = ["kms:Decrypt", "kms:GenerateDataKey", "kms:CreateGrant", "kms:DescribeKey"]
+        Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KMS Key for RDS Encryption (CKV_AWS_23)
+# ─────────────────────────────────────────────────────────────────────────────
+resource "aws_kms_key" "rds" {
+  description             = "KMS key for ANT RDS encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Enable IAM User Permissions"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "Allow RDS Service"
+        Effect    = "Allow"
+        Principal = { Service = "rds.amazonaws.com" }
+        Action    = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
       }
     ]
   })
@@ -906,7 +1021,7 @@ resource "aws_s3_bucket_versioning" "replication_logs" {
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption" "replication_logs" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "replication_logs" {
   provider = aws.replication
   bucket   = aws_s3_bucket.replication_logs.id
 
@@ -939,6 +1054,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "replication_logs" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
+    }
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
     }
 
     expiration {
@@ -995,6 +1115,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "replication" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
+    }
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
     }
 
     noncurrent_version_expiration {
@@ -1109,7 +1234,7 @@ resource "aws_s3_bucket_versioning" "logs_replication" {
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption" "logs_replication" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs_replication" {
   provider = aws.replication
   bucket   = aws_s3_bucket.logs_replication.id
 
@@ -1142,6 +1267,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs_replication" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
+    }
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
     }
 
     noncurrent_version_expiration {
@@ -1238,4 +1368,102 @@ resource "aws_s3_bucket_replication_configuration" "logs" {
     aws_s3_bucket_versioning.logs_replication,
     aws_s3_bucket_logging.logs
   ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S3 Access Logging for Replication Logs Bucket (CKV_AWS_18)
+# ─────────────────────────────────────────────────────────────────────────────
+resource "aws_s3_bucket_logging" "replication_logs" {
+  provider      = aws.replication
+  bucket        = aws_s3_bucket.replication_logs.id
+  target_bucket = aws_s3_bucket.replication_logs.id
+  target_prefix = "self-log/"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────────────
+# S3 Event Notifications for Replication Logs Bucket (CKV2_AWS_62)
+# ─────────────────────────────────────────────────────────────────────────────────────
+resource "aws_sns_topic" "replication_logs_events" {
+  provider          = aws.replication
+  name              = "ant-replication-logs-events-${var.environment}"
+  kms_master_key_id = aws_kms_key.s3_replication.arn
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_sns_topic_policy" "replication_logs_events" {
+  provider = aws.replication
+  arn      = aws_sns_topic.replication_logs_events.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "s3.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.replication_logs_events.arn
+      Condition = {
+        ArnLike = {
+          "aws:SourceArn" = aws_s3_bucket.replication_logs.arn
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_s3_bucket_notification" "replication_logs" {
+  provider = aws.replication
+  bucket   = aws_s3_bucket.replication_logs.id
+
+  topic {
+    topic_arn = aws_sns_topic.replication_logs_events.arn
+    events    = ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
+  }
+
+  depends_on = [aws_sns_topic_policy.replication_logs_events]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────────────
+# S3 Event Notifications for Logs Replication Bucket (CKV2_AWS_62)
+# ─────────────────────────────────────────────────────────────────────────────────────
+resource "aws_sns_topic" "logs_replication_events" {
+  provider          = aws.replication
+  name              = "ant-logs-replication-events-${var.environment}"
+  kms_master_key_id = aws_kms_key.s3_replication.arn
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_sns_topic_policy" "logs_replication_events" {
+  provider = aws.replication
+  arn      = aws_sns_topic.logs_replication_events.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "s3.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.logs_replication_events.arn
+      Condition = {
+        ArnLike = {
+          "aws:SourceArn" = aws_s3_bucket.logs_replication.arn
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_s3_bucket_notification" "logs_replication" {
+  provider = aws.replication
+  bucket   = aws_s3_bucket.logs_replication.id
+
+  topic {
+    topic_arn = aws_sns_topic.logs_replication_events.arn
+    events    = ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
+  }
+
+  depends_on = [aws_sns_topic_policy.logs_replication_events]
 }

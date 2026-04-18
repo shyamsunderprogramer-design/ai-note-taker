@@ -47,7 +47,7 @@ if USE_SQLITE or "sqlite" in DATABASE_URL.lower():
     DATABASE_URL = DEFAULT_SQLITE_URL
 
 _redacted_url = re.sub(r'://[^@]+@', '://***@', DATABASE_URL) if DATABASE_URL else "(none)"
-print(f"[Database] Module loaded. URL: {_redacted_url}")
+logger.info(f"[Database] Module loaded. URL: {_redacted_url}")
 
 # Try importing SQLAlchemy
 try:
@@ -62,7 +62,7 @@ try:
     HAS_SQLALCHEMY = True
 except ImportError as e:
     HAS_SQLALCHEMY = False
-    logger.warning(f"[Database] SQLAlchemy not available: {e}")
+    logger.warning("[Database] SQLAlchemy not available: %s", str(e))
 
 if HAS_SQLALCHEMY:
     class Base(DeclarativeBase):
@@ -488,7 +488,7 @@ class DatabaseManager:
             logger.info("[Database] Initialized successfully")
 
         except Exception as e:
-            logger.error(f"[Database] Failed to initialize: {e}")
+            logger.error("[Database] Failed to initialize: %s", str(e))
             raise
 
     async def close(self) -> None:
@@ -507,7 +507,7 @@ class DatabaseManager:
                 result = await session.execute(text("SELECT 1"))
                 return result.scalar() == 1
         except Exception as e:
-            logger.error(f"[Database] Health check failed: {e}")
+            logger.error("[Database] Health check failed: %s", str(e))
             return False
 
     async def get_stats(self) -> Dict[str, Any]:
@@ -544,8 +544,8 @@ class DatabaseManager:
 
             return stats
         except Exception as e:
-            logger.error(f"[Database] Failed to get stats: {e}")
-            return {"error": str(e)}
+            logger.error("[Database] Failed to get stats: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     async def get_session(self):
         """Get a database session"""
@@ -593,7 +593,7 @@ class UserRepository:
                 await db.refresh(user)
                 return user
         except Exception as e:
-            logger.error(f"[UserRepository] Create failed: {e}")
+            logger.error("[UserRepository] Create failed: %s", str(e))
             return None
 
     @staticmethod
@@ -605,7 +605,7 @@ class UserRepository:
                 result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
                 return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"[UserRepository] Get by ID failed: {e}")
+            logger.error("[UserRepository] Get by ID failed: %s", str(e))
             return None
 
     @staticmethod
@@ -617,7 +617,7 @@ class UserRepository:
                 result = await db.execute(select(User).where(User.username == username))
                 return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"[UserRepository] Get by username failed: {e}")
+            logger.error("[UserRepository] Get by username failed: %s", str(e))
             return None
 
     @staticmethod
@@ -629,7 +629,7 @@ class UserRepository:
                 result = await db.execute(select(User).where(User.email == email))
                 return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"[UserRepository] Get by email failed: {e}")
+            logger.error("[UserRepository] Get by email failed: %s", str(e))
             return None
 
     @staticmethod
@@ -649,7 +649,7 @@ class UserRepository:
                     await db.refresh(user)
                 return user
         except Exception as e:
-            logger.error(f"[UserRepository] Update failed: {e}")
+            logger.error("[UserRepository] Update failed: %s", str(e))
             return None
 
     @staticmethod
@@ -662,7 +662,7 @@ class UserRepository:
                 await db.commit()
                 return result.rowcount > 0
         except Exception as e:
-            logger.error(f"[UserRepository] Delete failed: {e}")
+            logger.error("[UserRepository] Delete failed: %s", str(e))
             return False
 
     @staticmethod
@@ -676,7 +676,7 @@ class UserRepository:
                 )
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[UserRepository] List failed: {e}")
+            logger.error("[UserRepository] List failed: %s", str(e))
             return []
 
 
@@ -701,7 +701,7 @@ class ConversationRepository:
                 await db.refresh(conv)
                 return conv
         except Exception as e:
-            logger.error(f"[ConversationRepository] Create failed: {e}")
+            logger.error("[ConversationRepository] Create failed: %s", str(e))
             return None
 
     @staticmethod
@@ -715,7 +715,7 @@ class ConversationRepository:
                 )
                 return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"[ConversationRepository] Get by ID failed: {e}")
+            logger.error("[ConversationRepository] Get by ID failed: %s", str(e))
             return None
 
     @staticmethod
@@ -733,7 +733,7 @@ class ConversationRepository:
                 )
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[ConversationRepository] Get by user failed: {e}")
+            logger.error("[ConversationRepository] Get by user failed: %s", str(e))
             return []
 
     @staticmethod
@@ -754,7 +754,7 @@ class ConversationRepository:
                     await db.refresh(conv)
                 return conv
         except Exception as e:
-            logger.error(f"[ConversationRepository] Update messages failed: {e}")
+            logger.error("[ConversationRepository] Update messages failed: %s", str(e))
             return None
 
     @staticmethod
@@ -769,7 +769,7 @@ class ConversationRepository:
                 await db.commit()
                 return result.rowcount > 0
         except Exception as e:
-            logger.error(f"[ConversationRepository] Delete failed: {e}")
+            logger.error("[ConversationRepository] Delete failed: %s", str(e))
             return False
 
     @staticmethod
@@ -788,7 +788,7 @@ class ConversationRepository:
                 )
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[ConversationRepository] Search failed: {e}")
+            logger.error("[ConversationRepository] Search failed: %s", str(e))
             return []
 
 
@@ -807,7 +807,7 @@ class VoiceModelRepository:
                 await db.refresh(model)
                 return model
         except Exception as e:
-            logger.error(f"[VoiceModelRepository] Create failed: {e}")
+            logger.error("[VoiceModelRepository] Create failed: %s", str(e))
             return None
 
     @staticmethod
@@ -821,7 +821,7 @@ class VoiceModelRepository:
                 )
                 return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"[VoiceModelRepository] Get by ID failed: {e}")
+            logger.error("[VoiceModelRepository] Get by ID failed: %s", str(e))
             return None
 
     @staticmethod
@@ -838,7 +838,7 @@ class VoiceModelRepository:
                 )
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[VoiceModelRepository] Get by user failed: {e}")
+            logger.error("[VoiceModelRepository] Get by user failed: %s", str(e))
             return []
 
     @staticmethod
@@ -861,7 +861,7 @@ class VoiceModelRepository:
                     await db.refresh(model)
                 return model
         except Exception as e:
-            logger.error(f"[VoiceModelRepository] Update status failed: {e}")
+            logger.error("[VoiceModelRepository] Update status failed: %s", str(e))
             return None
 
     @staticmethod
@@ -876,7 +876,7 @@ class VoiceModelRepository:
                 await db.commit()
                 return result.rowcount > 0
         except Exception as e:
-            logger.error(f"[VoiceModelRepository] Delete failed: {e}")
+            logger.error("[VoiceModelRepository] Delete failed: %s", str(e))
             return False
 
 
@@ -900,7 +900,7 @@ class JobApplicationRepository:
                 await db.refresh(app)
                 return app
         except Exception as e:
-            logger.error(f"[JobApplicationRepository] Create failed: {e}")
+            logger.error("[JobApplicationRepository] Create failed: %s", str(e))
             return None
 
     @staticmethod
@@ -914,7 +914,7 @@ class JobApplicationRepository:
                 )
                 return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"[JobApplicationRepository] Get by ID failed: {e}")
+            logger.error("[JobApplicationRepository] Get by ID failed: %s", str(e))
             return None
 
     @staticmethod
@@ -930,7 +930,7 @@ class JobApplicationRepository:
                 result = await db.execute(query)
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[JobApplicationRepository] Get by user failed: {e}")
+            logger.error("[JobApplicationRepository] Get by user failed: %s", str(e))
             return []
 
     @staticmethod
@@ -953,7 +953,7 @@ class JobApplicationRepository:
                     await db.refresh(app)
                 return app
         except Exception as e:
-            logger.error(f"[JobApplicationRepository] Update status failed: {e}")
+            logger.error("[JobApplicationRepository] Update status failed: %s", str(e))
             return None
 
     @staticmethod
@@ -968,7 +968,7 @@ class JobApplicationRepository:
                 await db.commit()
                 return result.rowcount > 0
         except Exception as e:
-            logger.error(f"[JobApplicationRepository] Delete failed: {e}")
+            logger.error("[JobApplicationRepository] Delete failed: %s", str(e))
             return False
 
 
@@ -987,7 +987,7 @@ class DocumentRepository:
                 await db.refresh(doc)
                 return doc
         except Exception as e:
-            logger.error(f"[DocumentRepository] Create failed: {e}")
+            logger.error("[DocumentRepository] Create failed: %s", str(e))
             return None
 
     @staticmethod
@@ -1004,7 +1004,7 @@ class DocumentRepository:
                 )
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[DocumentRepository] Get by user failed: {e}")
+            logger.error("[DocumentRepository] Get by user failed: %s", str(e))
             return []
 
     @staticmethod
@@ -1027,7 +1027,7 @@ class DocumentRepository:
                     await db.refresh(doc)
                 return doc
         except Exception as e:
-            logger.error(f"[DocumentRepository] Update status failed: {e}")
+            logger.error("[DocumentRepository] Update status failed: %s", str(e))
             return None
 
 
@@ -1051,7 +1051,7 @@ class AnalyticsRepository:
                 await db.refresh(event)
                 return event
         except Exception as e:
-            logger.error(f"[AnalyticsRepository] Create event failed: {e}")
+            logger.error("[AnalyticsRepository] Create event failed: %s", str(e))
             return None
 
     @staticmethod
@@ -1069,7 +1069,7 @@ class AnalyticsRepository:
                 result = await db.execute(query)
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[AnalyticsRepository] Get events failed: {e}")
+            logger.error("[AnalyticsRepository] Get events failed: %s", str(e))
             return []
 
     @staticmethod
@@ -1087,7 +1087,7 @@ class AnalyticsRepository:
                 result = await db.execute(query)
                 return {row[0]: row[1] for row in result.all()}
         except Exception as e:
-            logger.error(f"[AnalyticsRepository] Get counts failed: {e}")
+            logger.error("[AnalyticsRepository] Get counts failed: %s", str(e))
             return {}
 
 
@@ -1111,7 +1111,7 @@ class AuditLogRepository:
                 await db.refresh(log)
                 return log
         except Exception as e:
-            logger.error(f"[AuditLogRepository] Create failed: {e}")
+            logger.error("[AuditLogRepository] Create failed: %s", str(e))
             return None
 
     @staticmethod
@@ -1129,7 +1129,7 @@ class AuditLogRepository:
                 result = await db.execute(query)
                 return result.scalars().all()
         except Exception as e:
-            logger.error(f"[AuditLogRepository] Get logs failed: {e}")
+            logger.error("[AuditLogRepository] Get logs failed: %s", str(e))
             return []
 
 
@@ -1185,7 +1185,7 @@ class UserAPIKeyRepository:
                 await db.refresh(api_keys)
                 return api_keys
         except Exception as e:
-            logger.error(f"[UserAPIKeyRepository] Create/update failed: {e}")
+            logger.error("[UserAPIKeyRepository] Create/update failed: %s", str(e))
             return None
 
     @staticmethod
@@ -1235,7 +1235,7 @@ class UserAPIKeyRepository:
 
                 return decrypted
         except Exception as e:
-            logger.error(f"[UserAPIKeyRepository] Get by user failed: {e}")
+            logger.error("[UserAPIKeyRepository] Get by user failed: %s", str(e))
             return None
 
     @staticmethod
@@ -1269,7 +1269,7 @@ class UserAPIKeyRepository:
                     return True
                 return False
         except Exception as e:
-            logger.error(f"[UserAPIKeyRepository] Delete failed: {e}")
+            logger.error("[UserAPIKeyRepository] Delete failed: %s", str(e))
             return False
 
 
@@ -1317,7 +1317,7 @@ class DataMigrator:
             return id_mapping
 
         except Exception as e:
-            logger.error(f"[Migration] Failed to migrate users: {e}")
+            logger.error("[Migration] Failed to migrate users: %s", str(e))
             return {}
 
     @staticmethod
@@ -1345,12 +1345,12 @@ class DataMigrator:
                         )
                         count += 1
                 except Exception as e:
-                    logger.warning(f"[Migration] Failed to migrate conversation {conv_file}: {e}")
+                    logger.warning("[Migration] Failed to migrate conversation {conv_file}: %s", str(e))
 
             logger.info(f"[Migration] Migrated {count} conversations")
             return count
         except Exception as e:
-            logger.error(f"[Migration] Failed to migrate conversations: {e}")
+            logger.error("[Migration] Failed to migrate conversations: %s", str(e))
             return 0
 
     @staticmethod
@@ -1366,7 +1366,7 @@ class DataMigrator:
                 results["conversations"] = conv_count
 
         except Exception as e:
-            results["errors"].append(str(e))
+            results["errors"].append("An internal error occurred")
 
         return results
 
@@ -1429,7 +1429,7 @@ class BackupManager:
             return backup_data
 
         except Exception as e:
-            logger.error(f"[Backup] Failed: {e}")
+            logger.error("[Backup] Failed: %s", str(e))
             raise
 
     @staticmethod
@@ -1474,7 +1474,7 @@ class BackupManager:
             return restored
 
         except Exception as e:
-            logger.error(f"[Restore] Failed: {e}")
+            logger.error("[Restore] Failed: %s", str(e))
             raise
 
 

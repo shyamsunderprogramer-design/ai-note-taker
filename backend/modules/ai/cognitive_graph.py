@@ -7,7 +7,7 @@ Relationships: CONTAINS, ASKED_BY, ANSWERED_WITH, RELATED_TO, FOR_ROLE
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
 import json
@@ -54,7 +54,7 @@ def get_driver():
             logger.error("[CognitiveGraph] neo4j Python package not installed. Run: pip install neo4j")
             return None
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Failed to connect to Neo4j: {e}")
+            logger.error("[CognitiveGraph] Failed to connect to Neo4j: %s", str(e))
             logger.info("[CognitiveGraph] Make sure Neo4j is running and NEO4J_PASSWORD is set correctly.")
             _driver = None
             return None
@@ -146,7 +146,7 @@ class CognitiveGraph:
                     try:
                         session.run(constraint)
                     except Exception as e:
-                        logger.warning(f"[CognitiveGraph] Constraint creation skipped: {e}")
+                        logger.warning("[CognitiveGraph] Constraint creation skipped: %s", str(e))
 
                 # Create indexes for faster queries
                 indexes = [
@@ -160,14 +160,14 @@ class CognitiveGraph:
                     try:
                         session.run(index)
                     except Exception as e:
-                        logger.warning(f"[CognitiveGraph] Index creation skipped: {e}")
+                        logger.warning("[CognitiveGraph] Index creation skipped: %s", str(e))
 
             self._initialized = True
             logger.info("[CognitiveGraph] Schema initialized successfully")
             return True
 
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Schema initialization failed: {e}")
+            logger.error("[CognitiveGraph] Schema initialization failed: %s", str(e))
             return False
 
     def add_interview(self, interview: InterviewNode) -> bool:
@@ -195,7 +195,7 @@ class CognitiveGraph:
                 )
             return True
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Failed to add interview: {e}")
+            logger.error("[CognitiveGraph] Failed to add interview: %s", str(e))
             return False
 
     def add_question_answer(self, interview_id: str, question: QuestionNode,
@@ -272,7 +272,7 @@ class CognitiveGraph:
 
             return True
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Failed to add Q&A: {e}")
+            logger.error("[CognitiveGraph] Failed to add Q&A: %s", str(e))
             return False
 
         # Index new nodes for semantic search
@@ -283,7 +283,7 @@ class CognitiveGraph:
                 if company:
                     self._semantic._index_node("Company", company.id, company.name)
         except Exception as e:
-            logger.debug("[CognitiveGraph] Failed to index node for semantic search: %s", e)
+            logger.debug("[CognitiveGraph] Failed to index node for semantic search: %s", str(e))
 
     def add_topics_to_question(self, question_id: str, topics: List[TopicNode]) -> bool:
         """Link topics to a question"""
@@ -314,7 +314,7 @@ class CognitiveGraph:
 
             return True
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Failed to add topics: {e}")
+            logger.error("[CognitiveGraph] Failed to add topics: %s", str(e))
             return False
 
     def add_skills_to_answer(self, answer_id: str, skills: List[SkillNode]) -> bool:
@@ -346,7 +346,7 @@ class CognitiveGraph:
 
             return True
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Failed to add skills: {e}")
+            logger.error("[CognitiveGraph] Failed to add skills: %s", str(e))
             return False
 
     def semantic_search(self, query: str, limit: int = 10) -> List[Dict]:
@@ -376,7 +376,7 @@ class CognitiveGraph:
                 self._semantic = SemanticSearchMixin(neo4j_driver=self.driver)
                 return True
         except Exception as e:
-            logger.debug("[CognitiveGraph] Semantic search unavailable: %s", e)
+            logger.debug("[CognitiveGraph] Semantic search unavailable: %s", str(e))
 
         return False
 
@@ -456,7 +456,7 @@ class CognitiveGraph:
                 result = session.run(cypher, keyword=query.lower(), limit=limit)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Search failed: {e}")
+            logger.error("[CognitiveGraph] Search failed: %s", str(e))
             return []
 
     def advanced_search(
@@ -543,7 +543,7 @@ class CognitiveGraph:
                 result = session.run(cypher, **params)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Advanced search failed: {e}")
+            logger.error("[CognitiveGraph] Advanced search failed: %s", str(e))
             return []
 
     def get_interview_history(self, user_id: str, limit: int = 100) -> List[Dict]:
@@ -571,7 +571,7 @@ class CognitiveGraph:
                 result = session.run(cypher, user_id=user_id, limit=limit)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error(f"[CognitiveGraph] History query failed: {e}")
+            logger.error("[CognitiveGraph] History query failed: %s", str(e))
             return []
 
     def get_company_insights(self, company_name: str) -> Dict:
@@ -596,7 +596,7 @@ class CognitiveGraph:
                 record = result.single()
                 return dict(record) if record else {}
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Company insights failed: {e}")
+            logger.error("[CognitiveGraph] Company insights failed: %s", str(e))
             return {}
 
     def get_skill_progression(self, user_id: str, skill_name: str) -> List[Dict]:
@@ -618,7 +618,7 @@ class CognitiveGraph:
                 result = session.run(cypher, user_id=user_id, skill=skill_name)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Skill progression failed: {e}")
+            logger.error("[CognitiveGraph] Skill progression failed: %s", str(e))
             return []
 
     def get_user_skills(self, user_id: str) -> List[Dict]:
@@ -640,7 +640,7 @@ class CognitiveGraph:
                 result = session.run(cypher, user_id=user_id)
                 return [dict(record) for record in result]
         except Exception as e:
-            logger.error(f"[CognitiveGraph] Get user skills failed: {e}")
+            logger.error("[CognitiveGraph] Get user skills failed: %s", str(e))
             return []
 
     def close(self):
@@ -768,7 +768,7 @@ def ingest_conversation(conversation_id: str, conversation_data: Dict) -> bool:
         logger.info(f"[CognitiveGraph] Ingested conversation {conversation_id} with {len(qa_pairs)} Q&A pairs")
         return True
     except Exception as e:
-        logger.error(f"[CognitiveGraph] Ingestion failed: {e}")
+        logger.error("[CognitiveGraph] Ingestion failed: %s", str(e))
         import traceback
         logger.error(traceback.format_exc())
         return False

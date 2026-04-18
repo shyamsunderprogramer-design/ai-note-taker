@@ -74,7 +74,7 @@ async def admin_create_backup(user: User = Depends(require_admin)):
         }
     except Exception as e:
         log_audit_event("admin_backup", user.username, "backup_failed", success=False)
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Backup failed: {str(e)}")
+        return error_response(ErrorCode.INTERNAL_ERROR, "Backup failed")
 
 
 @router.post("/admin/restore")
@@ -93,7 +93,7 @@ async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depen
         }
     except Exception as e:
         log_audit_event("admin_restore", user.username, "restore_failed", success=False)
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Restore failed: {str(e)}")
+        return error_response(ErrorCode.INTERNAL_ERROR, "Restore failed")
 
 
 @router.post("/admin/migrate")
@@ -112,4 +112,4 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         }
     except Exception as e:
         log_audit_event("admin_migrate", user.username, "migration_failed", success=False)
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Migration failed: {str(e)}")
+        return error_response(ErrorCode.INTERNAL_ERROR, "Migration failed")

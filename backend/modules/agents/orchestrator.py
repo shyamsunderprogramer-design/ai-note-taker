@@ -216,7 +216,7 @@ class AgentOrchestrator:
                         agent.update_bant_status(session, suggestions)
 
             except Exception as e:
-                logger.error(f"[Orchestrator] Agent {agent_type.value} error: {e}")
+                logger.error("[Orchestrator] Agent {agent_type.value} error: %s", str(e))
                 self._set_agent_state(session, agent_type.value, "error")
 
         # Save session
@@ -287,8 +287,8 @@ class AgentOrchestrator:
                     yield event
 
             except Exception as e:
-                logger.error(f"[Orchestrator] Agent {agent_type.value} stream error: {e}")
-                yield _make_agent_event("agent_error", agent_type.value, message=str(e))
+                logger.error("[Orchestrator] Agent {agent_type.value} stream error: %s", str(e))
+                yield _make_agent_event("agent_error", agent_type.value, message="An internal error occurred")
                 self._set_agent_state(session, agent_type.value, "error")
 
         if not any_activated:

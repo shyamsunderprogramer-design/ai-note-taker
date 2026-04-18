@@ -68,7 +68,7 @@ class EncryptionManager:
         # Machine/node name
         try:
             identifiers.append(platform.node())
-        except:
+        except Exception:
             pass
 
         # Machine identifier (varies by OS)
@@ -78,7 +78,7 @@ class EncryptionManager:
                 result = subprocess.run(['wmic', 'csproduct', 'get', 'uuid'],  # nosec B603 B607
                                     capture_output=True, text=True)
                 identifiers.append(result.stdout.strip())
-            except:
+            except Exception:
                 pass  # nosec B110
         else:  # Linux/Mac
             try:
@@ -88,7 +88,7 @@ class EncryptionManager:
                         with open(machine_id_path) as f:
                             identifiers.append(f.read().strip())
                             break
-            except:
+            except Exception:
                 pass  # nosec B110
 
         # Fallback: Use environment variable or generate random
@@ -124,7 +124,7 @@ class EncryptionManager:
             logger.info("[Encryption] Encryption manager initialized")
 
         except Exception as e:
-            logger.error(f"[Encryption] Failed to initialize: {e}")
+            logger.error("[Encryption] Failed to initialize: %s", str(e))
             # Fallback: generate a temporary key (not persisted)
             self._key = Fernet.generate_key()
             self._fernet = Fernet(self._key)
@@ -158,7 +158,7 @@ class EncryptionManager:
         # Set restrictive permissions (Unix-like systems)
         try:
             os.chmod(self.key_file, 0o600)
-        except:
+        except Exception:
             pass  # nosec B110
 
     def encrypt(self, data: Union[str, bytes]) -> Optional[bytes]:
@@ -175,7 +175,7 @@ class EncryptionManager:
             encrypted = self._fernet.encrypt(data)
             return encrypted
         except Exception as e:
-            logger.error(f"[Encryption] Encryption failed: {e}")
+            logger.error("[Encryption] Encryption failed: %s", str(e))
             return None
 
     def decrypt(self, encrypted_data: Union[str, bytes]) -> Optional[bytes]:
@@ -195,7 +195,7 @@ class EncryptionManager:
             logger.error("[Encryption] Invalid token - decryption failed")
             return None
         except Exception as e:  # nosec B110
-            logger.error(f"[Encryption] Decryption failed: {e}")
+            logger.error("[Encryption] Decryption failed: %s", str(e))
             return None
 
     def encrypt_str(self, data: str) -> Optional[str]:

@@ -15,6 +15,13 @@ from pathlib import Path
 
 logger = logging.getLogger("audit")
 
+
+def _sanitize_for_log(value: str) -> str:
+    """Remove newlines and control characters from user input before logging to prevent log injection."""
+    if not isinstance(value, str):
+        value = str(value)
+    return value.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+
 # Audit log storage (JSONL fallback)
 AUDIT_LOG_DIR = os.getenv("AUDIT_LOG_DIR", "data/audit_logs")
 AUDIT_LOG_FILE = os.path.join(AUDIT_LOG_DIR, "audit.jsonl")
@@ -46,7 +53,7 @@ def _write_to_jsonl(event: AuditEvent):
         with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(asdict(event)) + "\n")
     except Exception as e:
-        logger.error(f"Failed to write audit log to JSONL: {e}")
+        logger.error("Failed to write audit log to JSONL: %s", str(e))
 
 
 async def _write_to_database(event: AuditEvent) -> bool:
@@ -71,7 +78,7 @@ async def _write_to_database(event: AuditEvent) -> bool:
         )
         return result is not None
     except Exception as e:
-        logger.debug(f"Database audit write failed (will use JSONL fallback): {e}")
+        logger.debug("Database audit write failed (will use JSONL fallback): %s", str(e))
         return False
 
 
@@ -115,9 +122,9 @@ def log_audit_event(
     # Always write to JSONL as fallback/secondary store
     _write_to_jsonl(event)
 
-    # Also log to Python logger
+    # Also log to Python logger (sanitize user-provided fields to prevent log injection)
     level = logging.INFO if success else logging.WARNING
-    logger.log(level, f"[AUDIT] {event_type} actor={actor} action={action} resource={resource} success={success}")
+    logger.log(level, f"[AUDIT] {_sanitize_for_log(event_type)} actor={_sanitize_for_log(actor)} action={_sanitize_for_log(action)} resource={_sanitize_for_log(resource)} success={success}")
 
 
 def get_audit_log(limit: int = 100, event_type: Optional[str] = None, actor: Optional[str] = None) -> list:
@@ -142,7 +149,7 @@ def get_audit_log(limit: int = 100, event_type: Optional[str] = None, actor: Opt
                 except json.JSONDecodeError:
                     continue
     except Exception as e:
-        logger.error(f"Failed to read audit log: {e}")
+        logger.error("Failed to read audit log: %s", str(e))
 
     return entries[-limit:]
 
@@ -156,7 +163,7 @@ async def get_audit_log_from_db(limit: int = 100, action: Optional[str] = None, 
         logs = await AuditLogRepository.get_logs(user_id=user_id, action=action, limit=limit)
         return [log.to_dict() for log in logs]
     except Exception as e:
-        logger.error(f"Failed to read audit log from database: {e}")
+        logger.error("Failed to read audit log from database: %s", str(e))
         return []
 
 

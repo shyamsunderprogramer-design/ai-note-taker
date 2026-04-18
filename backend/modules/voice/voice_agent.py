@@ -145,8 +145,8 @@ class VoiceActivityDetector:
             return result
 
         except Exception as e:
-            logger.error(f"[VAD] Processing error: {e}")
-            return {"is_speaking": False, "error": str(e)}
+            logger.error("[VAD] Processing error: %s", str(e))
+            return {"is_speaking": False, "error": "An internal error occurred"}
 
     def reset(self):
         """Reset VAD state"""
@@ -202,7 +202,7 @@ class TextToSpeechEngine:
             return True
 
         except Exception as e:
-            logger.error(f"[TTS] Speech generation failed: {e}")
+            logger.error("[TTS] Speech generation failed: %s", str(e))
             return False
 
         finally:
@@ -269,7 +269,7 @@ class AIResponseGenerator:
                 return self._fallback_response(interviewer_question)
 
         except Exception as e:
-            logger.error(f"[AI] Response generation failed: {e}")
+            logger.error("[AI] Response generation failed: %s", str(e))
             return "I'm sorry, I couldn't generate a response right now."
 
     def _fallback_response(self, question: str) -> str:
@@ -318,7 +318,7 @@ class VoiceAgent:
             try:
                 listener(old_state, new_state)
             except Exception as e:
-                logger.error(f"[VoiceAgent] State listener error: {e}")
+                logger.error("[VoiceAgent] State listener error: %s", str(e))
 
     def add_state_listener(self, listener: Callable[[VoiceAgentState, VoiceAgentState], None]):
         """Add a state change listener"""
@@ -427,9 +427,9 @@ class VoiceAgent:
             return {"action": "speak", "text": response}
 
         except Exception as e:
-            logger.error(f"[VoiceAgent] Thinking error: {e}")
+            logger.error("[VoiceAgent] Thinking error: %s", str(e))
             self._set_state(VoiceAgentState.IDLE)
-            return {"action": "error", "message": str(e)}
+            return {"action": "error", "message": "An internal error occurred"}
 
     async def _handle_speaking(self, vad_result: Dict) -> Dict[str, Any]:
         """Handle SPEAKING state - check for interruptions"""

@@ -155,13 +155,13 @@ class RVCTrainer:
 
         except Exception as e:
             job["status"] = "error"
-            job["error"] = str(e)
-            logger.error(f"[RVCTrainer] Training failed for {model_id}: {e}")
+            job["error"] = "An internal error occurred"
+            logger.error("[RVCTrainer] Training failed for {model_id}: %s", str(e))
 
             if voice_manager and model_id in voice_manager.models:
                 model = voice_manager.models[model_id]
                 model.status = "error"
-                model.training_error = str(e)
+                model.training_error = "An internal error occurred"
                 model.source = "edge_tts"  # Fallback
                 model.training_progress = 0.0
                 voice_manager._save_models()
@@ -205,7 +205,7 @@ class RVCTrainer:
                 sf.write(out_path, data, sr)
                 processed.append(out_path)
             except Exception as e:
-                logger.warning(f"[RVCTrainer] Failed to preprocess {fname}: {e}")
+                logger.warning("[RVCTrainer] Failed to preprocess {fname}: %s", str(e))
 
         return processed
 

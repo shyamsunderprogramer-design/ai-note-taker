@@ -137,12 +137,12 @@ class MCPServer:
                 "isError": False
             }
         except Exception as e:
-            logger.error(f"[MCP] Tool execution error: {e}")
+            logger.error("[MCP] Tool execution error: %s", str(e))
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": f"Error executing tool: {str(e)}"
+                        "text": "Error executing tool: An internal error occurred"
                     }
                 ],
                 "isError": True
@@ -180,7 +180,7 @@ class MCPServer:
                 ]
             }
         except Exception as e:
-            logger.error(f"[MCP] Resource read error: {e}")
+            logger.error("[MCP] Resource read error: %s", str(e))
             raise
 
     async def _handle_prompts_list(self, params: Dict) -> Dict:
@@ -260,8 +260,8 @@ class MCPServer:
             result = await handler(params)
             return self._create_success_response(request_id, result)
         except Exception as e:
-            logger.error(f"[MCP] Request handler error: {e}")
-            return self._create_error_response(request_id, MCPError.INTERNAL_ERROR, str(e))
+            logger.error("[MCP] Request handler error: %s", str(e))
+            return self._create_error_response(request_id, MCPError.INTERNAL_ERROR, "An internal error occurred")
 
     def _create_success_response(self, request_id: Any, result: Dict) -> Dict:
         """Create a JSON-RPC success response"""
@@ -302,7 +302,7 @@ class MCPServer:
                 try:
                     request = json.loads(line)
                 except json.JSONDecodeError as e:
-                    response = self._create_error_response(None, MCPError.PARSE_ERROR, str(e))
+                    response = self._create_error_response(None, MCPError.PARSE_ERROR, "Invalid request format")
                     self._send_response(response)
                     continue
 
@@ -312,14 +312,14 @@ class MCPServer:
                     self._send_response(response)
 
             except Exception as e:
-                logger.error(f"[MCP] Server loop error: {e}")
+                logger.error("[MCP] Server loop error: %s", str(e))
 
     def _send_response(self, response: Dict):
         """Send JSON-RPC response to stdout"""
         try:
             print(json.dumps(response), flush=True)
         except Exception as e:
-            logger.error(f"[MCP] Failed to send response: {e}")
+            logger.error("[MCP] Failed to send response: %s", str(e))
 
     def stop(self):
         """Stop the server"""
@@ -378,7 +378,7 @@ async def search_transcripts_handler(arguments: Dict) -> Dict:
                                 "title": data.get("title"),
                                 "message_count": len(data.get("messages", [])),
                             })
-                except:
+                except Exception:
                     pass  # nosec B110
 
             return {
@@ -389,7 +389,7 @@ async def search_transcripts_handler(arguments: Dict) -> Dict:
             }
 
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 async def get_summary_handler(arguments: Dict) -> Dict:
@@ -425,7 +425,7 @@ async def get_summary_handler(arguments: Dict) -> Dict:
         return {"error": "Conversation not found"}
 
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 async def list_action_items_handler(arguments: Dict) -> Dict:
@@ -530,7 +530,7 @@ async def conversations_list_resource() -> str:
             ]
         }, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": "An internal error occurred"})
 
 
 async def interview_notes_resource() -> str:

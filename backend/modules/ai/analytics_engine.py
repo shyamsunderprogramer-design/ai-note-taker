@@ -16,10 +16,9 @@ Usage:
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
-import json
 
 logger = logging.getLogger("analytics_engine")
 
@@ -110,8 +109,8 @@ class AnalyticsEngine:
             }
 
         except Exception as e:
-            logger.error(f"[Analytics] Skill progression error: {e}")
-            return {"error": str(e)}
+            logger.error("[Analytics] Skill progression error: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     def get_company_comparison(self, companies: List[str]) -> Dict:
         """
@@ -171,8 +170,8 @@ class AnalyticsEngine:
             }
 
         except Exception as e:
-            logger.error(f"[Analytics] Company comparison error: {e}")
-            return {"error": str(e)}
+            logger.error("[Analytics] Company comparison error: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     def get_topic_network(self, user_id: str, min_connections: int = 2) -> Dict:
         """
@@ -242,8 +241,8 @@ class AnalyticsEngine:
             }
 
         except Exception as e:
-            logger.error(f"[Analytics] Topic network error: {e}")
-            return {"error": str(e)}
+            logger.error("[Analytics] Topic network error: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     def _categorize_topic(self, topic: str) -> str:
         """Categorize topic for coloring in network graph"""
@@ -332,8 +331,8 @@ class AnalyticsEngine:
             }
 
         except Exception as e:
-            logger.error(f"[Analytics] Interview calendar error: {e}")
-            return {"error": str(e)}
+            logger.error("[Analytics] Interview calendar error: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     def get_performance_trends(self, user_id: str) -> Dict:
         """
@@ -405,8 +404,8 @@ class AnalyticsEngine:
             }
 
         except Exception as e:
-            logger.error(f"[Analytics] Performance trends error: {e}")
-            return {"error": str(e)}
+            logger.error("[Analytics] Performance trends error: %s", str(e))
+            return {"error": "An internal error occurred"}
 
     def get_dashboard_summary(self, user_id: str) -> Dict:
         """

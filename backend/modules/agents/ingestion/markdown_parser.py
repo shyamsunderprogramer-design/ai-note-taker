@@ -110,7 +110,7 @@ class MarkdownQAParser:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
-            logger.error(f"[MarkdownParser] Failed to read {file_path}: {e}")
+            logger.error("[MarkdownParser] Failed to read {file_path}: %s", str(e))
             return []
 
         qa_pairs = self._parse_content(content, category, os.path.basename(file_path))

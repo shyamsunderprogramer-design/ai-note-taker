@@ -44,8 +44,8 @@ async def get_crm_config():
     except ImportError:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM integration not available", status_code=503)
     except Exception as e:
-        logger.error(f"[CRM] Get config error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[CRM] Get config error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/crm/config")
@@ -59,8 +59,8 @@ async def save_crm_config(body: dict, user: User = Depends(require_authenticatio
     except ImportError:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM integration not available", status_code=503)
     except Exception as e:
-        logger.error(f"[CRM] Save config error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[CRM] Save config error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.post("/crm/webhook/{crm_type}/{event_type}")
@@ -74,8 +74,8 @@ async def send_crm_webhook(crm_type: str, event_type: str, body: dict):
     except ImportError:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM integration not available", status_code=503)
     except Exception as e:
-        logger.error(f"[CRM] Webhook error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[CRM] Webhook error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
 @router.get("/crm/test")
@@ -88,5 +88,5 @@ async def test_crm_connection():
     except ImportError:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM integration not available", status_code=503)
     except Exception as e:
-        logger.error(f"[CRM] Test error: {e}")
-        return error_response(ErrorCode.INTERNAL_ERROR, str(e), status_code=500)
+        logger.error("[CRM] Test error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

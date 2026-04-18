@@ -82,7 +82,7 @@ class DocumentStore:
                     self.embeddings_available = len(self.chunks) > 0 and len(self.chunks[0].embedding) > 0
                     logger.info(f"Loaded {len(self.chunks)} document chunks from vector store")
             except Exception as e:
-                logger.warning(f"Failed to load vector index: {e}")
+                logger.warning("Failed to load vector index: %s", str(e))
 
     def _save_vectors(self):
         """Save vector index to disk."""
@@ -94,7 +94,7 @@ class DocumentStore:
                 }, f, indent=2)
             logger.info(f"Saved {len(self.chunks)} chunks to vector store")
         except Exception as e:
-            logger.error(f"Failed to save vector index: {e}")
+            logger.error("Failed to save vector index: %s", str(e))
 
     def _compute_file_hash(self, file_path: Path) -> str:
         """Compute hash of file for deduplication (non-cryptographic)."""
@@ -122,7 +122,7 @@ class DocumentStore:
                         text += page.extract_text() + "\n"
                 return text
             except Exception as e:
-                logger.error(f"PDF extraction failed: {e}")
+                logger.error("PDF extraction failed: %s", str(e))
                 return ""
 
         elif ext == ".docx":
@@ -131,7 +131,7 @@ class DocumentStore:
                 doc = docx.Document(file_path)
                 return "\n".join([para.text for para in doc.paragraphs])
             except Exception as e:
-                logger.error(f"DOCX extraction failed: {e}")
+                logger.error("DOCX extraction failed: %s", str(e))
                 return ""
 
         elif ext == ".json":
@@ -179,7 +179,8 @@ class DocumentStore:
             response = sync_client.post(
                 f"{OLLAMA_URL}/api/embeddings",
                 json={"model": EMBEDDING_MODEL, "prompt": text},
-                timeout=15
+                timeout=15,
+                skip_ssrf_check=True,  # internal Ollama service
             )
 
             if response.status_code == 200:
@@ -188,7 +189,7 @@ class DocumentStore:
                 logger.warning(f"Ollama embedding failed: {response.status_code}")
                 return None
         except Exception as e:
-            logger.warning(f"Ollama embedding error: {e}")
+            logger.warning("Ollama embedding error: %s", str(e))
             return None
 
     def _get_embedding_local(self, text: str) -> Optional[List[float]]:

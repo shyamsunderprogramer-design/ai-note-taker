@@ -117,7 +117,7 @@ async def health_database():
         return {
             "available": True,
             "connected": False,
-            "message": f"Database error: {str(e)}"
+            "message": "An internal error occurred"
         }
 
 
@@ -140,7 +140,7 @@ async def health_modules():
     def has_provider_key(provider, env_var):
         try:
             from lib.http_client import sync_client
-            resp = sync_client.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1)  # nosec B106 — localhost
+            resp = sync_client.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1, skip_ssrf_check=True)  # nosec B106 — internal key server
             if resp.status_code == 200:
                 return bool(resp.json().get("apiKey"))
         except Exception:

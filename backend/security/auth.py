@@ -4,6 +4,7 @@ Handles token generation, validation, and user authentication
 """
 
 import hmac
+import logging
 import os
 import secrets
 import uuid
@@ -11,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 from pathlib import Path
-import json
 
 try:
     from jose import JWTError, jwt
@@ -19,8 +19,8 @@ try:
     HAS_JWT = True
 except ImportError:
     HAS_JWT = False
-    print("[WARNING] PyJWT or passlib not installed. Authentication will be limited.")
-    print("  Install: pip install python-jose[cryptography] passlib[bcrypt]")
+    logging.getLogger("auth").warning("[WARNING] PyJWT or passlib not installed. Authentication will be limited.")
+    logging.getLogger("auth").warning("  Install: pip install python-jose[cryptography] passlib[bcrypt]")
 
 # Configuration
 _is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
@@ -98,7 +98,7 @@ class UserManager:
                     user = User(**user_data)
                     self.users[user.username] = user
             except Exception as e:
-                print(f"[WARNING] Failed to load users: {e}")
+                logging.getLogger("auth").warning(f"[WARNING] Failed to load users: {e}")
 
     def _save_users(self):
         """Save users to disk"""
@@ -121,13 +121,13 @@ class UserManager:
             }
             USERS_FILE.write_text(json.dumps(data, indent=2))
         except Exception as e:
-            print(f"[WARNING] Failed to save users: {e}")
+            logging.getLogger("auth").warning(f"[WARNING] Failed to save users: {e}")
 
     def _create_default_user(self):
         """Create default admin user if none exists.
         Fixed credentials: admin / admin1234 — change in production."""
         if not self.users:
-            print("[SETUP] Default admin account: admin / admin1234")
+            logging.getLogger("auth").info("[SETUP] Default admin account: admin / admin1234")
             self.create_user(
                 username="admin",
                 email="admin@ainotetaker.local",

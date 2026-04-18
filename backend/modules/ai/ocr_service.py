@@ -28,7 +28,7 @@ def _get_vision_model():
         _vision_getter = _gvm
         return _gvm()
     except Exception as e:
-        logger.warning("[OCR] Could not import ai_router._get_vision_model: %s", e)
+        logger.warning("[OCR] Could not import ai_router._get_vision_model: %s", str(e))
         return None
 
 
@@ -76,7 +76,7 @@ def _extract_with_vision_model(image_b64: str, model_name: str) -> str:
             logger.warning("[OCR] Vision model returned HTTP %d", response.status_code)
             return ""
     except Exception as e:
-        logger.warning("[OCR] Vision model extraction failed: %s", e)
+        logger.warning("[OCR] Vision model extraction failed: %s", str(e))
         return ""
 
 
@@ -101,7 +101,7 @@ def _extract_with_tesseract(image_b64: str) -> str:
         text = pytesseract.image_to_string(image)
         return text.strip()
     except Exception as e:
-        logger.warning("[OCR] Tesseract extraction failed: %s", e)
+        logger.warning("[OCR] Tesseract extraction failed: %s", str(e))
         return ""
 
 

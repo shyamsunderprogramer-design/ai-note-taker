@@ -5,11 +5,10 @@ Track job applications, interviews, and offers.
 Integrates with cognitive graph and interview simulator.
 """
 
-import json
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 import uuid
 

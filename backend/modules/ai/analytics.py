@@ -87,7 +87,7 @@ class AnalyticsStore:
                     }
                 logger.info(f"Loaded analytics: {len(self.conversations)} conversations")
             except Exception as e:
-                logger.warning(f"Failed to load analytics: {e}")
+                logger.warning("Failed to load analytics: %s", str(e))
 
     def _save(self):
         """Save analytics data to disk."""
@@ -98,7 +98,7 @@ class AnalyticsStore:
                     "daily": {k: asdict(v) for k, v in self.daily.items()}
                 }, f, indent=2)
         except Exception as e:
-            logger.error(f"Failed to save analytics: {e}")
+            logger.error("Failed to save analytics: %s", str(e))
 
     def record_conversation(self, conversation_id: str, messages: List[Dict],
                            start_time: float, end_time: float,
