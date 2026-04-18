@@ -325,7 +325,7 @@ class VoiceCloneManager:
                     if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
                         file_size = os.path.getsize(output_file)
                         if logger:
-                            logger.info(f"[VoiceClone] Generated audio with voice {try_voice} for model {model_id}")
+                            logger.info("[VoiceClone] Generated audio with voice %s for model %s", try_voice, model_id)
 
                         return {
                             "text": text,
@@ -342,7 +342,7 @@ class VoiceCloneManager:
                     else:
                         last_error = f"Voice {try_voice} produced no output"
                         if logger:
-                            logger.warning(f"[VoiceClone] Voice {try_voice} produced no output, trying next")
+                            logger.warning("[VoiceClone] Voice %s produced no output, trying next", try_voice)
                         # Clean up empty file
                         if os.path.exists(output_file):
                             try:

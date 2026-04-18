@@ -284,24 +284,21 @@ async def get_conversation_types():
     if not ANALYZER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Conversation analyzer not available", status_code=503)
 
-    try:
-        return {
-            "types": [
-                {"id": "practice_session", "label": "Practice Session", "description": "Self-study or preparation"},
-                {"id": "mock_interview", "label": "Mock Interview", "description": "Simulated interview with feedback"},
-                {"id": "real_interview", "label": "Real Interview", "description": "Actual company interview"}
-            ],
-            "focus_areas": [
-                {"id": "system_design_focus", "label": "System Design"},
-                {"id": "algorithm_heavy", "label": "Algorithms"},
-                {"id": "behavioral_only", "label": "Behavioral"},
-                {"id": "frontend_focus", "label": "Frontend"},
-                {"id": "backend_focus", "label": "Backend"},
-                {"id": "fullstack_focus", "label": "Fullstack"}
-            ]
-        }
-    except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+    return {
+        "types": [
+            {"id": "practice_session", "label": "Practice Session", "description": "Self-study or preparation"},
+            {"id": "mock_interview", "label": "Mock Interview", "description": "Simulated interview with feedback"},
+            {"id": "real_interview", "label": "Real Interview", "description": "Actual company interview"}
+        ],
+        "focus_areas": [
+            {"id": "system_design_focus", "label": "System Design"},
+            {"id": "algorithm_heavy", "label": "Algorithms"},
+            {"id": "behavioral_only", "label": "Behavioral"},
+            {"id": "frontend_focus", "label": "Frontend"},
+            {"id": "backend_focus", "label": "Backend"},
+            {"id": "fullstack_focus", "label": "Fullstack"}
+        ]
+    }
 
 
 # --- Performance Analyzer Endpoints ---

@@ -410,6 +410,8 @@ class VibeVoiceDiarizer:
         sample_rate: int,
     ) -> List[SpeakerSegment]:
         """Fallback 2: Simple energy-based segmentation + Whisper transcription."""
+        # Initialize transcribe to None to ensure it's defined
+        transcribe = None
         try:
             try:
                 from .speaker_diarization import SimpleSpeakerDetector
@@ -420,19 +422,20 @@ class VibeVoiceDiarizer:
             except ImportError:
                 from voice.whisper_handler import transcribe
         except ImportError:
+            pass  # transcribe remains None
+
+        if transcribe is None:
             # Absolute minimal fallback — single speaker
             duration = len(audio) / sample_rate if len(audio) > 0 else 0
-            try:
-                text = transcribe(audio, mode="adaptive")
-            except Exception:
-                text = ""
             return [SpeakerSegment(
                 speaker_id="Speaker 1",
                 start_time=0.0,
                 end_time=duration,
-                text=text.strip() if text else "",
+                text="",
                 confidence=0.5,
             )]
+
+        # transcribe is now guaranteed to be defined
 
         try:
             detector = SimpleSpeakerDetector()

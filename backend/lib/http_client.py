@@ -160,25 +160,25 @@ class SyncHTTPClient:
             )
         return self._client
 
-    def post(self, url, *, skip_ssrf_check=False, **kwargs):
-        if not skip_ssrf_check:
-            validate_url(url)
-        return self._get().post(url, **kwargs)
+    def post(self, url: str, *, skip_ssrf_check: bool = False, **kwargs):
+        # SECURITY: Validate URL to prevent SSRF attacks
+        validated_url = url if skip_ssrf_check else validate_url(url)
+        return self._get().post(validated_url, **kwargs)
 
-    def get(self, url, *, skip_ssrf_check=False, **kwargs):
-        if not skip_ssrf_check:
-            validate_url(url)
-        return self._get().get(url, **kwargs)
+    def get(self, url: str, *, skip_ssrf_check: bool = False, **kwargs):
+        # SECURITY: Validate URL to prevent SSRF attacks
+        validated_url = url if skip_ssrf_check else validate_url(url)
+        return self._get().get(validated_url, **kwargs)
 
-    def delete(self, url, *, skip_ssrf_check=False, **kwargs):
-        if not skip_ssrf_check:
-            validate_url(url)
-        return self._get().delete(url, **kwargs)
+    def delete(self, url: str, *, skip_ssrf_check: bool = False, **kwargs):
+        # SECURITY: Validate URL to prevent SSRF attacks
+        validated_url = url if skip_ssrf_check else validate_url(url)
+        return self._get().delete(validated_url, **kwargs)
 
-    def stream(self, method, url, *, skip_ssrf_check=False, **kwargs):
-        if not skip_ssrf_check:
-            validate_url(url)
-        return self._get().stream(method, url, **kwargs)
+    def stream(self, method: str, url: str, *, skip_ssrf_check: bool = False, **kwargs):
+        # SECURITY: Validate URL to prevent SSRF attacks
+        validated_url = url if skip_ssrf_check else validate_url(url)
+        return self._get().stream(method, validated_url, **kwargs)
 
     def close(self):
         if self._client:

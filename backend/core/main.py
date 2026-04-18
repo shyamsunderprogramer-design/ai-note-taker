@@ -3575,24 +3575,21 @@ async def get_conversation_types():
     if not ANALYZER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Conversation analyzer not available", status_code=503)
 
-    try:
-        return {
-            "types": [
-                {"id": "practice_session", "label": "Practice Session", "description": "Self-study or preparation"},
-                {"id": "mock_interview", "label": "Mock Interview", "description": "Simulated interview with feedback"},
-                {"id": "real_interview", "label": "Real Interview", "description": "Actual company interview"}
-            ],
-            "focus_areas": [
-                {"id": "system_design_focus", "label": "System Design"},
-                {"id": "algorithm_heavy", "label": "Algorithms"},
-                {"id": "behavioral_only", "label": "Behavioral"},
-                {"id": "frontend_focus", "label": "Frontend"},
-                {"id": "backend_focus", "label": "Backend"},
-                {"id": "fullstack_focus", "label": "Fullstack"}
-            ]
-        }
-    except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+    return {
+        "types": [
+            {"id": "practice_session", "label": "Practice Session", "description": "Self-study or preparation"},
+            {"id": "mock_interview", "label": "Mock Interview", "description": "Simulated interview with feedback"},
+            {"id": "real_interview", "label": "Real Interview", "description": "Actual company interview"}
+        ],
+        "focus_areas": [
+            {"id": "system_design_focus", "label": "System Design"},
+            {"id": "algorithm_heavy", "label": "Algorithms"},
+            {"id": "behavioral_only", "label": "Behavioral"},
+            {"id": "frontend_focus", "label": "Frontend"},
+            {"id": "backend_focus", "label": "Backend"},
+            {"id": "fullstack_focus", "label": "Fullstack"}
+        ]
+    }
 
 
 # ======================================
@@ -4781,9 +4778,6 @@ async def compare_resume_to_job(
             "recommendations": analysis.get("analysis", {}).get("tailored_suggestions", []),
             "match_score": analysis.get("analysis", {}).get("overall_score", 0)
         }
-    except Exception as e:
-        logger.error("[ResumeReview] Compare error: %s", str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
     except Exception as e:
         logger.error("[ResumeReview] Compare error: %s", str(e))
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
