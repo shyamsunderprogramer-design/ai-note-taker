@@ -1,105 +1,170 @@
 /* ==============================
-   CONTROLS STRIP - Mode/Model Selectors
+   CONTROLS STRIP — Industrial Grade
    ============================== */
 .controls-strip {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-2);
-  padding: 6px 0;
+  padding: 4px 0 2px;
   width: 100%;
   box-sizing: border-box;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  margin-bottom: 2px;
 }
 
 /* Individual Control Groups */
 .ctrl-group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   flex-shrink: 1;
   min-width: 0;
 }
 
 .ctrl-group label {
-  font-size: 0.55em;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--text-dim);
+  opacity: 0.5;
   padding-left: 2px;
   white-space: nowrap;
 }
 
 /* Select Dropdowns */
 .controls-strip select {
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
   color: var(--text-main);
-  font-size: 0.75em;
+  font-size: 11px;
   font-weight: 500;
-  padding: 6px 28px 6px 12px;
+  padding: 5px 22px 5px 10px;
   cursor: pointer;
   outline: none;
   transition: all 0.2s var(--ease-default);
   width: 100%;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23888' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23666' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  background-position: right 7px center;
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.05);
+  height: 28px;
 }
 
 .controls-strip select:hover {
-  border-color: rgba(255,255,255,0.15);
-  background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1), inset 0 1px 2px rgba(0,0,0,0.1);
+  border-color: rgba(255,255,255,0.12);
+  background-color: rgba(255,255,255,0.05);
 }
 
 .controls-strip select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-glow), inset 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 0 0 2px var(--primary-glow), inset 0 1px 1px rgba(0,0,0,0.05);
 }
 
 .controls-strip select option {
-  background: rgba(20, 24, 42, 0.99);
+  background: #1a1a1e;
   color: var(--text-main);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.controls-strip select optgroup {
+  font-weight: 700;
+  font-size: 10px;
+  background: #1a1a1e;
+  color: var(--text-dim);
+  padding: 4px 8px;
 }
 
 /* Model Select - Wider */
 .ctrl-group:has(#modelSelect) {
   flex-shrink: 2;
-  min-width: 140px;
-  max-width: 180px;
+  min-width: 120px;
+  max-width: 170px;
 }
 
 #modelSelect {
-  min-width: 140px;
-  -webkit-appearance: none;
-  appearance: none;
-  background-color: rgba(20, 24, 42, 0.99);
+  min-width: 120px;
 }
 
-/* Provider Colors in Optgroups */
-#modelSelect optgroup {
-  font-weight: 700;
-  font-size: 0.9em;
-  background: rgba(20, 24, 42, 0.99) !important;
+/* Token counter */
+.token-counter {
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.5;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  align-self: center;
+  padding-bottom: 6px;
+  margin-left: 2px;
+  white-space: nowrap;
 }
 
-#modelSelect optgroup[label="OpenAI"] { color: #6ee7b7 !important; background: rgba(16, 185, 129, 0.25) !important; }
-#modelSelect optgroup[label="Anthropic"] { color: #fcd34d !important; background: rgba(251, 191, 36, 0.2) !important; }
-#modelSelect optgroup[label="Google"] { color: #fcd34d !important; background: rgba(251, 191, 36, 0.2) !important; }
-#modelSelect optgroup[label="xAI"] { color: rgba(255,255,255,0.85) !important; background: rgba(255,255,255,0.1) !important; }
-#modelSelect optgroup[label="DeepSeek"] { color: #7dd3fc !important; background: rgba(59, 130, 246, 0.2) !important; }
-#modelSelect optgroup[label="Groq"] { color: #fca5a5 !important; background: rgba(239, 68, 68, 0.2) !important; }
-#modelSelect optgroup[label="Ollama (Local)"] { color: #93c5fd !important; background: rgba(59, 130, 246, 0.15) !important; }
+/* Toggle buttons in controls strip */
+.smart-mode-btn,
+.auto-ss-btn,
+.always-on-btn,
+.suggestions-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-default);
+  flex-shrink: 0;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  height: 28px;
+}
 
-#modelSelect option,
-#modelSelect optgroup option {
-  font-size: 0.85em;
-  padding: 4px 8px;
-  background: rgba(20, 24, 42, 0.99) !important;
+.smart-mode-btn:hover,
+.auto-ss-btn:hover,
+.always-on-btn:hover,
+.suggestions-btn:hover {
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
   color: var(--text-main);
+}
+
+.smart-mode-btn.active,
+.auto-ss-btn.active,
+.always-on-btn.active,
+.suggestions-btn.active {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--primary);
+}
+
+.smart-mode-icon,
+.auto-ss-icon,
+.always-on-icon,
+.suggestions-icon {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.auto-ss-dot,
+.always-on-dot,
+.suggestions-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 4px var(--accent);
+  flex-shrink: 0;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
 }

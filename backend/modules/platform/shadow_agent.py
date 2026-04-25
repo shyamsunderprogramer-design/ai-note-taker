@@ -5,10 +5,25 @@ Provides real-time suggestions and response generation
 """
 
 import json
+import re
 import time
-from typing import Optional, Dict, List, Tuple
+import logging
+from typing import Optional, Dict, List
 from dataclasses import dataclass, field
 from enum import Enum
+
+logger = logging.getLogger("shadow_agent")
+
+# Try importing AI router for LLM-powered suggestions
+try:
+    from ai_router import route_ai_stream
+    HAS_AI_ROUTER = True
+except ImportError:
+    try:
+        from modules.ai.ai_router import route_ai_stream
+        HAS_AI_ROUTER = True
+    except ImportError:
+        HAS_AI_ROUTER = False
 
 
 class AgentState(Enum):
@@ -132,104 +147,109 @@ class ShadowInterviewAgent:
         return None
 
     def _generate_suggestions(self, question: str) -> List[Suggestion]:
-        """
-        Generate response suggestions based on question.
+        """Generate response suggestions using LLM when available, fallback to patterns."""
+        # Try LLM-powered generation first
+        if HAS_AI_ROUTER:
+            llm_suggestions = self._generate_llm_suggestions(question)
+            if llm_suggestions:
+                return llm_suggestions
 
-        In full implementation, this would:
-        1. Query cognitive graph for similar past questions
-        2. Use predictive engine for company-specific patterns
-        3. Generate responses using AI model
-        """
+        # Fallback: pattern-based suggestions
+        return self._generate_pattern_suggestions(question)
+
+    def _generate_llm_suggestions(self, question: str) -> List[Suggestion]:
+        """Use LLM to generate contextual interview suggestions."""
+        try:
+            role = self.context.role.replace("_", " ") or "software engineer"
+            company = self.context.company or "the company"
+            prompt = (
+                f"You are an interview coach helping a candidate interviewing for {role} at {company}.\n"
+                f"The interviewer just asked: \"{question}\"\n\n"
+                f"Provide 3 concise response suggestions. Format each as:\n"
+                f"[N] (confidence: 0.XX) category: suggestion text\n\n"
+                f"Categories: technical, behavioral, clarification, strategic, stalling\n"
+                f"Keep each suggestion to 1-2 sentences. Be specific to the question."
+            )
+
+            full_response = ""
+            for event in route_ai_stream(prompt, mode="interview", style="concise"):
+                if "event: chunk" in event:
+                    try:
+                        data_line = [l for l in event.split("\n") if l.startswith("data:")]
+                        if data_line:
+                            data = json.loads(data_line[0][5:])
+                            full_response += data.get("content", "")
+                    except (json.JSONDecodeError, IndexError):
+                        pass
+
+            # Parse structured output
+            suggestions = []
+            pattern = r'\[(\d+)\]\s*\(confidence:\s*(0?\.\d+)\)\s*(\w+):\s*(.+)'
+
+            for match in re.finditer(pattern, full_response):
+                num, conf_str, category, text = match.groups()
+                suggestions.append(Suggestion(
+                    id=f"s{num}",
+                    text=text.strip(),
+                    confidence=min(1.0, max(0.0, float(conf_str))),
+                    source="llm",
+                    category=category if category in ("technical", "behavioral", "clarification", "strategic", "stalling") else "technical",
+                    hotkey=f"Ctrl+{num}"
+                ))
+
+            # Fallback: treat each non-empty line as a suggestion
+            if not suggestions:
+                lines = [l.strip().lstrip("0123456789.-) ") for l in full_response.strip().split("\n") if l.strip()]
+                for i, line in enumerate(lines[:3], 1):
+                    clean = re.sub(r'^\[[\d]+\]\s*', '', line)
+                    if clean:
+                        suggestions.append(Suggestion(
+                            id=f"s{i}",
+                            text=clean,
+                            confidence=0.75,
+                            source="llm",
+                            category=self._classify_question(question),
+                            hotkey=f"Ctrl+{i}"
+                        ))
+
+            return [s for s in suggestions if s.confidence >= self.config["min_confidence"]]
+
+        except Exception as e:
+            logger.warning("[ShadowAgent] LLM generation failed: %s", str(e))
+            return []
+
+    def _classify_question(self, question: str) -> str:
+        """Classify question type for categorization."""
+        q = question.lower()
+        if any(kw in q for kw in ["system design", "architecture", "scale", "coding", "implement", "algorithm"]):
+            return "technical"
+        if any(kw in q for kw in ["tell me", "background", "challenge", "conflict", "leadership"]):
+            return "behavioral"
+        if any(kw in q for kw in ["can you clarify", "what do you mean", "specifically"]):
+            return "clarification"
+        return "strategic"
+
+    def _generate_pattern_suggestions(self, question: str) -> List[Suggestion]:
+        """Fallback: pattern-based suggestion generation."""
         suggestions = []
-
-        # Detect question type
         q_lower = question.lower()
 
         if any(kw in q_lower for kw in ["system design", "architecture", "scale"]):
-            # System design suggestion
-            suggestions.append(Suggestion(
-                id="s1",
-                text="I'd start by clarifying requirements: functional needs, scale (DAU, QPS), and constraints. Then outline the high-level components before diving into details.",
-                confidence=0.92,
-                source="pattern",
-                category="technical",
-                hotkey="Ctrl+1"
-            ))
-            suggestions.append(Suggestion(
-                id="s2",
-                text="Key considerations: data model, API design, service boundaries, database choice, caching strategy, and monitoring.",
-                confidence=0.85,
-                source="knowledge",
-                category="technical",
-                hotkey="Ctrl+2"
-            ))
-
+            suggestions.append(Suggestion(id="s1", text="I'd start by clarifying requirements: functional needs, scale (DAU, QPS), and constraints. Then outline the high-level components before diving into details.", confidence=0.92, source="pattern", category="technical", hotkey="Ctrl+1"))
+            suggestions.append(Suggestion(id="s2", text="Key considerations: data model, API design, service boundaries, database choice, caching strategy, and monitoring.", confidence=0.85, source="knowledge", category="technical", hotkey="Ctrl+2"))
         elif any(kw in q_lower for kw in ["tell me about yourself", "background", "experience"]):
-            # Behavioral - intro
-            suggestions.append(Suggestion(
-                id="s1",
-                text=f"I'm a {self.context.role.replace('_', ' ')} with experience in [key technologies]. Most recently at [company], I [impact statement with metrics].",
-                confidence=0.88,
-                source="template",
-                category="behavioral",
-                hotkey="Ctrl+1"
-            ))
-
+            suggestions.append(Suggestion(id="s1", text=f"I'm a {self.context.role.replace('_', ' ')} with experience in [key technologies]. Most recently at [company], I [impact statement with metrics].", confidence=0.88, source="template", category="behavioral", hotkey="Ctrl+1"))
         elif any(kw in q_lower for kw in ["challenge", "difficult", "problem"]):
-            # Behavioral - challenges
-            suggestions.append(Suggestion(
-                id="s1",
-                text="Using the STAR method: Situation was [context], Task was [my responsibility], Action I took was [steps], Result was [measurable outcome].",
-                confidence=0.90,
-                source="framework",
-                category="behavioral",
-                hotkey="Ctrl+1"
-            ))
-
+            suggestions.append(Suggestion(id="s1", text="Using the STAR method: Situation was [context], Task was [my responsibility], Action I took was [steps], Result was [measurable outcome].", confidence=0.90, source="framework", category="behavioral", hotkey="Ctrl+1"))
         elif any(kw in q_lower for kw in ["coding", "implement", "write a function", "algorithm"]):
-            # Coding question
-            suggestions.append(Suggestion(
-                id="s1",
-                text="First, let me understand the requirements. What's the input size? Are there any constraints on space or time complexity?",
-                confidence=0.87,
-                source="strategy",
-                category="clarification",
-                hotkey="Ctrl+1"
-            ))
-            suggestions.append(Suggestion(
-                id="s2",
-                text="I'll approach this by [explain approach]. Time complexity would be O(n) and space is O(1).",
-                confidence=0.82,
-                source="template",
-                category="technical",
-                hotkey="Ctrl+2"
-            ))
-
+            suggestions.append(Suggestion(id="s1", text="First, let me understand the requirements. What's the input size? Are there any constraints on space or time complexity?", confidence=0.87, source="strategy", category="clarification", hotkey="Ctrl+1"))
+            suggestions.append(Suggestion(id="s2", text="I'll approach this by [explain approach]. Time complexity would be O(n) and space is O(1).", confidence=0.82, source="template", category="technical", hotkey="Ctrl+2"))
         else:
-            # Generic suggestions
-            suggestions.append(Suggestion(
-                id="s1",
-                text="That's an interesting question. Let me think through this step by step...",
-                confidence=0.70,
-                source="generic",
-                category="stalling",
-                hotkey="Ctrl+1"
-            ))
-            suggestions.append(Suggestion(
-                id="s2",
-                text="From my experience, I'd approach this by [share relevant experience].",
-                confidence=0.65,
-                source="generic",
-                category="behavioral",
-                hotkey="Ctrl+2"
-            ))
+            suggestions.append(Suggestion(id="s1", text="That's an interesting question. Let me think through this step by step...", confidence=0.70, source="generic", category="stalling", hotkey="Ctrl+1"))
+            suggestions.append(Suggestion(id="s2", text="From my experience, I'd approach this by [share relevant experience].", confidence=0.65, source="generic", category="behavioral", hotkey="Ctrl+2"))
 
-        # Filter by confidence
         suggestions = [s for s in suggestions if s.confidence >= self.config["min_confidence"]]
-
-        # Sort by confidence
         suggestions.sort(key=lambda x: x.confidence, reverse=True)
-
         return suggestions[:self.config["suggestion_count"]]
 
     def get_suggestions(self) -> List[Dict]:

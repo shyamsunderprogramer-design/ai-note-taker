@@ -7,7 +7,11 @@
   gap: var(--space-2);
   padding: 14px 16px;
   padding-bottom: 24px;
-  background: transparent;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
   position: relative;
   min-height: 360px;
   height: 100%;

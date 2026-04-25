@@ -152,6 +152,105 @@ class APIClient {
     }
   }
 
+  // ── Integration API Methods ──────────────────────────────────────────
+
+  /**
+   * Authenticated fetch helper — adds auth headers, JSON body, error handling
+   */
+  async _authFetch(url, options = {}) {
+    const headers = { ...this._authHeaders(), ...(options.headers || {}) };
+    if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(options.body);
+    }
+    options.headers = headers;
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(err.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /** Get integration status */
+  async getIntegrationStatus(type) {
+    try {
+      return await this._authFetch(`${API_BASE}/${type}/status`);
+    } catch { return { connected: false }; }
+  }
+
+  /** Configure an integration */
+  async configureIntegration(type, config) {
+    if (type === 'slack') {
+      const params = new URLSearchParams({
+        webhook_url: config.webhook_url || '',
+        default_channel: config.default_channel || '',
+        auto_post: String(config.auto_post || false),
+      });
+      return await this._authFetch(`${API_BASE}/slack/configure?${params}`, { method: 'POST' });
+    }
+    if (type === 'calendar') {
+      const params = new URLSearchParams({
+        provider: config.provider || 'google',
+        auto_join: String(config.auto_join || false),
+      });
+      return await this._authFetch(`${API_BASE}/calendar/configure?${params}`, { method: 'POST' });
+    }
+    if (type === 'phone') {
+      return await this._authFetch(`${API_BASE}/phone/connect`, { method: 'POST', body: config });
+    }
+    // Notion, Jira, etc. — JSON body to /{type}/connect
+    return await this._authFetch(`${API_BASE}/${type}/connect`, { method: 'POST', body: config });
+  }
+
+  /** Disconnect an integration */
+  async disconnectIntegration(type) {
+    return await this._authFetch(`${API_BASE}/${type}/disconnect`, { method: 'DELETE' });
+  }
+
+  /** Post a message to Slack */
+  async postToSlack(body) {
+    return await this._authFetch(`${API_BASE}/slack/post`, { method: 'POST', body });
+  }
+
+  /** List Notion pages */
+  async listNotionPages(pageSize = 50) {
+    return await this._authFetch(`${API_BASE}/notion/pages?page_size=${pageSize}`);
+  }
+
+  /** List Jira projects */
+  async listJiraProjects() {
+    return await this._authFetch(`${API_BASE}/jira/projects`);
+  }
+
+  /** Get upcoming calendar meetings */
+  async getCalendarUpcoming(hours = 24) {
+    return await this._authFetch(`${API_BASE}/calendar/upcoming?hours=${hours}`);
+  }
+
+  /** Get SSO status */
+  async getSSOStatus() {
+    try {
+      const resp = await fetch(`${API_BASE}/sso/status`);
+      return await resp.json();
+    } catch { return { google: { configured: false }, microsoft: { configured: false } }; }
+  }
+
+  /** Initiate SSO login */
+  async initiateSSO(provider) {
+    return await this._authFetch(`${API_BASE}/sso/${provider}`);
+  }
+
+  /** Create a team */
+  async createTeam(name, description = '') {
+    return await this._authFetch(`${API_BASE}/teams`, { method: 'POST', body: { name, description } });
+  }
+
+  /** List teams */
+  async listTeams() {
+    return await this._authFetch(`${API_BASE}/teams`);
+  }
+
   /** Build auth headers from stored token */
   _authHeaders() {
     const token = localStorage.getItem('ainotetaker_auth_token');

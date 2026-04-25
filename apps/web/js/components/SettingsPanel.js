@@ -6,6 +6,7 @@
 import { State } from '../core/state.js';
 import { Events, EventNames } from '../core/events.js';
 import { API } from '../core/api.js';
+import { IntegrationPanel } from './IntegrationPanel.js';
 
 export class SettingsPanel {
   constructor() {
@@ -89,6 +90,11 @@ export class SettingsPanel {
       }
     } else if (tabName === 'data') {
       this.loadDocuments();
+    } else if (tabName === 'integrations') {
+      if (!this._integrationPanel) {
+        this._integrationPanel = new IntegrationPanel();
+      }
+      this._integrationPanel.loadAll();
     }
   }
 

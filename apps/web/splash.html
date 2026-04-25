@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANT - Loading</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+
+    .container {
+      position: relative;
+      text-align: center;
+      animation: fadeIn 0.5s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo {
+      width: 80px;
+      height: 80px;
+      background: rgba(15,20,35,0.55);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4); }
+      50% { transform: scale(1.05); box-shadow: 0 12px 40px rgba(59, 130, 246, 0.6); }
+    }
+
+    .logo-icon {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
+      transform: rotate(0deg);
+      filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.5));
+    }
+
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 32px;
+    }
+
+    .loader {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .loader-dot {
+      width: 8px;
+      height: 8px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: bounce 1.4s ease-in-out infinite both;
+    }
+
+    .loader-dot:nth-child(1) { animation-delay: -0.32s; }
+    .loader-dot:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+
+    .status {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.4);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Window controls inside splash */
+    .splash-controls {
+      position: absolute; top: 12px; right: 14px;
+      display: flex; align-items: center; gap: 7px;
+      -webkit-app-region: no-drag; z-index: 10;
+    }
+    .splash-btn {
+      width: 13px; height: 13px; border-radius: 50%; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: filter 0.15s;
+    }
+    .splash-btn:hover { filter: brightness(1.15); }
+    .splash-btn:active { filter: brightness(0.9); }
+    .splash-btn .si {
+      font-size: 8px; line-height: 1; opacity: 0; transition: opacity 0.15s;
+      color: rgba(0,0,0,0.5); pointer-events: none;
+    }
+    .splash-btn:hover .si { opacity: 1; }
+    .sp-close { background: #ff5f57; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+    .sp-close:hover { background: #ff3b30; }
+    .sp-min { background: #ffcc00; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+    .sp-min:hover { background: #e6b800; }
+    .sp-max { background: #28c840; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+    .sp-max:hover { background: #1fb834; }
+
+    .version {
+      position: absolute;
+      bottom: 20px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Glass effect on corners */
+    body::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 30%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Window controls inside splash -->
+    <div class="splash-controls">
+      <button class="splash-btn sp-min" id="spMinBtn" title="Minimize"><span class="si">−</span></button>
+      <button class="splash-btn sp-max" id="spMaxBtn" title="Maximize"><span class="si">+</span></button>
+      <button class="splash-btn sp-close" id="spCloseBtn" title="Close"><span class="si">✕</span></button>
+    </div>
+    <div class="logo">
+      <img class="logo-icon" src="ant-icon-new.png" alt="ANT">
+    </div>
+    <h1 class="title">ANT</h1>
+    <p class="subtitle">AI Note Taker</p>
+    <div class="loader">
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+    </div>
+    <p class="status" id="statusText">Initializing...</p>
+  </div>
+  <p class="version">v1.0.0</p>
+
+  <script>
+    // Window controls (Electron only)
+    if (window.api) {
+      document.getElementById('spMinBtn')?.addEventListener('click', () => window.api.minimizeWindow());
+      document.getElementById('spMaxBtn')?.addEventListener('click', () => window.api.toggleMaximizeWindow());
+      document.getElementById('spCloseBtn')?.addEventListener('click', () => window.api.closeWindow());
+    } else {
+      document.querySelector('.splash-controls')?.remove();
+    }
+
+    // Update status text periodically
+    const statuses = [
+      "Initializing...",
+      "Loading backend...",
+      "Starting AI engines...",
+      "Almost ready..."
+    ];
+
+    let index = 0;
+    setInterval(() => {
+      index = (index + 1) % statuses.length;
+      document.getElementById('statusText').textContent = statuses[index];
+    }, 800);
+
+    // Close splash on background click (not on controls)
+    document.querySelector('.container')?.addEventListener('click', (e) => {
+      if (e.target.closest('.splash-controls')) return;
+      if (window.api?.closeSplash) {
+        window.api.closeSplash();
+      }
+    });
+  </script>
+</body>
+</html>

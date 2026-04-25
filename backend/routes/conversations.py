@@ -204,3 +204,133 @@ async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)
     doc_store = get_document_store()
     results = doc_store.retrieve_context(query, top_k)
     return {"results": results}
+
+
+# ─── Share Links ────────────────────────────────────────────────────────
+
+import hashlib
+import secrets
+
+# In-memory share link store (production: database)
+_share_links: Dict[str, dict] = {}
+
+
+@router.post("/conversations/share")
+async def create_share_link(
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Create a public share link for a conversation."""
+    messages = body.get("messages", [])
+    title = body.get("title", "Shared Conversation")
+    password = body.get("password", None)
+    expires_hours = body.get("expires_hours", 168)  # 7 days default
+
+    if not messages:
+        return error_response(ErrorCode.VALIDATION_ERROR, "No messages to share", status_code=400)
+
+    share_id = secrets.token_urlsafe(12)
+    share_token = hashlib.sha256(share_id.encode()).hexdigest()[:16]
+
+    _share_links[share_id] = {
+        "messages": messages,
+        "title": title,
+        "created_by": user.username,
+        "password": password,
+        "created_at": time.time(),
+        "expires_at": time.time() + (expires_hours * 3600),
+        "access_count": 0,
+    }
+
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    share_url = f"{base_url}/shared/{share_id}"
+
+    return {
+        "share_id": share_id,
+        "share_url": share_url,
+        "has_password": bool(password),
+        "expires_hours": expires_hours,
+    }
+
+
+@router.get("/shared/{share_id}")
+async def view_shared_conversation(share_id: str, password: str = Query(None)):
+    """View a shared conversation (public access)."""
+    link = _share_links.get(share_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="Share link not found")
+
+    # Check expiry
+    if time.time() > link["expires_at"]:
+        del _share_links[share_id]
+        raise HTTPException(status_code=410, detail="Share link expired")
+
+    # Check password
+    if link["password"] and link["password"] != password:
+        raise HTTPException(status_code=403, detail="Password required")
+
+    # Track access
+    link["access_count"] += 1
+
+    return {
+        "title": link["title"],
+        "messages": link["messages"],
+        "shared_by": link["created_by"],
+        "access_count": link["access_count"],
+    }
+
+
+# ─── Custom AI Templates ────────────────────────────────────────────────
+
+_custom_templates: Dict[str, dict] = {}
+
+
+@router.post("/templates")
+async def create_template(
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Create a custom AI prompt template."""
+    name = body.get("name", "")
+    prompt = body.get("prompt", "")
+    category = body.get("category", "custom")
+
+    if not name or not prompt:
+        return error_response(ErrorCode.VALIDATION_ERROR, "name and prompt required", status_code=400)
+
+    template_id = f"tpl_{secrets.token_urlsafe(8)}"
+    _custom_templates[template_id] = {
+        "id": template_id,
+        "name": name,
+        "prompt": prompt,
+        "category": category,
+        "created_by": user.username,
+        "created_at": time.time(),
+    }
+
+    return {"id": template_id, "name": name, "status": "created"}
+
+
+@router.get("/templates")
+async def list_templates(user: User = Depends(require_authentication)):
+    """List all custom AI templates."""
+    return {
+        "templates": [
+            {
+                "id": t["id"],
+                "name": t["name"],
+                "category": t["category"],
+                "created_at": t["created_at"],
+            }
+            for t in _custom_templates.values()
+        ]
+    }
+
+
+@router.get("/templates/{template_id}")
+async def get_template(template_id: str, user: User = Depends(require_authentication)):
+    """Get a specific template."""
+    template = _custom_templates.get(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template

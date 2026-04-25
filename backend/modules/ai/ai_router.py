@@ -1,6 +1,9 @@
 import json
 import logging
+import os
 import re
+import threading
+import time
 
 from lib.http_client import sync_client
 import httpx
@@ -30,34 +33,95 @@ VISION_MODEL_NAMES = ("llava", "qwen-vl", "moondream", "minicpm-v", "bakllava")
 # Cache for installed vision-capable models
 _vision_model_cache = None
 
+# Provider key cache — warmed once, never blocks requests
+_provider_key_cache = {}
+_provider_key_cache_time = {}  # per-provider timestamps
+_PROVIDER_KEY_CACHE_TTL = 10  # 10 seconds
 
-def _get_vision_model():
-    """
-    Return the name of an available vision-capable Ollama model, or None if none found.
-    Caches result for the session lifetime.
-    """
-    global _vision_model_cache
-    if _vision_model_cache is not None:
-        logger.info("[_get_vision_model] Using cached vision model: %s", _vision_model_cache)
-        return _vision_model_cache
 
+def _warm_provider_keys():
+    """Background warmup of provider API keys. Call once at startup."""
+    global _provider_key_cache, _provider_key_cache_time
     try:
-        resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=5, skip_ssrf_check=True)
+        import os as _os
+        key_secret = _os.getenv("KEY_SERVER_SECRET", "")
+        headers = {}
+        if key_secret:
+            headers["X-Key-Server-Secret"] = key_secret
+        providers = ["openai", "anthropic", "google", "xai", "deepseek", "groq", "ollama-cloud", "perplexity"]
+        now = time.time()
+        for provider in providers:
+            try:
+                resp = sync_client.post(
+                    "http://127.0.0.1:18000/get-key",
+                    json={"provider": provider},
+                    headers=headers,
+                    timeout=1,
+                    skip_ssrf_check=True,
+                )
+                _provider_key_cache[provider] = resp.status_code == 200 and bool(resp.json().get("apiKey"))
+            except Exception:
+                _provider_key_cache[provider] = False
+            _provider_key_cache_time[provider] = now
+        logger.info("[ProviderKeys] Warmed %d providers", len(_provider_key_cache))
+    except Exception as e:
+        logger.warning("[ProviderKeys] Warmup failed: %s", e)
+
+
+def _has_provider_key_fast(provider: str) -> bool:
+    """Check provider key from cache (no HTTP call). Falls back to env var."""
+    now = time.time()
+    cached_time = _provider_key_cache_time.get(provider, 0)
+    if provider in _provider_key_cache and (now - cached_time) < _PROVIDER_KEY_CACHE_TTL:
+        return _provider_key_cache[provider]
+    # Fallback: check env var directly (zero latency)
+    env_map = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "google": "GOOGLE_API_KEY",
+        "xai": "XAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
+        "perplexity": "PERPLEXITY_API_KEY",
+    }
+    env_var = env_map.get(provider)
+    if env_var and os.getenv(env_var, "").strip():
+        _provider_key_cache[provider] = True
+        _provider_key_cache_time[provider] = now
+        return True
+    return _provider_key_cache.get(provider, False)
+
+
+def _discover_vision_model():
+    """Background discovery of vision-capable model."""
+    global _vision_model_cache
+    try:
+        resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=3, skip_ssrf_check=True)
         if resp.status_code == 200:
             models = resp.json().get("models", [])
-            logger.info("[_get_vision_model] Available models: %s", [m.get("name") for m in models])
             for m in models:
                 name = m.get("name", "")
                 for vision_name in VISION_MODEL_NAMES:
                     if vision_name in name.lower():
                         _vision_model_cache = name
                         logger.info("[_get_vision_model] Found vision model: %s", name)
-                        return name
+                        return
     except Exception as e:
-        logger.warning("Could not fetch Ollama models to find vision model: %s", str(e))
-
+        logger.debug("Vision model discovery: %s", str(e))
     _vision_model_cache = None
-    logger.warning("[_get_vision_model] No vision-capable model found")
+
+
+def _get_vision_model():
+    """
+    Return the name of an available vision-capable Ollama model, or None if none found.
+    Caches result for the session lifetime. Non-blocking on first call.
+    """
+    global _vision_model_cache
+    if _vision_model_cache is not None:
+        return _vision_model_cache
+    # If not cached yet, return None immediately and discover in background
+    threading.Thread(target=_discover_vision_model, daemon=True).start()
     return None
 
 
@@ -135,17 +199,19 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None, in
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
         history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
-    # Retrieve relevant document context if RAG is enabled
+    # Retrieve relevant document context if RAG is enabled (lazy, cached)
     rag_block = ""
-    if include_rag and mode not in ("race", "fast"):
+    if include_rag and mode not in ("race", "fast", "instant", "turbo"):
         try:
             from document_store import get_document_store
             doc_store = get_document_store()
-            rag_context = doc_store.format_context_for_prompt(user_input)
-            if rag_context:
-                rag_block = rag_context
-        except Exception as e:
-            logger.debug("RAG retrieval failed: %s", str(e))
+            # Only format context if documents exist (fast check)
+            if hasattr(doc_store, '_documents') and doc_store._documents:
+                rag_context = doc_store.format_context_for_prompt(user_input)
+                if rag_context:
+                    rag_block = rag_context
+        except Exception:
+            pass  # nosec B110
 
     base = f"""Slack message between two senior engineers.
 
@@ -283,7 +349,7 @@ def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
         return "AI error"
 
 
-def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", messages=None):
+def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", messages=None, temperature=None):
     """Yields SSE event strings — meta, content chunks, done, error."""
     import time
     start = time.time()
@@ -299,13 +365,21 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         is_instant = mode == "instant"
         num_predict = INSTANT_MAX_TOKENS if is_instant else (TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else (2000 if style == "detailed" else 500))))
 
+        import os as _os, psutil
+        cpu_count = psutil.cpu_count(logical=True) or 4
+        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+        # Low-end systems: small context window + all CPU threads for speed
+        num_ctx = 2048 if ram_gb < 8 else 4096
+
         payload = {
             "model": model_name or get_ai_model(mode),
             "prompt": final_prompt,
             "stream": True,
             "options": {
-                "temperature": AI_TEMPERATURE,
-                "num_predict": num_predict
+                "temperature": temperature if temperature is not None else AI_TEMPERATURE,
+                "num_predict": num_predict,
+                "num_ctx": num_ctx,
+                "num_thread": cpu_count,
             }
         }
 
@@ -359,7 +433,7 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         yield _make_error("AI error occurred.")
 
 
-def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="concise", messages=None, model_name=None):
+def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="concise", messages=None, model_name=None, temperature=None):
     """Ollama streaming with optional image — for multimodal (vision) models like llava.
 
     If image_b64 is provided but no vision model is available, attempts to pull one.
@@ -384,13 +458,20 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
         model_to_use = vision_model or get_ai_model(mode)
         logger.info("[ask_ollama_vision_stream] Using model: %s, has_image: %s", model_to_use, bool(image_b64))
 
+        import psutil
+        cpu_count = psutil.cpu_count(logical=True) or 4
+        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+        num_ctx = 2048 if ram_gb < 8 else 4096
+
         payload = {
             "model": model_to_use,
             "prompt": final_prompt,
             "stream": True,
             "options": {
-                "temperature": AI_TEMPERATURE,
-                "num_predict": num_predict
+                "temperature": temperature if temperature is not None else AI_TEMPERATURE,
+                "num_predict": num_predict,
+                "num_ctx": num_ctx,
+                "num_thread": cpu_count,
             }
         }
         if image_b64:
@@ -498,7 +579,7 @@ def route_ai(prompt, mode="adaptive", style="concise"):
     }
 
 
-def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None):
+def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None, temperature=None):
     """
     Yields SSE event strings (meta, content, done, error).
     Cloud providers yield their own SSE strings directly.
@@ -510,22 +591,25 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
 
     if is_ollama_cloud:
         # Ollama Cloud model — use cloud_providers module
-        try:
-            from cloud_providers import ask_ollama_cloud_stream
-            for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages):
-                yield event
-            return
-        except Exception as e:
-            logger.error("Ollama Cloud stream error: %s", str(e))
-            yield _make_error(f"Ollama Cloud error: {e}")
-            return
+        if not _has_provider_key_fast("ollama-cloud"):
+            logger.info("[route_ai_stream] Ollama Cloud model '%s' selected but no key — falling back to local Ollama", provider)
+            # Fall through to local Ollama below
+        else:
+            try:
+                from cloud_providers import ask_ollama_cloud_stream
+                for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages, temperature=temperature):
+                    yield event
+                return
+            except Exception as e:
+                logger.error("Ollama Cloud stream error: %s", str(e))
+                # Fall through to local Ollama instead of hard error
 
     # Check if provider looks like a local Ollama model name (contains colon)
     # e.g. "qwen2.5:1.5b", "deepseek-r1:8b"
     if provider and ":" in provider and not is_ollama_cloud:
         # This is a local Ollama model — use Ollama streaming directly
         try:
-            for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages):
+            for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages, temperature=temperature):
                 yield event
             return
         except Exception as e:
@@ -543,56 +627,27 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 "groq-llama-3-3-70b", "google-gemini-2-0-flash",
                 "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku",
             ]
-            # Find first fast cloud provider that has a stream function and API key
+            # Find first fast cloud provider that has a stream function and API key (cached, zero HTTP calls)
             for fast_model in SPEED_PRIORITY:
                 if fast_model in PROVIDER_MODEL_MAP:
                     provider_prefix, model_name = PROVIDER_MODEL_MAP[fast_model]
                     stream_fn = get_stream_fn(provider_prefix)
-                    if stream_fn:
-                        # Check if this provider has an API key
-                        key_secret = _os.getenv("KEY_SERVER_SECRET", "")
-                        headers = {}
-                        if key_secret:
-                            headers["X-Key-Server-Secret"] = key_secret
-                        try:
-                            resp = sync_client.post(
-                                "http://127.0.0.1:18000/get-key",
-                                json={"provider": provider_prefix},
-                                headers=headers,
-                                timeout=2,
-                                skip_ssrf_check=True,  # internal key server, not user-supplied
-                            )
-                            has_key = resp.status_code == 200 and bool(resp.json().get("apiKey"))
-                        except Exception:
-                            has_key = False
-
-                        if has_key:
-                            logger.info("[route_ai_stream] auto → %s (%s)", fast_model, provider_prefix)
-                            for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages):
-                                yield event
-                            return
+                    if stream_fn and _has_provider_key_fast(provider_prefix):
+                        logger.info("[route_ai_stream] auto → %s (%s)", fast_model, provider_prefix)
+                        for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
+                            yield event
+                        return
             logger.info("[route_ai_stream] auto → no paid cloud keys found, trying Ollama Cloud")
             # Try free Ollama Cloud (gemma3) as fallback
-            try:
-                key_secret = _os.getenv("KEY_SERVER_SECRET", "")
-                headers = {}
-                if key_secret:
-                    headers["X-Key-Server-Secret"] = key_secret
-                resp = sync_client.post(
-                    "http://127.0.0.1:18000/get-key",
-                    json={"provider": "ollama-cloud"},
-                    headers=headers,
-                    timeout=2,
-                    skip_ssrf_check=True,  # internal key server, not user-supplied
-                )
-                if resp.status_code == 200 and bool(resp.json().get("apiKey")):
+            if _has_provider_key_fast("ollama-cloud"):
+                try:
                     from cloud_providers import ask_ollama_cloud_stream
                     logger.info("[route_ai_stream] auto → Ollama Cloud (gemma3:cloud)")
-                    for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages):
+                    for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages, temperature=temperature):
                         yield event
                     return
-            except Exception:
-                pass  # nosec B110
+                except Exception:
+                    pass  # nosec B110
             logger.info("[route_ai_stream] auto → no Ollama Cloud key, falling back to local Ollama")
         except Exception as e:
             logger.error("[route_ai_stream] auto cloud race error: %s", str(e))
@@ -605,7 +660,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
             if stream_fn:
                 resolved = PROVIDER_MODEL_MAP.get(provider, ("openai", "gpt-4o-mini"))
                 model_name = resolved[1]
-                for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages):
+                for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
                     yield event
                 return
         except Exception as e:
@@ -619,7 +674,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     for candidate_mode, model_name in candidates:
         try:
             accumulated = []
-            for event in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages):
+            for event in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages, temperature=temperature):
                 accumulated.append(event)
                 # Check for error early
                 if event.startswith("event: error"):
@@ -634,3 +689,14 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
             logger.error("AI stream error: %s", str(e))
 
     yield _make_error("AI error")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STARTUP WARMUP — Non-blocking background tasks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Warm provider keys in background (avoids per-request HTTP calls)
+threading.Thread(target=_warm_provider_keys, daemon=True, name="provider-key-warmup").start()
+
+# Discover vision model in background (avoids 5s blocking call on first use)
+threading.Thread(target=_discover_vision_model, daemon=True, name="vision-model-warmup").start()

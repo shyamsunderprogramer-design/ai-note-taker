@@ -72,8 +72,8 @@ except ImportError as e:
     logging.getLogger("main").warning(f"[Database] module not available: {e}")
 
 # T23: HTTPS enforcement configuration
-# T23: Default to secure (HTTPS required); set HTTPS_REQUIRED=false for dev
-HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "false").lower() == "true"
+# T23: Default to HTTPS required in production; set HTTPS_REQUIRED=false for local dev
+HTTPS_REQUIRED = os.getenv("HTTPS_REQUIRED", "true").lower() == "true"
 HSTS_MAX_AGE = int(os.getenv("HSTS_MAX_AGE", "31536000"))  # 1 year default
 from config import OLLAMA_URL
 
@@ -239,6 +239,66 @@ _route_deps.WHISPER_AVAILABLE = WHISPER_AVAILABLE
 # app.include_router(admin_router)
 # app.include_router(crm_router)
 
+# GDPR compliance routes (active)
+from routes.gdpr import router as gdpr_router
+app.include_router(gdpr_router)
+
+# Calendar integration (Phase 4)
+from routes.calendar import router as calendar_router
+app.include_router(calendar_router)
+
+# Slack integration (Phase 4)
+from routes.slack import router as slack_router
+app.include_router(slack_router)
+
+# Team workspaces (Phase 4)
+from routes.teams import router as teams_router
+app.include_router(teams_router)
+
+# Webhook / Zapier integration (Phase 4)
+from routes.webhooks import router as webhooks_router
+app.include_router(webhooks_router)
+
+# CRM integration (Phase 4)
+from routes.crm import router as crm_router
+app.include_router(crm_router)
+
+# Video clips and highlight reels (Phase 5)
+from routes.video import router as video_router
+app.include_router(video_router)
+
+# Career features — cover letter, resume tailor, interview prep (Phase 5)
+from routes.career import router as career_router
+app.include_router(career_router)
+
+# SSO — Google and Microsoft OAuth2 (Phase 6)
+from routes.sso import router as sso_router
+app.include_router(sso_router)
+
+# Compliance — SOC 2, EU AI Act, data residency (Phase 6)
+from routes.compliance import router as compliance_router
+app.include_router(compliance_router)
+
+# Notion integration (Phase 7)
+from routes.notion import router as notion_router
+app.include_router(notion_router)
+
+# Jira integration (Phase 7)
+from routes.jira import router as jira_router
+app.include_router(jira_router)
+
+# Auto-apply for jobs (Phase 7)
+from routes.auto_apply import router as auto_apply_router
+app.include_router(auto_apply_router)
+
+# Phone call transcription support (Phase 7)
+from routes.phone import router as phone_router
+app.include_router(phone_router)
+
+# Cognitive graph — in-memory (zero-config) + Neo4j fallback
+from routes.cognitive import router as cognitive_router
+app.include_router(cognitive_router)
+
 # T6: Global exception handler for structured APIError
 @app.exception_handler(APIError)
 async def api_error_handler(request: Request, exc: APIError):
@@ -319,7 +379,7 @@ RATE_LIMIT_AUTHED = int(os.getenv("RATE_LIMIT_AUTHED", "200"))    # 200/min for 
 RATE_LIMIT_SENSITIVE = int(os.getenv("RATE_LIMIT_SENSITIVE", "20"))  # 20/min for expensive ops
 
 # Paths that are always public (no auth required, lower rate limit)
-PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
+PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
 # Paths that are expensive/sensitive (lower rate limit even when authed)
 SENSITIVE_PATHS = {"/ask-with-image", "/transcribe", "/transcribe-cloud", "/transcribe-with-speakers",
                    "/voice-clone/create", "/voice-clone/create-rvc"}
@@ -437,7 +497,7 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
     "/", "/health", "/health/database", "/health/modules",
-    "/auth/login", "/auth/register",
+    "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password",
     "/docs", "/openapi.json", "/redoc",
     "/voice-clone/audio/{filename}",  # Audio playback
     "/providers",  # Listing available providers
@@ -449,7 +509,7 @@ AUTH_PUBLIC_PATHS = {
 AUTH_REQUIRED_PATHS = {
     "/providers/byok/status", "/providers/byok/configure",
     "/providers/byok/{provider}", "/providers/byok/costs", "/providers/byok/test/{provider}",
-    "/auth/me", "/auth/logout",
+    "/auth/me", "/auth/logout", "/auth/set-security-question",
 }
 
 
@@ -784,7 +844,7 @@ def health_check():
 # Provider key status cache — avoids flooding the key server on every /providers call
 # Per-provider timestamps so one stale entry doesn't invalidate all others
 _provider_key_cache: Dict[str, tuple] = {}  # provider -> (result: bool, timestamp: float)
-_PROVIDER_KEY_CACHE_TTL = 300  # 5 minutes
+_PROVIDER_KEY_CACHE_TTL = 10  # 10 seconds
 
 
 def _has_provider_key(provider: str, env_var: str) -> bool:
@@ -829,6 +889,8 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
 
 def _batch_check_provider_keys(providers: list) -> Dict[str, bool]:
     """Check multiple provider keys concurrently using threads. Returns {provider: has_key}."""
+    if not providers:
+        return {}
     from concurrent.futures import ThreadPoolExecutor, as_completed
     results = {}
     with ThreadPoolExecutor(max_workers=len(providers)) as pool:
@@ -927,224 +989,202 @@ async def ask_with_image(
     provider: str = Form("ollama"),
     context: str = Form(None),
     image_b64: str = Form(None),
-    enabled: str = Form(None)
+    enabled: str = Form(None),
+    temperature: float = Form(0.3),
 ):
-    """Accept text + optional base64 screenshot, stream AI response via SSE.
-    When image is present and cloud vision keys are available, races across
-    cloud vision providers (GPT-4o, Claude, Gemini, Groq) for fastest response.
-    Falls back to Ollama vision model if all clouds fail."""
-    # SECURITY: Sanitize query input
-    query = sanitize_input(query, max_length=10000)
+    """Accept text + optional base64 screenshot, stream AI response via SSE."""
+    try:
+        query = sanitize_input(query, max_length=10000)
 
-    logger.info("[ask-with-image] query=%s, mode=%s, style=%s, has_image=%s, provider=%s",
-                _sanitize_for_log(query[:100]), _sanitize_for_log(mode), _sanitize_for_log(style), "Yes" if image_b64 else "No", _sanitize_for_log(provider))
-    messages = None
-    if context:
+        logger.info("[ask-with-image] query=%s, mode=%s, style=%s, has_image=%s, provider=%s",
+                    _sanitize_for_log(query[:100]), _sanitize_for_log(mode), _sanitize_for_log(style), "Yes" if image_b64 else "No", _sanitize_for_log(provider))
+        messages = None
+        if context:
+            try:
+                import json
+                messages = json.loads(context)
+            except Exception:
+                pass
+
+        # No screenshot — just do regular text streaming
+        if not image_b64:
+            def text_generator():
+                _state.is_streaming = True
+                try:
+                    from ai_router import route_ai_stream
+                    for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                        yield event
+                except Exception as e:
+                    import json as _json
+                    yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
+                finally:
+                    _state.is_streaming = False
+            return StreamingResponse(text_generator(), media_type="text/event-stream")
+
+        # === Screenshot provided — Two-Step Vision Pipeline ===
+        from cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
+        from modules.ai.vision_describer import stream_vision_description
+
+        resolved_model = None
+        provider_prefix = None
+
+        if provider and provider != "auto" and provider != "ollama":
+            if provider in PROVIDER_MODEL_MAP:
+                provider_prefix, resolved_model = PROVIDER_MODEL_MAP[provider]
+            elif "-" in provider:
+                provider_prefix = provider.split("-")[0]
+                if provider_prefix in VISION_PROVIDER_MAP:
+                    resolved_model = VISION_PROVIDER_MAP[provider_prefix]
+
+        enabled_set = None
+        if enabled:
+            enabled_set = set(enabled.split(","))
+
+        _VISION_PROVIDER_ENV = [
+            ("openai", "OPENAI_API_KEY"),
+            ("anthropic", "ANTHROPIC_API_KEY"),
+            ("google", "GOOGLE_API_KEY"),
+            ("groq", "GROQ_API_KEY"),
+        ]
+
+        if provider in ("auto", "ollama") or not enabled_set:
+            providers_to_check = _VISION_PROVIDER_ENV
+        else:
+            providers_to_check = [
+                (p, e) for p, e in _VISION_PROVIDER_ENV
+                if p in enabled_set
+            ]
+
+        key_status = _batch_check_provider_keys(providers_to_check)
+
+        vision_providers = []
+        for provider_name, has_key in key_status.items():
+            if has_key and provider_name in VISION_PROVIDER_MAP:
+                vision_providers.append(provider_name)
+
+        ollama_vision_model = None
         try:
-            import json
-            messages = json.loads(context)
+            from ai_router import _get_vision_model
+            ollama_vision_model = _get_vision_model()
         except Exception:
             pass
 
-    # No screenshot — just do regular text streaming
-    if not image_b64:
-        def text_generator():
+        has_ollama_vision = ollama_vision_model is not None
+        has_ollama_cloud_key = _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
+
+        if not vision_providers and has_ollama_cloud_key:
+            vision_providers.append("ollama-cloud")
+            logger.info("[ask-with-image] No paid vision keys, using free Ollama Cloud vision (gemma3)")
+
+        if not vision_providers and not has_ollama_vision:
+            def text_only_gen():
+                _state.is_streaming = True
+                try:
+                    from ai_router import route_ai_stream
+                    for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                        yield event
+                except Exception as e:
+                    import json as _json
+                    yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
+                finally:
+                    _state.is_streaming = False
+            return StreamingResponse(text_only_gen(), media_type="text/event-stream")
+
+        if not vision_providers and has_ollama_vision:
+            logger.info("[ask-with-image] No cloud vision keys, skipping Step 1 for speed")
+            def skip_vision_gen():
+                _state.is_streaming = True
+                try:
+                    from ai_router import route_ai_stream
+                    for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                        yield event
+                except Exception as e:
+                    import json as _json
+                    yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
+                finally:
+                    _state.is_streaming = False
+            return StreamingResponse(skip_vision_gen(), media_type="text/event-stream")
+
+        def two_step_vision_gen():
             _state.is_streaming = True
+            full_description = ""
+
             try:
-                from ai_router import route_ai_stream
-                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
-                    yield event
-            except Exception as e:
-                import json as _json
-                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
-            finally:
-                _state.is_streaming = False
-        return StreamingResponse(text_generator(), media_type="text/event-stream")
+                for event in stream_vision_description(
+                    image_b64=image_b64,
+                    vision_providers=vision_providers,
+                    ollama_vision_model=ollama_vision_model if has_ollama_vision else None,
+                    provider_prefix=provider_prefix,
+                    resolved_model=resolved_model,
+                    mode=mode,
+                    style=style,
+                    temperature=temperature,
+                ):
+                    if '"type":"vision"' in event or '"type": "vision"' in event:
+                        try:
+                            data_line = [l for l in event.split("\n") if l.startswith("data:")][0]
+                            data = json.loads(data_line[5:].strip())
+                            full_description += data.get("content", "")
+                        except (json.JSONDecodeError, IndexError):
+                            pass
+                        yield event
+                    elif '"type":"vision_done"' in event or '"type": "vision_done"' in event:
+                        yield event
+                    elif '"type":"error"' in event or '"type": "error"' in event:
+                        yield event
+                        if not full_description:
+                            _state.is_streaming = False
+                            return
+                    else:
+                        yield event
 
-    # === Screenshot provided — Two-Step Vision Pipeline ===
-    # Step 1: Vision model describes the image (cloud race + local Ollama fallback)
-    # Step 2: Main AI takes transcription + vision description → response
-
-    from cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
-    from modules.ai.vision_describer import stream_vision_description
-
-    # Resolve provider: dropdown sends e.g. "google-gemini-2-0-flash"
-    resolved_model = None
-    provider_prefix = None
-
-    if provider and provider != "auto" and provider != "ollama":
-        if provider in PROVIDER_MODEL_MAP:
-            provider_prefix, resolved_model = PROVIDER_MODEL_MAP[provider]
-        elif "-" in provider:
-            provider_prefix = provider.split("-")[0]
-            if provider_prefix in VISION_PROVIDER_MAP:
-                resolved_model = VISION_PROVIDER_MAP[provider_prefix]
-
-    enabled_set = None
-    if enabled:
-        enabled_set = set(enabled.split(","))
-
-    _VISION_PROVIDER_ENV = [
-        ("openai", "OPENAI_API_KEY"),
-        ("anthropic", "ANTHROPIC_API_KEY"),
-        ("google", "GOOGLE_API_KEY"),
-        ("groq", "GROQ_API_KEY"),
-    ]
-
-    # When "auto" is selected, check ALL providers (ignore UI toggles) —
-    # the user chose "auto" for fastest response, so use any available cloud key.
-    # When a specific provider is selected, still check all (user explicitly picked one).
-    if provider in ("auto", "ollama") or not enabled_set:
-        providers_to_check = _VISION_PROVIDER_ENV
-    else:
-        providers_to_check = [
-            (p, e) for p, e in _VISION_PROVIDER_ENV
-            if p in enabled_set
-        ]
-
-    key_status = _batch_check_provider_keys(providers_to_check)
-
-    vision_providers = []
-    for provider_name, has_key in key_status.items():
-        if has_key and provider_name in VISION_PROVIDER_MAP:
-            vision_providers.append(provider_name)
-
-    ollama_vision_model = None
-    try:
-        from ai_router import _get_vision_model
-        ollama_vision_model = _get_vision_model()
-    except Exception:
-        pass
-
-    has_ollama_vision = ollama_vision_model is not None
-
-    # Check if Ollama Cloud has a key (free vision-capable models like gemma3)
-    has_ollama_cloud_key = _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
-
-    # If no paid cloud vision keys, add free Ollama Cloud vision as fallback
-    if not vision_providers and has_ollama_cloud_key:
-        vision_providers.append("ollama-cloud")
-        logger.info("[ask-with-image] No paid vision keys, using free Ollama Cloud vision (gemma3)")
-
-    # No vision providers at all — fall back to text-only with warning
-    if not vision_providers and not has_ollama_vision:
-        def text_only_gen():
-            _state.is_streaming = True
-            try:
-                from ai_router import route_ai_stream
-                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
-                    yield event
-            except Exception as e:
-                import json as _json
-                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
-            finally:
-                _state.is_streaming = False
-        return StreamingResponse(text_only_gen(), media_type="text/event-stream")
-
-    # If only local Ollama vision available (very slow on CPU), skip Step 1
-    # and go directly to Step 2 with text-only to avoid 50-100s delay
-    if not vision_providers and has_ollama_vision:
-        logger.info("[ask-with-image] No cloud vision keys, skipping Step 1 for speed")
-        def skip_vision_gen():
-            _state.is_streaming = True
-            try:
-                from ai_router import route_ai_stream
-                # Just answer the text query without image context
-                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages):
-                    yield event
-            except Exception as e:
-                import json as _json
-                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
-            finally:
-                _state.is_streaming = False
-        return StreamingResponse(skip_vision_gen(), media_type="text/event-stream")
-
-    # Two-step pipeline generator
-    def two_step_vision_gen():
-        _state.is_streaming = True
-        full_description = ""
-
-        try:
-            # === STEP 1: Vision Description ===
-            # Stream image description from fastest available vision provider
-            for event in stream_vision_description(
-                image_b64=image_b64,
-                vision_providers=vision_providers,
-                ollama_vision_model=ollama_vision_model if has_ollama_vision else None,
-                provider_prefix=provider_prefix,
-                resolved_model=resolved_model,
-                mode=mode,
-                style=style,
-            ):
-                # Collect description text from vision events
-                if '"type":"vision"' in event or '"type": "vision"' in event:
-                    try:
-                        data_line = [l for l in event.split("\n") if l.startswith("data:")][0]
-                        data = json.loads(data_line[5:].strip())
-                        full_description += data.get("content", "")
-                    except (json.JSONDecodeError, IndexError):
-                        pass
-                    yield event  # Stream to frontend in real-time
-                elif '"type":"vision_done"' in event or '"type": "vision_done"' in event:
-                    yield event  # Signal Step 1 complete
-                elif '"type":"error"' in event or '"type": "error"' in event:
-                    yield event
-                    # If Step 1 failed, fall back to text-only
-                    if not full_description:
-                        _state.is_streaming = False
-                        return
+                if full_description:
+                    combined_prompt = (
+                        f"Context from screenshot: {full_description}\n\n"
+                        f"User question: {query}"
+                    )
                 else:
+                    combined_prompt = query
+
+                step2_provider = provider
+                if provider == "auto" and vision_providers:
+                    from cloud_providers import PROVIDER_MODEL_MAP
+                    SPEED_PRIORITY = ["groq-llama-3-3-70b", "google-gemini-2-0-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
+                    found_paid = False
+                    for fast_model in SPEED_PRIORITY:
+                        if fast_model in PROVIDER_MODEL_MAP:
+                            pfx, _ = PROVIDER_MODEL_MAP[fast_model]
+                            if pfx in vision_providers and pfx != "ollama-cloud":
+                                step2_provider = fast_model
+                                found_paid = True
+                                break
+                    if not found_paid and "ollama-cloud" in vision_providers:
+                        step2_provider = "gemma3:cloud"
+                        logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
+
+                from ai_router import route_ai_stream
+                for event in route_ai_stream(
+                    combined_prompt,
+                    mode=mode,
+                    style=style,
+                    provider=step2_provider,
+                    messages=messages,
+                    temperature=temperature,
+                ):
                     yield event
 
-            # === STEP 2: Main AI Response ===
-            # Feed transcription + vision description to the main AI
-            if full_description:
-                combined_prompt = (
-                    f"Context from screenshot: {full_description}\n\n"
-                    f"User question: {query}"
-                )
-            else:
-                # No description collected — just answer the text query
-                combined_prompt = query
+            except Exception as e:
+                import json as _json
+                logger.error("[ask-with-image] Two-step vision error: %s", str(e))
+                yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
+            finally:
+                _state.is_streaming = False
 
-            # For Step 2, prefer a fast cloud text model over slow local Ollama
-            # If user selected "auto" and we have cloud keys, use a fast cloud model
-            step2_provider = provider
-            if provider == "auto" and vision_providers:
-                # Use the fastest available cloud provider for text
-                # Priority: paid cloud (groq > google > openai > anthropic) > Ollama Cloud
-                from cloud_providers import PROVIDER_MODEL_MAP
-                SPEED_PRIORITY = ["groq-llama-3-3-70b", "google-gemini-2-0-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
-                found_paid = False
-                for fast_model in SPEED_PRIORITY:
-                    if fast_model in PROVIDER_MODEL_MAP:
-                        pfx, _ = PROVIDER_MODEL_MAP[fast_model]
-                        if pfx in vision_providers and pfx != "ollama-cloud":
-                            step2_provider = fast_model
-                            found_paid = True
-                            break
-                # If only Ollama Cloud is available, use a fast Ollama Cloud text model
-                if not found_paid and "ollama-cloud" in vision_providers:
-                    step2_provider = "gemma3:cloud"
-                    logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
+        return StreamingResponse(two_step_vision_gen(), media_type="text/event-stream")
 
-            from ai_router import route_ai_stream
-            for event in route_ai_stream(
-                combined_prompt,
-                mode=mode,
-                style=style,
-                provider=step2_provider,
-                messages=messages,
-            ):
-                yield event
-
-        except Exception as e:
-            import json as _json
-            yield f"event: error\ndata: {_json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
-        finally:
-            _state.is_streaming = False
-
-    return StreamingResponse(two_step_vision_gen(), media_type="text/event-stream")
+    except Exception as e:
+        logger.error("[ask-with-image] Endpoint error: %s", str(e))
+        return JSONResponse({"error": "An internal error occurred"}, status_code=500)
 
 
 @app.get("/transcribe-stream")
@@ -1348,7 +1388,16 @@ async def health_modules():
     def has_provider_key(provider, env_var):
         try:
             import requests as req
-            resp = req.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1)
+            headers = {}
+            key_secret = os.getenv("KEY_SERVER_SECRET", "")
+            if key_secret:
+                headers["X-Key-Server-Secret"] = key_secret
+            resp = req.post(
+                "http://127.0.0.1:18000/get-key",
+                json={"provider": provider},
+                headers=headers,
+                timeout=1
+            )
             if resp.status_code == 200:
                 return bool(resp.json().get("apiKey"))
         except Exception:
@@ -1524,7 +1573,9 @@ async def auth_status():
 async def register_user(
     username: str = Form(..., min_length=3, max_length=30),
     email: str = Form(...),
-    password: str = Form(..., min_length=8)  # nosec B105 — form parameter, not hardcoded
+    password: str = Form(..., min_length=8),  # nosec B105 — form parameter, not hardcoded
+    security_question: str = Form(None),
+    security_answer: str = Form(None)
 ):
     """Register a new user account"""
     # Validate inputs
@@ -1537,8 +1588,22 @@ async def register_user(
     if not InputValidator.validate_email(email):
         raise HTTPException(status_code=400, detail="Invalid email format")
 
+    # Validate security question if provided
+    valid_question = None
+    valid_answer = None
+    if security_question and security_answer:
+        valid_question = InputValidator.validate_security_question(security_question)
+        valid_answer = InputValidator.validate_security_answer(security_answer)
+        if not valid_question:
+            raise HTTPException(status_code=400, detail="Security question must be 5-200 characters")
+        if not valid_answer:
+            raise HTTPException(status_code=400, detail="Security answer must be 2-100 characters")
+
     try:
-        user = user_manager.create_user(username=username, email=email, password=password)
+        user = user_manager.create_user(
+            username=username, email=email, password=password,
+            security_question=valid_question, security_answer=valid_answer
+        )
         log_audit_event("auth_register", username, "user_registered", resource=f"user:{user.id}", success=True)
         return {
             "status": "success",
@@ -1595,7 +1660,8 @@ async def get_current_user_info(user: User = Depends(require_authentication)):
         "is_admin": user.is_admin,
         "is_active": user.is_active,
         "last_login": user.last_login,
-        "api_quota": user.api_quota
+        "api_quota": user.api_quota,
+        "has_security_question": user.security_question is not None
     }
 
 
@@ -1605,6 +1671,72 @@ async def logout_user(user: User = Depends(require_authentication)):
     log_audit_event("auth_logout", user.username, "user_logged_out", resource=f"user:{user.id}", success=True)
     # Note: JWT tokens are stateless, actual logout is client-side
     return {"status": "success", "message": "Logged out successfully"}
+
+
+@app.post("/auth/forgot-password")
+@rate_limit(requests_per_minute=3)
+async def forgot_password(username: str = Form(...)):
+    """Step 1 of password reset: look up user's security question.
+    Always returns 200 to prevent username enumeration."""
+    question = user_manager.has_security_question(username)
+    if question:
+        return {
+            "status": "success",
+            "security_question": question,
+            "has_security_question": True
+        }
+    return {
+        "status": "success",
+        "security_question": None,
+        "has_security_question": False,
+        "message": "If this account exists and has a security question set, it will be shown."
+    }
+
+
+@app.post("/auth/reset-password")
+@rate_limit(requests_per_minute=3)
+async def reset_password(
+    username: str = Form(...),
+    security_answer: str = Form(...),
+    new_password: str = Form(..., min_length=8)  # nosec B105 — form parameter
+):
+    """Step 2 of password reset: verify security answer and set new password."""
+    user = user_manager.get_user(username)
+    if not user:
+        log_audit_event("auth_reset_password", username, "password_reset_failed", resource="auth", success=False)
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    if not user.hashed_security_answer:
+        raise HTTPException(
+            status_code=400,
+            detail="Password reset requires a security question. Please set one up after logging in."
+        )
+
+    if not user_manager.verify_security_answer(username, security_answer):
+        log_audit_event("auth_reset_password", username, "password_reset_failed", resource="auth", success=False)
+        raise HTTPException(status_code=400, detail="Security answer is incorrect")
+
+    user_manager.update_password(username, new_password)
+    log_audit_event("auth_reset_password", username, "password_reset", resource=f"user:{user.id}", success=True)
+    return {"status": "success", "message": "Password reset successfully"}
+
+
+@app.post("/auth/set-security-question")
+async def set_security_question_endpoint(
+    user: User = Depends(require_authentication),
+    security_question: str = Form(...),
+    security_answer: str = Form(...)
+):
+    """Set or update the security question for the authenticated user."""
+    valid_question = InputValidator.validate_security_question(security_question)
+    valid_answer = InputValidator.validate_security_answer(security_answer)
+    if not valid_question:
+        raise HTTPException(status_code=400, detail="Security question must be 5-200 characters")
+    if not valid_answer:
+        raise HTTPException(status_code=400, detail="Security answer must be 2-100 characters")
+
+    user_manager.set_security_question(user.username, valid_question, valid_answer)
+    return {"status": "success", "message": "Security question set successfully"}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1879,75 +2011,39 @@ def set_mode(mode: str):
 
 @app.post("/transcribe")
 async def transcribe_api(file: UploadFile = File(...)):
-    # State is now in _state object
-
+    """Fast audio transcription — returns text only. AI response handled by frontend."""
     _state.use_autonomous = False
-    # Use secure filename to prevent path traversal
     secure_name = get_secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, secure_name)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    wav_path = file_path.replace(".webm", ".wav")
-    import subprocess  # nosec B404
-    ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(  # nosec B603
-        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+    # Skip redundant ffmpeg conversion — faster-whisper decodes webm directly
+    text = transcribe_audio(file_path, mode=_state.current_mode, fast=True)
 
-    text = transcribe_audio(wav_path, mode=_state.current_mode)
+    try: os.remove(file_path)
+    except OSError: pass  # nosec B110
 
-    # Clean up temp files immediately after use
-    for path in (file_path, wav_path):
-        try: os.remove(path)
-        except OSError: pass  # nosec B110
-
-    if not text or not is_meaningful(text) or not is_question(text):
-        return {"text": text, "response": ""}
-
-    result = route_ai(text, mode=_state.current_mode)
-    return {
-        "text": text,
-        "response": clean_ai_output(result["response"]),
-        "mode": result["mode"],
-        "model": result["model"]
-    }
+    return {"text": text or ""}
 
 
 @app.post("/transcribe-cloud")
 @rate_limit(requests_per_minute=20)  # T24: Expensive cloud transcription
 async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai", model: str = "gpt-4o-mini"):
-    """Transcribe and route to a cloud AI provider"""
-    # State is now in _state object
-
+    """Transcribe and route to a cloud AI provider."""
     _state.use_autonomous = False
-    # Use secure filename to prevent path traversal
     secure_name = get_secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, secure_name)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    wav_path = file_path.replace(".webm", ".wav")
-    import subprocess  # nosec B404
-    ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(  # nosec B603
-        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+    # Skip redundant ffmpeg conversion — faster-whisper decodes webm directly
+    text = transcribe_audio(file_path, mode=_state.current_mode, fast=True)
 
-    text = transcribe_audio(wav_path, mode=_state.current_mode)
-
-    # Clean up temp files immediately after transcription
-    for path in (file_path, wav_path):
-        try: os.remove(path)
-        except OSError: pass  # nosec B110
+    try: os.remove(file_path)
+    except OSError: pass  # nosec B110
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -3011,14 +3107,14 @@ async def websocket_endpoint(ws: WebSocket):
         pass  # Client disconnected
 
 
-# ======================================
-# COGNITIVE GRAPH API - Phase 1
-# Personal Knowledge Graph for Interview History
-# ======================================
+# COGNITIVE GRAPH API — Moved to routes/cognitive.py (in-memory + Neo4j fallback)
+# The inline endpoints below are DEPRECATED and commented out to avoid route conflicts.
+# All cognitive graph, entity extraction, and predictive interview endpoints
+# are now handled by the cognitive_router (imported above).
+if False:  # DISABLED — use routes/cognitive.py instead
+  pass
 
-@app.get("/cognitive-graph/status")
-async def cognitive_graph_status():
-    """Check if Neo4j cognitive graph is available"""
+async def _disabled_cognitive_graph_status():
     if not COGNITIVE_GRAPH_AVAILABLE:
         return {"available": False, "error": "Cognitive graph module not installed"}
 
@@ -3038,7 +3134,9 @@ async def cognitive_graph_status():
         return {"available": True, "connected": False, "error": "An internal error occurred"}
 
 
-@app.post("/cognitive-graph/initialize")
+async def _disabled_cognitive_init():
+    pass
+
 async def cognitive_graph_initialize():
     """Initialize the cognitive graph schema"""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3048,7 +3146,9 @@ async def cognitive_graph_initialize():
     return {"initialized": success}
 
 
-@app.get("/cognitive-graph/search")
+async def _disabled_cognitive_search():
+    pass
+
 async def cognitive_graph_search(q: str = Query(...), limit: int = Query(10)):
     """Semantic search across interview history"""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3058,7 +3158,9 @@ async def cognitive_graph_search(q: str = Query(...), limit: int = Query(10)):
     return {"query": q, "results": results, "count": len(results)}
 
 
-@app.get("/cognitive-graph/history/{user_id}")
+async def _disabled_cognitive_history():
+    pass
+
 async def cognitive_graph_history(user_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
     """Get user's interview history from graph (paginated)."""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3071,7 +3173,9 @@ async def cognitive_graph_history(user_id: str, limit: int = Query(100, ge=1, le
     return {"user_id": user_id, "interviews": paginated, "total": total, "limit": limit, "offset": offset}
 
 
-@app.get("/cognitive-graph/company/{company_name}")
+async def _disabled_cognitive_company():
+    pass
+
 async def cognitive_graph_company_insights(company_name: str):
     """Get insights about a company"""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3081,7 +3185,9 @@ async def cognitive_graph_company_insights(company_name: str):
     return {"company": company_name, "insights": insights}
 
 
-@app.get("/cognitive-graph/skill/{user_id}/{skill_name}")
+async def _disabled_cognitive_skill():
+    pass
+
 async def cognitive_graph_skill_progression(user_id: str, skill_name: str):
     """Track user's progression on a specific skill"""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3091,7 +3197,9 @@ async def cognitive_graph_skill_progression(user_id: str, skill_name: str):
     return {"user_id": user_id, "skill": skill_name, "progression": progression}
 
 
-@app.post("/cognitive-graph/ingest/{conversation_id}")
+async def _disabled_cognitive_ingest():
+    pass
+
 async def cognitive_graph_ingest(conversation_id: str, body: dict):
     """Ingest a conversation into the cognitive graph"""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3101,7 +3209,9 @@ async def cognitive_graph_ingest(conversation_id: str, body: dict):
     return {"ingested": success, "conversation_id": conversation_id}
 
 
-@app.post("/cognitive-graph/interview")
+async def _disabled_cognitive_interview():
+    pass
+
 async def cognitive_graph_add_interview(body: dict):
     """Add an interview to the cognitive graph"""
     if not COGNITIVE_GRAPH_AVAILABLE:
@@ -3133,7 +3243,9 @@ except ImportError:
     ENTITY_EXTRACTION_AVAILABLE = False
 
 
-@app.post("/extract-entities")
+async def _disabled_extract_entities():
+    pass
+
 async def extract_entities_api(body: dict):
     """Extract entities (companies, topics, skills) from text"""
     if not ENTITY_EXTRACTION_AVAILABLE:
@@ -3147,7 +3259,9 @@ async def extract_entities_api(body: dict):
     return {"text": text[:100] + "..." if len(text) > 100 else text, "entities": entities}
 
 
-@app.post("/process-transcript")
+async def _disabled_process_transcript():
+    pass
+
 async def process_transcript_api(body: dict):
     """Process a transcript into Q&A pairs with extracted entities"""
     if not ENTITY_EXTRACTION_AVAILABLE:
@@ -3165,7 +3279,9 @@ async def process_transcript_api(body: dict):
     }
 
 
-@app.get("/extract/categorize")
+async def _disabled_categorize():
+    pass
+
 async def categorize_question_api(q: str = Query(...)):
     """Categorize a question (technical, behavioral, system_design, knowledge)"""
     if not ENTITY_EXTRACTION_AVAILABLE:
@@ -3198,7 +3314,9 @@ except ImportError:
     logger.warning("[Predictive] Module not available")
 
 
-@app.get("/predict/questions")
+async def _disabled_predict_questions():
+    pass
+
 async def predict_questions(
     company: str = Query(...),
     role: Optional[str] = Query(None),
@@ -3212,7 +3330,9 @@ async def predict_questions(
     return predictions
 
 
-@app.get("/predict/checklist")
+async def _disabled_predict_checklist():
+    pass
+
 async def get_preparation_checklist(
     company: str = Query(...),
     role: Optional[str] = Query(None)
@@ -3229,7 +3349,9 @@ async def get_preparation_checklist(
 # ADVANCED SEARCH API - Enhanced search functionality
 # ======================================
 
-@app.get("/cognitive-graph/search/advanced")
+async def _disabled_cognitive_advanced_search():
+    pass
+
 async def cognitive_graph_advanced_search(
     query: Optional[str] = Query(None),
     company: Optional[str] = Query(None),
@@ -3282,7 +3404,9 @@ async def cognitive_graph_advanced_search(
     }
 
 
-@app.get("/predict/companies")
+async def _disabled_predict_companies():
+    pass
+
 async def get_supported_companies():
     """Get list of companies with prediction data"""
     if not PREDICTIVE_AVAILABLE:
@@ -3299,7 +3423,9 @@ async def get_supported_companies():
 # BACKFILL API - Backfill historical conversations
 # ======================================
 
-@app.post("/cognitive-graph/backfill")
+async def _disabled_cognitive_backfill():
+    pass
+
 async def backfill_historical_conversations():
     """
     Backfill all historical conversations into cognitive graph.
@@ -3327,7 +3453,9 @@ async def backfill_historical_conversations():
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/cognitive-graph/stats")
+async def _disabled_cognitive_stats():
+    pass
+
 async def get_cognitive_graph_stats():
     """Get statistics about the cognitive graph"""
     if not COGNITIVE_GRAPH_AVAILABLE:

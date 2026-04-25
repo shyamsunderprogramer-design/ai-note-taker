@@ -55,6 +55,7 @@ def stream_vision_description(
     resolved_model: str = None,
     mode: str = "race",
     style: str = "concise",
+    temperature: float = 0.3,
 ):
     """
     Step 1 of the two-step vision pipeline.
@@ -84,12 +85,12 @@ def stream_vision_description(
         stream_fn = get_vision_stream_fn(provider_prefix)
         model = resolved_model or VISION_PROVIDER_MAP.get(provider_prefix, "gpt-4o")
         if stream_fn:
-            yield from _single_provider_description(stream_fn, image_b64, model, provider_prefix)
+            yield from _single_provider_description(stream_fn, image_b64, model, provider_prefix, temperature)
             return
 
     # Ollama-only: no cloud keys available (not even Ollama Cloud)
     if not vision_providers and ollama_vision_model:
-        yield from _ollama_description(image_b64, ollama_vision_model)
+        yield from _ollama_description(image_b64, ollama_vision_model, temperature)
         return
 
     # No vision providers at all
@@ -98,10 +99,10 @@ def stream_vision_description(
         return
 
     # Race mode: all cloud providers + Ollama race, fastest description wins
-    yield from _race_description(image_b64, vision_providers, ollama_vision_model)
+    yield from _race_description(image_b64, vision_providers, ollama_vision_model, temperature)
 
 
-def _single_provider_description(stream_fn, image_b64, model, provider_prefix):
+def _single_provider_description(stream_fn, image_b64, model, provider_prefix, temperature=0.3):
     """Stream description from a single selected provider."""
     start = time.time()
     full_description = ""
@@ -112,6 +113,7 @@ def _single_provider_description(stream_fn, image_b64, model, provider_prefix):
             model=model,
             mode="race",
             style="concise",
+            temperature=temperature,
         ):
             # Check if this is an error event
             if "event: error" in event:
@@ -144,7 +146,7 @@ def _single_provider_description(stream_fn, image_b64, model, provider_prefix):
         yield make_error(f"Vision description failed: {e}")
 
 
-def _ollama_description(image_b64, model_name):
+def _ollama_description(image_b64, model_name, temperature=0.3):
     """Stream description from local Ollama vision model."""
     from ai_router import ask_ollama_vision_stream
     start = time.time()
@@ -156,6 +158,7 @@ def _ollama_description(image_b64, model_name):
             mode="race",
             style="concise",
             model_name=model_name,
+            temperature=temperature,
         ):
             if "event: error" in event:
                 yield event
@@ -184,7 +187,7 @@ def _ollama_description(image_b64, model_name):
         yield make_error(f"Vision description failed: {e}")
 
 
-def _race_description(image_b64, vision_providers, ollama_vision_model):
+def _race_description(image_b64, vision_providers, ollama_vision_model, temperature=0.3):
     """Race all available vision providers — first description wins."""
     from cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn
 
@@ -214,6 +217,7 @@ def _race_description(image_b64, vision_providers, ollama_vision_model):
                     mode="race",
                     style="concise",
                     model_name=ollama_vision_model,
+                    temperature=temperature,
                 )
             else:
                 stream_fn = get_vision_stream_fn(provider_name)
@@ -228,6 +232,7 @@ def _race_description(image_b64, vision_providers, ollama_vision_model):
                     model=model,
                     mode="race",
                     style="concise",
+                    temperature=temperature,
                 )
 
             for event in stream_iter:

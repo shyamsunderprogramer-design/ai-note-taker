@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In - ANT</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: transparent;
+      color: rgba(255,255,255,0.9);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .bg {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 700px 500px at 25% 35%, rgba(59,130,246,0.1) 0%, transparent 70%),
+        radial-gradient(ellipse 500px 400px at 75% 65%, rgba(139,92,246,0.07) 0%, transparent 70%),
+        radial-gradient(ellipse 400px 300px at 50% 80%, rgba(34,197,94,0.04) 0%, transparent 70%);
+    }
+
+    /* Window controls */
+    .win-controls {
+      position: absolute; top: 12px; right: 14px; z-index: 10;
+      display: flex; align-items: center; gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+    .win-btn {
+      width: 14px; height: 14px; border-radius: 50%; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: filter 0.15s;
+    }
+    .win-btn:hover { filter: brightness(1.15); }
+    .win-btn:active { filter: brightness(0.9); }
+    .win-btn .wi { font-size: 9px; line-height: 1; opacity: 0.7; transition: opacity 0.15s; color: rgba(0,0,0,0.6); pointer-events: none; font-weight: 700; }
+    .win-btn:hover .wi { opacity: 1; }
+    .btn-close { background: #ff5f57; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+    .btn-close:hover { background: #ff3b30; }
+    .btn-min { background: #ffcc00; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+    .btn-min:hover { background: #e6b800; }
+    .btn-max { background: #28c840; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+    .btn-max:hover { background: #1fb834; }
+
+    /* Card */
+    .card {
+      position: relative; z-index: 1;
+      width: 400px; max-width: 90vw;
+      background: rgba(15,20,35,0.55);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 40px 36px;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      -webkit-app-region: no-drag;
+      animation: cardIn 0.5s ease;
+    }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .logo-area { text-align: center; margin-bottom: 28px; }
+    .logo-img {
+      width: 56px; height: 56px;
+      filter: drop-shadow(0 0 12px rgba(56,189,248,0.5));
+      margin-bottom: 12px;
+      transition: transform 0.3s;
+    }
+    .logo-img:hover { transform: scale(1.1); }
+    .logo-title { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+    .logo-sub { font-size: 13px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+
+    /* Views */
+    .view { display: none; }
+    .view.active { display: block; animation: slideIn 0.3s ease; }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Form */
+    .nav-back {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    }
+    .back-btn {
+      background: none; border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.6);
+      width: 28px; height: 28px; border-radius: 7px; cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+    }
+    .back-btn:hover { border-color: rgba(255,255,255,0.3); color: #fff; }
+    .form-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .form-subtitle { font-size: 13px; color: rgba(255,255,255,0.4); margin-bottom: 20px; }
+
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.5);
+      margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .input-wrap { position: relative; }
+    .input-wrap input {
+      width: 100%; padding: 10px 14px; border-radius: 10px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s;
+    }
+    .input-wrap input:focus { border-color: rgba(59,130,246,0.5); }
+    .input-wrap input.invalid { border-color: rgba(239,68,68,0.5); }
+    .input-wrap input.valid { border-color: rgba(34,197,94,0.5); }
+    .input-wrap input::placeholder { color: rgba(255,255,255,0.2); }
+    .input-wrap input[type="password"], .input-wrap input[data-password] { padding-right: 40px; }
+
+    /* Toggle password visibility */
+    .toggle-password {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: rgba(255,255,255,0.3);
+      cursor: pointer; padding: 4px; display: flex; align-items: center;
+      transition: color 0.15s; font-size: 14px;
+    }
+    .toggle-password:hover { color: rgba(255,255,255,0.6); }
+
+    .field-hint {
+      font-size: 11px; margin-top: 4px; color: rgba(255,255,255,0.35);
+      min-height: 0; transition: all 0.15s;
+    }
+    .field-hint.error { color: #f87171; }
+    .field-hint.success { color: #4ade80; }
+
+    /* Password strength meter */
+    .strength-meter { display: flex; gap: 4px; margin-top: 6px; height: 4px; }
+    .strength-meter .bar { flex: 1; border-radius: 2px; background: rgba(255,255,255,0.08); transition: background 0.3s; }
+    .strength-meter.weak .bar:nth-child(1) { background: #ef4444; }
+    .strength-meter.fair .bar:nth-child(1), .strength-meter.fair .bar:nth-child(2) { background: #f59e0b; }
+    .strength-meter.good .bar:nth-child(1), .strength-meter.good .bar:nth-child(2), .strength-meter.good .bar:nth-child(3) { background: #3b82f6; }
+    .strength-meter.strong .bar { background: #22c55e; }
+    .strength-text { font-size: 11px; margin-top: 3px; color: rgba(255,255,255,0.4); }
+    .strength-text.weak { color: #ef4444; }
+    .strength-text.fair { color: #f59e0b; }
+    .strength-text.good { color: #3b82f6; }
+    .strength-text.strong { color: #22c55e; }
+
+    /* Security question display */
+    .security-question-display {
+      padding: 10px 14px; border-radius: 10px;
+      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.15);
+      color: rgba(255,255,255,0.8); font-size: 14px; font-style: italic;
+    }
+
+    /* Info box */
+    .info-box {
+      padding: 14px; border-radius: 10px; margin: 14px 0;
+      background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.15);
+      color: rgba(255,255,255,0.65); font-size: 13px; line-height: 1.5;
+    }
+
+    /* Checkbox */
+    .field-row { display: flex; align-items: center; margin-bottom: 16px; }
+    .checkbox-label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: rgba(255,255,255,0.45); cursor: pointer;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: 16px; height: 16px; accent-color: #3b82f6; cursor: pointer;
+    }
+
+    .error-msg {
+      font-size: 13px; color: #f87171; margin-bottom: 12px; display: none;
+      padding: 8px 12px; border-radius: 8px; background: rgba(239,68,68,0.1);
+    }
+    .success-msg {
+      font-size: 13px; color: #4ade80; margin-bottom: 12px; display: none;
+      padding: 8px 12px; border-radius: 8px; background: rgba(34,197,94,0.1);
+    }
+
+    .submit-btn {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+      margin-bottom: 16px;
+    }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-success { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; }
+    .btn-success:hover:not(:disabled) { filter: brightness(1.1); }
+
+    .switch-text { text-align: center; font-size: 13px; color: rgba(255,255,255,0.4); }
+    .switch-link { color: #60a5fa; text-decoration: none; font-weight: 600; cursor: pointer; }
+    .switch-link:hover { color: #93c5fd; }
+    .switch-sep { margin: 0 8px; opacity: 0.3; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sso-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0 8px; }
+    .sso-divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.1); }
+    .sso-divider-text { font-size: 12px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 1px; }
+    .sso-buttons { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+    .sso-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.85); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .sso-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+    .sso-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .sso-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-weight: 700; font-size: 12px; }
+    .sso-btn-google .sso-icon { background: #4285f4; color: #fff; }
+    .sso-btn-microsoft .sso-icon { background: #00a4ef; color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+
+  <div class="card">
+    <!-- Window controls -->
+    <div class="win-controls">
+      <button class="win-btn btn-min" id="minBtn" title="Minimize"><span class="wi">&minus;</span></button>
+      <button class="win-btn btn-max" id="maxBtn" title="Maximize"><span class="wi">+</span></button>
+      <button class="win-btn btn-close" id="closeBtn" title="Close"><span class="wi">&times;</span></button>
+    </div>
+
+    <!-- Logo -->
+    <div class="logo-area">
+      <img class="logo-img" src="ant-icon-new.png" alt="ANT">
+      <div class="logo-title">ANT</div>
+      <div class="logo-sub">AI Note Taker</div>
+    </div>
+
+    <!-- Sign In View -->
+    <div id="view-signin" class="view active">
+      <div class="form-title">Sign In</div>
+      <div class="form-subtitle">Welcome back</div>
+      <div class="field">
+        <label for="siUser">Username</label>
+        <div class="input-wrap">
+          <input type="text" id="siUser" placeholder="Enter username" autocomplete="username">
+        </div>
+      </div>
+      <div class="field">
+        <label for="siPass">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="siPass" placeholder="Enter password" autocomplete="current-password">
+          <button class="toggle-password" type="button" title="Show password" data-target="siPass">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="siRemember"> Remember me
+        </label>
+      </div>
+      <div class="error-msg" id="siError"></div>
+      <button class="submit-btn btn-primary" id="siBtn">Sign In</button>
+      <div class="sso-divider">
+        <span class="sso-divider-line"></span>
+        <span class="sso-divider-text">or</span>
+        <span class="sso-divider-line"></span>
+      </div>
+      <div class="sso-buttons">
+        <button class="sso-btn sso-btn-google" id="ssoGoogleBtn" type="button">
+          <span class="sso-icon">G</span>
+          <span>Sign in with Google</span>
+        </button>
+        <button class="sso-btn sso-btn-microsoft" id="ssoMicrosoftBtn" type="button">
+          <span class="sso-icon">M</span>
+          <span>Sign in with Microsoft</span>
+        </button>
+      </div>
+      <div class="switch-text">
+        <a class="switch-link" id="goForgot">Forgot password?</a>
+        <span class="switch-sep">|</span>
+        Don't have an account? <a class="switch-link" id="goRegister">Register</a>
+      </div>
+    </div>
+
+    <!-- Register View -->
+    <div id="view-register" class="view">
+      <div class="nav-back">
+        <button class="back-btn" id="backToSigninFromReg" title="Back">&larr;</button>
+        <div class="form-title">Create Account</div>
+      </div>
+      <div class="form-subtitle">Get started with ANT</div>
+      <div class="field">
+        <label for="regUser">Username</label>
+        <div class="input-wrap">
+          <input type="text" id="regUser" placeholder="Choose a username (3-30 chars)" autocomplete="username">
+        </div>
+        <div class="field-hint" id="regUserHint"></div>
+      </div>
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <div class="input-wrap">
+          <input type="email" id="regEmail" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="field-hint" id="regEmailHint"></div>
+      </div>
+      <div class="field">
+        <label for="regPass">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="regPass" placeholder="Choose a password (8+ chars)" autocomplete="new-password">
+          <button class="toggle-password" type="button" title="Show password" data-target="regPass">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="strength-meter" id="regPassStrength"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+        <div class="strength-text" id="regPassStrengthText"></div>
+      </div>
+      <div class="field">
+        <label for="regPassConfirm">Confirm Password</label>
+        <div class="input-wrap">
+          <input type="password" id="regPassConfirm" placeholder="Re-enter password" autocomplete="new-password">
+          <button class="toggle-password" type="button" title="Show password" data-target="regPassConfirm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-hint" id="regPassConfirmHint"></div>
+      </div>
+      <div class="field">
+        <label for="regSecQuestion">Security Question <span style="color:rgba(255,255,255,0.25)">(optional)</span></label>
+        <div class="input-wrap">
+          <input type="text" id="regSecQuestion" placeholder="e.g. What was the name of your first pet?">
+        </div>
+        <div class="field-hint">Used to recover your password if you forget it</div>
+      </div>
+      <div class="field">
+        <label for="regSecAnswer">Security Answer <span style="color:rgba(255,255,255,0.25)">(if question set)</span></label>
+        <div class="input-wrap">
+          <input type="text" id="regSecAnswer" placeholder="Your answer">
+        </div>
+      </div>
+      <div class="error-msg" id="regError"></div>
+      <div class="success-msg" id="regSuccess"></div>
+      <button class="submit-btn btn-success" id="regBtn">Create Account</button>
+      <div class="switch-text">Already have an account? <a class="switch-link" id="goSignin">Sign In</a></div>
+    </div>
+
+    <!-- Forgot Password View -->
+    <div id="view-forgot" class="view">
+      <div class="nav-back">
+        <button class="back-btn" id="backToSigninFromForgot" title="Back">&larr;</button>
+        <div class="form-title">Reset Password</div>
+      </div>
+
+      <!-- Step 1: Enter username -->
+      <div id="forgotStep1">
+        <div class="form-subtitle">Enter your username to verify your identity</div>
+        <div class="field">
+          <label for="forgotUser">Username</label>
+          <div class="input-wrap">
+            <input type="text" id="forgotUser" placeholder="Enter your username">
+          </div>
+        </div>
+        <div class="error-msg" id="forgotError"></div>
+        <button class="submit-btn btn-primary" id="forgotStep1Btn">Continue</button>
+      </div>
+
+      <!-- Step 2: Answer security question + set new password -->
+      <div id="forgotStep2" style="display:none;">
+        <div class="form-subtitle">Answer your security question</div>
+        <div class="field">
+          <label>Security Question</label>
+          <div class="security-question-display" id="forgotQuestionDisplay"></div>
+        </div>
+        <div class="field">
+          <label for="forgotAnswer">Your Answer</label>
+          <div class="input-wrap">
+            <input type="text" id="forgotAnswer" placeholder="Enter your answer">
+          </div>
+        </div>
+        <div class="field">
+          <label for="forgotNewPass">New Password</label>
+          <div class="input-wrap">
+            <input type="password" id="forgotNewPass" placeholder="Enter new password (8+ chars)" autocomplete="new-password">
+            <button class="toggle-password" type="button" title="Show password" data-target="forgotNewPass">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <div class="strength-meter" id="forgotPassStrength"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+        </div>
+        <div class="error-msg" id="forgotStep2Error"></div>
+        <div class="success-msg" id="forgotSuccess"></div>
+        <button class="submit-btn btn-primary" id="forgotStep2Btn">Reset Password</button>
+      </div>
+
+      <!-- No security question set -->
+      <div id="forgotNoQuestion" style="display:none;">
+        <div class="form-subtitle">Password recovery not available</div>
+        <div class="info-box">
+          This account has not set up a security question for password recovery.
+          Please contact an administrator or create a new account.
+        </div>
+        <button class="submit-btn btn-primary" id="forgotBackToSignin">Back to Sign In</button>
+      </div>
+
+      <div class="switch-text" id="forgotSwitchText">Remember your password? <a class="switch-link" id="goSigninFromForgot">Sign In</a></div>
+    </div>
+  </div>
+
+  <script src="js/core/auth-helper.js"></script>
+  <script>
+    // Window controls (Electron only)
+    if (window.api) {
+      document.getElementById('minBtn')?.addEventListener('click', () => window.api.minimizeWindow());
+      document.getElementById('maxBtn')?.addEventListener('click', () => window.api.toggleMaximizeWindow());
+      document.getElementById('closeBtn')?.addEventListener('click', () => window.api.closeWindow());
+    } else {
+      document.querySelector('.win-controls')?.remove();
+    }
+
+    // View switching
+    function showView(viewId) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(viewId).classList.add('active');
+    }
+
+    // Toggle password visibility
+    const eyeOpenSVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const eyeClosedSVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    document.querySelectorAll('.toggle-password').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = btn.parentElement.querySelector('input');
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        btn.innerHTML = isPassword ? eyeClosedSVG : eyeOpenSVG;
+      });
+    });
+
+    // Password strength meter
+    function updateStrengthMeter(inputId, meterId, textId) {
+      const input = document.getElementById(inputId);
+      const meter = document.getElementById(meterId);
+      const text = document.getElementById(textId);
+      if (!input || !meter || !text) return;
+
+      input.addEventListener('input', () => {
+        const val = input.value;
+        if (!val) { meter.className = 'strength-meter'; text.textContent = ''; text.className = 'strength-text'; return; }
+        const strength = AuthHelper.getPasswordStrength(val);
+        meter.className = 'strength-meter ' + strength.level;
+        text.textContent = strength.label;
+        text.className = 'strength-text ' + strength.level;
+      });
+    }
+    updateStrengthMeter('regPass', 'regPassStrength', 'regPassStrengthText');
+    updateStrengthMeter('forgotNewPass', 'forgotPassStrength', null);
+
+    // Confirm password validation
+    const regPassInput = document.getElementById('regPass');
+    const regPassConfirm = document.getElementById('regPassConfirm');
+    const regPassConfirmHint = document.getElementById('regPassConfirmHint');
+    if (regPassConfirm) {
+      regPassConfirm.addEventListener('input', () => {
+        if (regPassConfirm.value && regPassConfirm.value !== regPassInput.value) {
+          regPassConfirmHint.textContent = 'Passwords do not match';
+          regPassConfirmHint.className = 'field-hint error';
+          regPassConfirm.classList.add('invalid');
+          regPassConfirm.classList.remove('valid');
+        } else if (regPassConfirm.value && regPassConfirm.value === regPassInput.value) {
+          regPassConfirmHint.textContent = 'Passwords match';
+          regPassConfirmHint.className = 'field-hint success';
+          regPassConfirm.classList.remove('invalid');
+          regPassConfirm.classList.add('valid');
+        } else {
+          regPassConfirmHint.textContent = '';
+          regPassConfirm.classList.remove('invalid', 'valid');
+        }
+      });
+    }
+
+    // Navigation links
+    document.getElementById('goRegister')?.addEventListener('click', (e) => { e.preventDefault(); showView('view-register'); document.getElementById('regUser')?.focus(); });
+    document.getElementById('goSignin')?.addEventListener('click', (e) => { e.preventDefault(); showView('view-signin'); document.getElementById('siUser')?.focus(); });
+    document.getElementById('goForgot')?.addEventListener('click', (e) => { e.preventDefault(); showView('view-forgot'); resetForgotForm(); document.getElementById('forgotUser')?.focus(); });
+    document.getElementById('goSigninFromForgot')?.addEventListener('click', (e) => { e.preventDefault(); showView('view-signin'); document.getElementById('siUser')?.focus(); });
+    document.getElementById('backToSigninFromReg')?.addEventListener('click', () => { showView('view-signin'); document.getElementById('siUser')?.focus(); });
+    document.getElementById('backToSigninFromForgot')?.addEventListener('click', () => { showView('view-signin'); document.getElementById('siUser')?.focus(); });
+    document.getElementById('forgotBackToSignin')?.addEventListener('click', () => { showView('view-signin'); document.getElementById('siUser')?.focus(); });
+
+    // Remember me - restore saved username
+    const savedUsername = localStorage.getItem('ainotetaker_remember_user');
+    if (savedUsername) {
+      document.getElementById('siUser').value = savedUsername;
+      document.getElementById('siRemember').checked = true;
+    }
+
+    // Check if already authenticated
+    async function checkAuth() {
+      const token = localStorage.getItem('ainotetaker_auth_token');
+      if (!token) return;
+      try {
+        const r = await fetch(`${API_BASE}/auth/status`);
+        const d = await r.json();
+        if (d.auth_required === false) { window.location.href = 'index.html'; return; }
+        const test = await fetch(`${API_BASE}/providers`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (test.ok) window.location.href = 'index.html';
+      } catch {}
+    }
+    checkAuth();
+
+    // ─── Sign In ───
+    async function doSignIn() {
+      const btn = document.getElementById('siBtn');
+      const errEl = document.getElementById('siError');
+      const user = document.getElementById('siUser').value.trim();
+      const pass = document.getElementById('siPass').value;
+
+      errEl.style.display = 'none';
+      if (!user || !pass) { errEl.textContent = 'Username and password are required'; errEl.style.display = 'block'; return; }
+
+      // Remember me
+      if (document.getElementById('siRemember').checked) {
+        localStorage.setItem('ainotetaker_remember_user', user);
+      } else {
+        localStorage.removeItem('ainotetaker_remember_user');
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Signing in...';
+
+      try {
+        await AuthHelper.login(user, pass);
+        window.location.href = 'index.html';
+      } catch (e) {
+        errEl.textContent = 'Invalid username or password';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    }
+    document.getElementById('siBtn')?.addEventListener('click', doSignIn);
+    document.getElementById('siPass')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSignIn(); });
+    document.getElementById('siUser')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('siPass')?.focus(); });
+
+    // ─── Register ───
+    async function doRegister() {
+      const btn = document.getElementById('regBtn');
+      const errEl = document.getElementById('regError');
+      const sucEl = document.getElementById('regSuccess');
+      const user = document.getElementById('regUser').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const pass = document.getElementById('regPass').value;
+      const passConfirm = document.getElementById('regPassConfirm').value;
+      const secQuestion = document.getElementById('regSecQuestion').value.trim();
+      const secAnswer = document.getElementById('regSecAnswer').value.trim();
+
+      errEl.style.display = 'none';
+      sucEl.style.display = 'none';
+
+      if (!user || !email || !pass) { errEl.textContent = 'Username, email, and password are required'; errEl.style.display = 'block'; return; }
+      if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; errEl.style.display = 'block'; return; }
+      if (pass !== passConfirm) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; return; }
+      if (secQuestion && !secAnswer) { errEl.textContent = 'Please provide an answer for your security question'; errEl.style.display = 'block'; return; }
+      if (!secQuestion && secAnswer) { errEl.textContent = 'Please provide a security question'; errEl.style.display = 'block'; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Creating account...';
+
+      try {
+        await AuthHelper.register(user, email, pass, secQuestion || undefined, secAnswer || undefined);
+        sucEl.textContent = 'Account created! Signing you in...';
+        sucEl.style.display = 'block';
+        // Auto-login after registration
+        try {
+          await AuthHelper.login(user, pass);
+          setTimeout(() => { window.location.href = 'index.html'; }, 500);
+        } catch {
+          showView('view-signin');
+          document.getElementById('siUser').value = user;
+          document.getElementById('siUser').focus();
+        }
+      } catch (e) {
+        const detail = e.message || 'Registration failed. Username may already exist.';
+        errEl.textContent = detail;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    }
+    document.getElementById('regBtn')?.addEventListener('click', doRegister);
+    document.getElementById('regPassConfirm')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doRegister(); });
+    document.getElementById('regPass')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('regPassConfirm')?.focus(); });
+    document.getElementById('regEmail')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('regPass')?.focus(); });
+    document.getElementById('regUser')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('regEmail')?.focus(); });
+
+    // ─── Forgot Password ───
+    function resetForgotForm() {
+      document.getElementById('forgotStep1').style.display = 'block';
+      document.getElementById('forgotStep2').style.display = 'none';
+      document.getElementById('forgotNoQuestion').style.display = 'none';
+      document.getElementById('forgotSwitchText').style.display = '';
+      document.getElementById('forgotError').style.display = 'none';
+      document.getElementById('forgotStep2Error').style.display = 'none';
+      document.getElementById('forgotSuccess').style.display = 'none';
+    }
+
+    async function doForgotStep1() {
+      const btn = document.getElementById('forgotStep1Btn');
+      const errEl = document.getElementById('forgotError');
+      const username = document.getElementById('forgotUser').value.trim();
+
+      errEl.style.display = 'none';
+      if (!username) { errEl.textContent = 'Username is required'; errEl.style.display = 'block'; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Looking up...';
+
+      try {
+        const result = await AuthHelper.forgotPassword(username);
+        if (result.has_security_question) {
+          document.getElementById('forgotQuestionDisplay').textContent = result.security_question;
+          document.getElementById('forgotStep1').style.display = 'none';
+          document.getElementById('forgotStep2').style.display = 'block';
+          document.getElementById('forgotAnswer')?.focus();
+        } else {
+          document.getElementById('forgotStep1').style.display = 'none';
+          document.getElementById('forgotNoQuestion').style.display = 'block';
+          document.getElementById('forgotSwitchText').style.display = 'none';
+        }
+      } catch (e) {
+        errEl.textContent = 'Failed to process request. Please try again.';
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Continue';
+      }
+    }
+    document.getElementById('forgotStep1Btn')?.addEventListener('click', doForgotStep1);
+    document.getElementById('forgotUser')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doForgotStep1(); });
+
+    async function doForgotStep2() {
+      const btn = document.getElementById('forgotStep2Btn');
+      const errEl = document.getElementById('forgotStep2Error');
+      const sucEl = document.getElementById('forgotSuccess');
+      const username = document.getElementById('forgotUser').value.trim();
+      const answer = document.getElementById('forgotAnswer').value.trim();
+      const newPass = document.getElementById('forgotNewPass').value;
+
+      errEl.style.display = 'none';
+      sucEl.style.display = 'none';
+
+      if (!answer) { errEl.textContent = 'Security answer is required'; errEl.style.display = 'block'; return; }
+      if (newPass.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; errEl.style.display = 'block'; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Resetting...';
+
+      try {
+        await AuthHelper.resetPasswordWithSecurityAnswer(username, answer, newPass);
+        sucEl.textContent = 'Password reset successfully! Redirecting to sign in...';
+        sucEl.style.display = 'block';
+        setTimeout(() => {
+          showView('view-signin');
+          document.getElementById('siUser').value = username;
+          document.getElementById('siUser').focus();
+          resetForgotForm();
+        }, 1500);
+      } catch (e) {
+        errEl.textContent = e.message || 'Reset failed. Please try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Reset Password';
+      }
+    }
+    document.getElementById('forgotStep2Btn')?.addEventListener('click', doForgotStep2);
+    document.getElementById('forgotNewPass')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doForgotStep2(); });
+    document.getElementById('forgotAnswer')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('forgotNewPass')?.focus(); });
+
+    // ── SSO Buttons ──
+    async function ssoLogin(provider) {
+      const btn = document.getElementById(provider === 'google' ? 'ssoGoogleBtn' : 'ssoMicrosoftBtn');
+      if (btn) btn.disabled = true;
+      try {
+        const resp = await fetch(`${API_BASE}/sso/${provider}`);
+        const data = await resp.json();
+        if (data.redirect_url) {
+          window.location.href = data.redirect_url;
+        } else {
+          const errEl = document.getElementById('siError');
+          if (errEl) { errEl.textContent = `${provider === 'google' ? 'Google' : 'Microsoft'} SSO is not configured`; errEl.style.display = 'block'; }
+        }
+      } catch (e) {
+        const errEl = document.getElementById('siError');
+        if (errEl) { errEl.textContent = 'SSO unavailable'; errEl.style.display = 'block'; }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    document.getElementById('ssoGoogleBtn')?.addEventListener('click', () => ssoLogin('google'));
+    document.getElementById('ssoMicrosoftBtn')?.addEventListener('click', () => ssoLogin('microsoft'));
+
+    // Auto-hide unavailable SSO providers
+    (async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/sso/status`);
+        const data = await resp.json();
+        if (!data?.google?.configured) document.getElementById('ssoGoogleBtn')?.remove();
+        if (!data?.microsoft?.configured) document.getElementById('ssoMicrosoftBtn')?.remove();
+        if (!data?.google?.configured && !data?.microsoft?.configured) {
+          document.querySelector('.sso-divider')?.remove();
+          document.querySelector('.sso-buttons')?.remove();
+        }
+      } catch {}
+    })();
+  </script>
+</body>
+</html>

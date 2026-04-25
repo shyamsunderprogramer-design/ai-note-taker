@@ -1,6 +1,56 @@
-// ==============================
+// ═══════════════════════════════════════════════════════════════════════════════
+// PERFORMANCE OPTIMIZATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Debounce function for performance
+function debounce(fn, wait) {
+  let timeout
+  return function(...args) {
+    clearTimeout(timeout)
+    timeout = setTimeout(() => fn.apply(this, args), wait)
+  }
+}
+
+// Throttle function for scroll/resize
+function throttle(fn, limit) {
+  let inThrottle
+  return function(...args) {
+    if (!inThrottle) {
+      fn.apply(this, args)
+      inThrottle = true
+      setTimeout(() => inThrottle = false, limit)
+    }
+  }
+}
+
+// Lazy load heavy components
+const lazyModules = new Map()
+
+async function lazyLoad(moduleName, importFn) {
+  if (lazyModules.has(moduleName)) {
+    return lazyModules.get(moduleName)
+  }
+  const module = await importFn()
+  lazyModules.set(moduleName, module)
+  return module
+}
+
+// Intersection Observer for lazy rendering
+const lazyObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible')
+      lazyObserver.unobserve(entry.target)
+    }
+  })
+}, { rootMargin: '100px' })
+
+// RequestIdleCallback polyfill
+const requestIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1))
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // STATE
-// ==============================
+// ═══════════════════════════════════════════════════════════════════════════════
 var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:8000'
 let isListening = false
 let isStarting = false
@@ -34,6 +84,10 @@ let transcribeWs = null      // WebSocket for live transcription
 let streamProcessor = null   // ScriptProcessorNode for PCM capture
 let partialTranscriptText = "" // Accumulated partial text
 
+// Pre-warmed resources for instant start/stop
+let prewarmedMicStream = null
+let prewarmedAudioCtx = null
+
 // Speaker diarization state
 let speakerDiarizationEnabled = false
 let currentSpeakers = []
@@ -55,6 +109,115 @@ let SESSION_MAX_DURATION = 60 // Auto-stop at 60 minutes
 let objectionDetectionEnabled = false
 let currentObjections = []
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLUELY-INSPIRED FEATURES (Autostart, Portable Mode)
+// ═══════════════════════════════════════════════════════════════════════════════
+let autostartEnabled = false
+let autostartHidden = true
+let isPortableMode = false
+
+async function initOverlayFeatures() {
+  try {
+    // Initialize autostart settings
+    await initAutostart()
+
+    // Initialize portable mode detection
+    await initPortableMode()
+
+    console.log("[Overlay] Features initialized")
+  } catch (e) {
+    console.error("[Overlay] Failed to initialize features:", e)
+  }
+}
+
+async function initAutostart() {
+  try {
+    const autostartToggle = document.getElementById("toggle-autostart")
+    const autostartHiddenToggle = document.getElementById("toggle-autostart-hidden")
+    const autostartHiddenRow = document.getElementById("autostartHiddenRow")
+
+    // Get current autostart status
+    if (window.api?.getAutoStart) {
+      const status = await window.api.getAutoStart()
+      autostartEnabled = status.enabled
+      autostartHidden = status.openAsHidden
+
+      // Update UI
+      if (autostartToggle) {
+        autostartToggle.checked = autostartEnabled
+      }
+      if (autostartHiddenToggle) {
+        autostartHiddenToggle.checked = autostartHidden
+      }
+      if (autostartHiddenRow) {
+        autostartHiddenRow.style.opacity = autostartEnabled ? "1" : "0.5"
+        autostartHiddenRow.style.pointerEvents = autostartEnabled ? "auto" : "none"
+      }
+    }
+
+    // Setup event listeners
+    autostartToggle?.addEventListener("change", async (e) => {
+      const enabled = e.target.checked
+      autostartEnabled = enabled
+
+      // Enable/disable hidden option
+      if (autostartHiddenRow) {
+        autostartHiddenRow.style.opacity = enabled ? "1" : "0.5"
+        autostartHiddenRow.style.pointerEvents = enabled ? "auto" : "none"
+      }
+
+      // Save setting
+      if (window.api?.setAutoStart) {
+        const result = await window.api.setAutoStart(enabled, autostartHidden)
+        if (result.success) {
+          showNotification(`Autostart ${enabled ? "enabled" : "disabled"}`, "success")
+        } else {
+          showNotification("Failed to update autostart settings", "error")
+          e.target.checked = !enabled // Revert
+        }
+      }
+    })
+
+    autostartHiddenToggle?.addEventListener("change", async (e) => {
+      autostartHidden = e.target.checked
+
+      // Save setting
+      if (window.api?.setAutoStart && autostartEnabled) {
+        await window.api.setAutoStart(autostartEnabled, autostartHidden)
+      }
+    })
+  } catch (e) {
+    console.error("[Overlay] Failed to init autostart:", e)
+  }
+}
+
+async function initPortableMode() {
+  try {
+    const portableStatusEl = document.getElementById("portableModeStatus")
+
+    if (window.api?.getPortableMode) {
+      const info = await window.api.getPortableMode()
+      isPortableMode = info.isPortable
+
+      if (portableStatusEl) {
+        if (isPortableMode) {
+          portableStatusEl.textContent = "Active - Data stored with app"
+          portableStatusEl.style.color = "var(--accent, #22c55e)"
+        } else {
+          portableStatusEl.textContent = "Not active - Data in user folder"
+          portableStatusEl.style.color = "var(--text-dim)"
+        }
+      }
+    } else {
+      if (portableStatusEl) {
+        portableStatusEl.textContent = "Not available"
+      }
+    }
+  } catch (e) {
+    console.error("[Overlay] Failed to init portable mode:", e)
+  }
+}
+
 // ==============================
 // DOM REFS
 // ==============================
@@ -70,6 +233,7 @@ const modeSelect = document.getElementById("modeSelect") // hidden, kept for com
 const modelSelect = document.getElementById("modelSelect")
 const fontSizeSelect = document.getElementById("fontSizeSelect")
 const responseStyleSelect = document.getElementById("responseStyleSelect")
+const temperatureSelect = document.getElementById("temperatureSelect")
 const contextLengthSelect = document.getElementById("contextLengthSelect")
 const tokenLimitSelect = document.getElementById("tokenLimitSelect")
 const tokenCounter = document.getElementById("tokenCounter")
@@ -82,6 +246,7 @@ const chatArea = document.getElementById("chatArea")
 const chatWelcome = document.getElementById("chatWelcome")
 const summarizeBtn = document.getElementById("summarizeBtn")
 const menuBtn = document.getElementById("menuBtn")
+const opacitySlider = document.getElementById("opacitySlider")
 const textInput = document.getElementById("textInput")
 const historyBtn = document.getElementById("historyBtn")
 const historyPanel = document.getElementById("historyPanel")
@@ -96,6 +261,51 @@ const modalSave = document.getElementById("modalSave")
 const modalCancel = document.getElementById("modalCancel")
 const backApiKeyModal = document.getElementById("backApiKeyModal")
 const cloudModelSelect = document.getElementById("cloudModelSelect")
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OPACITY SLIDER — adjusts glass background transparency
+// ═══════════════════════════════════════════════════════════════════════════════
+function updateGlassOpacity(value, skipBackend = false) {
+  const f = value / 100 // 0..1
+  const root = document.documentElement.style
+  root.setProperty("--glass-bg", `rgba(15,23,42,${(0.55 * f + 0.05).toFixed(2)})`)
+  root.setProperty("--bg-primary", `rgba(10,14,26,${(0.55 * f + 0.05).toFixed(2)})`)
+  root.setProperty("--bg-secondary", `rgba(20,24,40,${(0.5 * f + 0.05).toFixed(2)})`)
+  root.setProperty("--bg-tertiary", `rgba(30,35,55,${(0.45 * f + 0.05).toFixed(2)})`)
+  root.setProperty("--glass-border", `rgba(255,255,255,${(0.1 * f + 0.02).toFixed(2)})`)
+  // Only sync to backend when user directly interacts with the slider
+  if (!skipBackend && window.api && window.api.invoke) {
+    window.api.invoke("overlay:set-opacity", Math.max(0.1, f))
+  }
+}
+
+if (opacitySlider) {
+  // Restore saved value
+  const savedOpacity = localStorage.getItem("ainotetaker_glass_opacity")
+  if (savedOpacity !== null) {
+    opacitySlider.value = savedOpacity
+    updateGlassOpacity(parseInt(savedOpacity))
+  }
+
+  opacitySlider.addEventListener("input", (e) => {
+    const val = e.target.value
+    updateGlassOpacity(parseInt(val))
+    localStorage.setItem("ainotetaker_glass_opacity", val)
+  })
+
+  // Sync slider when hotkeys change opacity
+  if (window.api && window.api.onOpacityChanged) {
+    window.api.onOpacityChanged((overlayOpacity) => {
+      // overlayOpacity is 0.5-1.0, map to slider 50-100
+      const sliderVal = Math.round(overlayOpacity * 100)
+      if (opacitySlider.value !== String(sliderVal)) {
+        opacitySlider.value = sliderVal
+        updateGlassOpacity(sliderVal, true)
+        localStorage.setItem("ainotetaker_glass_opacity", sliderVal)
+      }
+    })
+  }
+}
 
 // OCR / capture elements
 const captureBtn = document.getElementById("captureBtn")
@@ -150,7 +360,7 @@ window.api.onTriggerAI(async () => {
     const query = transcript
       ? `The user said: "${transcript}"\n\nAlso, I can see their screen. Help based on both the conversation and what's on screen.`
       : "Analyze what's on the user's screen and provide helpful context or suggestions."
-    streamMessage("user", transcript ? `🎤 ${transcript.substring(0, 60)}...` : "📷 Screen query", { hasScreenshot: true, screenshotB64 })
+    streamMessage("user", transcript ? `[Voice] ${transcript.substring(0, 60)}...` : "[Screen] Screen query", { hasScreenshot: true, screenshotB64 })
     setProcessingUI(true)
     try {
       await streamAIResponseWithImage(query, screenshotB64)
@@ -187,7 +397,7 @@ window.api.onTriggerAIScreen(async () => {
 
   // Send screenshot directly to vision model — skip OCR entirely
   const query = "Analyze what's on the user's screen. Provide helpful context, suggestions, or answers based on what you see."
-  streamMessage("user", "📷 Screen-only query", { hasScreenshot: true, screenshotB64 })
+  streamMessage("user", "[Screen] Screen-only query", { hasScreenshot: true, screenshotB64 })
   setProcessingUI(true)
   try {
     await streamAIResponseWithImage(query, screenshotB64)
@@ -320,8 +530,60 @@ function getSelectedModel() {
   return modelSelect ? modelSelect.value || "auto" : "auto"
 }
 
+function updateProviderRecommendation(mode) {
+  const banner = document.getElementById("providerRecommendation")
+  const modeName = document.getElementById("recModeName")
+  const container = document.getElementById("recProviders")
+  if (!banner || !modeName || !container) return
+
+  const recommendations = {
+    adaptive:   { label: "Adaptive", providers: ["OpenAI", "Anthropic", "Google"] },
+    auto:       { label: "Auto", providers: ["OpenAI", "Anthropic", "Google"] },
+    fast:       { label: "Fast", providers: ["Groq", "Google Gemini", "DeepSeek"] },
+    cloud:      { label: "Cloud", providers: ["OpenAI", "Anthropic", "Google", "Groq"] },
+    universal:  { label: "Universal", providers: ["OpenAI", "Anthropic", "Google"] },
+    interview:  { label: "Interview", providers: ["Anthropic", "OpenAI", "Ollama Local"] },
+    reasoning:  { label: "Reasoning", providers: ["Anthropic", "OpenAI o-series", "DeepSeek"] },
+    code:       { label: "Code", providers: ["Anthropic", "OpenAI", "DeepSeek Coder"] },
+    turbo:      { label: "Turbo", providers: ["Groq", "Google Gemini Flash", "GPT-4o Mini"] },
+    instant:    { label: "Instant", providers: ["Groq", "Google Gemini Flash", "Llama 3.2 1B"] }
+  }
+
+  const rec = recommendations[mode] || recommendations.adaptive
+  modeName.textContent = rec.label
+  container.innerHTML = rec.providers.map(p =>
+    `<span class="provider-chip"><span class="provider-chip-dot"></span>${p}</span>`
+  ).join("")
+
+  // Animate in
+  banner.style.opacity = "0"
+  banner.style.transform = "translateY(-4px)"
+  requestAnimationFrame(() => {
+    banner.style.transition = "opacity 0.25s ease, transform 0.25s ease"
+    banner.style.opacity = "1"
+    banner.style.transform = "translateY(0)"
+  })
+}
+
 function getSelectedResponseStyle() {
   return responseStyleSelect?.value || "concise"
+}
+
+function getSelectedTemperature() {
+  return parseFloat(temperatureSelect?.value || "0.3")
+}
+
+function renderModelBadge(msg, displayName) {
+  if (!msg || !msg.element || !displayName) return
+  const label = msg.element.querySelector(".msg-label")
+  if (!label) return
+  let badge = label.querySelector(".model-badge")
+  if (!badge) {
+    badge = document.createElement("span")
+    badge.className = "model-badge streaming-badge"
+    label.appendChild(badge)
+  }
+  badge.textContent = `[${displayName}]`
 }
 
 function setListeningUI(listening) {
@@ -546,7 +808,7 @@ async function ingestConversationToGraph(conversation) {
         body: JSON.stringify({ text: fullText })
       })
       const extractData = await extractRes.json()
-      console.log('[CognitiveGraph] Extracted entities:', extractData.entities)
+      console.log('[CognitiveGraph] Extracted entities:', extractData?.entities || 'none')
     }
   } catch (err) {
     console.error('[CognitiveGraph] Auto-ingestion failed:', err)
@@ -1067,7 +1329,7 @@ async function renderHistoryList() {
 
     const groupHeader = document.createElement("div")
     groupHeader.className = "history-group-header"
-    groupHeader.textContent = groupName + (isPinnedSection ? "  ★ Pinned" : "")
+    groupHeader.textContent = groupName + (isPinnedSection ? "  (Pinned)" : "")
     historyList.appendChild(groupHeader)
 
     convs.forEach(conv => {
@@ -1101,14 +1363,14 @@ async function renderHistoryList() {
         }
       }
 
-      // Emoji icons for modes
-      const modeEmoji = {
-        adaptive: "⚡", auto: "⚡", fast: "🔥", cloud: "☁️",
-        universal: "✨", interview: "💬", reasoning: "🧠", code: "💻",
-        turbo: "⚡", instant: "⚡"
+      // Mode badge initials
+      const modeBadge = {
+        adaptive: "A", auto: "A", fast: "F", cloud: "C",
+        universal: "U", interview: "I", reasoning: "R", code: "C",
+        turbo: "T", instant: "I"
       }
-      const icon = modeEmoji[mode] || "💬"
-      const previewIcon = previewRole === "user" ? "👤" : "🤖"
+      const icon = modeBadge[mode] || "?"
+      const previewLabel = previewRole === "user" ? "You" : "AI"
 
       const item = document.createElement("div")
       item.className = "history-item" + (isActive ? " active" : "")
@@ -1116,15 +1378,15 @@ async function renderHistoryList() {
 
       item.innerHTML = `
         <div class="history-item-checkbox" style="display: none;" title="Select">
-          <div class="checkbox-box">☐</div>
+          <div class="checkbox-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg></div>
         </div>
         <div class="history-item-icon">${icon}</div>
         <div class="history-item-content">
           <div class="history-item-top">
-            ${conv.pinned ? '<span class="pin-icon" title="Pinned">📌</span>' : ''}
+            ${conv.pinned ? '<span class="pin-icon" title="Pinned"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-4H5v4z"/><path d="M15 7V5H9v2"/><path d="M12 7v5"/></svg></span>' : ''}
             <div class="history-item-title">${highlightText(conv.title, searchQuery)}</div>
           </div>
-          ${preview ? `<div class="history-item-preview"><span class="preview-role-icon">${previewIcon}</span> ${highlightText(preview, searchQuery)}</div>` : ""}
+          ${preview ? `<div class="history-item-preview"><span class="preview-role-label">${previewLabel}:</span> ${highlightText(preview, searchQuery)}</div>` : ""}
           <div class="history-item-meta">
             <span class="history-item-date">${formatDate(conv.updatedAt)}</span>
             <span class="history-item-msg-count">${msgCount} msg${msgCount !== 1 ? "s" : ""}</span>
@@ -1314,14 +1576,16 @@ document.addEventListener("click", (e) => {
       historyItem.classList.toggle("selected")
       const checkbox = historyItem.querySelector('.history-item-checkbox .checkbox-box')
       if (checkbox) {
-        checkbox.textContent = historyItem.classList.contains('selected') ? '☑' : '☐'
+        checkbox.innerHTML = historyItem.classList.contains('selected')
+          ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><polyline points="9 12 12 15 17 9"/></svg>'
+          : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>'
       }
       // Update clear chat button text based on selection
       const selectedCount = document.querySelectorAll('.history-item.selected').length
       if (clearChatBtn) {
         clearChatBtn.innerHTML = selectedCount > 0
-          ? `<span>&#128465;</span> Delete (${selectedCount})`
-          : '<span>&#128465;</span> Clear Chat'
+          ? `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>Delete (${selectedCount})`
+          : '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>Clear Chat'
       }
     } else {
       // Normal mode - load conversation
@@ -1392,7 +1656,7 @@ function addMessage(role, text) {
         return
       }
       window.api.copyToClipboard(textToCopy).then(() => {
-        copyBtn.textContent = "✓"
+        copyBtn.textContent = "Copied"
         copyBtn.classList.add("copied")
         setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("copied") }, 1500)
       }).catch(() => {
@@ -1636,9 +1900,17 @@ function formatMessage(rawText) {
   // Step 1: Extract code blocks BEFORE any text processing
   const codeBlocks = []
   const codeBlockLangs = []
-  let text = sanitizedText.replace(/```([a-z]*)\s*([\s\S]*?)```/g, (_, lang, code) => {
+  // Regex: capture optional language tag, then code until closing ```
+  let text = sanitizedText.replace(/```([a-zA-Z0-9_+\-.]{0,20})\s*([\s\S]*?)```/g, (_, lang, code) => {
     codeBlocks.push(code)
-    codeBlockLangs.push(lang || "code")
+    // Validate language tag: reject concatenated words like "pythondef"
+    let cleanLang = (lang || "").toLowerCase().trim()
+    // Heuristic: if the code starts without whitespace and the lang looks like lang+keyword, it's invalid
+    const commonKeywords = /def|class|func|function|const|let|var|import|from|if|for|while|return|struct|interface|impl|fn|pub|use|package/
+    if (cleanLang.length > 15 || (cleanLang.length > 3 && commonKeywords.test(cleanLang))) {
+      cleanLang = ""
+    }
+    codeBlockLangs.push(cleanLang || "code")
     return `§K8CODE${codeBlocks.length - 1}K8§`
   })
 
@@ -2020,8 +2292,10 @@ async function streamAIResponse(query) {
   const mode = getSelectedMode()
   const responseStyle = getSelectedResponseStyle()
   const selectedModel = modelSelect ? modelSelect.value : "auto"
-  const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
-  const provider = isCloudModel ? selectedModel : "ollama"
+  // Cloud models use dashes (e.g. openai-gpt-4o); local Ollama models use colons (e.g. gemma4:latest)
+  const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-") && !selectedModel.includes(":")
+  const isLocalModel = selectedModel && selectedModel !== "auto" && selectedModel.includes(":")
+  const provider = isCloudModel ? selectedModel : (isLocalModel ? selectedModel : "ollama")
 
   // If "auto" is selected, race all configured providers — fastest wins
   if (selectedModel === "auto") {
@@ -2036,7 +2310,8 @@ async function streamAIResponse(query) {
     return
   }
   const contextMessages = getContextMessages()
-  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages)
+  const temperature = getSelectedTemperature()
+  const streamUrl = window.api.getStreamUrlWithMode(query, mode, responseStyle, provider, contextMessages, temperature)
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
@@ -2098,6 +2373,7 @@ async function streamAIResponse(query) {
               latestBotMessage.modelName = modelDisplay || modelName
               latestBotMessage.modelProvider = modelProvider
               latestBotMessage.modelDisplay = modelDisplay || modelName
+              renderModelBadge(latestBotMessage, latestBotMessage.modelDisplay)
             }
             continue
           }
@@ -2145,16 +2421,23 @@ async function streamAIResponse(query) {
       if (latestBotMessage.modelDisplay) {
         const label = latestBotMessage.element.querySelector(".msg-label")
         if (label) {
-          const badge = document.createElement("span")
-          badge.className = "model-badge"
+          let badge = label.querySelector(".model-badge")
+          if (!badge) {
+            badge = document.createElement("span")
+            badge.className = "model-badge"
+            label.appendChild(badge)
+          }
+          badge.classList.remove("streaming-badge")
           badge.textContent = `[${latestBotMessage.modelDisplay}]`
-          label.appendChild(badge)
           // Add response time
           const elapsed = Date.now() - requestStartTime
-          const timeBadge = document.createElement("span")
-          timeBadge.className = "model-badge time-badge"
+          let timeBadge = label.querySelector(".time-badge")
+          if (!timeBadge) {
+            timeBadge = document.createElement("span")
+            timeBadge.className = "model-badge time-badge"
+            label.appendChild(timeBadge)
+          }
           timeBadge.textContent = `${(elapsed / 1000).toFixed(1)}s`
-          label.appendChild(timeBadge)
         }
       }
 
@@ -2206,10 +2489,16 @@ async function streamAIResponseWithImage(query, screenshotB64) {
   const storedResults = await Promise.all(
     VISION_PROVIDERS.map(p => window.api.storeGet("provider_" + p))
   )
+  const visionLocalKeyResults = await Promise.all(
+    VISION_PROVIDERS.map(async p => {
+      try { return (await window.api.hasApiKey(p)).hasKey } catch { return false }
+    })
+  )
   for (let i = 0; i < VISION_PROVIDERS.length; i++) {
     const p = VISION_PROVIDERS[i]
     const stored = storedResults[i] || {}
-    if (stored.enabled && backendProviders[p]) {
+    const hasKey = !!backendProviders[p] || visionLocalKeyResults[i]
+    if (stored.enabled !== false && hasKey) {
       enabledProviders.push(p)
     }
   }
@@ -2222,6 +2511,7 @@ async function streamAIResponseWithImage(query, screenshotB64) {
   formData.append("mode", selectedModel === "auto" ? "race" : mode)
   formData.append("style", responseStyle)
   formData.append("provider", provider)
+  formData.append("temperature", getSelectedTemperature())
   if (contextMessages) {
     formData.append("context", JSON.stringify(contextMessages))
   }
@@ -2327,6 +2617,7 @@ async function streamAIResponseWithImage(query, screenshotB64) {
               latestBotMessage.modelName = data.model
               latestBotMessage.modelProvider = data.provider
               latestBotMessage.modelDisplay = data.model
+              renderModelBadge(latestBotMessage, latestBotMessage.modelDisplay)
             }
             continue
           }
@@ -2353,15 +2644,22 @@ async function streamAIResponseWithImage(query, screenshotB64) {
 
       const label = latestBotMessage.element.querySelector(".msg-label")
       if (label) {
-        const badge = document.createElement("span")
-        badge.className = "model-badge"
+        let badge = label.querySelector(".model-badge")
+        if (!badge) {
+          badge = document.createElement("span")
+          badge.className = "model-badge"
+          label.appendChild(badge)
+        }
+        badge.classList.remove("streaming-badge")
         badge.textContent = `[${latestBotMessage.modelDisplay || provider}]`
-        label.appendChild(badge)
         const elapsed = Date.now() - requestStartTime
-        const timeBadge = document.createElement("span")
-        timeBadge.className = "model-badge time-badge"
+        let timeBadge = label.querySelector(".time-badge")
+        if (!timeBadge) {
+          timeBadge = document.createElement("span")
+          timeBadge.className = "model-badge time-badge"
+          label.appendChild(timeBadge)
+        }
         timeBadge.textContent = `${(elapsed / 1000).toFixed(1)}s`
-        label.appendChild(timeBadge)
       }
 
       if (!suppressAutoSave) {
@@ -2411,11 +2709,20 @@ async function streamAIRace(query) {
   const storedResults = await Promise.all(
     CLOUD_PROVIDERS.map(p => window.api.storeGet("provider_" + p))
   )
+  // Fetch local key status in parallel too
+  const localKeyResults = await Promise.all(
+    CLOUD_PROVIDERS.map(async p => {
+      try { return (await window.api.hasApiKey(p)).hasKey } catch { return false }
+    })
+  )
   for (let i = 0; i < CLOUD_PROVIDERS.length; i++) {
     const p = CLOUD_PROVIDERS[i]
     const stored = storedResults[i] || {}
-    // Check if toggle is enabled AND backend has the API key
-    if (stored.enabled && backendProviders[p]) {
+    const hasKeyBackend = !!backendProviders[p]
+    const hasKeyLocal = localKeyResults[i]
+    const hasKey = hasKeyBackend || hasKeyLocal
+    // Check if toggle is enabled AND provider has an API key (backend or local)
+    if (stored.enabled !== false && hasKey) {
       // Check if all models for this provider are disabled
       const providerModels = (PROVIDER_META[p] || {}).models || []
       const allModelsDisabled = providerModels.length > 0 && providerModels.every(m => isModelDisabled(m.value))
@@ -2427,13 +2734,13 @@ async function streamAIRace(query) {
   // Always include local ollama as fallback (will be used if all clouds fail)
   enabledProviders.push("ollama")
 
-  // Build race URL directly in renderer (encodeURIComponent is available here)
   const BASE_URL = API_BASE
   const encodedQuery = encodeURIComponent(query || "")
   // Race mode uses minimal prompt for sub-second first-byte — always override to "race"
   const encodedMode = encodeURIComponent("race")
   const encodedStyle = encodeURIComponent(responseStyle)
-  let raceUrl = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}`
+  const temperature = getSelectedTemperature()
+  let raceUrl = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}&temperature=${temperature}`
   if (contextMessages && Array.isArray(contextMessages) && contextMessages.length > 0) {
     raceUrl += `&context=${encodeURIComponent(JSON.stringify(contextMessages))}`
   }
@@ -2517,6 +2824,7 @@ async function streamAIRace(query) {
               latestBotMessage.modelName = modelDisplay || modelName
               latestBotMessage.modelProvider = modelProvider
               latestBotMessage.modelDisplay = modelDisplay || modelName
+              renderModelBadge(latestBotMessage, latestBotMessage.modelDisplay)
             }
             // Highlight winner in race indicator
             if (raceIndicator && modelProvider) {
@@ -2589,16 +2897,23 @@ async function streamAIRace(query) {
       if (latestBotMessage.modelDisplay) {
         const label = latestBotMessage.element.querySelector(".msg-label")
         if (label) {
-          const badge = document.createElement("span")
-          badge.className = "model-badge"
+          let badge = label.querySelector(".model-badge")
+          if (!badge) {
+            badge = document.createElement("span")
+            badge.className = "model-badge"
+            label.appendChild(badge)
+          }
+          badge.classList.remove("streaming-badge")
           badge.textContent = `[${latestBotMessage.modelDisplay}]`
-          label.appendChild(badge)
           // Add response time
           const elapsed = Date.now() - requestStartTime
-          const timeBadge = document.createElement("span")
-          timeBadge.className = "model-badge time-badge"
+          let timeBadge = label.querySelector(".time-badge")
+          if (!timeBadge) {
+            timeBadge = document.createElement("span")
+            timeBadge.className = "model-badge time-badge"
+            label.appendChild(timeBadge)
+          }
           timeBadge.textContent = `${(elapsed / 1000).toFixed(1)}s`
-          label.appendChild(timeBadge)
         }
       }
 
@@ -2662,7 +2977,7 @@ function streamMessage(role, text, opts = {}) {
     if (opts.racingMode) {
       // Racing mode: subtle pulse, no animated dots — instant visual feedback
       msg.classList.add("loading", "racing")
-      bubble.innerHTML = '<span class="racing-indicator">⚡</span>'
+      bubble.innerHTML = '<span class="racing-indicator"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>'
     } else {
       msg.classList.add("loading")
       bubble.innerHTML = '<span class="loading-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>'
@@ -2681,7 +2996,7 @@ function streamMessage(role, text, opts = {}) {
       ssIndicator.dataset.fullB64 = opts.screenshotB64
       ssIndicator.addEventListener("click", () => showFullScreenshot(opts.screenshotB64))
     }
-    ssIndicator.textContent = "📷 Sent with screenshot"
+    ssIndicator.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Sent with screenshot'
     msg.appendChild(ssIndicator)
   }
 
@@ -2689,7 +3004,7 @@ function streamMessage(role, text, opts = {}) {
   if (role === "user" && opts.speakerTranscript) {
     const speakerToggle = document.createElement("button")
     speakerToggle.className = "speaker-transcript-toggle"
-    speakerToggle.innerHTML = `&#128483; ${opts.speakerCount || 1} speaker${opts.speakerCount !== 1 ? 's' : ''}`
+    speakerToggle.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>${opts.speakerCount || 1} speaker${opts.speakerCount !== 1 ? 's' : ''}`
     speakerToggle.title = "Click to view transcript with speaker labels"
     speakerToggle.style.cssText = "margin-left: 8px; font-size: 0.7em; color: var(--accent); background: none; border: none; cursor: pointer;"
     speakerToggle.addEventListener("click", () => {
@@ -2721,7 +3036,7 @@ function streamMessage(role, text, opts = {}) {
         return
       }
       navigator.clipboard.writeText(textToCopy).then(() => {
-        copyBtn.textContent = "✓"
+        copyBtn.textContent = "Copied"
         copyBtn.classList.add("copied")
         setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("copied") }, 1500)
       }).catch(() => {
@@ -2804,8 +3119,6 @@ async function submitText(text) {
   window.speechSynthesis?.cancel()
   setProcessingUI(true)
 
-  await window.api.setMode(getSelectedMode())
-
   // Combine user text with screenshot if available
   const hasScreenshot = !!pendingOcrScreenshot
 
@@ -2839,7 +3152,6 @@ async function submitAudio(blob, screenshotB64 = null) {
     // Partial transcript from WS — submit directly as text
     textInput.value = ""
     setProcessingUI(true)
-    await window.api.setMode(getSelectedMode())
     const effectiveScreenshot = screenshotB64 || pendingOcrScreenshot
     streamMessage("user", streamedText, { hasScreenshot: !!effectiveScreenshot, screenshotB64: effectiveScreenshot })
     if (effectiveScreenshot) {
@@ -2854,8 +3166,6 @@ async function submitAudio(blob, screenshotB64 = null) {
   }
 
   setProcessingUI(true)
-
-  await window.api.setMode(getSelectedMode())
 
   // Transcribe audio first
   const formData = new FormData()
@@ -2959,23 +3269,29 @@ listenBtn.addEventListener("click", async () => {
   try {
     isStarting = true
 
+    // Fire-and-forget backend check — if not ready, we'll show error later
     if (!isBackendReady) {
-      setProcessingUI(true)
-      const ok = await waitForBackend()
-      if (!ok) {
-        addErrorMessage("Backend unavailable")
-        setProcessingUI(false)
-        isStarting = false
-        return
-      }
+      waitForBackend().then(ok => {
+        if (!ok) console.warn("[Voice] Backend became unavailable after start")
+      })
     }
 
     setListeningUI(true)
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+
+    // Use prewarmed mic stream if available (instant), otherwise request fresh
+    if (prewarmedMicStream) {
+      mediaStream = prewarmedMicStream
+      prewarmedMicStream = null
+      // Re-warm in background for next click
+      prewarmVoiceResources()
+    } else {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    }
+
     mediaRecorder = new MediaRecorder(mediaStream)
     audioChunks = []
 
-    // Setup waveform visualization
+    // Setup waveform visualization (reuses prewarmed AudioContext if available)
     startWaveform(mediaStream)
 
     mediaRecorder.addEventListener("dataavailable", (e) => {
@@ -2984,7 +3300,7 @@ listenBtn.addEventListener("click", async () => {
       }
     })
 
-    mediaRecorder.addEventListener("stop", async () => {
+    mediaRecorder.addEventListener("stop", () => {
       const audioBlob = new Blob(audioChunks, { type: "audio/webm" })
       mediaRecorder = null
       audioChunks = []
@@ -2997,15 +3313,17 @@ listenBtn.addEventListener("click", async () => {
         return
       }
 
-      setListeningUI(false)
-      // Always grab latest screenshot from ring buffer (like Cluely)
-      let screenshotB64 = null
-      try {
-        screenshotB64 = await window.api.overlayGetLatestScreenshot()
-      } catch (e) {
-        console.warn("Auto-screenshot buffer read failed:", e)
-      }
-      await submitAudio(audioBlob, screenshotB64)
+      // UI already updated by stopListening() — just do background work
+      // Fire screenshot fetch + submit in background so user sees instant feedback
+      (async () => {
+        let screenshotB64 = null
+        try {
+          screenshotB64 = await window.api.overlayGetLatestScreenshot()
+        } catch (e) {
+          console.warn("Auto-screenshot buffer read failed:", e)
+        }
+        await submitAudio(audioBlob, screenshotB64)
+      })()
     })
 
     mediaRecorder.start()
@@ -3024,13 +3342,14 @@ listenBtn.addEventListener("click", async () => {
 })
 
 function stopListening() {
+  // Update UI immediately so user feels instant response
+  setListeningUI(false)
+
   // Stop WebSocket streaming first (triggers final transcription)
   stopStreamingTranscription()
 
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop()
-  } else {
-    setListeningUI(false)
   }
 
   // Auto-generate meeting notes if session was 5+ minutes
@@ -3047,6 +3366,26 @@ function stopTracks() {
       track.stop()
     }
     mediaStream = null
+  }
+}
+
+// ==============================
+// PRE-WARM VOICE RESOURCES
+// ==============================
+function prewarmVoiceResources() {
+  // Pre-request microphone permission so getUserMedia is instant on click
+  if (!prewarmedMicStream) {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        prewarmedMicStream = stream
+        // Pre-create AudioContext for waveform so it's ready
+        if (!prewarmedAudioCtx) {
+          try {
+            prewarmedAudioCtx = new AudioContext()
+          } catch {}
+        }
+      })
+      .catch(() => { /* mic permission denied — will show error on actual click */ })
   }
 }
 
@@ -3068,7 +3407,14 @@ function startStreamingTranscription() {
     return
   }
 
-  transcribeWs = new WebSocket(API_BASE.replace('http', 'ws') + "/ws/transcribe")
+  // Pass auth token in WebSocket URL so backend auth succeeds immediately
+  let wsUrl = API_BASE.replace('http', 'ws') + "/ws/transcribe"
+  try {
+    const token = localStorage.getItem('ainotetaker_auth_token')
+    if (token) wsUrl += "?token=" + encodeURIComponent(token)
+  } catch {}
+
+  transcribeWs = new WebSocket(wsUrl)
   let connectionTimeout = null
 
   // Set connection timeout to prevent hanging
@@ -3078,7 +3424,7 @@ function startStreamingTranscription() {
       transcribeWs.close()
       transcribeWs = null
     }
-  }, 5000) // 5 second timeout
+  }, 3000) // 3 second timeout — auth now passes instantly
 
   transcribeWs.addEventListener("open", () => {
     clearTimeout(connectionTimeout)
@@ -3208,7 +3554,9 @@ function confirmPartialTranscript(text) {
 // ==============================
 function startWaveform(stream) {
   try {
-    waveformAudioCtx = new AudioContext()
+    // Reuse prewarmed AudioContext if available, otherwise create new
+    waveformAudioCtx = prewarmedAudioCtx || new AudioContext()
+    prewarmedAudioCtx = null  // consumed, will be re-warmed on next init
     waveformAnalyser = waveformAudioCtx.createAnalyser()
     waveformAnalyser.fftSize = 256
     const source = waveformAudioCtx.createMediaStreamSource(stream)
@@ -3300,6 +3648,7 @@ fontSizeSelect?.addEventListener("change", async () => {
 
 modeSelect?.addEventListener("change", async () => {
   await window.api.storeSet("mode", modeSelect.value)
+  updateProviderRecommendation(modeSelect.value)
 })
 
 contextLengthSelect?.addEventListener("change", async () => {
@@ -3313,8 +3662,12 @@ tokenLimitSelect?.addEventListener("change", async () => {
 responseStyleSelect?.addEventListener("change", async () => {
   await window.api.storeSet("responseStyle", responseStyleSelect.value)
 })
+temperatureSelect?.addEventListener("change", async () => {
+  await window.api.storeSet("temperature", temperatureSelect.value)
+})
 modelSelect?.addEventListener("change", async () => {
   await window.api.storeSet("model", modelSelect.value)
+  updateModelProviderBar()
 })
 
 // Cloud model select — update active provider indicator
@@ -3335,8 +3688,9 @@ maxBtn.addEventListener("click", async () => {
 // Update maximize button icon based on state
 function updateMaximizeButtonIcon(isMaximized) {
   if (!maxBtn) return
-  // ▢ = restore (currently maximized), ❐ = maximize (currently normal)
-  maxBtn.textContent = isMaximized ? "▢" : "❐"
+  maxBtn.innerHTML = isMaximized
+    ? '<span class="traffic-icon">&#9634;</span>'
+    : '<span class="traffic-icon">&#9633;</span>'
   maxBtn.title = isMaximized ? "Restore" : "Maximize"
 }
 
@@ -3382,8 +3736,9 @@ summarizeBtn?.addEventListener("click", async () => {
 
     // Call the AI summary endpoint with proper SSE parsing
     const selectedModel = modelSelect ? modelSelect.value : "auto"
-    const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-")
-    const provider = isCloudModel ? selectedModel : "ollama"
+    const isCloudModel = selectedModel && selectedModel !== "auto" && selectedModel.includes("-") && !selectedModel.includes(":")
+    const isLocalModel = selectedModel && selectedModel !== "auto" && selectedModel.includes(":")
+    const provider = isCloudModel ? selectedModel : (isLocalModel ? selectedModel : "ollama")
 
     const healthUrl = window.api.getHealthUrl()
     const base = healthUrl.replace("/health", "")
@@ -4062,6 +4417,12 @@ menuBtn.addEventListener("click", (e) => {
   }
 })
 
+function openSettings() {
+  closeHistoryPanel()
+  settingsPanel?.classList.add("open")
+  updatePanelBackdrop()
+}
+
 // Close menu when clicking outside
 document.addEventListener("click", (e) => {
   if (appMenu?.classList.contains("open") && !appMenu?.contains(e.target) && !menuBtn?.contains(e.target)) {
@@ -4079,10 +4440,7 @@ appMenu.addEventListener("click", async (e) => {
   const action = item.getAttribute("data-action")
 
   if (action === "settings") {
-    closeHistoryPanel() // Close history if open
-    settingsPanel.classList.add("open")
-    updatePanelBackdrop()
-
+    openSettings()
     // Reset to General tab
     settingsTabs.forEach(t => t.classList.remove('active'))
     settingsTabContents.forEach(c => c.classList.remove('active'))
@@ -4091,14 +4449,30 @@ appMenu.addEventListener("click", async (e) => {
 
     try {
       const providers = await window.api.getProviders()
-      syncProviderRow("openai", !!providers.openai)
-      syncProviderRow("anthropic", !!providers.anthropic)
-      syncProviderRow("google", !!providers.google)
-      syncProviderRow("xai", !!providers.xai)
-      syncProviderRow("deepseek", !!providers.deepseek)
-      syncProviderRow("groq", !!providers.groq)
-      syncProviderRow("ollama-cloud", !!providers["ollama-cloud"])
-      syncProviderRow("perplexity", !!providers.perplexity)
+      // Merge backend key status with local store to avoid stale cache disabling a freshly-saved provider
+      const mergeProvider = async (name) => {
+        const hasKeyBackend = !!providers[name]
+        let hasKeyLocal = false
+        try { hasKeyLocal = (await window.api.hasApiKey(name)).hasKey } catch {}
+        let stored = {}
+        try { stored = (await window.api.storeGet("provider_" + name)) || {} } catch {}
+        const hasKey = hasKeyBackend || hasKeyLocal
+        if (hasKey) {
+          const isEnabled = stored.enabled !== false
+          syncProviderRow(name, isEnabled)
+          return
+        }
+        const isEnabled = stored.enabled !== false && !!stored.apiKey
+        syncProviderRow(name, isEnabled)
+      }
+      await mergeProvider("openai")
+      await mergeProvider("anthropic")
+      await mergeProvider("google")
+      await mergeProvider("xai")
+      await mergeProvider("deepseek")
+      await mergeProvider("groq")
+      await mergeProvider("ollama-cloud")
+      await mergeProvider("perplexity")
     } catch (e) { console.error(e) }
     const savedCloudModel = await window.api.storeGet("cloudModel")
     if (savedCloudModel && cloudModelSelect) {
@@ -4135,6 +4509,13 @@ appMenu.addEventListener("click", async (e) => {
   }
   else if (action === "quit") {
     window.api.closeWindow()
+  }
+  else if (action === "signout") {
+    if (window.AuthHelper) {
+      AuthHelper.clearToken()
+      showToast("Signed out")
+      setTimeout(() => { AuthHelper.showLoginOverlay() }, 400)
+    }
   }
   else if (action === "new-chat") {
     startNewConversation()
@@ -4222,6 +4603,10 @@ const configProviderIcon = document.getElementById("configProviderIcon")
 const configApiKeyInput = document.getElementById("configApiKeyInput")
 const configSaveBtn = document.getElementById("configSaveBtn")
 const configTestResult = document.getElementById("configTestResult")
+const configSyncEnvCheckbox = document.getElementById("configSyncEnvCheckbox")
+const configEnvWarning = document.getElementById("configEnvWarning")
+const configRestartHint = document.getElementById("configRestartHint")
+const configRestartBackendBtn = document.getElementById("configRestartBackendBtn")
 // ==============================
 // SETTINGS TABS
 // ==============================
@@ -4229,7 +4614,7 @@ const settingsTabs = document.querySelectorAll('.settings-tab')
 const settingsTabContents = document.querySelectorAll('.settings-tab-content')
 
 settingsTabs.forEach(tab => {
-  tab.addEventListener('click', () => {
+  tab.addEventListener('click', async () => {
     const targetTab = tab.dataset.tab
 
     // Deactivate all tabs
@@ -4239,6 +4624,11 @@ settingsTabs.forEach(tab => {
     // Activate clicked tab
     tab.classList.add('active')
     document.querySelector(`.settings-tab-content[data-content="${targetTab}"]`).classList.add('active')
+
+    // Refresh Model Manager when opening Models tab
+    if (targetTab === "models" && typeof renderRaceToggles === "function") {
+      await renderRaceToggles()
+    }
   })
 })
 
@@ -4333,12 +4723,21 @@ async function refreshModuleHealth() {
   }
 }
 
-// Refresh module health when settings panel opens
-const originalOpenSettings = () => {}
-document.getElementById("settingsPanel")?.addEventListener("transitionend", () => {
+// Refresh module health when settings panel opens — debounced to avoid transitionend spam
+let _lastHealthFetch = 0
+const _HEALTH_FETCH_MIN_INTERVAL = 5000  // 5 seconds
+function _throttledRefreshHealth() {
+  const now = Date.now()
+  if (now - _lastHealthFetch < _HEALTH_FETCH_MIN_INTERVAL) return
+  _lastHealthFetch = now
+  refreshModuleHealth()
+}
+document.getElementById("settingsPanel")?.addEventListener("transitionend", (e) => {
+  // Only fire for the panel itself, not child elements (transitionend bubbles)
+  if (e.target !== document.getElementById("settingsPanel")) return
   const panel = document.getElementById("settingsPanel")
   if (panel?.classList.contains("open")) {
-    refreshModuleHealth()
+    _throttledRefreshHealth()
   }
 })
 
@@ -4346,7 +4745,7 @@ document.getElementById("settingsPanel")?.addEventListener("transitionend", () =
 document.querySelectorAll('.settings-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     if (tab.dataset.tab === 'general') {
-      setTimeout(refreshModuleHealth, 50)
+      _throttledRefreshHealth()
     }
   })
 })
@@ -4490,6 +4889,9 @@ function closeProviderConfig() {
     configTestResult.className = "config-inline-result"
     configTestResult.textContent = ""
   }
+  if (configSyncEnvCheckbox) configSyncEnvCheckbox.checked = false
+  if (configEnvWarning) configEnvWarning.classList.remove("show")
+  if (configRestartHint) configRestartHint.style.display = "none"
 
   // Switch back to providers tab
   settingsTabs.forEach(t => t.classList.remove('active'))
@@ -4502,7 +4904,8 @@ function closeProviderConfig() {
 
 // Load provider config from store
 async function loadProviderConfig(provider) {
-  const stored = await window.api.storeGet("provider_" + provider) || {}
+  let stored = {}
+  try { stored = await window.api.storeGet("provider_" + provider) || {} } catch {}
   const hasKey = await checkProviderHasKey(provider)
 
   // Clear the API key input for security
@@ -4539,21 +4942,26 @@ async function loadProviderConfig(provider) {
   if (toggle) toggle.checked = isEnabled
 }
 
-// Check if provider has API key configured (from backend)
+// Check if provider has API key configured (backend + local encrypted store)
 async function checkProviderHasKey(provider) {
   try {
     const providers = await window.api.getProviders()
-    return !!providers[provider]
-  } catch {
-    return false
-  }
+    if (providers[provider]) return true
+  } catch {}
+  try {
+    const local = await window.api.hasApiKey(provider)
+    if (local.hasKey) return true
+  } catch {}
+  return false
 }
 
 // Close settings panel
-closeSettingsBtn.addEventListener("click", () => {
+closeSettingsBtn.addEventListener("click", async () => {
   providerConfigPanel.classList.remove("open")
   settingsPanel.classList.remove("open")
   updatePanelBackdrop()
+  updateModelProviderBar()
+  await updateCloudModelVisibility()
 })
 
 // Save button
@@ -4619,9 +5027,10 @@ configSaveBtn.addEventListener("click", async () => {
   configTestResult.textContent = "Verifying API key..."
 
   try {
+    const syncToEnv = configSyncEnvCheckbox?.checked || false
     // Save API key to secure encrypted storage (P1 Privacy)
     // SECURITY: Keys are never sent over HTTP, only via secure IPC
-    const saveResult = await window.api.saveApiKey(activeProvider, apiKey)
+    const saveResult = await window.api.saveApiKey(activeProvider, apiKey, syncToEnv)
     if (!saveResult.success) {
       throw new Error(saveResult.error || "Failed to save API key securely")
     }
@@ -4629,17 +5038,36 @@ configSaveBtn.addEventListener("click", async () => {
     // Update UI — mark provider as enabled
     syncProviderRow(activeProvider, true)
 
-    // Show success
+    // Persist enabled state so models stay visible after reload
+    const stored = await window.api.storeGet("provider_" + activeProvider) || {}
+    await window.api.storeSet("provider_" + activeProvider, { ...stored, enabled: true })
+
+    // Refresh model dropdown so newly-enabled provider models appear
+    await updateCloudModelVisibility()
+
+    // Refresh Model Manager so newly-enabled provider sections appear
+    if (typeof renderRaceToggles === "function") {
+      await renderRaceToggles()
+    }
+
+    // Show success (with optional .env warning)
     configTestResult.className = "config-inline-result success"
-    configTestResult.textContent = "✓ Saved successfully"
+    configTestResult.textContent = saveResult.warning
+      ? "Saved. " + saveResult.warning
+      : "Saved successfully"
 
     // Clear the input field for security
     configApiKeyInput.value = ""
 
-    // Auto-close after short delay
-    setTimeout(() => {
-      closeProviderConfig()
-    }, 800)
+    // If synced to .env, show restart hint (backend needs restart to pick up new env vars)
+    if (syncToEnv && configRestartHint) {
+      configRestartHint.style.display = "flex"
+    } else {
+      // Auto-close after short delay if no restart needed
+      setTimeout(() => {
+        closeProviderConfig()
+      }, 800)
+    }
   } catch (e) {
     console.error("Provider config error:", e)
     configTestResult.className = "config-inline-result error"
@@ -4664,6 +5092,35 @@ configSaveBtn.addEventListener("click", async () => {
 // Enter key on config input
 configApiKeyInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") configSaveBtn.click()
+})
+
+// Restart backend button in provider config panel
+if (configRestartBackendBtn) {
+  configRestartBackendBtn.addEventListener("click", async () => {
+    configRestartBackendBtn.textContent = "Restarting..."
+    configRestartBackendBtn.disabled = true
+    try {
+      await window.api.restartBackend()
+      if (configTestResult) {
+        configTestResult.className = "config-inline-result success"
+        configTestResult.textContent = "Backend restarted successfully"
+      }
+      setTimeout(() => closeProviderConfig(), 600)
+    } catch (e) {
+      console.error("Backend restart failed:", e)
+      if (configTestResult) {
+        configTestResult.className = "config-inline-result error"
+        configTestResult.textContent = "Restart failed: " + (e.message || "Unknown error")
+      }
+      configRestartBackendBtn.textContent = "Restart"
+      configRestartBackendBtn.disabled = false
+    }
+  })
+}
+
+// Toggle .env warning when checkbox changes
+configSyncEnvCheckbox?.addEventListener("change", () => {
+  configEnvWarning?.classList.toggle("show", configSyncEnvCheckbox.checked)
 })
 
 // Sync a provider row's enabled/disabled state
@@ -4847,13 +5304,13 @@ function addCustomModelToDropdowns(name, value) {
   // Add to toolbar <select>
   const modelSelect = document.getElementById("modelSelect")
   if (modelSelect) {
-    const cloudGroup = modelSelect.querySelector('optgroup[label="Ollama Cloud"]')
-    if (cloudGroup && !cloudGroup.querySelector(`option[value="${CSS.escape(value)}"]`)) {
+    const fastGroup = modelSelect.querySelector('optgroup[label="Fast & Affordable"]')
+    if (fastGroup && !fastGroup.querySelector(`option[value="${CSS.escape(value)}"]`)) {
       const opt = document.createElement("option")
       opt.value = value
-      const displayName = name.includes("★") ? name : name + " ★"
+      const displayName = name.includes("★") ? name : name + " [Default]"
 	      opt.textContent = displayName
-      cloudGroup.appendChild(opt)
+      fastGroup.appendChild(opt)
     }
   }
 
@@ -4967,6 +5424,7 @@ async function loadLocalOllamaModels() {
         opt.value = m.name  // e.g. "qwen2.5:1.5b"
         opt.textContent = m.name
         opt.dataset.localModel = "true"
+        opt.dataset.provider = "ollama"
         localGroup.appendChild(opt)
       }
     }
@@ -5011,7 +5469,7 @@ async function loadLocalOllamaModels() {
 
     // Refresh race toggles to include newly detected models
     if (typeof renderRaceToggles === "function") {
-      renderRaceToggles()
+      await renderRaceToggles()
     }
 
     return models
@@ -5029,7 +5487,8 @@ function formatOllamaSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
 }
 
-// Hide cloud model options for providers without API keys
+// Interlinked model visibility: disables (not hides) options from providers without keys
+// so users can discover available models. Uses data-provider attributes for reliable matching.
 async function updateCloudModelVisibility() {
   let backendProviders = {}
   try {
@@ -5038,64 +5497,153 @@ async function updateCloudModelVisibility() {
     console.warn("[updateCloudModelVisibility] Could not fetch providers:", e)
   }
 
-  // Map of provider key -> prefix used in <option> values
-  const cloudProviderPrefixes = {
-    openai: "openai-",
-    anthropic: "anthropic-",
-    google: "google-",
-    xai: "xai-",
-    deepseek: "deepseek-",
-    groq: "groq-",
-    "ollama-cloud": "",  // handled separately
-    perplexity: "perplexity-",
-  }
-
   const selectEl = document.getElementById("modelSelect")
   if (!selectEl) return
 
-  // Process each cloud provider
   const disabledModels = getDisabledModels()
 
-  for (const [provider, prefix] of Object.entries(cloudProviderPrefixes)) {
-    const hasKey = !!backendProviders[provider]
-    const stored = await window.api.storeGet("provider_" + provider) || {}
-    const isEnabled = hasKey && stored.enabled !== false
-
-    if (provider === "ollama-cloud") {
-      // Ollama Cloud models use :cloud suffix
-      const cloudGroup = selectEl.querySelector('optgroup[label="Ollama Cloud"]')
-      if (cloudGroup) {
-        cloudGroup.querySelectorAll("option").forEach(opt => {
-          const providerDisabled = !isEnabled
-          const modelDisabled = disabledModels.includes(opt.value)
-          opt.hidden = providerDisabled || modelDisabled
-          opt.disabled = providerDisabled || modelDisabled
-        })
-      }
-    } else {
-      // Other providers use dash prefix convention
-      selectEl.querySelectorAll(`option[value^="${prefix}"]`).forEach(opt => {
-        const providerDisabled = !isEnabled
-        const modelDisabled = disabledModels.includes(opt.value)
-        opt.hidden = providerDisabled || modelDisabled
-        opt.disabled = providerDisabled || modelDisabled
-      })
+  // Build provider state map
+  const providerState = {}
+  for (const provider of CLOUD_PROVIDERS_WITH_KEY) {
+    let stored = {}
+    try {
+      stored = await window.api.storeGet("provider_" + provider) || {}
+    } catch (e) {
+      console.warn(`[updateCloudModelVisibility] Could not read store for ${provider}:`, e)
     }
+    const hasKeyBackend = !!backendProviders[provider]
+    let hasKeyLocal = false
+    try { hasKeyLocal = (await window.api.hasApiKey(provider)).hasKey } catch {}
+    const hasKey = hasKeyBackend || hasKeyLocal
+    const isEnabled = hasKey && stored.enabled !== false
+    providerState[provider] = { hasKey, isEnabled }
   }
+
+  // Ensure local Ollama is always enabled
+  providerState["ollama"] = { hasKey: true, isEnabled: true }
+
+  // Update each option based on its data-provider attribute
+  // Front-page dropdown: selectable if key exists (ignore toggle) so users can always
+  // pick from providers they have keys for. Toggle controls race-mode inclusion only.
+  selectEl.querySelectorAll("option[data-provider]").forEach(opt => {
+    const provider = opt.dataset.provider
+    const state = providerState[provider]
+    if (!state) return
+    const modelDisabled = disabledModels.includes(opt.value)
+    const shouldDisable = !state.hasKey || modelDisabled
+    opt.disabled = shouldDisable
+    // Keep option visible (interlink UX) — remove hidden
+    opt.hidden = false
+    // Add/remove CSS classes for styling
+    opt.classList.toggle("model-option-no-key", !state.hasKey)
+    opt.classList.toggle("model-option-disabled", modelDisabled)
+  })
+
+  // Update model provider bar below dropdown
+  updateModelProviderBar()
 
   // Also update settings panel provider cards visibility
   for (const provider of CLOUD_PROVIDERS_WITH_KEY) {
     const card = document.getElementById("card-" + provider)
     if (!card) continue
-    const hasKey = !!backendProviders[provider]
-    if (!hasKey) {
-      // Dim but don't hide — user can still click to add a key
-      card.classList.add("provider-no-key")
-    } else {
-      card.classList.remove("provider-no-key")
+    const state = providerState[provider]
+    if (!state) continue
+    card.classList.toggle("provider-no-key", !state.hasKey)
+  }
+
+  console.log("[updateCloudModelVisibility] Provider state:", providerState)
+}
+
+// Map a model value to its provider name
+function getModelProvider(modelValue) {
+  if (!modelValue || modelValue === "auto") return null
+  if (modelValue.endsWith(":cloud")) return { id: "ollama-cloud", name: "Ollama Cloud" }
+  if (modelValue.includes(":")) return { id: "ollama", name: "Local Ollama" }
+  const prefixMap = {
+    "openai-": { id: "openai", name: "OpenAI" },
+    "anthropic-": { id: "anthropic", name: "Anthropic" },
+    "google-": { id: "google", name: "Google" },
+    "xai-": { id: "xai", name: "xAI" },
+    "deepseek-": { id: "deepseek", name: "DeepSeek" },
+    "groq-": { id: "groq", name: "Groq" },
+    "perplexity-": { id: "perplexity", name: "Perplexity" },
+  }
+  for (const [prefix, info] of Object.entries(prefixMap)) {
+    if (modelValue.startsWith(prefix)) return info
+  }
+  return null
+}
+
+// Update the model provider info bar below the model dropdown
+async function updateModelProviderBar() {
+  const bar = document.getElementById("modelProviderBar")
+  const badge = document.getElementById("modelProviderBadge")
+  const status = document.getElementById("modelProviderStatus")
+  const configBtn = document.getElementById("modelProviderConfigBtn")
+  if (!bar || !badge || !status) return
+
+  const modelValue = modelSelect ? modelSelect.value : "auto"
+  const provider = getModelProvider(modelValue)
+
+  if (!provider || provider.id === "ollama") {
+    bar.style.display = "none"
+    return
+  }
+
+  bar.style.display = "flex"
+  badge.textContent = provider.name
+
+  // Check if provider has key and is enabled
+  let hasKeyLocal = false
+  try { hasKeyLocal = (await window.api.hasApiKey(provider.id)).hasKey } catch {}
+  let backendProviders = {}
+  try { backendProviders = await window.api.getProviders() } catch {}
+  let stored = {}
+  try { stored = await window.api.storeGet("provider_" + provider.id) || {} } catch {}
+  const hasKeyBackend = !!backendProviders[provider.id]
+  const hasKey = hasKeyBackend || hasKeyLocal
+  const isEnabled = hasKey && stored.enabled !== false
+
+  if (hasKey && isEnabled) {
+    status.textContent = "Ready"
+    status.style.color = "#6ee7b7"
+    bar.classList.remove("provider-missing-key")
+    if (configBtn) configBtn.style.display = "none"
+  } else if (hasKey && !isEnabled) {
+    status.textContent = "Disabled in settings"
+    status.style.color = "var(--text-dim)"
+    bar.classList.add("provider-missing-key")
+    if (configBtn) {
+      configBtn.style.display = "inline-block"
+      configBtn.textContent = "Enable"
+    }
+  } else {
+    status.textContent = "API key required"
+    status.style.color = "#fca5a5"
+    bar.classList.add("provider-missing-key")
+    if (configBtn) {
+      configBtn.style.display = "inline-block"
+      configBtn.textContent = "Add Key"
     }
   }
 }
+
+// Model provider config button (Add Key / Enable)
+document.getElementById("modelProviderConfigBtn")?.addEventListener("click", () => {
+  const modelValue = modelSelect ? modelSelect.value : "auto"
+  const provider = getModelProvider(modelValue)
+  if (provider) {
+    openSettings()
+    // Switch to providers tab and open config for this provider
+    settingsTabs.forEach(t => t.classList.remove("active"))
+    settingsTabContents.forEach(c => c.classList.remove("active"))
+    const providersTab = document.querySelector('.settings-tab[data-tab="providers"]')
+    const providersContent = document.querySelector('.settings-tab-content[data-content="providers"]')
+    if (providersTab) providersTab.classList.add("active")
+    if (providersContent) providersContent.classList.add("active")
+    openProviderConfig(provider.id)
+  }
+})
 
 // === Ollama Model Pull Handler ===
 if (ollamaPullBtn) {
@@ -5137,80 +5685,169 @@ if (ollamaPullBtn) {
 
 // === Race Toggle Rendering ===
 // Renders per-model on/off switches in the Race Toggles settings section
-function renderRaceToggles() {
-  const container = document.getElementById("raceToggleList")
+async function renderRaceToggles() {
+  // Backward compat: render into old raceToggleList if it exists
+  const oldContainer = document.getElementById("raceToggleList")
+  if (oldContainer) oldContainer.innerHTML = ""
+
+  const container = document.getElementById("modelManagerList")
   if (!container) return
 
   const disabledModels = getDisabledModels()
+
+  // Provider badge initials
+  const providerInitials = {
+    openai: "O",
+    anthropic: "A",
+    google: "G",
+    xai: "X",
+    deepseek: "D",
+    groq: "Q",
+    perplexity: "P",
+    "ollama-cloud": "OC",
+    ollama: "L"
+  }
+
+  // Fetch provider key status
+  let backendProviders = {}
+  try { backendProviders = await window.api.getProviders() } catch {}
+
   let html = ""
 
   // Cloud provider models from PROVIDER_META
   for (const [provider, meta] of Object.entries(PROVIDER_META)) {
-    const isProviderEnabled = provider !== "ollama-cloud" || true  // Always show ollama-cloud toggles
+    let hasKeyLocal = false
+    try { hasKeyLocal = (await window.api.hasApiKey(provider)).hasKey } catch {}
+    const hasKeyBackend = !!backendProviders[provider]
+    const hasKey = hasKeyBackend || hasKeyLocal
+    const providerDisabled = !hasKey
+
+    html += `<div class="model-provider-section ${providerDisabled ? 'provider-disabled' : ''}">`
+    html += `<div class="model-provider-header">`
+    html += `<span class="model-provider-badge provider-badge-${provider}">${providerInitials[provider] || provider[0].toUpperCase()}</span>`
+    html += `<span class="model-provider-name">${meta.name}</span>`
+    html += `<span class="model-provider-status ${hasKey ? 'ready' : 'nokey'}">${hasKey ? 'Ready' : 'No Key'}</span>`
+    html += `<div class="model-provider-actions">`
+    html += `<button data-provider="${provider}" data-action="enable-all">All On</button>`
+    html += `<button data-provider="${provider}" data-action="disable-all">All Off</button>`
+    html += `</div></div>`
+
+    html += `<div class="model-grid">`
     for (const model of meta.models) {
       const isDisabled = disabledModels.includes(model.value)
-      html += `<div class="model-toggle-row ${isDisabled ? 'disabled' : ''}">
-        <span class="model-toggle-name">${model.label}</span>
-        <label class="model-toggle-switch">
-          <input type="checkbox" data-model-value="${model.value}" ${isDisabled ? '' : 'checked'} />
-          <span class="toggle-track"></span>
-        </label>
-      </div>`
+      html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${model.value}">`
+      html += `<div class="model-card-info">`
+      html += `<span class="model-card-name">${model.label}</span>`
+      html += `<span class="model-card-value">${model.value}</span>`
+      html += `</div>`
+      html += `<label class="model-card-toggle">`
+      html += `<input type="checkbox" data-model-value="${model.value}" ${isDisabled ? '' : 'checked'} ${providerDisabled ? 'disabled' : ''} />`
+      html += `<span class="toggle-track"></span>`
+      html += `</label>`
+      html += `</div>`
     }
+    html += `</div></div>`
   }
 
-  // Local Ollama models — read from toolbar optgroup
+  // Local Ollama models
   const localGroup = document.getElementById("ollamaLocalGroup")
   if (localGroup) {
     const localOptions = localGroup.querySelectorAll("option")
     if (localOptions.length > 0) {
-      html += `<div style="font-size:11px;color:var(--text-dim);margin:8px 0 4px 0;padding:0 4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">Local Models</div>`
+      html += `<div class="model-provider-section">`
+      html += `<div class="model-provider-header">`
+      html += `<span class="model-provider-badge provider-badge-ollama">L</span>`
+      html += `<span class="model-provider-name">Local Ollama</span>`
+      html += `<span class="model-provider-status ready">Ready</span>`
+      html += `<div class="model-provider-actions">`
+      html += `<button data-provider="ollama" data-action="enable-all">All On</button>`
+      html += `<button data-provider="ollama" data-action="disable-all">All Off</button>`
+      html += `</div></div>`
+
+      html += `<div class="model-grid">`
       for (const opt of localOptions) {
         const isDisabled = disabledModels.includes(opt.value)
-        html += `<div class="model-toggle-row ${isDisabled ? 'disabled' : ''}">
-          <span class="model-toggle-name">${opt.textContent}</span>
-          <label class="model-toggle-switch">
-            <input type="checkbox" data-model-value="${opt.value}" ${isDisabled ? '' : 'checked'} />
-            <span class="toggle-track"></span>
-          </label>
-        </div>`
+        html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${opt.value}">`
+        html += `<div class="model-card-info">`
+        html += `<span class="model-card-name">${opt.textContent}</span>`
+        html += `<span class="model-card-value">${opt.value}</span>`
+        html += `</div>`
+        html += `<label class="model-card-toggle">`
+        html += `<input type="checkbox" data-model-value="${opt.value}" ${isDisabled ? '' : 'checked'} />`
+        html += `<span class="toggle-track"></span>`
+        html += `</label>`
+        html += `</div>`
       }
+      html += `</div></div>`
     }
   }
 
   // Custom cloud models from localStorage
   const customModels = loadCustomModels()
   if (customModels.length > 0) {
-    html += `<div style="font-size:11px;color:var(--text-dim);margin:8px 0 4px 0;padding:0 4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">Custom Models</div>`
+    html += `<div class="model-provider-section">`
+    html += `<div class="model-provider-header">`
+    html += `<span class="model-provider-badge provider-badge-ollama-cloud">C</span>`
+    html += `<span class="model-provider-name">Custom Models</span>`
+    html += `<span class="model-provider-status ready">Ready</span>`
+    html += `<div class="model-provider-actions">`
+    html += `<button data-provider="custom" data-action="enable-all">All On</button>`
+    html += `<button data-provider="custom" data-action="disable-all">All Off</button>`
+    html += `</div></div>`
+
+    html += `<div class="model-grid">`
     for (const cm of customModels) {
       const isDisabled = disabledModels.includes(cm.value)
-      html += `<div class="model-toggle-row ${isDisabled ? 'disabled' : ''}">
-        <span class="model-toggle-name">${cm.name}</span>
-        <label class="model-toggle-switch">
-          <input type="checkbox" data-model-value="${cm.value}" ${isDisabled ? '' : 'checked'} />
-          <span class="toggle-track"></span>
-        </label>
-      </div>`
+      html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${cm.value}">`
+      html += `<div class="model-card-info">`
+      html += `<span class="model-card-name">${cm.name}</span>`
+      html += `<span class="model-card-value">${cm.value}</span>`
+      html += `</div>`
+      html += `<label class="model-card-toggle">`
+      html += `<input type="checkbox" data-model-value="${cm.value}" ${isDisabled ? '' : 'checked'} />`
+      html += `<span class="toggle-track"></span>`
+      html += `</label>`
+      html += `</div>`
     }
+    html += `</div></div>`
   }
 
   container.innerHTML = html
 
-  // Wire up toggle event listeners
+  // Wire up individual toggle event listeners
   container.querySelectorAll("input[type='checkbox'][data-model-value]").forEach(cb => {
     cb.addEventListener("change", () => {
       const modelValue = cb.dataset.modelValue
       const isDisabled = !cb.checked
       setModelDisabled(modelValue, isDisabled)
 
-      // Update row styling
-      const row = cb.closest(".model-toggle-row")
-      if (row) {
-        row.classList.toggle("disabled", isDisabled)
+      // Update card styling
+      const card = cb.closest(".model-card")
+      if (card) {
+        card.classList.toggle("disabled", isDisabled)
       }
 
       // Update cloud model visibility in toolbar
       updateCloudModelVisibility()
+    })
+  })
+
+  // Wire up provider-level enable/disable all buttons
+  container.querySelectorAll(".model-provider-actions button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const provider = btn.dataset.provider
+      const action = btn.dataset.action
+      const section = btn.closest(".model-provider-section")
+      if (!section) return
+      const checkboxes = section.querySelectorAll("input[type='checkbox'][data-model-value]")
+      checkboxes.forEach(cb => {
+        if (cb.disabled) return
+        const shouldCheck = action === "enable-all"
+        if (cb.checked !== shouldCheck) {
+          cb.checked = shouldCheck
+          cb.dispatchEvent(new Event("change"))
+        }
+      })
     })
   })
 }
@@ -5315,11 +5952,18 @@ async function init() {
     // Mode
     const savedMode = await window.api.storeGet("mode")
     if (savedMode && modeSelect) modeSelect.value = savedMode
+    updateProviderRecommendation(savedMode || "adaptive")
 
     // Response style
     const savedResponseStyle = await window.api.storeGet("responseStyle")
     if (savedResponseStyle && responseStyleSelect) {
       responseStyleSelect.value = savedResponseStyle
+    }
+
+    // Temperature
+    const savedTemperature = await window.api.storeGet("temperature")
+    if (savedTemperature && temperatureSelect) {
+      temperatureSelect.value = savedTemperature
     }
 
     // Context
@@ -5341,6 +5985,35 @@ async function init() {
     const savedModel = await window.api.storeGet("model")
     if (savedModel && modelSelect) {
       modelSelect.value = savedModel
+    }
+
+    // Reset model to auto if saved model belongs to a disabled provider
+    if (savedModel && savedModel !== "auto" && modelSelect) {
+      const providerMap = {
+        "openai-": "openai", "anthropic-": "anthropic", "google-": "google",
+        "xai-": "xai", "deepseek-": "deepseek", "groq-": "groq"
+      }
+      let provider = null
+      if (savedModel.endsWith(":cloud")) provider = "ollama-cloud"
+      else {
+        for (const [prefix, p] of Object.entries(providerMap)) {
+          if (savedModel.startsWith(prefix)) { provider = p; break }
+        }
+      }
+      if (provider) {
+        let stored = {}
+        try { stored = (await window.api.storeGet("provider_" + provider)) || {} } catch {}
+        let backendProviders = {}
+        try { backendProviders = await window.api.getProviders() } catch {}
+        let hasKeyLocal = false
+        try { hasKeyLocal = (await window.api.hasApiKey(provider)).hasKey } catch {}
+        const hasKey = !!backendProviders[provider] || hasKeyLocal
+        const isEnabled = hasKey && stored.enabled !== false
+        if (!isEnabled) {
+          modelSelect.value = "auto"
+          await window.api.storeSet("model", "auto")
+        }
+      }
     }
 
     // Right-click context menu for copying selected text
@@ -5365,8 +6038,17 @@ async function init() {
     // Hide cloud models for providers without API keys
     await updateCloudModelVisibility()
 
+    // Update model provider bar on startup
+    updateModelProviderBar()
+
     // Render per-model race toggles
-    renderRaceToggles()
+    await renderRaceToggles()
+
+    // Initialize overlay features (autostart, portable mode)
+    await initOverlayFeatures()
+
+    // Pre-warm microphone and audio context for instant voice start
+    prewarmVoiceResources()
 
     // Run onboarding check on first launch
     await checkOnboarding()
@@ -5379,8 +6061,12 @@ async function init() {
 async function syncAllProviderRows() {
   const providers = await window.api.getProviders()
   for (const p of CLOUD_PROVIDERS_WITH_KEY) {
-    const hasKey = !!providers[p]
-    const stored = (await window.api.storeGet("provider_" + p)) || {}
+    let hasKeyBackend = !!providers[p]
+    let hasKeyLocal = false
+    try { hasKeyLocal = (await window.api.hasApiKey(p)).hasKey } catch {}
+    const hasKey = hasKeyBackend || hasKeyLocal
+    let stored = {}
+    try { stored = (await window.api.storeGet("provider_" + p)) || {} } catch {}
     const isEnabled = stored.enabled !== false && hasKey
     syncProviderRow(p, isEnabled)
   }
@@ -6064,7 +6750,7 @@ if (selectBtn) {
       if (!selectionMode) {
         item.classList.remove('selected')
         const checkboxBox = item.querySelector('.history-item-checkbox .checkbox-box')
-        if (checkboxBox) checkboxBox.textContent = '☐'
+        if (checkboxBox) checkboxBox.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>'
       }
     })
 
@@ -6596,6 +7282,13 @@ function initCustomDropdown(triggerId, menuId, textId, hiddenInputId, onChange) 
       menu.classList.remove("open")
       trigger.classList.remove("active")
     } else {
+      // Compute fixed position so menu escapes overflow clipping of scrollable parents
+      const rect = trigger.getBoundingClientRect()
+      const panelRect = settingsPanel ? settingsPanel.getBoundingClientRect() : { left: 0, right: window.innerWidth }
+      const menuMaxWidth = Math.min(320, panelRect.right - rect.left - 8)
+      menu.style.setProperty("--dropdown-width", menuMaxWidth + "px")
+      menu.style.top = (rect.bottom + 4) + "px"
+      menu.style.left = rect.left + "px"
       menu.classList.add("open")
       trigger.classList.add("active")
     }
@@ -6879,7 +7572,7 @@ async function triggerDynamicAction() {
     query = `Detected ${type}: ${contextText}\n\nProvide a relevant answer.`
   }
 
-  streamMessage("user", `[⚡ ${type}]: ${contextText.substring(0, 60)}...`, { hasScreenshot: !!screenshotB64, screenshotB64 })
+  streamMessage("user", `[${type}]: ${contextText.substring(0, 60)}...`, { hasScreenshot: !!screenshotB64, screenshotB64 })
   const selectedModel = modelSelect ? modelSelect.value : "auto"
   if (selectedModel === "auto") {
     await streamAIRace(query)
@@ -7036,9 +7729,9 @@ function displayAgentSuggestion(suggestion) {
 
   const agentType = suggestion.agent_type || "interview_coach"
   const agentLabels = {
-    interview_coach: "🎯 Interview Coach",
-    meeting: "📝 Meeting Notes",
-    sales_coach: "💼 Sales Coach"
+    interview_coach: "Interview Coach",
+    meeting: "Meeting Notes",
+    sales_coach: "Sales Coach"
   }
   const agentLabel = agentLabels[agentType] || agentType
   const categoryLabels = {
@@ -7291,13 +7984,13 @@ console.log("[Suggestions] Phase 2 feature initialized")
 // ==============================
 
 const complexityPatterns = {
-  'O(1)': { pattern: /constant time|O\(1\)/i, badge: '🟢 O(1)', color: '#22c55e', desc: 'Constant time' },
-  'O(log n)': { pattern: /logarithmic|binary search|O\(log n\)/i, badge: '🟢 O(log n)', color: '#22c55e', desc: 'Logarithmic time' },
-  'O(n)': { pattern: /linear time|single pass|O\(n\)(?!\^|\w)/i, badge: '🟢 O(n)', color: '#22c55e', desc: 'Linear time' },
-  'O(n log n)': { pattern: /n log n|O\(n log n\)|merge sort|heap sort|quick sort.*average/i, badge: '🟡 O(n log n)', color: '#eab308', desc: 'Linearithmic time' },
-  'O(n²)': { pattern: /quadratic|nested loop|bubble sort|O\(n\^2\)|O\(n²\)/i, badge: '🟡 O(n²)', color: '#eab308', desc: 'Quadratic time' },
-  'O(2^n)': { pattern: /exponential|recursive.*tree|fibonacci recursive|O\(2\^n\)/i, badge: '🔴 O(2ⁿ)', color: '#ef4444', desc: 'Exponential time' },
-  'O(n!)': { pattern: /factorial|permutations|O\(n!\)/i, badge: '🔴 O(n!)', color: '#ef4444', desc: 'Factorial time' }
+  'O(1)': { pattern: /constant time|O\(1\)/i, badge: '● O(1)', color: '#22c55e', desc: 'Constant time' },
+  'O(log n)': { pattern: /logarithmic|binary search|O\(log n\)/i, badge: '● O(log n)', color: '#22c55e', desc: 'Logarithmic time' },
+  'O(n)': { pattern: /linear time|single pass|O\(n\)(?!\^|\w)/i, badge: '● O(n)', color: '#22c55e', desc: 'Linear time' },
+  'O(n log n)': { pattern: /n log n|O\(n log n\)|merge sort|heap sort|quick sort.*average/i, badge: '● O(n log n)', color: '#eab308', desc: 'Linearithmic time' },
+  'O(n²)': { pattern: /quadratic|nested loop|bubble sort|O\(n\^2\)|O\(n²\)/i, badge: '● O(n²)', color: '#eab308', desc: 'Quadratic time' },
+  'O(2^n)': { pattern: /exponential|recursive.*tree|fibonacci recursive|O\(2\^n\)/i, badge: '● O(2ⁿ)', color: '#ef4444', desc: 'Exponential time' },
+  'O(n!)': { pattern: /factorial|permutations|O\(n!\)/i, badge: '● O(n!)', color: '#ef4444', desc: 'Factorial time' }
 }
 
 function analyzeComplexity(text) {
@@ -7451,9 +8144,15 @@ function toggleVoiceDropdown() {
 }
 
 function openVoiceDropdown() {
-  if (!voiceDropdownMenu) return
+  if (!voiceDropdownMenu || !voiceDropdownTrigger) return
+  const rect = voiceDropdownTrigger.getBoundingClientRect()
+  const panelRect = settingsPanel ? settingsPanel.getBoundingClientRect() : { right: window.innerWidth }
+  const menuMaxWidth = Math.min(320, panelRect.right - rect.left - 8)
+  voiceDropdownMenu.style.setProperty("--dropdown-width", menuMaxWidth + "px")
+  voiceDropdownMenu.style.top = (rect.bottom + 4) + "px"
+  voiceDropdownMenu.style.left = rect.left + "px"
   voiceDropdownMenu.classList.add("open")
-  if (voiceDropdownTrigger) voiceDropdownTrigger.classList.add("active")
+  voiceDropdownTrigger.classList.add("active")
 }
 
 function closeVoiceDropdown() {
@@ -7831,7 +8530,7 @@ function updateCreateButton() {
   // Visual hint if files added but name missing
   if (hasFiles && !hasName && cloneModelName) {
     cloneModelName.style.borderColor = '#f59e0b'
-    cloneModelName.placeholder = '⚠️ Enter a name to enable Create button'
+    cloneModelName.placeholder = 'Enter a name to enable Create button'
   } else if (cloneModelName) {
     cloneModelName.style.borderColor = ''
     if (!hasFiles) {
@@ -7875,7 +8574,7 @@ async function pollModelStatus(modelId) {
       const response = await fetch(`${API_BASE}/voice-clone/${modelId}/status`)
       const result = await response.json()
       if (result.status === "ready") {
-        cloneCreateStatus.innerHTML = '<div class="clone-status-ready">✓ Voice model ready! Scroll down to Test Voice Synthesis section.</div>'
+        cloneCreateStatus.innerHTML = '<div class="clone-status-ready">Voice model ready! Scroll down to Test Voice Synthesis section.</div>'
         await loadVoiceModels()
       } else if (result.status === "error") {
         cloneCreateStatus.innerHTML = '<div class="clone-status-error">Training failed</div>'
@@ -7993,11 +8692,11 @@ async function loadGalleryVoices() {
       galleryContainer.innerHTML = '<div class="clone-empty">No gallery voices available</div>'
       return
     }
-    const genderIcons = { male: "♂", female: "♀", neutral: "⚲" }
+    const genderLabels = { male: "M", female: "F", neutral: "N" }
     galleryContainer.innerHTML = voices.map(v => `
       <div class="clone-model-item gallery-item" data-gallery-id="${v.id}">
         <div class="clone-model-info">
-          <div class="clone-model-name">${genderIcons[v.gender] || ""} ${escapeHtml(v.name)}</div>
+          <div class="clone-model-name">${genderLabels[v.gender] ? '[' + genderLabels[v.gender] + '] ' : ''}${escapeHtml(v.name)}</div>
           <div class="clone-model-meta">${v.category} • ${v.accent} accent</div>
         </div>
         <button class="clone-test-btn" style="font-size:12px;padding:4px 10px" onclick="installGalleryVoice('${v.id}')">Install</button>
@@ -8038,7 +8737,7 @@ async function testVoiceSynthesis() {
         cloneTestResult.innerHTML = `
           <div class="clone-status-error">${escapeHtml(errorMsg)}</div>
           <div class="clone-tts-fallback">
-            <p>🔊 Click to hear with browser voice:</p>
+            <p>Click to hear with browser voice:</p>
             <button id="${btnId}" class="clone-test-btn" style="margin-top:8px;background:var(--primary);color:#fff;">
               ▶ Play Speech
             </button>
@@ -8126,7 +8825,7 @@ async function testVoiceSynthesis() {
         <div class="clone-tts-fallback">
           <p>Using browser TTS as fallback:</p>
           <button id="browserTtsBtn" class="clone-test-btn" style="margin-top:8px">
-            <span>🔊</span> Play with Browser Voice
+            <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></span>Play with Browser Voice
           </button>
         </div>
       `

@@ -55,12 +55,19 @@ RECORD_SECONDS = 4
 # MODEL SELECTION
 # ==============================
 
-def select_model(mode="adaptive"):
+def select_model(mode="adaptive", streaming=False):
     """
     Dynamically select Whisper model based on system resources and mode.
+    For streaming (real-time), prefer smaller models for low latency.
     """
     import psutil
     ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+
+    # Streaming: prioritize speed — tiny/base are much faster than small
+    if streaming:
+        if ram_gb >= 16:
+            return "base"   # good balance for streaming on high-RAM systems
+        return "tiny"       # fastest, lowest latency
 
     if mode == "interview":
         return "small"   # better accuracy for important content
@@ -93,6 +100,8 @@ def warmup():
         logger.info("[Warmup] Loading Whisper model...")
         model = get_model("adaptive")
         logger.info("[Warmup] Whisper ready: %s", model)
+        # Also preload streaming model in background so BrowserTranscriber is fast
+        threading.Thread(target=_preload_streaming_model, daemon=True, name="whisper-streaming-warmup").start()
         model_ready.set()
         _warmup_done = True
     except Exception as e:
@@ -101,17 +110,27 @@ def warmup():
         _warmup_done = True
 
 
+def _preload_streaming_model():
+    """Preload the lightweight model used by BrowserTranscriber for real-time streaming."""
+    try:
+        logger.info("[Warmup] Preloading streaming model...")
+        get_model("adaptive", streaming=True)
+        logger.info("[Warmup] Streaming model ready")
+    except Exception as e:
+        logger.debug("[Warmup] Streaming model preload skipped: %s", str(e))
+
+
 def wait_for_model(timeout=None):
     """Block until the model is ready (or timeout expires). Returns True if ready."""
     return model_ready.wait(timeout=timeout)
 
 
-def get_model(mode="adaptive"):
+def get_model(mode="adaptive", streaming=False):
     """
     Return already-loaded model instance based on selected mode.
     Thread-safe lazy loading.
     """
-    selected = select_model(mode)
+    selected = select_model(mode, streaming=streaming)
 
     if selected not in models:
         with _model_lock:
@@ -163,10 +182,10 @@ def record_audio(duration=RECORD_SECONDS, samplerate=SAMPLE_RATE):
 # TRANSCRIBE AUDIO
 # ==============================
 
-def transcribe(audio, mode="adaptive"):
+def transcribe(audio, mode="adaptive", streaming=False):
     """
     Convert audio to text using Whisper.
-    Optimized for speed: beam_size=3, vad_filter=False, greedy decoding.
+    Optimized for speed: greedy decoding for streaming, small beam for batch.
     """
 
     # Wait for warmup to complete (max 5s — return error if not ready)
@@ -174,17 +193,29 @@ def transcribe(audio, mode="adaptive"):
         logger.warning("Whisper model not ready after 5s")
 
     try:
-        model = get_model(mode)
+        model = get_model(mode, streaming=streaming)
 
-        segments, _ = model.transcribe(
-            audio,
-            beam_size=3,          # reduced from 5 — minimal quality loss, faster
-            vad_filter=False,      # disabled — adds ~200ms overhead per call
-            condition_on_previous_text=False,
-            language="en",
-            best_of=3,             # replaces beam_size reduction with non-beam alternatives
-            patience=0.3           # less patience = faster
-        )
+        if streaming:
+            # Greedy decoding for real-time — fastest possible path
+            segments, _ = model.transcribe(
+                audio,
+                beam_size=1,
+                vad_filter=False,
+                condition_on_previous_text=False,
+                language="en",
+                best_of=1,
+                without_timestamps=True,  # skip timestamp prediction = faster
+            )
+        else:
+            segments, _ = model.transcribe(
+                audio,
+                beam_size=3,          # reduced from 5 — minimal quality loss, faster
+                vad_filter=False,      # disabled — adds ~200ms overhead per call
+                condition_on_previous_text=False,
+                language="en",
+                best_of=3,             # replaces beam_size reduction with non-beam alternatives
+                patience=0.3           # less patience = faster
+            )
 
         text = " ".join(seg.text for seg in segments)
         return text.strip()
@@ -331,9 +362,10 @@ def is_meaningful(text):
 # FILE TO TRANSCRIBE
 # ==============================
 
-def transcribe_audio(file_path, mode="adaptive"):
+def transcribe_audio(file_path, mode="adaptive", fast=False):
     """
     Convert file to numpy to transcription.
+    Pass fast=True for greedy decoding (lowest latency, slight accuracy trade-off).
     """
     sf = _get_sf()
 
@@ -346,14 +378,16 @@ def transcribe_audio(file_path, mode="adaptive"):
         max_val = abs(audio).max() + 1e-6
         audio = (audio / max_val).astype("float32")
 
-        return transcribe(audio, mode)
+        return transcribe(audio, mode, streaming=fast)
 
     except Exception as e:
         logger.error("File transcription error: %s", str(e))
         return ""
 
 
-# ==============================
+def transcribe_fast(file_path):
+    """Fastest possible transcription path for uploaded audio files."""
+    return transcribe_audio(file_path, mode="adaptive", fast=True)
 # STREAMING TRANSCRIBER
 # ==============================
 
@@ -474,7 +508,7 @@ class StreamingTranscriber:
             if segment is None:  # Sentinel
                 break
             try:
-                text = transcribe(segment, mode="adaptive")
+                text = transcribe(segment, mode="adaptive", streaming=True)
                 if text and text.strip():
                     for cb in self._callbacks:
                         try:
@@ -499,7 +533,8 @@ def get_streaming_transcriber():
     if _transcriber_instance is None:
         with _transcriber_lock:
             if _transcriber_instance is None:
-                _transcriber_instance = StreamingTranscriber()
+                # 1.5s segments for lower latency than default 2.0s
+                _transcriber_instance = StreamingTranscriber(segment_duration=1.5, overlap_duration=0.3)
     return _transcriber_instance
 
 
@@ -509,10 +544,16 @@ def get_streaming_transcriber():
 
 class BrowserTranscriber:
     """Receives raw PCM Float32 chunks from browser WebSocket, buffers them,
-    transcribes on 0.5s segments, returns partial text via callbacks.
+    transcribes on ~1s segments, returns partial text via callbacks.
 
     Per-session (not a singleton) — each WebSocket connection gets its own instance.
     Thread-safe: all shared state (buffer) is protected by self.lock.
+
+    Optimizations for low latency:
+    - First transcription after 1s of audio (not 0.5s) — responsive but not excessive
+    - Sliding window: after first transcription, flush every 1s of accumulated audio
+    - Uses greedy decoding (beam_size=1) for real-time speed
+    - Forces tiny/base model for streaming regardless of RAM
     """
 
     def __init__(self, sample_rate=16000):
@@ -520,7 +561,9 @@ class BrowserTranscriber:
         self.buffer = np.array([], dtype=np.float32)
         self.lock = threading.Lock()
         self.callbacks = []
-        self.min_samples = int(0.5 * sample_rate)  # 500ms before triggering transcribe
+        self._first_done = False
+        self.min_samples_first = int(0.5 * sample_rate)   # 0.5s before first transcribe (faster)
+        self.min_samples_next = int(0.5 * sample_rate)   # 0.5s sliding window after first
 
     def add_callback(self, cb):
         """Add a callback(text) called when a partial transcription is ready."""
@@ -533,17 +576,18 @@ class BrowserTranscriber:
         with self.lock:
             self.buffer = np.concatenate([self.buffer, chunk])
 
-        # When we have at least 500ms of audio, transcribe and keep the rest
-        if len(self.buffer) >= self.min_samples:
-            segment = self.buffer[:self.min_samples].copy()
+        threshold = self.min_samples_next if self._first_done else self.min_samples_first
+        if len(self.buffer) >= threshold:
+            segment = self.buffer[:threshold].copy()
             with self.lock:
-                self.buffer = self.buffer[self.min_samples:]
+                self.buffer = self.buffer[threshold:]
+            self._first_done = True
             threading.Thread(target=self._transcribe, args=(segment,), daemon=True).start()
 
     def _transcribe(self, segment):
-        """Transcribe a segment on a background thread."""
+        """Transcribe a segment on a background thread using streaming-optimized settings."""
         try:
-            text = transcribe(segment, mode="adaptive")
+            text = transcribe(segment, mode="adaptive", streaming=True)
             if text and text.strip():
                 for cb in self.callbacks:
                     try:
@@ -561,10 +605,10 @@ class BrowserTranscriber:
             segment = self.buffer.copy()
             self.buffer = np.array([], dtype=np.float32)
         # Only transcribe if we have at least 250ms
-        if len(segment) < self.min_samples // 2:
+        if len(segment) < self.min_samples_first // 4:
             return ""
         try:
-            return transcribe(segment, mode="adaptive").strip()
+            return transcribe(segment, mode="adaptive", streaming=True).strip()
         except Exception as e:
             logger.error("[BrowserTranscriber] Final transcription error: %s", str(e))
             return ""

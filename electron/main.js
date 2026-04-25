@@ -3,6 +3,8 @@ const path = require("path")
 const { spawn } = require("child_process")
 const os = require("os")
 const stealth = require("./stealth")
+const { OverlayAdapter } = require("./features/overlay-adapter")
+const { ScreenRecorder } = require("./features/screen-recorder")
 const log = require("electron-log/main")
 const Store = require("electron-store")
 const { autoUpdater } = require("electron-updater")
@@ -14,6 +16,37 @@ log.transports.file.level = "info"
 log.transports.console.level = "debug"
 log.transports.file.maxSize = 5 * 1024 * 1024
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SPEED OPTIMIZATIONS - Disable unused Chromium features
+// ═══════════════════════════════════════════════════════════════════════════════
+// Reduce memory and startup time by disabling unnecessary features
+app.commandLine.appendSwitch("disable-features",
+  "HttpsUpgrades,HttpsFirstModeV2,HttpsFirstBalancedMode," +
+  "MediaRouter,TabHoverCardImages,ReadAnything," +
+  "AccessibilityPerformanceMonitoring,PaymentMethodQuery,WebPayments"
+)
+
+// Disable background networking
+app.commandLine.appendSwitch("disable-background-networking")
+
+// Disable component extensions (PDF viewer, etc)
+app.commandLine.appendSwitch("disable-component-extensions-with-background-pages")
+
+// Disable renderer backgrounding (keep UI responsive)
+app.commandLine.appendSwitch("disable-renderer-backgrounding")
+
+// Disable background timer throttling
+app.commandLine.appendSwitch("disable-background-timer-throttling")
+
+// Limit in-memory cache
+app.commandLine.appendSwitch("disk-cache-size", "104857600") // 100MB
+
+// Limit media cache
+app.commandLine.appendSwitch("media-cache-size", "52428800") // 50MB
+
+// Reduce memory usage
+app.commandLine.appendSwitch("js-flags", "--max-old-space-size=4096")
+
 // Prevent Chromium from upgrading HTTP→HTTPS on localhost (which causes
 // ERR_SSL_PROTOCOL_ERROR since our dev backend only serves plain HTTP).
 // Must be set BEFORE app.whenReady().
@@ -24,7 +57,6 @@ app.commandLine.appendSwitch("allow-insecure-localhost")
 // auto-upgrade it to HTTPS (Chromium's built-in HSTS preload forces HTTPS
 // for localhost/127.0.0.1 since Chrome 89)
 app.commandLine.appendSwitch("unsafely-treat-insecure-origin-as-secure", "http://127.0.0.1:8000")
-app.commandLine.appendSwitch("disable-features", "HttpsUpgrades,HttpsFirstModeV2,HttpsFirstBalancedMode")
 
 // Disable file logging in production for stealth mode
 // Logs only go to console (memory), not to disk
@@ -34,6 +66,59 @@ if (app.isPackaged) {
 
 const PLATFORM = process.platform  // 'win32' | 'darwin' | 'linux'
 const logger = log
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUTOSTART CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════════
+const AUTO_START_SETTINGS_KEY = "autoStartEnabled"
+const AUTO_START_HIDDEN_KEY = "autoStartHidden"
+
+function configureAutoStart(enabled, openAsHidden = true) {
+  if (!app.isPackaged) {
+    logger.info("[Autostart] Skipping in development mode")
+    return { success: false, reason: "development_mode" }
+  }
+
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: openAsHidden,
+      path: app.getPath("exe"),
+      args: enabled ? ["--hidden"] : []
+    })
+
+    logger.info(`[Autostart] ${enabled ? "Enabled" : "Disabled"} (hidden: ${openAsHidden})`)
+    return { success: true, enabled }
+  } catch (err) {
+    logger.error("[Autostart] Failed:", err.message)
+    return { success: false, error: err.message }
+  }
+}
+
+function getAutoStartStatus() {
+  return app.getLoginItemSettings()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PORTABLE MODE DETECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+function isPortableMode() {
+  // Check for portable mode flag file or command line arg
+  const portableFlagPath = path.join(process.resourcesPath, "PORTABLE")
+  return process.argv.includes("--portable") || fs.existsSync(portableFlagPath)
+}
+
+function getAppDataPath() {
+  if (isPortableMode()) {
+    // In portable mode, store data next to executable
+    const portableDataDir = path.join(path.dirname(app.getPath("exe")), "ANT-Data")
+    if (!fs.existsSync(portableDataDir)) {
+      fs.mkdirSync(portableDataDir, { recursive: true })
+    }
+    return portableDataDir
+  }
+  return appDataDir
+}
 
 // appData path is cross-platform via Electron API
 // IMPORTANT: Set userData BEFORE creating Store instances so they read/write
@@ -93,6 +178,9 @@ function ensureConversationsDir() {
 }
 
 let win
+let splashScreen = null
+let overlayAdapter = null
+let screenRecorder = null
 let backendProcess = null
 let backendStopped = false  // true if user/App Quit initiated the stop — don't restart
 let backendRestartAttempts = 0
@@ -191,10 +279,74 @@ function saveBounds() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SPLASH SCREEN - For perceived fast startup
+// ═══════════════════════════════════════════════════════════════════════════════
+function createSplashScreen() {
+  // Show splash immediately for perceived speed
+  splashScreen = new BrowserWindow({
+    width: 420,
+    height: 320,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    center: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js")
+    }
+  })
+
+  // Load splash HTML
+  const isProd = app.isPackaged
+  const splashPath = isProd
+    ? path.join(process.resourcesPath, "renderer", "splash.html")
+    : path.join(__dirname, "..", "apps", "web", "splash.html")
+
+  splashScreen.loadFile(splashPath).catch(() => {
+    // If splash.html doesn't exist, show basic splash
+    splashScreen.loadURL(`data:text/html,
+      <html><body style="margin:0;background:transparent;display:flex;align-items:center;justify-content:center;height:100vh;">
+        <div style="text-align:center;color:white;font-family:sans-serif;">
+          <img src="ant-icon-new.png" style="width:60px;height:60px;margin-bottom:20px;filter:drop-shadow(0 0 12px rgba(56,189,248,0.5));" alt="ANT">
+          <div style="font-size:24px;font-weight:bold;">ANT</div>
+          <div style="font-size:14px;opacity:0.7;margin-top:10px;">Loading...</div>
+        </div>
+      </body></html>
+    `)
+  })
+
+  // Close splash after main window loads
+  splashScreen.on("ready-to-show", () => {
+    splashScreen.show()
+  })
+
+  return splashScreen
+}
+
+function closeSplashScreen() {
+  if (splashScreen && !splashScreen.isDestroyed()) {
+    // Fade out effect
+    splashScreen.webContents.executeJavaScript(`
+      document.body.style.transition = "opacity 0.3s";
+      document.body.style.opacity = "0";
+    `).catch(() => {})
+
+    setTimeout(() => {
+      splashScreen.close()
+      splashScreen = null
+    }, 300)
+  }
+}
+
 // ==============================
 // WINDOW CREATION
 // ==============================
-function createWindow() {
+async function createWindow() {
   const savedBounds = store.get("windowBounds", DEFAULT_BOUNDS)
   const bounds = validateBounds(savedBounds)
 
@@ -249,10 +401,44 @@ function createWindow() {
 
   // In production, renderer is in extraResources; in dev, it's alongside electron/
   const isProd = app.isPackaged
-  const rendererPath = isProd
-    ? path.join(process.resourcesPath, "renderer", "index.html")
-    : path.join(__dirname, "..", "apps", "web", "index.html")
-  win.loadFile(rendererPath)
+  const webDir = isProd
+    ? path.join(process.resourcesPath, "renderer")
+    : path.join(__dirname, "..", "apps", "web")
+
+  // Check auth status and load signin.html if authentication is required
+  const loadAppropriatePage = () => {
+    return new Promise((resolve) => {
+      const http = require("http")
+      const req = http.get("http://127.0.0.1:8000/auth/status", { timeout: 2000 }, (res) => {
+        let body = ""
+        res.on("data", (chunk) => { body += chunk })
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(body)
+            if (data.auth_required === false) {
+              win.loadFile(path.join(webDir, "index.html"))
+            } else {
+              win.loadFile(path.join(webDir, "signin.html"))
+            }
+          } catch {
+            win.loadFile(path.join(webDir, "signin.html"))
+          }
+          resolve()
+        })
+      })
+      req.on("error", () => {
+        // Backend not ready yet — load signin as safe default
+        win.loadFile(path.join(webDir, "signin.html"))
+        resolve()
+      })
+      req.on("timeout", () => {
+        req.destroy()
+        win.loadFile(path.join(webDir, "signin.html"))
+        resolve()
+      })
+    })
+  }
+  await loadAppropriatePage()
 
   // Open external links in system browser, not in Electron window
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -260,6 +446,20 @@ function createWindow() {
       shell.openExternal(url)
     }
     return { action: "deny" }
+  })
+
+  // Toggle DevTools with Ctrl+Shift+I when window is focused
+  // (Global shortcut conflicts on Windows, so we use in-app listener)
+  win.webContents.on("before-input-event", (event, input) => {
+    const isCtrl = input.control || input.meta
+    if (isCtrl && input.shift && input.key.toLowerCase() === "i") {
+      event.preventDefault()
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools()
+      } else {
+        win.webContents.openDevTools({ mode: "detach" })
+      }
+    }
   })
   win.webContents.on("will-navigate", (event, url) => {
     // Allow navigation to our own pages, block external navigation inside the window
@@ -331,6 +531,10 @@ function createWindow() {
   // Note: Window is already set to always-on-top, no need for aggressive re-assertion
   stealth.init(win)
   ensureTopmost(win)
+
+  // Initialize overlay adapter
+  overlayAdapter = new OverlayAdapter(win)
+  overlayAdapter.setupIpcHandlers()
 }
 
 // ======================================
@@ -927,17 +1131,162 @@ ipcMain.handle("dialog:import-file", async (_event, { filePath, encryptionKey })
   }
 })
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUTOSTART IPC HANDLERS
+// ═══════════════════════════════════════════════════════════════════════════════
+ipcMain.handle("autostart:set", (_event, { enabled, hidden }) => {
+  const result = configureAutoStart(enabled, hidden !== false)
+  if (result.success) {
+    store.set(AUTO_START_SETTINGS_KEY, enabled)
+    store.set(AUTO_START_HIDDEN_KEY, hidden !== false)
+  }
+  return result
+})
+
+ipcMain.handle("autostart:get", () => {
+  const settings = getAutoStartStatus()
+  const enabled = store.get(AUTO_START_SETTINGS_KEY, false)
+  return {
+    enabled: enabled && settings.executableWillLaunchAtLogin,
+    openAsHidden: store.get(AUTO_START_HIDDEN_KEY, true),
+    systemSettings: settings
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PORTABLE MODE IPC HANDLERS
+// ═══════════════════════════════════════════════════════════════════════════════
+ipcMain.handle("app:portable-mode", () => {
+  return {
+    isPortable: isPortableMode(),
+    dataPath: getAppDataPath()
+  }
+})
+
 // Platform info for renderer
 ipcMain.handle("app:platform", () => PLATFORM)
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FILE DRAG & DROP HANDLERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Handle file drop from renderer (when HTML5 drag-drop is used)
+ipcMain.handle("file:drop", async (_event, filePath) => {
+  if (overlayAdapter) {
+    return await overlayAdapter.processDroppedFile(filePath)
+  }
+  return null
+})
+
+// Read file contents for the renderer
+ipcMain.handle("file:read", async (_event, filePath) => {
+  try {
+    const fs = require("fs")
+    if (!fs.existsSync(filePath)) {
+      return { error: "File not found" }
+    }
+
+    const stats = fs.statSync(filePath)
+    const ext = path.extname(filePath).toLowerCase()
+
+    // For text/code files, read contents
+    const textExts = [".txt", ".md", ".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml"]
+    if (textExts.includes(ext) && stats.size < 1024 * 1024) { // Max 1MB
+      const content = fs.readFileSync(filePath, "utf-8")
+      return {
+        name: path.basename(filePath),
+        content,
+        size: stats.size,
+        type: "text"
+      }
+    }
+
+    // For images, return base64
+    const imageExts = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]
+    if (imageExts.includes(ext)) {
+      const buffer = fs.readFileSync(filePath)
+      const base64 = buffer.toString("base64")
+      const mimeType = ext === ".png" ? "image/png" :
+                       ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
+                       ext === ".gif" ? "image/gif" :
+                       ext === ".webp" ? "image/webp" : "image/png"
+      return {
+        name: path.basename(filePath),
+        content: `data:${mimeType};base64,${base64}`,
+        size: stats.size,
+        type: "image"
+      }
+    }
+
+    // For PDFs and other files, just return metadata
+    return {
+      name: path.basename(filePath),
+      path: filePath,
+      size: stats.size,
+      type: overlayAdapter?.getFileType(ext) || "unknown"
+    }
+  } catch (err) {
+    logger.error("[File] Read error:", err.message)
+    return { error: err.message }
+  }
+})
+
 // ======================================
+// Provider name to .env variable mapping
+const _PROVIDER_ENV_MAP = {
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  google: "GOOGLE_API_KEY",
+  xai: "XAI_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  groq: "GROQ_API_KEY",
+  "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
+  perplexity: "PERPLEXITY_API_KEY",
+}
+
+function _updateBackendEnv(key, value) {
+  const backendDir = app.isPackaged
+    ? path.join(process.resourcesPath, "backend")
+    : path.join(__dirname, "..", "backend")
+  const envPath = path.join(backendDir, ".env")
+  let content = ""
+  try { content = fs.readFileSync(envPath, "utf8") } catch {}
+  const lines = content.split(/\r?\n/)
+  let found = false
+  const pattern = new RegExp(`^(${key}=)(.*)$`)
+  const newLines = lines.map((line) => {
+    const match = line.match(pattern)
+    if (match) {
+      found = true
+      return `${key}=${value}`
+    }
+    return line
+  })
+  if (!found) {
+    newLines.push(`${key}=${value}`)
+  }
+  fs.writeFileSync(envPath, newLines.join("\n"), "utf8")
+}
+
 // SECURE API KEY STORAGE (P1 Privacy)
 // ======================================
-// Store API keys encrypted, never in .env
-ipcMain.handle("apiKey:save", (_event, { provider, apiKey }) => {
+// Store API keys encrypted. Optionally sync to backend/.env for standalone usage.
+ipcMain.handle("apiKey:save", (_event, { provider, apiKey, syncToEnv }) => {
   try {
     apiKeyStore.set(`apiKey.${provider}`, apiKey)
     logger.info(`[API Key] Saved encrypted key for provider: ${provider}`)
+    if (syncToEnv) {
+      const envKey = _PROVIDER_ENV_MAP[provider]
+      if (envKey) {
+        try {
+          _updateBackendEnv(envKey, apiKey)
+          logger.info(`[API Key] Synced ${provider} to backend/.env`)
+        } catch (envErr) {
+          logger.error(`[API Key] Failed to sync ${provider} to .env:`, envErr.message)
+          return { success: true, warning: "Saved to encrypted store, but failed to write to backend/.env" }
+        }
+      }
+    }
     return { success: true }
   } catch (err) {
     logger.error("[API Key] Save error:", err.message)
@@ -952,6 +1301,16 @@ ipcMain.handle("apiKey:get", (_event, provider) => {
   } catch (err) {
     logger.error("[API Key] Get error:", err.message)
     return { apiKey: null, error: err.message }
+  }
+})
+
+ipcMain.handle("apiKey:has", (_event, provider) => {
+  try {
+    const key = apiKeyStore.get(`apiKey.${provider}`, null)
+    return { hasKey: !!key }
+  } catch (err) {
+    logger.error("[API Key] Has error:", err.message)
+    return { hasKey: false }
   }
 })
 
@@ -997,7 +1356,12 @@ function startApiKeyServer() {
       )) {
         res.writeHead(403, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ error: "Unauthorized" }))
-        logger.warn("[API Key Server] Rejected unauthorized key request")
+        // Rate-limit rejection logs to avoid spam
+        const now = Date.now()
+        if (!global._lastKeyRejectLog || (now - global._lastKeyRejectLog) > 10000) {
+          logger.warn("[API Key Server] Rejected unauthorized key request (throttled)")
+          global._lastKeyRejectLog = now
+        }
         return
       }
 
@@ -1188,8 +1552,67 @@ app.whenReady().then(async () => {
     callback({ requestHeaders: details.requestHeaders })
   })
 
-  await startBackend()
-  createWindow()
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // FAST STARTUP SEQUENCE
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // Check for hidden startup (skip splash)
+  const startHidden = process.argv.includes("--hidden") || process.argv.includes("--autostart")
+  const autoStartEnabled = store.get(AUTO_START_SETTINGS_KEY, false)
+
+  // Show splash screen first (for perceived speed)
+  if (!startHidden) {
+    createSplashScreen()
+  }
+
+  // Start backend and create window in parallel
+  const backendPromise = startBackend()
+  const windowPromise = new Promise((resolve) => {
+    if (startHidden && autoStartEnabled) {
+      // Start hidden
+      createWindow()
+      if (win) {
+        win.hide()
+        win.setSkipTaskbar(true)
+        stealth.enable()
+      }
+      resolve(null)
+    } else {
+      createWindow()
+      resolve(null)
+    }
+  })
+
+  // Wait for both to complete
+  await Promise.all([backendPromise, windowPromise])
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // POST-STARTUP INITIALIZATION (Lazy loading)
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // Close splash screen after main window is ready
+  if (win) {
+    win.webContents.once("dom-ready", () => {
+      // Delay close for smooth transition
+      setTimeout(closeSplashScreen, 500)
+
+      // Lazy initialize non-critical features
+      setTimeout(() => {
+        // Initialize overlay adapter
+        if (!overlayAdapter) {
+          overlayAdapter = new OverlayAdapter(win)
+          overlayAdapter.setupIpcHandlers()
+        }
+
+        // Initialize screen recorder
+        if (!screenRecorder) {
+          screenRecorder = new ScreenRecorder(win)
+          screenRecorder.registerIpcHandlers()
+        }
+
+      }, 1000) // Delay 1s for UI responsiveness
+    })
+  }
 
   // Machine lock detection - clear sensitive data when screen locks
   const { systemPreferences } = require("electron")
@@ -1310,6 +1733,105 @@ app.whenReady().then(async () => {
     }
   })
 
+  // F12 — toggle Developer Tools (Ctrl+Shift+I conflicts on some platforms)
+  registerShortcut("F12", "toggle devtools", () => {
+    if (win?.webContents) {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools()
+      } else {
+        win.webContents.openDevTools({ mode: "detach" })
+      }
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // CAPTION OVERLAY WINDOW
+  // ═══════════════════════════════════════════════════════════════════════════════
+  let captionWindow = null
+
+  function createCaptionWindow() {
+    if (captionWindow && !captionWindow.isDestroyed()) {
+      captionWindow.show()
+      captionWindow.focus()
+      return captionWindow
+    }
+
+    captionWindow = new BrowserWindow({
+      width: 500,
+      height: 300,
+      x: 50,
+      y: 50,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: true,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, "preload.js"),
+      },
+    })
+
+    if (PLATFORM === "win32") {
+      captionWindow.setAlwaysOnTop(true, "monitor", 2147483647)
+    }
+
+    const captionPath = isProd
+      ? path.join(process.resourcesPath, "renderer", "caption-overlay.html")
+      : path.join(__dirname, "..", "apps", "web", "caption-overlay.html")
+
+    captionWindow.loadFile(captionPath).catch(() => {
+      // Fallback: load from backend URL
+      captionWindow.loadURL(`http://127.0.0.1:8000/apps/web/caption-overlay.html`).catch(() => {})
+    })
+
+    captionWindow.on("closed", () => {
+      captionWindow = null
+    })
+
+    return captionWindow
+  }
+
+  ipcMain.handle("caption:show", () => {
+    createCaptionWindow()
+    return true
+  })
+
+  ipcMain.handle("caption:hide", () => {
+    if (captionWindow && !captionWindow.isDestroyed()) {
+      captionWindow.hide()
+    }
+    return true
+  })
+
+  ipcMain.handle("caption:toggle", () => {
+    if (captionWindow && !captionWindow.isDestroyed() && captionWindow.isVisible()) {
+      captionWindow.hide()
+      return false
+    } else {
+      createCaptionWindow()
+      return true
+    }
+  })
+
+  // Hotkey: Ctrl+Shift+C to toggle caption overlay
+  globalShortcut.register("CommandOrControl+Shift+C", () => {
+    if (captionWindow && !captionWindow.isDestroyed() && captionWindow.isVisible()) {
+      captionWindow.hide()
+    } else {
+      createCaptionWindow()
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // OVERLAY HOTKEYS
+  // ═══════════════════════════════════════════════════════════════════════════════
+  if (overlayAdapter) {
+    overlayAdapter.registerHotkeys()
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -1326,6 +1848,8 @@ app.on("will-quit", () => {
   backendStopped = true  // prevent crash-restart loop during shutdown
   stopHealthCheck()
   if (backendProcess) backendProcess.kill()
+  if (overlayAdapter) overlayAdapter.destroy()
+  if (screenRecorder) screenRecorder.destroy()
 })
 
 app.on("window-all-closed", () => {

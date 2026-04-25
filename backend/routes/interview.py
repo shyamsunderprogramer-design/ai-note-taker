@@ -48,7 +48,7 @@ try:
 except ImportError:
     INTERVIEW_SIMULATOR_AVAILABLE = False
 
-# Mock interview library
+# Mock interview library - Enhanced with unified question database
 try:
     from mock_interview_library import (
         mock_library,
@@ -63,6 +63,23 @@ try:
     MOCK_LIBRARY_AVAILABLE = True
 except ImportError as e:
     MOCK_LIBRARY_AVAILABLE = False
+
+# New Unified Question Library (Premium Database)
+try:
+    from question_library_integration import (
+        unified_library,
+        get_question as get_unified_question,
+        get_questions as get_unified_questions,
+        get_practice_set as get_unified_practice_set,
+        search_questions as search_unified_questions,
+        get_company_questions as get_unified_company_questions,
+        get_company_tips,
+        get_library_stats as get_unified_stats
+    )
+    UNIFIED_LIBRARY_AVAILABLE = True
+except ImportError as e:
+    logger.warning("[UnifiedLibrary] Not available: %s", str(e))
+    UNIFIED_LIBRARY_AVAILABLE = False
 
 # Resume review
 try:
@@ -395,6 +412,208 @@ async def get_companies_with_questions():
         return {"companies": sorted(list(companies))}
     except Exception as e:
         logger.error("[MockLibrary] Error getting companies: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+# --- Enhanced Question Database Endpoints (Premium) ---
+
+@router.get("/questions/v2/enhanced")
+async def get_enhanced_questions(
+    role: str = Query(None, description="Filter by role (e.g., software_engineer, senior_software_engineer)"),
+    category: str = Query(None, description="Filter by category (behavioral/coding/system_design/technical)"),
+    difficulty: str = Query(None, description="Filter by difficulty (entry/easy/medium/hard/expert)"),
+    company: str = Query(None, description="Filter by company (google/amazon/meta/netflix/etc)"),
+    topic: str = Query(None, description="Filter by topic"),
+    limit: int = Query(50, ge=1, le=500, description="Number of questions to return"),
+    prefer_curated: bool = Query(True, description="Prefer curated questions over templates")
+):
+    """
+    Get enhanced interview questions from the premium database.
+    Includes rich metadata, expected answers, and company-specific insights.
+    """
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        questions = get_unified_questions(
+            role=role,
+            category=category,
+            difficulty=difficulty,
+            company=company,
+            topic=topic,
+            limit=limit,
+            prefer_curated=prefer_curated
+        )
+
+        return {
+            "questions": questions,
+            "total_returned": len(questions),
+            "filters": {
+                "role": role,
+                "category": category,
+                "difficulty": difficulty,
+                "company": company,
+                "topic": topic
+            },
+            "library_version": "v2.0_premium",
+            "features": ["curated_questions", "expected_answers", "company_insights", "prep_tips"]
+        }
+    except Exception as e:
+        logger.error("[EnhancedQuestions] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/questions/v2/company/{company}")
+async def get_company_specific_questions(
+    company: str,
+    limit: int = Query(50, ge=1, le=200)
+):
+    """
+    Get verified questions asked by a specific company.
+    Includes company-specific interview tips.
+    """
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        questions = get_unified_company_questions(company, limit)
+        tips = get_company_tips(company)
+
+        return {
+            "company": company,
+            "questions": questions,
+            "total": len(questions),
+            "company_tips": tips,
+            "verified": True
+        }
+    except Exception as e:
+        logger.error("[CompanyQuestions] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/questions/v2/practice-set")
+async def get_enhanced_practice_set(
+    role: str = Query(..., description="Target role"),
+    difficulty: str = Query(None, description="Difficulty level"),
+    target_company: str = Query(None, description="Target company for company-specific questions"),
+    num_behavioral: int = Query(3, ge=1, le=10),
+    num_coding: int = Query(2, ge=1, le=10),
+    num_system_design: int = Query(1, ge=0, le=5)
+):
+    """
+    Get a curated practice set with balanced categories.
+    Optionally includes company-specific questions.
+    """
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        practice_set = get_unified_practice_set(
+            role=role,
+            difficulty=difficulty,
+            num_behavioral=num_behavioral,
+            num_coding=num_coding,
+            num_system_design=num_system_design,
+            target_company=target_company
+        )
+
+        return {
+            "practice_set": practice_set,
+            "role": role,
+            "target_company": target_company,
+            "configuration": {
+                "behavioral": num_behavioral,
+                "coding": num_coding,
+                "system_design": num_system_design
+            }
+        }
+    except Exception as e:
+        logger.error("[PracticeSet] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/questions/v2/search")
+async def search_enhanced_questions(
+    query: str = Query(..., description="Search query"),
+    limit: int = Query(50, ge=1, le=500)
+):
+    """Search across the enhanced question database."""
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        results = search_unified_questions(query, limit)
+        return {
+            "query": query,
+            "results": results,
+            "total": len(results)
+        }
+    except Exception as e:
+        logger.error("[SearchQuestions] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/questions/v2/stats")
+async def get_enhanced_library_stats():
+    """Get statistics about the enhanced question database."""
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        stats = get_unified_stats()
+        return {
+            "stats": stats,
+            "comparison": {
+                "legacy_template_capacity": "50,000,000+",
+                "curated_verified_questions": stats.get("total_verified_questions", 0),
+                "companies_covered": stats.get("companies_with_verified_questions", 0),
+                "total_capacity": stats.get("total_capacity", 0)
+            },
+            "features": [
+                "STAR_format_behavioral_questions",
+                "expected_answer_frameworks",
+                "company_specific_insights",
+                "interview_preparation_tips",
+                "coding_complexity_analysis",
+                "system_design_rubrics",
+                "difficulty_ratings",
+                "topic_tagging"
+            ]
+        }
+    except Exception as e:
+        logger.error("[EnhancedStats] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/questions/v2/categories")
+async def get_question_categories():
+    """Get available question categories."""
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        categories = unified_library.get_categories()
+        return {"categories": categories}
+    except Exception as e:
+        logger.error("[Categories] Error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/questions/v2/companies")
+async def get_available_companies():
+    """Get list of companies with verified questions."""
+    if not UNIFIED_LIBRARY_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Enhanced question library not available", status_code=503)
+
+    try:
+        companies = unified_library.get_companies()
+        return {
+            "companies": companies,
+            "total": len(companies),
+            "tiers": ["FAANG", "Big Tech", "Unicorns", "Startups"]
+        }
+    except Exception as e:
+        logger.error("[Companies] Error: %s", str(e))
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 

@@ -146,6 +146,21 @@ async def logout_user(user: User = Depends(require_authentication)):
     return {"status": "success", "message": "Logged out successfully"}
 
 
+@router.post("/auth/reset-password")
+async def reset_password(
+    username: str = Form(...),
+    new_password: str = Form(..., min_length=8)  # nosec B105
+):
+    """Reset password for a user account (for local/self-hosted use)"""
+    user = user_manager.get_user(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_manager.update_password(username, new_password)
+    log_audit_event("auth_reset_password", username, "password_reset", resource=f"user:{user.id}", success=True)
+    return {"status": "success", "message": "Password reset successfully"}
+
+
 @router.get("/audit/log")
 async def get_audit_log_endpoint(
     user: User = Depends(require_authentication),

@@ -10,6 +10,7 @@
   /* Colors - Dark Theme (Default) */
   --text-main: rgba(255, 255, 255, 0.95);
   --text-dim: rgba(255, 255, 255, 0.45);
+  --text-secondary: rgba(255, 255, 255, 0.45);
   --text-bright: rgba(255, 255, 255, 1);
   --line: rgba(255, 255, 255, 0.1);
   --line-bright: rgba(255, 255, 255, 0.2);
@@ -69,9 +70,14 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Glass Effect */
-  --glass-bg: rgba(18, 21, 36, 0.98);
+  --glass-bg: rgba(15, 23, 42, 0.55);
   --glass-backdrop: blur(20px);
+  --glass-blur: 20px;
   --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: var(--shadow-md);
+  --bg-primary: rgba(10, 14, 26, 0.55);
+  --bg-secondary: rgba(20, 24, 40, 0.5);
+  --bg-tertiary: rgba(30, 35, 55, 0.45);
 }
 
 /* ==============================
@@ -81,6 +87,7 @@
   :root {
     --text-main: rgba(0, 0, 0, 0.9);
     --text-dim: rgba(0, 0, 0, 0.45);
+    --text-secondary: rgba(0, 0, 0, 0.45);
     --text-bright: rgba(0, 0, 0, 1);
     --line: rgba(0, 0, 0, 0.1);
     --line-bright: rgba(0, 0, 0, 0.2);
@@ -104,7 +111,12 @@
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.15);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
 
-    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-bg: rgba(255, 255, 255, 0.75);
+    --glass-blur: 20px;
     --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-shadow: var(--shadow-md);
+    --bg-primary: rgba(240, 240, 255, 0.55);
+    --bg-secondary: rgba(230, 230, 245, 0.5);
+    --bg-tertiary: rgba(220, 220, 240, 0.45);
   }
 }

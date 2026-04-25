@@ -429,77 +429,189 @@ async def get_summary_handler(arguments: Dict) -> Dict:
 
 
 async def list_action_items_handler(arguments: Dict) -> Dict:
-    """
-    Tool: list_action_items
-    Get action items from a meeting/conversation.
-    """
+    """Extract action items from a conversation by analyzing its messages."""
     conversation_id = arguments.get("conversation_id")
 
-    # Mock implementation - would parse conversation for action items
-    return {
-        "action_items": [
-            {"text": "Follow up on technical discussion", "priority": "high"},
-            {"text": "Review system design proposal", "priority": "medium"},
-            {"text": "Schedule next round interview", "priority": "high"}
-        ],
-        "conversation_id": conversation_id,
-        "generated_at": datetime.now().isoformat()
-    }
+    if not conversation_id:
+        return {"error": "conversation_id required", "action_items": []}
+
+    try:
+        from database import ConversationRepository
+        conv = await ConversationRepository.get_by_id(conversation_id)
+        if not conv:
+            return {"error": "Conversation not found", "action_items": [], "conversation_id": conversation_id}
+
+        messages = conv.messages or []
+        if not messages:
+            return {"action_items": [], "conversation_id": conversation_id, "note": "No messages in conversation"}
+
+        # Extract action items from messages using keyword patterns
+        action_items = []
+        action_patterns = [
+            r"(?:i'll|I will|let me|we should|we need to|please|todo|action item|follow up|next step)\s+(.+)",
+            r"(?:assign|schedule|create|review|update|send|share|check|fix|implement)\s+(.+)",
+        ]
+
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content", "")
+            if not content or not isinstance(content, str):
+                continue
+            for pattern in action_patterns:
+                for match in __import__("re").finditer(pattern, content, __import__("re").IGNORECASE):
+                    item_text = match.group(1).strip().rstrip(".,;:")
+                    if len(item_text) > 5:
+                        action_items.append({
+                            "text": item_text,
+                            "source": msg.get("role", "unknown"),
+                            "priority": "high" if any(w in item_text.lower() for w in ["urgent", "asap", "critical", "today"]) else "medium",
+                        })
+
+        # Deduplicate
+        seen = set()
+        unique_items = []
+        for item in action_items:
+            key = item["text"][:50].lower()
+            if key not in seen:
+                seen.add(key)
+                unique_items.append(item)
+
+        return {
+            "action_items": unique_items[:10],
+            "conversation_id": conversation_id,
+            "title": conv.title,
+            "generated_at": datetime.now().isoformat()
+        }
+
+    except ImportError:
+        return {"error": "Database not available", "action_items": [], "conversation_id": conversation_id}
+    except Exception as e:
+        return {"error": "An internal error occurred", "action_items": [], "conversation_id": conversation_id}
 
 
 async def get_interview_notes_handler(arguments: Dict) -> Dict:
-    """
-    Tool: get_interview_notes
-    Get interview preparation notes for a company/role.
-    """
+    """Get interview preparation notes from the question database and prediction engine."""
     company = arguments.get("company", "")
     role = arguments.get("role", "")
 
-    # Mock implementation - would query interview database
     notes = {
         "company": company,
         "role": role,
-        "process": [
-            "Initial phone screen (30 min)",
-            "Technical interview (60 min)",
-            "System design (60 min)",
-            "Behavioral/Culture fit (45 min)"
-        ],
-        "common_questions": [
-            "Tell me about yourself",
-            "Why do you want to work here?",
-            "Describe a challenging project"
-        ],
-        "tips": [
-            "Research recent company news",
-            "Prepare specific examples using STAR method",
-            "Have questions ready for the interviewer"
-        ],
+        "process": [],
+        "common_questions": [],
+        "tips": [],
         "generated_at": datetime.now().isoformat()
     }
+
+    # Try to get company-specific questions from prediction engine
+    try:
+        from database import InterviewSession
+        try:
+            from predict import predict_questions, get_checklist, get_supported_companies
+            if company:
+                predicted = predict_questions(company)
+                if predicted:
+                    notes["common_questions"] = predicted[:10]
+                checklist = get_checklist(company)
+                if checklist:
+                    notes["tips"] = checklist[:8]
+                notes["process"] = _get_interview_stages(company)
+        except ImportError:
+            notes["common_questions"] = _get_default_questions(company, role)
+            notes["tips"] = _get_default_tips()
+            notes["process"] = _get_interview_stages(company)
+    except ImportError:
+        notes["common_questions"] = _get_default_questions(company, role)
+        notes["tips"] = _get_default_tips()
+        notes["process"] = _get_interview_stages(company)
 
     return notes
 
 
+def _get_interview_stages(company: str) -> List[str]:
+    """Get typical interview stages for a company."""
+    return [
+        "Initial phone screen (30 min)",
+        "Technical interview (60 min)",
+        "System design (60 min)",
+        "Behavioral/Culture fit (45 min)"
+    ]
+
+
+def _get_default_questions(company: str, role: str) -> List[str]:
+    """Default interview questions when prediction engine unavailable."""
+    return [
+        "Tell me about yourself",
+        f"Why do you want to work at {company}?" if company else "Why do you want to work here?",
+        "Describe a challenging project you've worked on",
+        "Where do you see yourself in 5 years?",
+        "What is your biggest weakness?",
+    ]
+
+
+def _get_default_tips() -> List[str]:
+    """Default interview tips."""
+    return [
+        "Research the company's recent news and products",
+        "Prepare specific examples using the STAR method",
+        "Have thoughtful questions ready for the interviewer",
+        "Practice your 2-minute personal pitch",
+    ]
+
+
 async def ask_about_conversation_handler(arguments: Dict) -> Dict:
-    """
-    Tool: ask_about_conversation
-    Q&A over a specific conversation.
-    """
+    """Q&A over a specific conversation using context from messages."""
     conversation_id = arguments.get("conversation_id")
     question = arguments.get("question", "")
 
     if not conversation_id or not question:
         return {"error": "conversation_id and question required"}
 
-    # Mock implementation - would use RAG or similar
-    return {
-        "conversation_id": conversation_id,
-        "question": question,
-        "answer": "Based on the conversation, the key points discussed were... [This is a placeholder answer. In production, would use RAG to generate answer from conversation context.]",
-        "relevant_messages": [1, 3, 5],  # Indices of relevant messages
-        "confidence": 0.85
-    }
+    try:
+        from database import ConversationRepository
+        conv = await ConversationRepository.get_by_id(conversation_id)
+        if not conv:
+            return {"error": "Conversation not found", "conversation_id": conversation_id}
+
+        messages = conv.messages or []
+        # Find relevant messages by keyword matching
+        q_words = set(question.lower().split())
+        relevant_indices = []
+        for i, msg in enumerate(messages):
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                msg_words = set(content.lower().split())
+                overlap = len(q_words & msg_words)
+                if overlap >= 2:
+                    relevant_indices.append(i)
+
+        # Build context from relevant messages
+        relevant_messages = []
+        for i in relevant_indices[:5]:
+            msg = messages[i]
+            if isinstance(msg, dict):
+                relevant_messages.append({
+                    "role": msg.get("role", "unknown"),
+                    "content": (msg.get("content", "") or "")[:200],
+                    "index": i
+                })
+
+        return {
+            "conversation_id": conversation_id,
+            "question": question,
+            "relevant_messages": relevant_messages,
+            "total_messages": len(messages),
+            "confidence": min(1.0, len(relevant_indices) * 0.2 + 0.3) if relevant_indices else 0.2,
+            "generated_at": datetime.now().isoformat()
+        }
+
+    except ImportError:
+        return {"error": "Database not available", "conversation_id": conversation_id}
+    except Exception as e:
+        return {"error": "An internal error occurred", "conversation_id": conversation_id}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

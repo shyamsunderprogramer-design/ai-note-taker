@@ -103,70 +103,42 @@ router = APIRouter()
 
 @router.post("/transcribe")
 async def transcribe_api(file: UploadFile = File(...)):
-    """Transcribe uploaded audio and route to AI if a question is detected."""
-    USE_AUTONOMOUS = False
+    """Fast audio transcription — returns text only. AI response is handled by the frontend."""
     secure_name = get_secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, secure_name)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    wav_path = file_path.replace(".webm", ".wav")
-    ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(  # nosec B603
-        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+    # Pass file directly to faster-whisper (it uses ffmpeg internally, supports webm/wav/mp3/etc.)
+    # This skips a redundant 300-800ms ffmpeg subprocess call.
+    text = transcribe_audio(file_path, mode=CURRENT_MODE, fast=True)
 
-    text = transcribe_audio(wav_path, mode=CURRENT_MODE)
+    try:
+        os.remove(file_path)
+    except OSError:
+        pass  # nosec B110
 
-    for path in (file_path, wav_path):
-        try:
-            os.remove(path)
-        except OSError:
-            pass  # nosec B110
-
-    if not text or not is_meaningful(text) or not is_question(text):
-        return {"text": text, "response": ""}
-
-    result = route_ai(text, mode=CURRENT_MODE)
-    return {
-        "text": text,
-        "response": clean_ai_output(result["response"]),
-        "mode": result["mode"],
-        "model": result["model"]
-    }
+    return {"text": text or ""}
 
 
 @router.post("/transcribe-cloud")
 @rate_limit(requests_per_minute=20)
 async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai", model: str = "gpt-4o-mini"):
-    """Transcribe and route to a cloud AI provider"""
-    USE_AUTONOMOUS = False
+    """Transcribe and route to a cloud AI provider."""
     secure_name = get_secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, secure_name)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    wav_path = file_path.replace(".webm", ".wav")
-    ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(  # nosec B603
-        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+    # Pass file directly to faster-whisper, skipping redundant ffmpeg subprocess
+    text = transcribe_audio(file_path, mode=CURRENT_MODE, fast=True)
 
-    text = transcribe_audio(wav_path, mode=CURRENT_MODE)
-
-    for path in (file_path, wav_path):
-        try:
-            os.remove(path)
-        except OSError:
-            pass  # nosec B110
+    try:
+        os.remove(file_path)
+    except OSError:
+        pass  # nosec B110
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -358,7 +330,7 @@ async def ws_transcribe(ws: WebSocket):
 
     await ws.accept()
 
-    # WebSocket authentication
+    # WebSocket authentication — fast path: token in query param
     token = ws.query_params.get("token")
     user = None
 
@@ -366,8 +338,9 @@ async def ws_transcribe(ws: WebSocket):
         if token:
             user = get_current_user(token)
         else:
+            # Brief wait for auth message (2s), then reject fast
             try:
-                first_msg = await asyncio.wait_for(ws.receive(), timeout=10)
+                first_msg = await asyncio.wait_for(ws.receive(), timeout=2)
                 if "text" in first_msg and first_msg["text"]:
                     try:
                         auth_data = json.loads(first_msg["text"])

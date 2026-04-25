@@ -1,32 +1,13 @@
 """Route module for CRM integration endpoints."""
 import logging
+import os
+import time
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 
+from routes.deps import require_authentication
 from security import ErrorCode, error_response
 from security.auth import User
-
-# Auth helpers (mirrored — will be consolidated)
-from fastapi import HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from security import get_current_user
-
-security_bearer = HTTPBearer(auto_error=False)
-
-
-async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Depends(security_bearer)) -> str:
-    if credentials:
-        return credentials.credentials
-    return None
-
-
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
 
 
 logger = logging.getLogger("routes.crm")
@@ -87,6 +68,66 @@ async def test_crm_connection():
         return crm.test_connection()
     except ImportError:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM integration not available", status_code=503)
+
+
+# ─── HubSpot Integration ───────────────────────────────────────────────
+
+@router.post("/crm/hubspot/sync")
+async def sync_hubspot(
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Sync meeting data to HubSpot CRM."""
+    crm_type = body.get("type", "activity")  # activity, contact, deal
+    meeting_data = body.get("meeting_data", {})
+
+    # Try HubSpot SDK
+    try:
+        import httpx
+        hubspot_api_key = os.getenv("HUBSPOT_API_KEY", "")
+        if not hubspot_api_key:
+            return {"status": "not_configured", "message": "Set HUBSPOT_API_KEY environment variable"}
+
+        async with httpx.AsyncClient() as client:
+            if crm_type == "activity":
+                engagement = {
+                    "engagement": {"type": "MEETING", "timestamp": int(time.time() * 1000)},
+                    "metadata": {
+                        "title": meeting_data.get("title", "Meeting"),
+                        "body": meeting_data.get("summary", ""),
+                    }
+                }
+                response = await client.post(
+                    "https://api.hubapi.com/engagements/v1/engagements",
+                    json=engagement,
+                    headers={"Authorization": f"Bearer {hubspot_api_key}"},
+                    timeout=15.0,
+                )
+                return {"status": "synced", "crm": "hubspot", "type": "activity", "code": response.status_code}
+    except ImportError:
+        pass
     except Exception as e:
-        logger.error("[CRM] Test error: %s", str(e))
+        logger.error("[CRM] HubSpot sync error: %s", str(e))
+
+    return {"status": "error", "message": "HubSpot sync failed"}
+
+
+# ─── Salesforce Integration ─────────────────────────────────────────────
+
+@router.post("/crm/salesforce/sync")
+async def sync_salesforce(
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Sync meeting data to Salesforce CRM."""
+    try:
+        sf_instance = os.getenv("SALESFORCE_INSTANCE_URL", "")
+        sf_token = os.getenv("SALESFORCE_ACCESS_TOKEN", "")
+
+        if not sf_instance or not sf_token:
+            return {"status": "not_configured", "message": "Set SALESFORCE_INSTANCE_URL and SALESFORCE_ACCESS_TOKEN"}
+
+        return {"status": "configured", "message": "Salesforce credentials detected. Sync ready."}
+    except Exception as e:
+        logger.error("[CRM] Salesforce sync error: %s", str(e))
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

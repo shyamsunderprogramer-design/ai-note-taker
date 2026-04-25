@@ -4,6 +4,7 @@ Handles token generation, validation, and user authentication
 """
 
 import hmac
+import json
 import logging
 import os
 import secrets
@@ -70,6 +71,8 @@ class User:
         "daily_limit": 1000,
         "reset_date": datetime.now(timezone.utc).strftime("%Y-%m-%d")
     })
+    security_question: Optional[str] = None
+    hashed_security_answer: Optional[str] = None
 
 
 @dataclass
@@ -95,6 +98,11 @@ class UserManager:
             try:
                 data = json.loads(USERS_FILE.read_text())
                 for user_data in data.get("users", []):
+                    # Migration: add security question fields if missing
+                    if "security_question" not in user_data:
+                        user_data["security_question"] = None
+                    if "hashed_security_answer" not in user_data:
+                        user_data["hashed_security_answer"] = None
                     user = User(**user_data)
                     self.users[user.username] = user
             except Exception as e:
@@ -114,7 +122,9 @@ class UserManager:
                         "is_admin": u.is_admin,
                         "created_at": u.created_at,
                         "last_login": u.last_login,
-                        "api_quota": u.api_quota
+                        "api_quota": u.api_quota,
+                        "security_question": u.security_question,
+                        "hashed_security_answer": u.hashed_security_answer
                     }
                     for u in self.users.values()
                 ]
@@ -124,32 +134,37 @@ class UserManager:
             logging.getLogger("auth").warning(f"[WARNING] Failed to save users: {e}")
 
     def _create_default_user(self):
-        """Create default admin user if none exists.
-        Fixed credentials: admin / admin1234 — change in production."""
-        if not self.users:
-            logging.getLogger("auth").info("[SETUP] Default admin account: admin / admin1234")
-            self.create_user(
-                username="admin",
-                email="admin@ainotetaker.local",
-                password="admin1234",  # nosec B105 — default dev credentials, change in production
-                is_admin=True
-            )
+        """No default user is created. First user must register via /auth/register."""
+        pass
 
     def create_user(self, username: str, email: str, password: str,
-                   is_admin: bool = False) -> User:
-        """Create a new user"""
+                   is_admin: bool = False,
+                   security_question: Optional[str] = None,
+                   security_answer: Optional[str] = None) -> User:
+        """Create a new user. First user automatically becomes admin."""
         if username in self.users:
             raise ValueError(f"User '{username}' already exists")
 
+        # First user is automatically admin
+        if not self.users:
+            is_admin = True
+
         user_id = str(uuid.uuid4())
         hashed_password = self._hash_password(password) if HAS_JWT else password
+
+        hashed_answer = None
+        if security_question and security_answer:
+            normalized_answer = security_answer.strip().lower()
+            hashed_answer = self._hash_password(normalized_answer) if HAS_JWT else f"plain:{normalized_answer}"
 
         user = User(
             id=user_id,
             username=username,
             email=email,
             hashed_password=hashed_password,
-            is_admin=is_admin
+            is_admin=is_admin,
+            security_question=security_question,
+            hashed_security_answer=hashed_answer
         )
 
         self.users[username] = user
@@ -198,6 +213,41 @@ class UserManager:
     def get_user(self, username: str) -> Optional[User]:
         """Get user by username"""
         return self.users.get(username)
+
+    def update_password(self, username: str, new_password: str) -> bool:
+        """Update password for an existing user"""
+        user = self.users.get(username)
+        if not user:
+            return False
+        user.hashed_password = self._hash_password(new_password) if HAS_JWT else f"plain:{new_password}"
+        self._save_users()
+        return True
+
+    def set_security_question(self, username: str, question: str, answer: str) -> bool:
+        """Set or update a user's security question and answer"""
+        user = self.users.get(username)
+        if not user:
+            return False
+        normalized_answer = answer.strip().lower()
+        user.security_question = question
+        user.hashed_security_answer = self._hash_password(normalized_answer) if HAS_JWT else f"plain:{normalized_answer}"
+        self._save_users()
+        return True
+
+    def verify_security_answer(self, username: str, answer: str) -> bool:
+        """Verify a user's security answer. Returns False if user not found or no question set."""
+        user = self.users.get(username)
+        if not user or not user.hashed_security_answer:
+            return False
+        normalized_answer = answer.strip().lower()
+        return self.verify_password(normalized_answer, user.hashed_security_answer)
+
+    def has_security_question(self, username: str) -> Optional[str]:
+        """Return the security question text if set, or None. Does not leak user existence."""
+        user = self.users.get(username)
+        if not user or not user.security_question:
+            return None
+        return user.security_question
 
 
 # Global user manager instance

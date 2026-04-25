@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 
 logger = logging.getLogger("cloud_providers")
 
@@ -11,7 +12,8 @@ from lib.http_client import sync_client
 # SECURE API KEY FETCHER (P1 Privacy)
 # Fetches encrypted keys from Electron secure storage
 # ==============================
-_key_cache = {}
+_key_cache = {}  # provider -> (key: str|None, timestamp: float)
+_KEY_CACHE_TTL = 5  # 5 seconds — fresh enough for immediate use after save
 
 # Shared secret for authenticating with the Electron API key server.
 # Passed via KEY_SERVER_SECRET env var from Electron on startup.
@@ -20,8 +22,11 @@ _KEY_SERVER_SECRET = os.getenv("KEY_SERVER_SECRET", "")
 def fetch_key_from_secure_server(provider):
     """Fetch API key from Electron's secure key server (localhost:18000)
     Requires shared secret for authentication."""
+    now = time.time()
     if provider in _key_cache:
-        return _key_cache[provider]
+        cached_key, cached_time = _key_cache[provider]
+        if (now - cached_time) < _KEY_CACHE_TTL:
+            return cached_key
     try:
         headers = {}
         if _KEY_SERVER_SECRET:
@@ -35,15 +40,16 @@ def fetch_key_from_secure_server(provider):
         )
         if response.status_code == 403:
             logger.warning(f"[SecureKey] Authentication rejected for {provider}")
+            _key_cache[provider] = (None, now)
             return None
         if response.status_code == 200:
             data = response.json()
             key = data.get("apiKey")
-            if key:
-                _key_cache[provider] = key
-                return key
+            _key_cache[provider] = (key, now)
+            return key
     except Exception as e:
         logger.debug("[SecureKey] Could not fetch from secure server: %s", str(e))
+    _key_cache[provider] = (None, now)
     return None
 
 def get_key_secure(provider, env_var):
@@ -234,7 +240,7 @@ def get_perplexity_key(user_id: str = None):
 # OLLAMA CLOUD (ollama.com)
 # ==============================
 
-def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", style="concise", messages=None, image_b64=None):
+def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", style="concise", messages=None, image_b64=None, temperature=None):
     """Ollama Cloud - uses https://ollama.com/api/chat endpoint.
     Supports vision models (gemma3, qwen3-vl, etc.) via image_b64 param."""
     import time
@@ -265,6 +271,8 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
         "messages": chat_messages,
         "stream": stream
     }
+    if temperature is not None:
+        body["options"] = {"temperature": temperature}
 
     try:
         if stream:
@@ -309,16 +317,16 @@ def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", 
     yield _make_done(ms)
 
 
-def ask_ollama_cloud_stream(prompt, model="qwen2.5:1.5b", mode="adaptive", style="concise", messages=None, image_b64=None):
+def ask_ollama_cloud_stream(prompt, model="qwen2.5:1.5b", mode="adaptive", style="concise", messages=None, image_b64=None, temperature=None):
     """Streaming version of Ollama Cloud — supports vision via image_b64."""
-    yield from ask_ollama_cloud(prompt, model=model, stream=True, mode=mode, style=style, messages=messages, image_b64=image_b64)
+    yield from ask_ollama_cloud(prompt, model=model, stream=True, mode=mode, style=style, messages=messages, image_b64=image_b64, temperature=temperature)
 
 
 # ==============================
 # BASE NON-STREAMING
 # ==============================
 
-def ask_gpt(prompt, model="gpt-4o-mini", stream=False):
+def ask_gpt(prompt, model="gpt-4o-mini", stream=False, temperature=None):
     """OpenAI ChatGPT"""
     api_key = get_openai_key()
     headers = {
@@ -328,7 +336,7 @@ def ask_gpt(prompt, model="gpt-4o-mini", stream=False):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": temperature if temperature is not None else 0.3
     }
     if stream:
         body["stream"] = True
@@ -344,7 +352,7 @@ def ask_gpt(prompt, model="gpt-4o-mini", stream=False):
     return response
 
 
-def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False):
+def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False, temperature=None):
     """Anthropic Claude"""
     api_key = get_anthropic_key()
     headers = {
@@ -355,7 +363,7 @@ def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
+        "temperature": temperature if temperature is not None else 0.3,
         "max_tokens": 1024
     }
     if stream:
@@ -372,13 +380,13 @@ def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False):
     return response
 
 
-def ask_gemini(prompt, model="gemini-2.0-flash", stream=False):
+def ask_gemini(prompt, model="gemini-2.0-flash", stream=False, temperature=None):
     """Google Gemini"""
     api_key = get_google_key()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
+        "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 1024}
     }
     if stream:
         url += "&alt=sse"
@@ -388,7 +396,7 @@ def ask_gemini(prompt, model="gemini-2.0-flash", stream=False):
     return response
 
 
-def ask_grok(prompt, model="grok-2-mini", stream=False):
+def ask_grok(prompt, model="grok-2-mini", stream=False, temperature=None):
     """xAI Grok"""
     api_key = get_xai_key()
     headers = {
@@ -398,7 +406,7 @@ def ask_grok(prompt, model="grok-2-mini", stream=False):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": temperature if temperature is not None else 0.3
     }
     if stream:
         body["stream"] = True
@@ -414,7 +422,7 @@ def ask_grok(prompt, model="grok-2-mini", stream=False):
     return response
 
 
-def ask_deepseek(prompt, model="deepseek-chat", stream=False):
+def ask_deepseek(prompt, model="deepseek-chat", stream=False, temperature=None):
     """DeepSeek"""
     api_key = get_deepseek_key()
     headers = {
@@ -424,7 +432,7 @@ def ask_deepseek(prompt, model="deepseek-chat", stream=False):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": temperature if temperature is not None else 0.3
     }
     if stream:
         body["stream"] = True
@@ -440,7 +448,7 @@ def ask_deepseek(prompt, model="deepseek-chat", stream=False):
     return response
 
 
-def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False):
+def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False, temperature=None):
     """Groq"""
     api_key = get_groq_key()
     headers = {
@@ -450,7 +458,7 @@ def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": temperature if temperature is not None else 0.3
     }
     if stream:
         body["stream"] = True
@@ -470,13 +478,13 @@ def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False):
 # STREAMING — SSE event format
 # ==============================
 
-def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise", messages=None):
+def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise", messages=None, temperature=None):
     """OpenAI streaming — yields SSE event strings"""
     import time
     start = time.time()
     final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
     try:
-        resp = ask_gpt(final_prompt, model=model, stream=True)
+        resp = ask_gpt(final_prompt, model=model, stream=True, temperature=temperature)
         yield _make_meta(model, "openai")
 
         chunk_count = 0
@@ -506,7 +514,7 @@ def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise"
         yield _make_error("OpenAI error: An internal error occurred")
 
 
-def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive", style="concise", messages=None):
+def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive", style="concise", messages=None, temperature=None):
     """Anthropic streaming — yields SSE event strings"""
     import time
     start = time.time()
@@ -521,7 +529,7 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
         body = {
             "model": model,
             "messages": [{"role": "user", "content": final_prompt}],
-            "temperature": 0.3,
+            "temperature": temperature if temperature is not None else 0.3,
             "max_tokens": 1024,
             "stream": True
         }
@@ -557,7 +565,7 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
         yield _make_error("Claude error: An internal error occurred")
 
 
-def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="concise", messages=None):
+def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="concise", messages=None, temperature=None):
     """Google Gemini streaming — yields SSE event strings"""
     import time
     start = time.time()
@@ -566,7 +574,7 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
     body = {
         "contents": [{"parts": [{"text": final_prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
+        "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 1024}
     }
     with sync_client.stream("POST", url, json=body, timeout=60) as resp:
         if resp.status_code != 200:
@@ -591,7 +599,7 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
     yield _make_done(ms)
 
 
-def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise", messages=None):
+def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise", messages=None, temperature=None):
     """xAI Grok streaming — yields SSE event strings"""
     import time
     start = time.time()
@@ -604,7 +612,7 @@ def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise
     body = {
         "model": model,
         "messages": [{"role": "user", "content": final_prompt}],
-        "temperature": 0.3,
+        "temperature": temperature if temperature is not None else 0.3,
         "stream": True
     }
     yield _make_meta(model, "xai")
@@ -631,7 +639,7 @@ def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise
     yield _make_done(ms)
 
 
-def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="concise", messages=None):
+def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="concise", messages=None, temperature=None):
     """DeepSeek streaming — yields SSE event strings"""
     import time
     start = time.time()
@@ -644,7 +652,7 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
     body = {
         "model": model,
         "messages": [{"role": "user", "content": final_prompt}],
-        "temperature": 0.3,
+        "temperature": temperature if temperature is not None else 0.3,
         "stream": True
     }
     yield _make_meta(model, "deepseek")
@@ -671,7 +679,7 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
     yield _make_done(ms)
 
 
-def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", style="concise", messages=None):
+def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", style="concise", messages=None, temperature=None):
     """Groq streaming — yields SSE event strings"""
     import time
     start = time.time()
@@ -684,7 +692,7 @@ def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", st
     body = {
         "model": model,
         "messages": [{"role": "user", "content": final_prompt}],
-        "temperature": 0.3,
+        "temperature": temperature if temperature is not None else 0.3,
         "stream": True
     }
     yield _make_meta(model, "groq")
@@ -715,7 +723,7 @@ def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", st
 # PERPLEXITY
 # ==============================
 
-def ask_perplexity(prompt, model="sonar", stream=False):
+def ask_perplexity(prompt, model="sonar", stream=False, temperature=None):
     """Perplexity AI — uses OpenAI-compatible endpoint"""
     api_key = get_perplexity_key()
     headers = {
@@ -725,7 +733,7 @@ def ask_perplexity(prompt, model="sonar", stream=False):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": temperature if temperature is not None else 0.3
     }
     if stream:
         body["stream"] = True
@@ -740,7 +748,7 @@ def ask_perplexity(prompt, model="sonar", stream=False):
     return response
 
 
-def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise", messages=None):
+def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise", messages=None, temperature=None):
     """Perplexity streaming — yields SSE event strings"""
     import time
     start = time.time()
@@ -753,7 +761,7 @@ def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise
     body = {
         "model": model,
         "messages": [{"role": "user", "content": final_prompt}],
-        "temperature": 0.3,
+        "temperature": temperature if temperature is not None else 0.3,
         "stream": True
     }
     yield _make_meta(model, "perplexity")
@@ -907,7 +915,7 @@ VISION_PROVIDER_MAP = {
 }
 
 
-def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", style="concise", messages=None):
+def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", style="concise", messages=None, temperature=None):
     """OpenAI vision streaming (GPT-4o) — yields SSE event strings."""
     import time
     start = time.time()
@@ -928,7 +936,7 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
         body = {
             "model": model,
             "messages": [{"role": "user", "content": content_parts}],
-            "temperature": 0.3,
+            "temperature": temperature if temperature is not None else 0.3,
             "max_tokens": 512,
             "stream": True
         }
@@ -969,7 +977,7 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
         yield _make_error("OpenAI vision error: An internal error occurred")
 
 
-def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-20241022", mode="race", style="concise", messages=None):
+def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-20241022", mode="race", style="concise", messages=None, temperature=None):
     """Anthropic Claude vision streaming — yields SSE event strings."""
     import time
     start = time.time()
@@ -992,7 +1000,7 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
         body = {
             "model": model,
             "messages": [{"role": "user", "content": content_parts}],
-            "temperature": 0.3,
+            "temperature": temperature if temperature is not None else 0.3,
             "max_tokens": 512,
             "stream": True
         }
@@ -1029,7 +1037,7 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
         yield _make_error("Claude vision error: An internal error occurred")
 
 
-def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", mode="race", style="concise", messages=None):
+def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", mode="race", style="concise", messages=None, temperature=None):
     """Google Gemini vision streaming — yields SSE event strings."""
     import time
     start = time.time()
@@ -1044,7 +1052,7 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
 
         body = {
             "contents": [{"parts": parts}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}
+            "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 512}
         }
         with sync_client.stream("POST", url, json=body, timeout=30) as resp:
             if resp.status_code == 429:
@@ -1077,7 +1085,7 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
         yield _make_error("Gemini vision error: An internal error occurred")
 
 
-def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-preview", mode="race", style="concise", messages=None):
+def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-preview", mode="race", style="concise", messages=None, temperature=None):
     """Groq vision streaming (llama-3.2-90b-vision) — yields SSE event strings."""
     import time
     start = time.time()
@@ -1098,7 +1106,7 @@ def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-p
         body = {
             "model": model,
             "messages": [{"role": "user", "content": content_parts}],
-            "temperature": 0.3,
+            "temperature": temperature if temperature is not None else 0.3,
             "max_tokens": 512,
             "stream": True
         }
@@ -1159,7 +1167,7 @@ OLLAMA_CLOUD_VISION_MODELS = {
 }
 
 
-def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud", mode="race", style="concise", messages=None):
+def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud", mode="race", style="concise", messages=None, temperature=None):
     """Ollama Cloud vision streaming — for free vision-capable cloud models.
     Uses the Ollama /api/chat endpoint with images array."""
     import time
@@ -1192,6 +1200,8 @@ def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud",
             "messages": chat_messages,
             "stream": True
         }
+        if temperature is not None:
+            body["options"] = {"temperature": temperature}
 
         with sync_client.stream("POST", url, headers=headers, json=body, timeout=90) as response:
             if response.status_code == 429:

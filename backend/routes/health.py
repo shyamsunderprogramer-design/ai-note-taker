@@ -140,7 +140,17 @@ async def health_modules():
     def has_provider_key(provider, env_var):
         try:
             from lib.http_client import sync_client
-            resp = sync_client.post("http://127.0.0.1:18000/get-key", json={"provider": provider}, timeout=1, skip_ssrf_check=True)  # nosec B106 — internal key server
+            headers = {}
+            key_secret = os.getenv("KEY_SERVER_SECRET", "")
+            if key_secret:
+                headers["X-Key-Server-Secret"] = key_secret
+            resp = sync_client.post(
+                "http://127.0.0.1:18000/get-key",
+                json={"provider": provider},
+                headers=headers,
+                timeout=1,
+                skip_ssrf_check=True  # nosec B106 — internal key server
+            )
             if resp.status_code == 200:
                 return bool(resp.json().get("apiKey"))
         except Exception:

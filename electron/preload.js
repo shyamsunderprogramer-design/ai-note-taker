@@ -34,12 +34,12 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   // Get streaming URL with mode parameter
-  getStreamUrlWithMode: (query, mode = "adaptive", responseStyle = "concise", provider = "ollama", context = null) => {
+  getStreamUrlWithMode: (query, mode = "adaptive", responseStyle = "concise", provider = "ollama", context = null, temperature = 0.3) => {
     const encodedQuery = encodeURIComponent(query || "")
     const encodedMode = encodeURIComponent(mode)
     const encodedStyle = encodeURIComponent(responseStyle)
     const encodedProvider = encodeURIComponent(provider)
-    let url = `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}&provider=${encodedProvider}`
+    let url = `${BASE_URL}/stream?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}&provider=${encodedProvider}&temperature=${temperature}`
     if (context && Array.isArray(context) && context.length > 0) {
       const encodedContext = encodeURIComponent(JSON.stringify(context))
       url += `&context=${encodedContext}`
@@ -54,11 +54,11 @@ contextBridge.exposeInMainWorld("api", {
   getTranscribeUrl: () => `${BASE_URL}/transcribe`,
 
   // Race mode stream URL — fires all providers, fastest wins
-  getRaceUrl: (query, mode = "race", responseStyle = "concise", context = null, enabledProviders = null) => {
+  getRaceUrl: (query, mode = "race", responseStyle = "concise", context = null, enabledProviders = null, temperature = 0.3) => {
     const encodedQuery = encodeURIComponent(query || "")
     const encodedMode = encodeURIComponent(mode)
     const encodedStyle = encodeURIComponent(responseStyle)
-    let url = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}`
+    let url = `${BASE_URL}/stream-race?q=${encodedQuery}&mode=${encodedMode}&style=${encodedStyle}&temperature=${temperature}`
     if (context && Array.isArray(context) && context.length > 0) {
       const encodedContext = encodeURIComponent(JSON.stringify(context))
       url += `&context=${encodedContext}`
@@ -280,8 +280,72 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   // Secure API Key Storage (P1 Privacy) - encrypted, never stored in .env
-  saveApiKey: (provider, apiKey) => ipcRenderer.invoke("apiKey:save", { provider, apiKey }),
-  getApiKey: (provider) => ipcRenderer.invoke("apiKey:get", provider)
+  saveApiKey: (provider, apiKey, syncToEnv) => ipcRenderer.invoke("apiKey:save", { provider, apiKey, syncToEnv }),
+  getApiKey: (provider) => ipcRenderer.invoke("apiKey:get", provider),
+  hasApiKey: (provider) => ipcRenderer.invoke("apiKey:has", provider),
+
+  // Screen recorder
+  getRecordingSources: () => ipcRenderer.invoke("recorder:get-sources"),
+  startRecording: (sourceId) => ipcRenderer.invoke("recorder:start", sourceId),
+  stopRecording: () => ipcRenderer.invoke("recorder:stop"),
+  takeScreenshot: () => ipcRenderer.invoke("recorder:screenshot"),
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // OVERLAY & SYSTEM FEATURES
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // Autostart (login item) configuration
+  setAutoStart: (enabled, hidden = true) => ipcRenderer.invoke("autostart:set", { enabled, hidden }),
+  getAutoStart: () => ipcRenderer.invoke("autostart:get"),
+
+  // Portable mode
+  getPortableMode: () => ipcRenderer.invoke("app:portable-mode"),
+
+  // Overlay window controls
+  showOverlay: () => ipcRenderer.invoke("overlay:show"),
+  hideOverlay: () => ipcRenderer.invoke("overlay:hide"),
+  toggleOverlay: () => ipcRenderer.invoke("overlay:toggle"),
+  getOverlayState: () => ipcRenderer.invoke("overlay:state"),
+
+  // Caption overlay
+  showCaptionOverlay: () => ipcRenderer.invoke("caption:show"),
+  hideCaptionOverlay: () => ipcRenderer.invoke("caption:hide"),
+  toggleCaptionOverlay: () => ipcRenderer.invoke("caption:toggle"),
+
+  // Opacity controls
+  setOverlayOpacity: (value) => ipcRenderer.invoke("overlay:set-opacity", value),
+  getOverlayOpacity: () => ipcRenderer.invoke("overlay:get-opacity"),
+
+  // Click-through mode
+  toggleClickThrough: () => ipcRenderer.invoke("overlay:toggle-click-through"),
+
+  // File drag & drop
+  processDroppedFile: (filePath) => ipcRenderer.invoke("overlay:process-file", filePath),
+  openFileDialog: () => ipcRenderer.invoke("overlay:open-file-dialog"),
+
+  // Listen for hotkey events
+  onToggleMic: (callback) => {
+    ipcRenderer.on("hotkey-toggle-mic", () => callback())
+  },
+  onStartVoice: (callback) => {
+    ipcRenderer.on("hotkey-start-voice", () => callback())
+  },
+  onScreenshot: (callback) => {
+    ipcRenderer.on("hotkey-screenshot", () => callback())
+  },
+  onFileDropped: (callback) => {
+    ipcRenderer.on("file-dropped", (_event, fileInfo) => callback(fileInfo))
+  },
+  onOpacityChanged: (callback) => {
+    ipcRenderer.on("overlay-opacity-changed", (_event, value) => callback(value))
+  },
+
+  // Generic send/receive for overlay
+  send: (channel, ...args) => ipcRenderer.send(channel, ...args),
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  receive: (channel, callback) => {
+    ipcRenderer.on(channel, (_event, ...args) => callback(...args))
+  }
 
 
 })

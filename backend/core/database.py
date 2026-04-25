@@ -19,6 +19,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
+# Encryption support for data at rest
+try:
+    from security.encryption import (
+        field_encryption, encrypt_string, decrypt_string,
+        is_encryption_available, HAS_CRYPTOGRAPHY,
+    )
+    ENCRYPTION_ENABLED = HAS_CRYPTOGRAPHY
+except ImportError:
+    ENCRYPTION_ENABLED = False
+    logging.getLogger("database").warning("[Database] Encryption module not available")
+
 logger = logging.getLogger("database")
 
 # Database configuration
@@ -414,6 +425,99 @@ class CRMConfig(Base if Base else object):
         }
 
 
+class IntegrationConfig(Base if Base else object):
+    """Generic integration configuration — one row per user per integration type."""
+    __tablename__ = "integration_configs"
+    __table_args__ = (
+        {"extend_existing": True},
+    )
+
+    if HAS_SQLALCHEMY:
+        id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+        user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+        integration_type = Column(String(30), nullable=False, index=True)
+        enabled = Column(Boolean, default=False)
+        config = Column(JSON, default=dict)
+        secrets_encrypted = Column(Text, nullable=True)
+        last_sync_at = Column(DateTime, nullable=True)
+        sync_errors = Column(JSON, default=list)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+        updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+
+    def to_dict(self, include_secrets=False):
+        d = {
+            "id": str(self.id) if hasattr(self, 'id') else None,
+            "user_id": str(self.user_id) if hasattr(self, 'user_id') else None,
+            "integration_type": getattr(self, 'integration_type', None),
+            "enabled": getattr(self, 'enabled', False),
+            "config": getattr(self, 'config', {}) or {},
+            "last_sync_at": getattr(self, 'last_sync_at', None),
+            "sync_errors": getattr(self, 'sync_errors', []) or [],
+            "created_at": getattr(self, 'created_at', None),
+            "updated_at": getattr(self, 'updated_at', None),
+        }
+        if include_secrets:
+            d["secrets"] = self._decrypt_secrets()
+        return d
+
+    def _decrypt_secrets(self):
+        raw = getattr(self, 'secrets_encrypted', None)
+        if not raw:
+            return {}
+        try:
+            if raw.startswith("plain:"):
+                return json.loads(raw[6:])
+            if ENCRYPTION_ENABLED:
+                decrypted = decrypt_string(raw)
+                if decrypted:
+                    return json.loads(decrypted)
+        except Exception:
+            pass
+        return {}
+
+
+class Team(Base if Base else object):
+    """Team workspaces for collaboration."""
+    __tablename__ = "teams"
+
+    if HAS_SQLALCHEMY:
+        id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+        name = Column(String(100), nullable=False)
+        description = Column(Text, default="")
+        created_by = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+        created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    def to_dict(self):
+        return {
+            "id": str(self.id) if hasattr(self, 'id') else None,
+            "name": getattr(self, 'name', ""),
+            "description": getattr(self, 'description', ""),
+            "created_by": str(self.created_by) if hasattr(self, 'created_by') else None,
+            "created_at": getattr(self, 'created_at', None),
+        }
+
+
+class TeamMember(Base if Base else object):
+    """Team membership with roles."""
+    __tablename__ = "team_members"
+
+    if HAS_SQLALCHEMY:
+        id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+        team_id = Column(PGUUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+        user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+        role = Column(String(20), default="member")
+        joined_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    def to_dict(self):
+        return {
+            "id": str(self.id) if hasattr(self, 'id') else None,
+            "team_id": str(self.team_id) if hasattr(self, 'team_id') else None,
+            "user_id": str(self.user_id) if hasattr(self, 'user_id') else None,
+            "role": getattr(self, 'role', "member"),
+            "joined_at": getattr(self, 'joined_at', None),
+        }
+
+
 class AuditLog(Base if Base else object):
     """Audit log for security events"""
     __tablename__ = "audit_logs"
@@ -681,7 +785,40 @@ class UserRepository:
 
 
 class ConversationRepository:
-    """Conversation data access layer"""
+    """Conversation data access layer with encryption at rest"""
+
+    # Fields to encrypt when ENCRYPTION_ENABLED
+    _encrypted_fields = ["messages"]
+
+    @staticmethod
+    def _encrypt_messages(messages: List[Dict]) -> tuple:
+        """Encrypt messages list. Returns (encrypted_json_str, is_encrypted)."""
+        if not ENCRYPTION_ENABLED or not messages:
+            return messages, False
+        try:
+            plain = json.dumps(messages)
+            encrypted = encrypt_string(plain)
+            if encrypted:
+                return encrypted, True
+        except Exception as e:
+            logger.warning("[ConversationRepository] Encryption failed, storing plaintext: %s", str(e))
+        return messages, False
+
+    @staticmethod
+    def _decrypt_messages(conv: Conversation) -> Conversation:
+        """Decrypt messages if encrypted. Modifies conv in place."""
+        if not ENCRYPTION_ENABLED or not conv or not getattr(conv, 'is_encrypted', False):
+            return conv
+        try:
+            raw = getattr(conv, 'messages', None)
+            if isinstance(raw, str) and raw:
+                decrypted = decrypt_string(raw)
+                if decrypted:
+                    conv.messages = json.loads(decrypted)
+                    conv.is_encrypted = False  # Decrypted for use
+        except Exception as e:
+            logger.warning("[ConversationRepository] Decryption failed: %s", str(e))
+        return conv
 
     @staticmethod
     async def create(user_id: str, title: str = None, messages: List[Dict] = None, **kwargs) -> Optional[Conversation]:
@@ -689,11 +826,17 @@ class ConversationRepository:
             return None
         try:
             async with db_manager.session_maker() as db:
+                encrypted_messages = messages or []
+                is_encrypted = False
+                if encrypted_messages and ENCRYPTION_ENABLED:
+                    encrypted_messages, is_encrypted = ConversationRepository._encrypt_messages(encrypted_messages)
+
                 conv = Conversation(
                     user_id=uuid.UUID(user_id),
                     title=title,
-                    messages=messages or [],
+                    messages=encrypted_messages,
                     message_count=len(messages) if messages else 0,
+                    is_encrypted=is_encrypted,
                     **kwargs
                 )
                 db.add(conv)
@@ -713,7 +856,8 @@ class ConversationRepository:
                 result = await db.execute(
                     select(Conversation).where(Conversation.id == uuid.UUID(conversation_id))
                 )
-                return result.scalar_one_or_none()
+                conv = result.scalar_one_or_none()
+                return ConversationRepository._decrypt_messages(conv) if conv else None
         except Exception as e:
             logger.error("[ConversationRepository] Get by ID failed: %s", str(e))
             return None
@@ -731,7 +875,8 @@ class ConversationRepository:
                     .limit(limit)
                     .offset(offset)
                 )
-                return result.scalars().all()
+                convs = result.scalars().all()
+                return [ConversationRepository._decrypt_messages(c) for c in convs]
         except Exception as e:
             logger.error("[ConversationRepository] Get by user failed: %s", str(e))
             return []
@@ -747,8 +892,14 @@ class ConversationRepository:
                 )
                 conv = result.scalar_one_or_none()
                 if conv:
-                    conv.messages = messages
-                    conv.message_count = len(messages)
+                    encrypted_messages = messages
+                    is_encrypted = False
+                    if messages and ENCRYPTION_ENABLED:
+                        encrypted_messages, is_encrypted = ConversationRepository._encrypt_messages(messages)
+
+                    conv.messages = encrypted_messages
+                    conv.message_count = len(messages) if messages else 0
+                    conv.is_encrypted = is_encrypted
                     conv.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(conv)
@@ -771,6 +922,22 @@ class ConversationRepository:
         except Exception as e:
             logger.error("[ConversationRepository] Delete failed: %s", str(e))
             return False
+
+    @staticmethod
+    async def delete_by_user(user_id: str) -> int:
+        """Delete all conversations for a user (GDPR right to be forgotten)."""
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    delete(Conversation).where(Conversation.user_id == uuid.UUID(user_id))
+                )
+                await db.commit()
+                return result.rowcount
+        except Exception as e:
+            logger.error("[ConversationRepository] Delete by user failed: %s", str(e))
+            return 0
 
     @staticmethod
     async def search(user_id: str, query: str) -> List[Conversation]:
@@ -879,6 +1046,22 @@ class VoiceModelRepository:
             logger.error("[VoiceModelRepository] Delete failed: %s", str(e))
             return False
 
+    @staticmethod
+    async def delete_by_user(user_id: str) -> int:
+        """Delete all voice models for a user (GDPR)."""
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    delete(VoiceModel).where(VoiceModel.user_id == uuid.UUID(user_id))
+                )
+                await db.commit()
+                return result.rowcount
+        except Exception as e:
+            logger.error("[VoiceModelRepository] Delete by user failed: %s", str(e))
+            return 0
+
 
 class JobApplicationRepository:
     """Job application data access layer"""
@@ -971,6 +1154,22 @@ class JobApplicationRepository:
             logger.error("[JobApplicationRepository] Delete failed: %s", str(e))
             return False
 
+    @staticmethod
+    async def delete_by_user(user_id: str) -> int:
+        """Delete all job applications for a user (GDPR)."""
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    delete(JobApplication).where(JobApplication.user_id == uuid.UUID(user_id))
+                )
+                await db.commit()
+                return result.rowcount
+        except Exception as e:
+            logger.error("[JobApplicationRepository] Delete by user failed: %s", str(e))
+            return 0
+
 
 class DocumentRepository:
     """Document data access layer"""
@@ -1030,6 +1229,22 @@ class DocumentRepository:
             logger.error("[DocumentRepository] Update status failed: %s", str(e))
             return None
 
+    @staticmethod
+    async def delete_by_user(user_id: str) -> int:
+        """Delete all documents for a user (GDPR)."""
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    delete(Document).where(Document.user_id == uuid.UUID(user_id))
+                )
+                await db.commit()
+                return result.rowcount
+        except Exception as e:
+            logger.error("[DocumentRepository] Delete by user failed: %s", str(e))
+            return 0
+
 
 class AnalyticsRepository:
     """Analytics data access layer"""
@@ -1071,6 +1286,27 @@ class AnalyticsRepository:
         except Exception as e:
             logger.error("[AnalyticsRepository] Get events failed: %s", str(e))
             return []
+
+    @staticmethod
+    async def get_by_user(user_id: str, limit: int = 10000) -> List[AnalyticsEvent]:
+        """Get all analytics events for a user (GDPR export)."""
+        return await AnalyticsRepository.get_events(user_id=user_id, limit=limit)
+
+    @staticmethod
+    async def delete_by_user(user_id: str) -> int:
+        """Delete all analytics events for a user (GDPR)."""
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    delete(AnalyticsEvent).where(AnalyticsEvent.user_id == uuid.UUID(user_id))
+                )
+                await db.commit()
+                return result.rowcount
+        except Exception as e:
+            logger.error("[AnalyticsRepository] Delete by user failed: %s", str(e))
+            return 0
 
     @staticmethod
     async def get_event_counts_by_type(start_date: datetime = None, end_date: datetime = None) -> Dict[str, int]:
@@ -1273,6 +1509,274 @@ class UserAPIKeyRepository:
             return False
 
 
+class IntegrationConfigRepository:
+    """Generic integration config data access with encryption support."""
+
+    @staticmethod
+    async def upsert(user_id: str, integration_type: str, config: dict = None, secrets: dict = None, enabled: bool = True) -> Optional[IntegrationConfig]:
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(IntegrationConfig).where(
+                        IntegrationConfig.user_id == uuid.UUID(user_id),
+                        IntegrationConfig.integration_type == integration_type,
+                    )
+                )
+                record = result.scalar_one_or_none()
+
+                if record:
+                    if config is not None:
+                        record.config = config
+                    if secrets is not None:
+                        record.secrets_encrypted = IntegrationConfigRepository._encrypt_secrets(secrets)
+                    record.enabled = enabled
+                    record.updated_at = datetime.now(timezone.utc)
+                else:
+                    secrets_str = IntegrationConfigRepository._encrypt_secrets(secrets) if secrets else None
+                    record = IntegrationConfig(
+                        user_id=uuid.UUID(user_id),
+                        integration_type=integration_type,
+                        enabled=enabled,
+                        config=config or {},
+                        secrets_encrypted=secrets_str,
+                    )
+                    db.add(record)
+
+                await db.commit()
+                await db.refresh(record)
+                return record
+        except Exception as e:
+            logger.error("[IntegrationConfigRepository] Upsert failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def get_by_user_and_type(user_id: str, integration_type: str) -> Optional[IntegrationConfig]:
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(IntegrationConfig).where(
+                        IntegrationConfig.user_id == uuid.UUID(user_id),
+                        IntegrationConfig.integration_type == integration_type,
+                    )
+                )
+                return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error("[IntegrationConfigRepository] Get failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def get_all_by_user(user_id: str) -> List[IntegrationConfig]:
+        if not HAS_SQLALCHEMY:
+            return []
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(IntegrationConfig).where(IntegrationConfig.user_id == uuid.UUID(user_id))
+                )
+                return list(result.scalars().all())
+        except Exception as e:
+            logger.error("[IntegrationConfigRepository] Get all failed: %s", str(e))
+            return []
+
+    @staticmethod
+    async def delete(user_id: str, integration_type: str) -> bool:
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(IntegrationConfig).where(
+                        IntegrationConfig.user_id == uuid.UUID(user_id),
+                        IntegrationConfig.integration_type == integration_type,
+                    )
+                )
+                record = result.scalar_one_or_none()
+                if record:
+                    await db.delete(record)
+                    await db.commit()
+                    return True
+                return False
+        except Exception as e:
+            logger.error("[IntegrationConfigRepository] Delete failed: %s", str(e))
+            return False
+
+    @staticmethod
+    def _encrypt_secrets(secrets_dict: dict) -> str:
+        raw = json.dumps(secrets_dict)
+        if ENCRYPTION_ENABLED:
+            try:
+                return encrypt_string(raw)
+            except Exception:
+                pass
+        return f"plain:{raw}"
+
+    @staticmethod
+    def decrypt_secrets_for_record(record: IntegrationConfig) -> dict:
+        if not record:
+            return {}
+        return record._decrypt_secrets()
+
+
+class TeamRepository:
+    """Team workspace data access."""
+
+    @staticmethod
+    async def create(name: str, description: str, created_by: str) -> Optional[Team]:
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                team = Team(
+                    name=name,
+                    description=description,
+                    created_by=uuid.UUID(created_by),
+                )
+                db.add(team)
+                await db.commit()
+                await db.refresh(team)
+                # Auto-add creator as admin
+                member = TeamMember(
+                    team_id=team.id,
+                    user_id=uuid.UUID(created_by),
+                    role="admin",
+                )
+                db.add(member)
+                await db.commit()
+                return team
+        except Exception as e:
+            logger.error("[TeamRepository] Create failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def get_by_id(team_id: str) -> Optional[Team]:
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(Team).where(Team.id == uuid.UUID(team_id))
+                )
+                return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error("[TeamRepository] Get by ID failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def get_by_user(user_id: str) -> List[Team]:
+        if not HAS_SQLALCHEMY:
+            return []
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(Team).join(TeamMember, TeamMember.team_id == Team.id).where(
+                        TeamMember.user_id == uuid.UUID(user_id)
+                    )
+                )
+                return list(result.scalars().all())
+        except Exception as e:
+            logger.error("[TeamRepository] Get by user failed: %s", str(e))
+            return []
+
+    @staticmethod
+    async def delete_team(team_id: str) -> bool:
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(Team).where(Team.id == uuid.UUID(team_id))
+                )
+                team = result.scalar_one_or_none()
+                if team:
+                    await db.delete(team)
+                    await db.commit()
+                    return True
+                return False
+        except Exception as e:
+            logger.error("[TeamRepository] Delete failed: %s", str(e))
+            return False
+
+
+class TeamMemberRepository:
+    """Team membership data access."""
+
+    @staticmethod
+    async def add(team_id: str, user_id: str, role: str = "member") -> Optional[TeamMember]:
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                member = TeamMember(
+                    team_id=uuid.UUID(team_id),
+                    user_id=uuid.UUID(user_id),
+                    role=role,
+                )
+                db.add(member)
+                await db.commit()
+                await db.refresh(member)
+                return member
+        except Exception as e:
+            logger.error("[TeamMemberRepository] Add failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def get_members(team_id: str) -> List[TeamMember]:
+        if not HAS_SQLALCHEMY:
+            return []
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(TeamMember).where(TeamMember.team_id == uuid.UUID(team_id))
+                )
+                return list(result.scalars().all())
+        except Exception as e:
+            logger.error("[TeamMemberRepository] Get members failed: %s", str(e))
+            return []
+
+    @staticmethod
+    async def remove(team_id: str, user_id: str) -> bool:
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(TeamMember).where(
+                        TeamMember.team_id == uuid.UUID(team_id),
+                        TeamMember.user_id == uuid.UUID(user_id),
+                    )
+                )
+                member = result.scalar_one_or_none()
+                if member:
+                    await db.delete(member)
+                    await db.commit()
+                    return True
+                return False
+        except Exception as e:
+            logger.error("[TeamMemberRepository] Remove failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def is_member(team_id: str, user_id: str) -> bool:
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(TeamMember).where(
+                        TeamMember.team_id == uuid.UUID(team_id),
+                        TeamMember.user_id == uuid.UUID(user_id),
+                    )
+                )
+                return result.scalar_one_or_none() is not None
+        except Exception as e:
+            logger.error("[TeamMemberRepository] Is member check failed: %s", str(e))
+            return False
+
+
 # ============================================================================
 # MIGRATION UTILITIES
 # ============================================================================
@@ -1445,6 +1949,9 @@ class BackupManager:
                 await db.execute(delete(AuditLog))
                 await db.execute(delete(AnalyticsEvent))
                 await db.execute(delete(Document))
+                await db.execute(delete(TeamMember))
+                await db.execute(delete(Team))
+                await db.execute(delete(IntegrationConfig))
                 await db.execute(delete(CRMConfig))
                 await db.execute(delete(UserAPIKey))
                 await db.execute(delete(InterviewSession))
@@ -1490,12 +1997,13 @@ __all__ = [
     # Models
     "User", "Conversation", "VoiceModel", "JobApplication",
     "InterviewSession", "AnalyticsEvent", "UserAPIKey", "Document",
-    "CRMConfig", "AuditLog",
+    "CRMConfig", "IntegrationConfig", "Team", "TeamMember", "AuditLog",
 
     # Repositories
     "UserRepository", "ConversationRepository", "VoiceModelRepository",
     "JobApplicationRepository", "AnalyticsRepository", "DocumentRepository",
     "AuditLogRepository", "UserAPIKeyRepository",
+    "IntegrationConfigRepository", "TeamRepository", "TeamMemberRepository",
 
     # Utilities
     "DataMigrator", "BackupManager",

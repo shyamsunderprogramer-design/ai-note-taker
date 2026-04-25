@@ -56,9 +56,14 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
         return True
 
     try:
+        headers = {}
+        key_secret = os.getenv("KEY_SERVER_SECRET", "")
+        if key_secret:
+            headers["X-Key-Server-Secret"] = key_secret
         resp = sync_client.post(
             "http://127.0.0.1:18000/get-key",
             json={"provider": provider},
+            headers=headers,
             timeout=1,
             skip_ssrf_check=True,  # internal key server, not user-supplied
         )

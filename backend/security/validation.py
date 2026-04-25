@@ -232,6 +232,27 @@ class InputValidator:
         return filename if filename else None
 
     @staticmethod
+    def validate_security_question(question: str) -> Optional[str]:
+        """Validate security question format. Returns sanitized question or None."""
+        if not question:
+            return None
+        question = question.strip()
+        if len(question) < 5 or len(question) > 200:
+            return None
+        return InputValidator.sanitize_string(question, max_length=200, allow_html=False)
+
+    @staticmethod
+    def validate_security_answer(answer: str) -> Optional[str]:
+        """Validate security answer format. Returns stripped answer or None.
+        Answer is stored hashed, so no HTML sanitization needed."""
+        if not answer:
+            return None
+        answer = answer.strip()
+        if len(answer) < 2 or len(answer) > 100:
+            return None
+        return answer
+
+    @staticmethod
     def check_sql_injection(text: str) -> bool:
         """
         Check for potential SQL injection patterns

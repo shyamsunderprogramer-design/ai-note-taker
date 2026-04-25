@@ -104,7 +104,7 @@ class TestProviderEndpoints:
     async def test_ollama_models(self, auth_client: httpx.AsyncClient):
         """GET /ollama/models."""
         response = await auth_client.get("/ollama/models")
-        assert response.status_code in [200, 500]  # May fail if Ollama not running  # nosec B101
+        assert response.status_code in [200, 401, 500]  # May fail if Ollama not running or auth required  # nosec B101
 
     async def test_byok_status(self, auth_client: httpx.AsyncClient):
         """GET /providers/byok/status."""

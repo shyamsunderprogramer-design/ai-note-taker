@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANT Live Captions</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --caption-bg: rgba(15, 23, 42, 0.88);
+      --caption-text: #e2e8f0;
+      --caption-partial: rgba(148, 163, 184, 0.7);
+      --caption-border: rgba(59, 130, 246, 0.3);
+      --speaker-user: #60a5fa;
+      --speaker-other: #f472b6;
+      --caption-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --caption-bg: rgba(255, 255, 255, 0.92);
+        --caption-text: #1e293b;
+        --caption-partial: rgba(71, 85, 105, 0.5);
+        --caption-border: rgba(59, 130, 246, 0.2);
+      }
+    }
+
+    body {
+      background: transparent;
+      color: var(--caption-text);
+      font-family: var(--caption-font);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 8px;
+      -webkit-app-region: no-drag;
+    }
+
+    .caption-container {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .caption-line {
+      background: var(--caption-bg);
+      border: 1px solid var(--caption-border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+      line-height: 1.4;
+      animation: fadeIn 0.3s ease-out;
+      max-width: 100%;
+      word-wrap: break-word;
+    }
+
+    .caption-line.partial {
+      color: var(--caption-partial);
+      font-style: italic;
+    }
+
+    .caption-line .speaker {
+      font-weight: 600;
+      margin-right: 6px;
+    }
+
+    .caption-line .speaker.user { color: var(--speaker-user); }
+    .caption-line .speaker.other { color: var(--speaker-other); }
+
+    .caption-line .timestamp {
+      font-size: 10px;
+      color: var(--caption-partial);
+      margin-left: 8px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: var(--caption-partial);
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected { background: #22c55e; }
+    .status-dot.connecting { background: #f59e0b; animation: pulse 1s infinite; }
+
+    .controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    .controls button {
+      background: var(--caption-bg);
+      border: 1px solid var(--caption-border);
+      color: var(--caption-text);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .controls button:hover { opacity: 1; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <div class="caption-container" id="captions">
+    <!-- Caption lines appear here -->
+  </div>
+  <div class="status-bar">
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+    <div class="controls">
+      <button id="btnClear" title="Clear captions">Clear</button>
+      <button id="btnPause" title="Pause/Resume">Pause</button>
+    </div>
+  </div>
+
+  <script>
+    const MAX_LINES = 15;
+    let ws = null;
+    let paused = false;
+
+    const captionsEl = document.getElementById('captions');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    function addCaptionLine(text, speaker, isPartial) {
+      if (paused) return;
+
+      const line = document.createElement('div');
+      line.className = 'caption-line' + (isPartial ? ' partial' : '');
+
+      const speakerClass = speaker === 'user' ? 'user' : 'other';
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      if (speaker) {
+        line.innerHTML = `<span class="speaker ${speakerClass}">${escapeHtml(speaker)}</span>${escapeHtml(text)}<span class="timestamp">${time}</span>`;
+      } else {
+        line.textContent = text;
+      }
+
+      if (isPartial) {
+        // Replace previous partial if exists
+        const prevPartial = captionsEl.querySelector('.partial');
+        if (prevPartial) prevPartial.remove();
+      }
+
+      captionsEl.appendChild(line);
+
+      // Trim old lines
+      while (captionsEl.children.length > MAX_LINES) {
+        captionsEl.removeChild(captionsEl.firstChild);
+      }
+
+      captionsEl.scrollTop = captionsEl.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function setStatus(status) {
+      statusDot.className = 'status-dot ' + status;
+      statusText.textContent = status === 'connected' ? 'Live' :
+                               status === 'connecting' ? 'Connecting...' : 'Disconnected';
+    }
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.hostname}:8000/ws/transcribe`;
+      setStatus('connecting');
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setStatus('connected');
+        addCaptionLine('Connected — start speaking to see live captions', null, false);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'partial') {
+            addCaptionLine(data.text, data.speaker || null, true);
+          } else if (data.type === 'final') {
+            addCaptionLine(data.text, data.speaker || null, false);
+          }
+        } catch (e) { /* ignore parse errors */ }
+      };
+
+      ws.onclose = () => {
+        setStatus('disconnected');
+        setTimeout(connect, 3000);
+      };
+
+      ws.onerror = () => {
+        setStatus('disconnected');
+      };
+    }
+
+    // Controls
+    document.getElementById('btnClear').addEventListener('click', () => {
+      captionsEl.innerHTML = '';
+    });
+
+    document.getElementById('btnPause').addEventListener('click', function() {
+      paused = !paused;
+      this.textContent = paused ? 'Resume' : 'Pause';
+      if (paused) {
+        statusDot.style.background = '#f59e0b';
+        statusText.textContent = 'Paused';
+      } else {
+        setStatus(ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected');
+      }
+    });
+
+    // Auto-connect
+    connect();
+  </script>
+</body>
+</html>
