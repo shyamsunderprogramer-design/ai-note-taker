@@ -20,7 +20,7 @@ jobs:
 
       - name: Check Frontend Health
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" https://ant-note-taker.vercel.app)
+          status=$(curl -s -o /dev/null -w "%{http_code}" https://ai-note-taker-five.vercel.app)
           if [ "$status" != "200" ]; then
             echo "::error::Frontend health check failed with status $status"
             exit 1
