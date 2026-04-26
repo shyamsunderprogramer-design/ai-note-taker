@@ -101,6 +101,16 @@ from security import get_current_user
 router = APIRouter()
 
 
+@router.get("/transcribe/languages")
+async def list_transcription_languages():
+    """T22: List supported transcription languages."""
+    try:
+        from modules.voice.whisper_handler import get_supported_languages
+        return {"languages": get_supported_languages()}
+    except ImportError:
+        return {"languages": {"en": "English"}, "note": "Whisper handler not available"}
+
+
 @router.post("/transcribe")
 async def transcribe_api(file: UploadFile = File(...)):
     """Fast audio transcription — returns text only. AI response is handled by the frontend."""
@@ -226,8 +236,13 @@ async def transcribe_stream(request: Request):
 
 
 @router.post("/transcribe-with-speakers")
-async def transcribe_with_speakers(file: UploadFile = File(...)):
+async def transcribe_with_speakers(
+    file: UploadFile = File(...),
+    language: str = Form("en"),
+    auto_detect: bool = Form(False),
+):
     """Transcribe audio with speaker diarization.
+    T22: Supports multi-language transcription.
     Returns transcript + speakers — the frontend handles AI response separately."""
     USE_AUTONOMOUS = False
     file_path = os.path.join(UPLOAD_DIR, get_secure_filename(file.filename))
@@ -249,13 +264,15 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         from modules.voice.speaker_diarization import process_transcription_with_speakers
 
         model = get_model(CURRENT_MODE)
+        # T22: Use provided language or auto-detect
+        lang = None if auto_detect else language
         # Use faster settings: beam_size=1, VAD filter ON
-        segments, _ = model.transcribe(
+        segments, info = model.transcribe(
             wav_path,
             beam_size=1,
             vad_filter=True,
             condition_on_previous_text=False,
-            language="en",
+            language=lang,
             word_timestamps=True
         )
 
@@ -273,12 +290,15 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
         # NOTE: AI response is handled by the frontend separately via streaming.
         # Do NOT call route_ai() here — it blocks the event loop and doubles latency.
 
+        detected_lang = info.language if info else language
         return {
             "text": full_text,
             "response": "",
             "speakers": speaker_result["segments"],
             "formatted_transcript": speaker_result["formatted"],
-            "speaker_count": speaker_result["speaker_count"]
+            "speaker_count": speaker_result["speaker_count"],
+            "language": detected_lang,
+            "auto_detected": auto_detect,
         }
 
     except Exception as e:
