@@ -36,6 +36,9 @@ RUN mkdir -p /app/backend/core/data \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Run the app
+# Run the app with memory optimization for cloud (512MB RAM limit)
+ENV CLOUD_MODE=true
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app/backend
-CMD uvicorn core.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+CMD uvicorn core.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --no-access-log

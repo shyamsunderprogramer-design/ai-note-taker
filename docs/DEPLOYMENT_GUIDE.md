@@ -2,6 +2,11 @@
 
 > **Complete step-by-step guide to deploy AI Note Taker to the cloud for FREE**
 > Last updated: 2026-04-26
+>
+> **Actual deployed URLs:**
+> - Backend: https://ai-note-taker-7xvn.onrender.com
+> - Frontend: https://ai-note-taker-five.vercel.app
+> - Database: Neon PostgreSQL (us-east-1)
 
 ---
 

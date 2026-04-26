@@ -780,6 +780,7 @@ def autonomous_listener():
 @app.on_event("startup")
 async def start_listener():
     # State is now in _state object
+    CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
 
     # T16: Initialize PostgreSQL database
     if DATABASE_AVAILABLE:
@@ -791,69 +792,77 @@ async def start_listener():
 
     # Initialize AI response cache (in-memory LRU + optional Redis)
     # Use importlib to avoid triggering modules/ai/__init__.py circular imports
-    try:
-        import importlib.util
-        _cache_spec = importlib.util.spec_from_file_location(
-            "cache_manager",
-            os.path.join(os.path.dirname(__file__), "..", "modules", "ai", "cache_manager.py")
-        )
-        if _cache_spec and _cache_spec.loader:
-            _cache_mod = importlib.util.module_from_spec(_cache_spec)
-            _cache_spec.loader.exec_module(_cache_mod)
-            await _cache_mod.init_cache()
-            logger.info("[Startup] AI response cache initialized")
-    except Exception as e:
-        logger.warning("[Startup] Cache init skipped: %s", str(e))
+    if not CLOUD_MODE:
+        try:
+            import importlib.util
+            _cache_spec = importlib.util.spec_from_file_location(
+                "cache_manager",
+                os.path.join(os.path.dirname(__file__), "..", "modules", "ai", "cache_manager.py")
+            )
+            if _cache_spec and _cache_spec.loader:
+                _cache_mod = importlib.util.module_from_spec(_cache_spec)
+                _cache_spec.loader.exec_module(_cache_mod)
+                await _cache_mod.init_cache()
+                logger.info("[Startup] AI response cache initialized")
+        except Exception as e:
+            logger.warning("[Startup] Cache init skipped: %s", str(e))
 
     # Clean up stale temp audio files on startup
-    cleanup_temp_audio()
+    if not CLOUD_MODE:
+        cleanup_temp_audio()
 
     # Start Whisper warmup in background — doesn't block uvicorn startup
     # Transcription requests will wait for the model via model_ready.wait()
-    if WHISPER_AVAILABLE:
+    if WHISPER_AVAILABLE and not CLOUD_MODE:
         threading.Thread(target=warmup, daemon=True).start()
     else:
-        logger.info("[Startup] Whisper warmup skipped — voice packages not installed")
+        logger.info("[Startup] Whisper warmup skipped — voice packages not installed or cloud mode")
 
     # Start embedding service and classifier warmup in background
     # These are optional — if they fail, existing keyword logic is used as fallback
-    try:
-        from config import EMBEDDING_ENABLED, CLASSIFIER_ENABLED
-        if EMBEDDING_ENABLED:
-            from modules.ai.embedding_service import warmup as embedding_warmup
-            threading.Thread(target=embedding_warmup, daemon=True, name="embedding-warmup").start()
-        if CLASSIFIER_ENABLED:
-            from modules.ai.smart_classifier import warmup as classifier_warmup
-            threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
-    except Exception as e:
-        logger.warning("[Startup] ML warmup skipped: %s", str(e))
+    if not CLOUD_MODE:
+        try:
+            from config import EMBEDDING_ENABLED, CLASSIFIER_ENABLED
+            if EMBEDDING_ENABLED:
+                from modules.ai.embedding_service import warmup as embedding_warmup
+                threading.Thread(target=embedding_warmup, daemon=True, name="embedding-warmup").start()
+            if CLASSIFIER_ENABLED:
+                from modules.ai.smart_classifier import warmup as classifier_warmup
+                threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
+        except Exception as e:
+            logger.warning("[Startup] ML warmup skipped: %s", str(e))
 
     # Pre-warm cloud provider connections (DNS + TLS handshake) for sub-second first-byte
-    def prewarm_connections():
-        import urllib.request
-        CLOUD_ENDPOINTS = [
-            ("groq", "https://api.groq.com", "GROQ_API_KEY"),
-            ("google", "https://generativelanguage.googleapis.com", "GOOGLE_API_KEY"),
-            ("openai", "https://api.openai.com", "OPENAI_API_KEY"),
-            ("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"),
-            ("deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY"),
-            ("xai", "https://api.x.ai", "XAI_API_KEY"),
-            ("perplexity", "https://api.perplexity.ai", "PERPLEXITY_API_KEY"),
-        ]
-        for name, url, env_var in CLOUD_ENDPOINTS:
-            if _has_provider_key(name, env_var):
-                try:
-                    urllib.request.urlopen(url, timeout=5)  # nosec B310
-                    logger.info("[Pre-warm] %s connection established", name)
-                except Exception:
-                    # Expected: most will return 401/403 — we just want the TCP/TLS handshake
-                    logger.debug("[Pre-warm] %s handshake done (non-200 OK)", name)
+    # Skip in cloud mode to save memory — connections warm up on first request
+    if not CLOUD_MODE:
+        def prewarm_connections():
+            import urllib.request
+            CLOUD_ENDPOINTS = [
+                ("groq", "https://api.groq.com", "GROQ_API_KEY"),
+                ("google", "https://generativelanguage.googleapis.com", "GOOGLE_API_KEY"),
+                ("openai", "https://api.openai.com", "OPENAI_API_KEY"),
+                ("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"),
+                ("deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+                ("xai", "https://api.x.ai", "XAI_API_KEY"),
+                ("perplexity", "https://api.perplexity.ai", "PERPLEXITY_API_KEY"),
+            ]
+            for name, url, env_var in CLOUD_ENDPOINTS:
+                if _has_provider_key(name, env_var):
+                    try:
+                        urllib.request.urlopen(url, timeout=5)  # nosec B310
+                        logger.info("[Pre-warm] %s connection established", name)
+                    except Exception:
+                        # Expected: most will return 401/403 — we just want the TCP/TLS handshake
+                        logger.debug("[Pre-warm] %s handshake done (non-200 OK)", name)
 
-    threading.Thread(target=prewarm_connections, daemon=True, name="connection-prewarm").start()
+        threading.Thread(target=prewarm_connections, daemon=True, name="connection-prewarm").start()
 
-    if _state.use_autonomous and _state.listener_thread is None:
+    if _state.use_autonomous and _state.listener_thread is None and not CLOUD_MODE:
         _state.listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
         _state.listener_thread.start()
+
+    if CLOUD_MODE:
+        logger.info("[Startup] Cloud mode active — skipped ML warmup, cache init, connection pre-warming")
 
 
 @app.get("/")
