@@ -575,10 +575,22 @@ class DatabaseManager:
             return
 
         try:
-            # Build connection args — Neon and other cloud DBs require SSL
+            # Build connection args for cloud databases
+            # Neon requires SSL — sslmode=require is in the URL query string
+            # asyncpg handles sslmode from the URL automatically
             connect_args = {}
             if "postgresql" in DATABASE_URL and "sqlite" not in DATABASE_URL:
-                connect_args["ssl"] = "require"
+                # Ensure sslmode is in the URL for Neon compatibility
+                if "sslmode" not in DATABASE_URL and "ssl" not in DATABASE_URL:
+                    DATABASE_URL = DATABASE_URL.rstrip("/") + "?sslmode=require"
+                try:
+                    import ssl as _ssl
+                    _ssl_ctx = _ssl.create_default_context()
+                    _ssl_ctx.check_hostname = False
+                    _ssl_ctx.verify_mode = _ssl.CERT_NONE
+                    connect_args["ssl"] = _ssl_ctx
+                except Exception:
+                    pass
 
             # Cloud mode: smaller pool to fit in 512MB RAM
             _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
