@@ -4618,9 +4618,11 @@ async function loadAboutStatus() {
   setStatus("aboutOllama", false, "Checking...")
   setStatus("aboutWhisper", false, "Checking...")
 
-  // Check Ollama
+  // Check Ollama (local only — not available on cloud)
+  var _ollamaUrl = (typeof API_BASE !== 'undefined' && API_BASE.indexOf('127.0.0.1') !== -1) ? 'http://127.0.0.1:11434/api/tags' : null;
+  if (_ollamaUrl) {
   try {
-    const res = await fetch("http://127.0.0.1:11434/api/tags", { method: "GET", signal: AbortSignal.timeout(3000) })
+    const res = await fetch(_ollamaUrl, { method: "GET", signal: AbortSignal.timeout(3000) })
     if (res.ok) {
       const data = await res.json()
       const count = data.models ? data.models.length : 0
@@ -6170,7 +6172,7 @@ async function checkOnboarding() {
 
   // Step 2: Ollama
   try {
-    const r = await fetch("http://127.0.0.1:8000/health")
+    const r = await fetch(`${API_BASE}/health`)
     if (r.ok) {
       const ollamaItem = checklist.querySelector('[data-step="ollama"]')
       ollamaItem.className = "ok"
@@ -6186,7 +6188,7 @@ async function checkOnboarding() {
 
   // Step 3: Vision model
   try {
-    const r = await fetch("http://127.0.0.1:8000/providers")
+    const r = await fetch(`${API_BASE}/providers`)
     if (r.ok) {
       const visionItem = checklist.querySelector('[data-step="vision"]')
       visionItem.className = "ok"

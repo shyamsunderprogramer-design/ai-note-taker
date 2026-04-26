@@ -314,6 +314,15 @@ from fastapi.middleware.cors import CORSMiddleware
 # T2: CORS — Whitelist specific origins instead of ["*"]
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:3000,http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+
+# Cloud deployment: add Vercel frontend origin dynamically
+CORS_VERCEL_URL = os.getenv("CORS_VERCEL_URL", "")
+if CORS_VERCEL_URL:
+    ALLOWED_ORIGINS.extend([
+        f"https://{CORS_VERCEL_URL}",
+        f"https://www.{CORS_VERCEL_URL}",
+    ])
+
 # T2: Default to secure (whitelist); set CORS_ALLOW_ALL=true for dev convenience
 CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
 

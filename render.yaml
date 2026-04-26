@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: ant-backend
+    runtime: python
+    buildCommand: pip install -r backend/requirements-cloud.txt
+    startCommand: cd backend && uvicorn core.main:app --host 0.0.0.0 --port $PORT --workers 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: FORCE_SQLITE
+        value: "false"
+      - key: EMBEDDING_ENABLED
+        value: "false"
+      - key: CLASSIFIER_ENABLED
+        value: "false"
+      - key: CORS_ALLOW_ALL
+        value: "false"
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: HTTPS_REQUIRED
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: CORS_VERCEL_URL
+        sync: false
+      # AI provider keys (set at least one for cloud functionality)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
