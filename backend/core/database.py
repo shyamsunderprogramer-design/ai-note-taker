@@ -568,13 +568,23 @@ class DatabaseManager:
             return
 
         try:
+            # Build connection args — Neon and other cloud DBs require SSL
+            connect_args = {}
+            if "postgresql" in DATABASE_URL and "sqlite" not in DATABASE_URL:
+                connect_args["ssl"] = "require"
+
+            # Cloud mode: smaller pool to fit in 512MB RAM
+            _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
+            _max_overflow = 2 if _pool_size == 2 else 20
+
             self.engine = create_async_engine(
                 DATABASE_URL,
-                pool_size=10,
-                max_overflow=20,
+                pool_size=_pool_size,
+                max_overflow=_max_overflow,
                 pool_timeout=30,
                 pool_pre_ping=True,
                 echo=False,
+                connect_args=connect_args if connect_args else None,
             )
 
             self.session_maker = async_sessionmaker(
