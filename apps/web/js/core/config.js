@@ -28,7 +28,7 @@
   if (!isLocalhost) {
     // Cloud mode — backend runs on Render
     // Replace this URL if you rename your Render service
-    window.API_BASE = 'https://ai-note-taker-rek0.onrender.com';
+    window.API_BASE = 'https://ai-note-taker-7xvn.onrender.com';
   } else {
     // Local / Electron mode
     window.API_BASE = 'http://127.0.0.1:8000';

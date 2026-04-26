@@ -57,7 +57,7 @@ self.addEventListener('fetch', (event) => {
 
   // Skip API calls - don't cache these
   // Also skip requests to the cloud backend (Render)
-  var CLOUD_BACKEND = 'ai-note-taker-rek0.onrender.com';
+  var CLOUD_BACKEND = 'ai-note-taker-7xvn.onrender.com';
   if (url.pathname.startsWith('/api/') ||
       url.hostname === '127.0.0.1' ||
       url.port === '8000' ||
