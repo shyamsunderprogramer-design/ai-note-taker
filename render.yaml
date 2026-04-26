@@ -1,12 +1,10 @@
 services:
   - type: web
     name: ant-backend
-    runtime: python
-    buildCommand: pip install -r backend/requirements-cloud.txt
-    startCommand: cd backend && uvicorn core.main:app --host 0.0.0.0 --port $PORT --workers 1
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile.cloud
+    dockerContext: .
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
       - key: FORCE_SQLITE
         value: "false"
       - key: EMBEDDING_ENABLED

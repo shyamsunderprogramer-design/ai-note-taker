@@ -1702,6 +1702,38 @@ async def logout_user(user: User = Depends(require_authentication)):
     return {"status": "success", "message": "Logged out successfully"}
 
 
+@app.post("/auth/refresh")
+@rate_limit(requests_per_minute=10)
+async def refresh_token(request: Request):
+    """Refresh access token using refresh token."""
+    try:
+        data = await request.json()
+        refresh_token_str = data.get("refresh_token")
+    except Exception:
+        refresh_token_str = None
+
+    if not refresh_token_str:
+        return error_response(ErrorCode.AUTHENTICATION_ERROR, "Refresh token required", status_code=401)
+
+    try:
+        from security import verify_refresh_token
+        payload = verify_refresh_token(refresh_token_str)
+        if not payload:
+            return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
+
+        username = payload.get("sub")
+        user = user_manager.get_user(username)
+        if not user:
+            return error_response(ErrorCode.AUTHENTICATION_ERROR, "User not found", status_code=401)
+
+        new_token = create_access_token(username)
+        log_audit_event("auth_refresh", username, "token_refreshed", resource=f"user:{user.id}", success=True)
+        return {"access_token": new_token, "token_type": "bearer"}
+    except Exception as e:
+        logger.error("[Auth] Refresh error: %s", str(e))
+        return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
+
+
 @app.post("/auth/forgot-password")
 @rate_limit(requests_per_minute=3)
 async def forgot_password(username: str = Form(...)):
@@ -2137,6 +2169,16 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
     except Exception as e:
         logger.error("[ERROR cloud transcribe]: %s", str(e))
         return {"text": text, "response": "", "error": "An internal error occurred"}
+
+
+@app.get("/transcribe/languages")
+async def list_transcription_languages():
+    """T22: List supported transcription languages."""
+    try:
+        from modules.voice.whisper_handler import get_supported_languages
+        return {"languages": get_supported_languages()}
+    except ImportError:
+        return {"languages": {"en": "English"}, "note": "Whisper handler not available"}
 
 
 @app.get("/stream")
