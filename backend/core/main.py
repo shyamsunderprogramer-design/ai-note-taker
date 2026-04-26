@@ -2943,6 +2943,93 @@ async def ws_voice_agent(ws: WebSocket):
 
 
 # ==============================
+# MCP SERVER ENDPOINTS (T18)
+# ==============================
+
+try:
+    from modules.platform.mcp_server import (
+        MCPServer, MCPTool, MCPResource,
+        create_mcp_server, mcp_server,
+        search_transcripts_handler, get_summary_handler,
+        list_action_items_handler, get_interview_notes_handler,
+        ask_about_conversation_handler
+    )
+    MCP_AVAILABLE = True
+except ImportError as e:
+    MCP_AVAILABLE = False
+    logger.warning("[MCP] Module not available: %s", str(e))
+
+
+@app.get("/mcp/status")
+async def mcp_status():
+    """Get MCP server status."""
+    if not MCP_AVAILABLE:
+        return {"available": False, "error": "MCP module not installed"}
+    return get_status()
+
+
+@app.post("/mcp/tools/{tool_name}")
+async def mcp_tool_call(tool_name: str, body: dict, user: User = Depends(require_authentication)):
+    """Call an MCP tool via HTTP."""
+    if not MCP_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
+
+    try:
+        from modules.platform.mcp_server import mcp_server
+        if tool_name not in mcp_server.tools:
+            return error_response(ErrorCode.NOT_FOUND, f"Tool not found: {tool_name}", status_code=404)
+
+        result = await mcp_server.tools[tool_name].handler(body)
+        return {"tool": tool_name, "result": result}
+    except Exception as e:
+        logger.error("[MCP] Tool call error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "Tool execution failed", status_code=500)
+
+
+@app.get("/mcp/tools")
+async def mcp_tools_list(user: User = Depends(require_authentication)):
+    """List all available MCP tools."""
+    if not MCP_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
+
+    try:
+        from modules.platform.mcp_server import mcp_server
+        tools = []
+        for tool in mcp_server.tools.values():
+            tools.append({
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema
+            })
+        return {"tools": tools}
+    except Exception as e:
+        logger.error("[MCP] Tools list error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "Failed to list tools", status_code=500)
+
+
+@app.get("/mcp/resources")
+async def mcp_resources_list(user: User = Depends(require_authentication)):
+    """List all available MCP resources."""
+    if not MCP_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
+
+    try:
+        from modules.platform.mcp_server import mcp_server
+        resources = []
+        for resource in mcp_server.resources.values():
+            resources.append({
+                "uri": resource.uri,
+                "name": resource.name,
+                "description": resource.description,
+                "mime_type": resource.mime_type
+            })
+        return {"resources": resources}
+    except Exception as e:
+        logger.error("[MCP] Resources list error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "Failed to list resources", status_code=500)
+
+
+# ==============================
 # EXPORT/IMPORT ENDPOINTS
 # ==============================
 
