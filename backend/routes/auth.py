@@ -5,7 +5,8 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, Form, HTTPException, Query
 
 from security import (
-    create_access_token, get_current_user,
+    create_access_token, create_refresh_token, verify_refresh_token,
+    get_current_user, rate_limit,
     log_audit_event, get_audit_log, get_audit_stats,
     InputValidator, ErrorCode, error_response,
 )
@@ -61,6 +62,7 @@ router = APIRouter()
 
 
 @router.post("/auth/register")
+@rate_limit(requests_per_minute=5, window_seconds=60)
 async def register_user(
     username: str = Form(..., min_length=3, max_length=30),
     email: str = Form(...),
@@ -92,6 +94,7 @@ async def register_user(
 
 
 @router.post("/auth/login")
+@rate_limit(requests_per_minute=10, window_seconds=60)
 async def login_user(username: str = Form(...), password: str = Form(...)):  # nosec B105
     """Login and get JWT token"""
     user = user_manager.authenticate_user(username, password)
@@ -159,6 +162,33 @@ async def reset_password(
     user_manager.update_password(username, new_password)
     log_audit_event("auth_reset_password", username, "password_reset", resource=f"user:{user.id}", success=True)
     return {"status": "success", "message": "Password reset successfully"}
+
+
+@router.post("/auth/refresh")
+@rate_limit(requests_per_minute=10, window_seconds=60)
+async def refresh_access_token(refresh_token: str = Form(...)):
+    """Refresh an access token using a refresh token"""
+    token_data = verify_refresh_token(refresh_token)
+    if not token_data:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    user = user_manager.users.get(token_data.username)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    access_token = create_access_token(
+        data={"sub": user.id, "username": user.username},
+        expires_delta=timedelta(hours=24)
+    )
+
+    log_audit_event("auth_refresh", user.username, "token_refreshed", resource=f"user:{user.id}", success=True)
+
+    return {
+        "status": "success",
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": 86400
+    }
 
 
 @router.get("/audit/log")

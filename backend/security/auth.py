@@ -43,6 +43,7 @@ if not _jwt_secret:
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 hours
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))  # 7 days
 
 # Password hashing
 if HAS_JWT:
@@ -275,6 +276,63 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
 
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict) -> str:
+    """Create a long-lived JWT refresh token"""
+    if not HAS_JWT:
+        # Fallback: create simple token
+        import base64
+        import json
+
+        to_encode = data.copy()
+        expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        to_encode.update({
+            "exp": expire.isoformat(),
+            "iat": datetime.now(timezone.utc).isoformat(),
+            "type": "refresh"
+        })
+        payload = json.dumps(to_encode).encode()
+        token = base64.urlsafe_b64encode(payload).decode()
+        return f"dev_refresh_{token}"
+
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "refresh"})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_refresh_token(token: str) -> Optional[TokenData]:
+    """Verify a refresh token and return the payload"""
+    if not HAS_JWT:
+        import base64
+        import json
+        try:
+            if token.startswith("dev_refresh_"):
+                payload = base64.urlsafe_b64decode(token[12:])
+                data = json.loads(payload)
+                return TokenData(
+                    user_id=data.get("sub", "unknown"),
+                    username=data.get("username", "unknown"),
+                    exp=datetime.fromisoformat(data.get("exp")) if data.get("exp") else None,
+                    iat=datetime.fromisoformat(data.get("iat")) if data.get("iat") else None
+                )
+        except Exception:
+            pass  # nosec B110
+        return None
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None
+        return TokenData(
+            user_id=payload.get("sub", ""),
+            username=payload.get("username", ""),
+            exp=datetime.fromtimestamp(payload.get("exp")) if payload.get("exp") else None,
+            iat=datetime.fromtimestamp(payload.get("iat")) if payload.get("iat") else None
+        )
+    except JWTError:
+        return None
 
 
 def verify_token(token: str) -> Optional[TokenData]:
