@@ -177,6 +177,31 @@ function ensureConversationsDir() {
   }
 }
 
+// T4: AES-256 encryption for conversation files at rest
+const _convoKey = crypto.scryptSync(app.getPath("userData") + ":ant-conversations", "ai-note-taker-convo-salt-v1", 32)
+
+function _encryptConversation(plainText) {
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv("aes-256-cbc", _convoKey, iv)
+  let encrypted = cipher.update(plainText, "utf8", "hex")
+  encrypted += cipher.final("hex")
+  return JSON.stringify({ iv: iv.toString("hex"), data: encrypted })
+}
+
+function _decryptConversation(cipherText) {
+  try {
+    const parsed = JSON.parse(cipherText)
+    if (!parsed.iv || !parsed.data) return cipherText // plaintext fallback
+    const decipher = crypto.createDecipheriv("aes-256-cbc", _convoKey, Buffer.from(parsed.iv, "hex"))
+    let decrypted = decipher.update(parsed.data, "hex", "utf8")
+    decrypted += decipher.final("utf8")
+    return decrypted
+  } catch (e) {
+    // Fallback: may be old plaintext
+    return cipherText
+  }
+}
+
 let win
 let splashScreen = null
 let overlayAdapter = null
@@ -851,7 +876,8 @@ ipcMain.handle("conversation:save", (_event, conversation) => {
     updatedAt: now
   }
   const filePath = path.join(conversationsDir, `${id}.json`)
-  fs.writeFileSync(filePath, JSON.stringify(record, null, 2), "utf-8")
+  const encrypted = _encryptConversation(JSON.stringify(record))
+  fs.writeFileSync(filePath, encrypted, "utf-8")
   return record
 })
 
@@ -863,7 +889,13 @@ ipcMain.handle("conversation:load", (_event, id) => {
   }
   const filePath = path.join(conversationsDir, `${id}.json`)
   if (!fs.existsSync(filePath)) return null
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"))
+  const decrypted = _decryptConversation(fs.readFileSync(filePath, "utf-8"))
+  try {
+    return JSON.parse(decrypted)
+  } catch (e) {
+    logger.warn("[conversation:load] Failed to parse conversation %s: %s", id, e.message)
+    return null
+  }
 })
 
 ipcMain.handle("conversation:list", () => {
@@ -871,16 +903,24 @@ ipcMain.handle("conversation:list", () => {
   return fs.readdirSync(conversationsDir)
     .filter(f => f.endsWith(".json"))
     .map(f => {
-      const data = JSON.parse(fs.readFileSync(path.join(conversationsDir, f), "utf-8"))
-      return {
-        id: data.id,
-        title: data.title,
-        pinned: data.pinned || false,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt,
-        messageCount: data.messages ? data.messages.length : 0
+      const raw = fs.readFileSync(path.join(conversationsDir, f), "utf-8")
+      const decrypted = _decryptConversation(raw)
+      try {
+        const data = JSON.parse(decrypted)
+        return {
+          id: data.id,
+          title: data.title,
+          pinned: data.pinned || false,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+          messageCount: data.messages ? data.messages.length : 0
+        }
+      } catch (e) {
+        logger.warn("[conversation:list] Failed to parse %s: %s", f, e.message)
+        return null
       }
     })
+    .filter(Boolean)
 })
 
 ipcMain.handle("conversation:delete", (_event, id) => {
