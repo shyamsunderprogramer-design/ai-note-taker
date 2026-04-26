@@ -47,10 +47,17 @@ async def client() -> AsyncGenerator[httpx.AsyncClient, None]:
 async def auth_client() -> AsyncGenerator[httpx.AsyncClient, None]:
     """Create authenticated async HTTP client with valid JWT token."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=30.0) as client:
-        # Login with the default admin user
+        # Register a test user first (self-contained fixture)
+        unique = str(uuid.uuid4())[:8]
+        reg_resp = await client.post("/auth/register", data={
+            "username": f"integration_{unique}",
+            "email": f"integration_{unique}@example.com",
+            "password": "TestPass123!"
+        })
+        # Login with the registered user
         response = await client.post("/auth/login", data={
-            "username": TEST_USERNAME,
-            "password": TEST_PASSWORD
+            "username": f"integration_{unique}",
+            "password": "TestPass123!"
         })
         if response.status_code == 200:
             token = response.json().get("access_token")
@@ -123,14 +130,14 @@ class TestConversationEndpoints:
 
     async def test_list_conversations(self, auth_client: httpx.AsyncClient):
         """GET /conversations."""
-        response = await client.get("/conversations")
+        response = await auth_client.get("/conversations")
         assert response.status_code == 200  # nosec B101
         data = response.json()
         assert isinstance(data, list)  # nosec B101
 
     async def test_create_conversation(self, auth_client: httpx.AsyncClient):
         """POST /conversations."""
-        response = await client.post("/conversations", json={
+        response = await auth_client.post("/conversations", json={
             "title": "Test Conversation",
             "messages": []
         })
@@ -474,8 +481,7 @@ def test_endpoint_count():  # noqa: F821
     # This test file should cover at least 30 endpoints
     # Count the number of test methods
     import inspect
-    test_methods = [m for m in dir(TestHealthEndpoints) if m.startswith('test_')]  # noqa: F821
-    test_methods += [m for m in dir(TestAuthEndpoints) if m.startswith('test_')]
+    test_methods = [m for m in dir(TestAuthEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestProviderEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestConversationEndpoints) if m.startswith('test_')]
     test_methods += [m for m in dir(TestDocumentEndpoints) if m.startswith('test_')]
