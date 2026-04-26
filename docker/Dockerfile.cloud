@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements-cloud.txt
 # Copy backend code
 COPY backend/ /app/backend/
 
+# Create non-root user FIRST (before chown)
+RUN useradd --create-home appuser
+
 # Create all data directories the app needs at runtime
 # and set ownership so appuser can write to them
 RUN mkdir -p /app/backend/core/data \
@@ -27,18 +30,17 @@ RUN mkdir -p /app/backend/core/data \
     /app/backend/data/meeting_templates \
     /app/backend/security/data \
     /app/backend/modules/ai/data \
+    /app/backend/modules/ai/embeddings \
     /app/backend/modules/crm/data \
     /app/backend/modules/platform/data \
     /app/backend/modules/platform/data/documents \
     /app/backend/modules/platform/data/vectors \
-    /app/backend/modules/ai/embeddings \
     && chown -R appuser:appuser /app/backend/data \
     /app/backend/core/data \
     /app/backend/security/data \
     /app/backend/modules
 
-# Non-root user for security
-RUN useradd --create-home appuser
+# Switch to non-root user
 USER appuser
 
 # Health check
