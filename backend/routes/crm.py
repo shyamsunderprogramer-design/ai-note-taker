@@ -131,3 +131,79 @@ async def sync_salesforce(
     except Exception as e:
         logger.error("[CRM] Salesforce sync error: %s", str(e))
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+# ─── Real CRM Integration (T20) ──────────────────────────────────────────
+
+@router.post("/crm/integrations/{name}/init")
+async def init_crm_integration(
+    name: str,
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Initialize a real CRM integration (HubSpot or Salesforce)."""
+    try:
+        from modules.crm.crm_real_integration import (
+            create_crm_config, initialize_crm_integration, get_crm_status
+        )
+        provider = body.get("provider", name)
+        credentials = body.get("credentials", {})
+        config = create_crm_config(provider, credentials)
+        success = await initialize_crm_integration(name, config)
+        return {"status": "initialized" if success else "failed", "name": name, "provider": provider}
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM real integration not available", status_code=503)
+    except Exception as e:
+        logger.error("[CRM] Init error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.post("/crm/integrations/{name}/sync-contacts")
+async def sync_contacts(
+    name: str,
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Sync contacts to CRM."""
+    try:
+        from modules.crm.crm_real_integration import sync_contacts_to_crm, CRMContact
+        contacts = []
+        for c in body.get("contacts", []):
+            contacts.append(CRMContact(**c))
+        result = await sync_contacts_to_crm(name, contacts)
+        return result
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM real integration not available", status_code=503)
+    except Exception as e:
+        logger.error("[CRM] Sync contacts error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/crm/integrations/{name}/status")
+async def get_integration_status(
+    name: str,
+    user: User = Depends(require_authentication),
+):
+    """Get CRM integration sync status."""
+    try:
+        from modules.crm.crm_real_integration import crm_manager
+        status = await crm_manager.get_sync_status(name)
+        return status
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM real integration not available", status_code=503)
+    except Exception as e:
+        logger.error("[CRM] Status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/crm/status")
+async def crm_overall_status(user: User = Depends(require_authentication)):
+    """Get overall CRM status."""
+    try:
+        from modules.crm.crm_real_integration import get_crm_status
+        return get_crm_status()
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "CRM real integration not available", status_code=503)
+    except Exception as e:
+        logger.error("[CRM] Overall status error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
