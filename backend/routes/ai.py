@@ -703,7 +703,7 @@ async def set_always_on_mic(enabled: bool = Form(...)):
     try:
         from whisper_handler import get_streaming_transcriber
     except ImportError:
-        return {"error": "Whisper not available", "enabled": False}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Whisper not available", status_code=503)
 
     transcriber = get_streaming_transcriber()
 

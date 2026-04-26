@@ -4621,17 +4621,20 @@ async function loadAboutStatus() {
   // Check Ollama (local only — not available on cloud)
   var _ollamaUrl = (typeof API_BASE !== 'undefined' && API_BASE.indexOf('127.0.0.1') !== -1) ? 'http://127.0.0.1:11434/api/tags' : null;
   if (_ollamaUrl) {
-  try {
-    const res = await fetch(_ollamaUrl, { method: "GET", signal: AbortSignal.timeout(3000) })
-    if (res.ok) {
-      const data = await res.json()
-      const count = data.models ? data.models.length : 0
-      setStatus("aboutOllama", true, `Connected (${count} models)`)
-    } else {
-      setStatus("aboutOllama", false, "Connection failed")
+    try {
+      const res = await fetch(_ollamaUrl, { method: "GET", signal: AbortSignal.timeout(3000) })
+      if (res.ok) {
+        const data = await res.json()
+        const count = data.models ? data.models.length : 0
+        setStatus("aboutOllama", true, `Connected (${count} models)`)
+      } else {
+        setStatus("aboutOllama", false, "Connection failed")
+      }
+    } catch {
+      setStatus("aboutOllama", false, "Not reachable")
     }
-  } catch {
-    setStatus("aboutOllama", false, "Not reachable")
+  } else {
+    setStatus("aboutOllama", false, "Cloud mode (N/A)")
   }
 
   // Whisper model is loaded on first use — we can't query it directly

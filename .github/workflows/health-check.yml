@@ -1,0 +1,28 @@
+name: Health Check
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Backend Health
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" https://ant-backend.onrender.com/health)
+          if [ "$status" != "200" ]; then
+            echo "::error::Backend health check failed with status $status"
+            exit 1
+          fi
+          echo "Backend health check passed (HTTP $status)"
+
+      - name: Check Frontend Health
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" https://ant-note-taker.vercel.app)
+          if [ "$status" != "200" ]; then
+            echo "::error::Frontend health check failed with status $status"
+            exit 1
+          fi
+          echo "Frontend health check passed (HTTP $status)"

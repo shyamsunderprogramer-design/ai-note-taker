@@ -328,7 +328,7 @@ async def get_cache_stats():
         from agents.cache import get_cache
         return get_cache().get_stats()
     except ImportError:
-        return {"error": "Cache module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cache module not available", status_code=503)
 
 
 @router.post("/agents/cache/cleanup")
@@ -342,7 +342,7 @@ async def cleanup_cache():
         removed = get_cache().cleanup_expired()
         return {"removed": removed}
     except ImportError:
-        return {"error": "Cache module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cache module not available", status_code=503)
 
 
 @router.get("/agents/learning/stats")
@@ -355,7 +355,7 @@ async def get_learning_stats(agent_type: Optional[str] = None):
         from agents.learning import get_learner
         return get_learner().get_performance_stats(agent_type)
     except ImportError:
-        return {"error": "Learning module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Learning module not available", status_code=503)
 
 
 # --- Ingestion Endpoints ---
