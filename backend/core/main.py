@@ -893,6 +893,32 @@ def config_check():
     }
 
 
+@app.get("/health/db-debug")
+async def db_debug():
+    """Diagnostic endpoint that attempts a fresh database connection and returns the error"""
+    from core.database import DATABASE_URL as db_url, HAS_SQLALCHEMY
+    if not HAS_SQLALCHEMY:
+        return {"error": "SQLAlchemy not available"}
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        from sqlalchemy import text
+        import ssl as _ssl
+        _ssl_ctx = _ssl.create_default_context()
+        _ssl_ctx.check_hostname = False
+        _ssl_ctx.verify_mode = _ssl.CERT_NONE
+        _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
+        # Strip sslmode from URL for asyncpg
+        _test_url = db_url.split("?sslmode=")[0] if "?sslmode=" in db_url else db_url
+        engine = create_async_engine(_test_url, connect_args={"ssl": _ssl_ctx}, pool_size=1)
+        async with engine.begin() as conn:
+            result = await conn.execute(text("SELECT version()"))
+            version = result.scalar()
+        await engine.dispose()
+        return {"status": "connected", "version": version, "url": _redacted}
+    except Exception as e:
+        return {"status": "failed", "error": str(e), "error_type": type(e).__name__, "url": re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"}
+
+
 # Provider key status cache — avoids flooding the key server on every /providers call
 # Per-provider timestamps so one stale entry doesn't invalidate all others
 _provider_key_cache: Dict[str, tuple] = {}  # provider -> (result: bool, timestamp: float)

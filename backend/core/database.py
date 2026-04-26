@@ -640,6 +640,7 @@ class DatabaseManager:
     async def health_check(self) -> bool:
         """Check database connectivity"""
         if not self.engine:
+            logger.error("[Database] Health check: engine is None, database not initialized")
             return False
         try:
             async with self.session_maker() as session:
