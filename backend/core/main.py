@@ -879,6 +879,20 @@ def health_check():
     }
 
 
+@app.get("/health/config")
+def config_check():
+    """Diagnostic endpoint to verify database configuration (no secrets exposed)"""
+    from core.database import DATABASE_URL as db_url, USE_SQLITE, FORCE_SQLITE
+    _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
+    return {
+        "database_url_prefix": db_url[:30] + "..." if db_url and len(db_url) > 30 else _redacted,
+        "use_sqlite": USE_SQLITE,
+        "force_sqlite": FORCE_SQLITE,
+        "cloud_mode": os.getenv("CLOUD_MODE", "false"),
+        "database_available": DATABASE_AVAILABLE,
+    }
+
+
 # Provider key status cache — avoids flooding the key server on every /providers call
 # Per-provider timestamps so one stale entry doesn't invalidate all others
 _provider_key_cache: Dict[str, tuple] = {}  # provider -> (result: bool, timestamp: float)
