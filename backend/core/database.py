@@ -575,14 +575,18 @@ class DatabaseManager:
             return
 
         try:
+            # Build the effective database URL for this connection
+            _db_url = DATABASE_URL
+
             # Build connection args for cloud databases
-            # Neon requires SSL — sslmode=require is in the URL query string
-            # asyncpg handles sslmode from the URL automatically
+            # Neon requires SSL — pass as SSLContext via connect_args
             connect_args = {}
-            if "postgresql" in DATABASE_URL and "sqlite" not in DATABASE_URL:
-                # Ensure sslmode is in the URL for Neon compatibility
-                if "sslmode" not in DATABASE_URL and "ssl" not in DATABASE_URL:
-                    DATABASE_URL = DATABASE_URL.rstrip("/") + "?sslmode=require"
+            if "postgresql" in _db_url and "sqlite" not in _db_url:
+                # Remove sslmode from URL if present — asyncpg doesn't use it in URL
+                if "sslmode=" in _db_url:
+                    _db_url = _db_url.split("?sslmode=")[0]
+                    if _db_url.endswith("?"):
+                        _db_url = _db_url[:-1]
                 try:
                     import ssl as _ssl
                     _ssl_ctx = _ssl.create_default_context()
@@ -596,8 +600,10 @@ class DatabaseManager:
             _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
             _max_overflow = 2 if _pool_size == 2 else 20
 
+            logger.info("[Database] Connecting to: %s", re.sub(r'://[^@]+@', '://***@', _db_url))
+
             self.engine = create_async_engine(
-                DATABASE_URL,
+                _db_url,
                 pool_size=_pool_size,
                 max_overflow=_max_overflow,
                 pool_timeout=30,
