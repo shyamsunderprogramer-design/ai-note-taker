@@ -528,7 +528,7 @@ async def process_shadow_transcript(
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Shadow agent not available", status_code=503)
 
     try:
-        result = process_transcript_segment(text, speaker)
+        result = await process_transcript_segment(text, speaker)
         return result or {"detected": False}
     except Exception as e:
         logger.error("[ShadowAgent] Process error: %s", str(e))

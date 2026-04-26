@@ -1787,9 +1787,9 @@ class DataMigrator:
     @staticmethod
     async def migrate_users() -> Dict[str, str]:
         """Migrate users from data/users.json"""
-        users_file = Path("data/users.json")
+        users_file = Path(__file__).resolve().parent / "data" / "users.json"
         if not users_file.exists():
-            logger.info("[Migration] No users.json found")
+            logger.info("[Migration] No users.json found at %s", users_file)
             return {}
 
         id_mapping = {}

@@ -1,9 +1,7 @@
 """Notion integration — sync meeting notes, summaries, and action items to Notion pages."""
 import httpx
 import logging
-from typing import Optional
-
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from routes.deps import require_authentication
 from routes.integration_helpers import get_integration_config, save_integration_config, delete_integration_config

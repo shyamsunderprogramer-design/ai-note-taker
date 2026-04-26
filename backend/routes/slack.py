@@ -1,10 +1,7 @@
 """Slack integration — post transcripts, summaries, and action items to channels."""
 import httpx
-import json
 import logging
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from routes.deps import require_authentication
 from routes.integration_helpers import get_integration_config, save_integration_config, delete_integration_config

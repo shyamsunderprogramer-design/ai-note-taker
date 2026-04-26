@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException
 
 from routes.deps import require_authentication
 from security import ErrorCode, error_response

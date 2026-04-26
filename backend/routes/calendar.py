@@ -1,10 +1,9 @@
 """Calendar integration — Google Calendar OAuth + auto-join detection."""
 import logging
 import os
-from datetime import datetime, timezone
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from routes.deps import require_authentication
 from routes.integration_helpers import get_integration_config, save_integration_config, delete_integration_config

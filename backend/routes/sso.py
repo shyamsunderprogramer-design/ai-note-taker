@@ -2,7 +2,6 @@
 import os
 import logging
 import secrets
-import uuid
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 

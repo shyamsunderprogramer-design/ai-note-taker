@@ -51,7 +51,7 @@ else:
     pwd_context = None
 
 # In-memory user storage (replace with database in production)
-USERS_FILE = Path("data/users.json")
+USERS_FILE = Path(__file__).resolve().parent / ".." / "core" / "data" / "users.json"
 USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 

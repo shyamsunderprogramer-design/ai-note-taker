@@ -3,9 +3,9 @@ import base64
 import httpx
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from routes.deps import require_authentication
 from routes.integration_helpers import get_integration_config, save_integration_config, delete_integration_config

@@ -97,7 +97,7 @@ class ShadowInterviewAgent:
             "message": "Shadow agent is listening. Press Ctrl+~ to toggle overlay."
         }
 
-    def process_transcript(self, text: str, speaker: str) -> Optional[Dict]:
+    async def process_transcript(self, text: str, speaker: str) -> Optional[Dict]:
         """
         Process incoming transcript.
 
@@ -121,7 +121,7 @@ class ShadowInterviewAgent:
                 # Generate suggestions
                 if self.config["auto_generate"]:
                     self.state = AgentState.THINKING
-                    self.suggestions = self._generate_suggestions(text)
+                    self.suggestions = await self._generate_suggestions(text)
                     self.state = AgentState.SUGGESTING
 
                     return {
@@ -146,18 +146,18 @@ class ShadowInterviewAgent:
 
         return None
 
-    def _generate_suggestions(self, question: str) -> List[Suggestion]:
+    async def _generate_suggestions(self, question: str) -> List[Suggestion]:
         """Generate response suggestions using LLM when available, fallback to patterns."""
         # Try LLM-powered generation first
         if HAS_AI_ROUTER:
-            llm_suggestions = self._generate_llm_suggestions(question)
+            llm_suggestions = await self._generate_llm_suggestions(question)
             if llm_suggestions:
                 return llm_suggestions
 
         # Fallback: pattern-based suggestions
         return self._generate_pattern_suggestions(question)
 
-    def _generate_llm_suggestions(self, question: str) -> List[Suggestion]:
+    async def _generate_llm_suggestions(self, question: str) -> List[Suggestion]:
         """Use LLM to generate contextual interview suggestions."""
         try:
             role = self.context.role.replace("_", " ") or "software engineer"
@@ -172,7 +172,7 @@ class ShadowInterviewAgent:
             )
 
             full_response = ""
-            for event in route_ai_stream(prompt, mode="interview", style="concise"):
+            async for event in route_ai_stream(prompt, mode="interview", style="concise"):
                 if "event: chunk" in event:
                     try:
                         data_line = [l for l in event.split("\n") if l.startswith("data:")]
@@ -320,8 +320,8 @@ def start_shadow_session(company: str, role: str, stage: str = "") -> Dict:
     return shadow_agent.start_session(company, role, stage)
 
 
-def process_transcript_segment(text: str, speaker: str) -> Optional[Dict]:
-    return shadow_agent.process_transcript(text, speaker)
+async def process_transcript_segment(text: str, speaker: str) -> Optional[Dict]:
+    return await shadow_agent.process_transcript(text, speaker)
 
 
 def get_shadow_suggestions() -> List[Dict]:

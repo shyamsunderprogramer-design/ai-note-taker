@@ -105,7 +105,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
     """SSE stream endpoint — yields event: meta/chunk/done/error
     Includes response caching: repeated queries return from cache (~5ms) instead of LLM (~500ms).
     """
-    def generator():
+    async def generator():
         STATE["is_streaming"] = True
 
         # Parse context messages from JSON
@@ -132,7 +132,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
             collected_parts = []
-            for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
+            async for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
                 yield event
                 # Collect text content for caching (parse SSE data)
                 if event.startswith("event: chunk"):
@@ -263,19 +263,19 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     # Single-provider fast path
     if len(all_providers) <= 1:
         single_pk = all_providers[0] if all_providers else "ollama"
-        def single_generator():
+        async def single_generator():
             STATE["is_streaming"] = True
             try:
                 if single_pk == "ollama":
                     from ai_router import ask_ollama_stream
-                    for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature):
+                    async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature):
                         yield event
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
                     model_name = resolved[1]
                     stream_fn = get_stream_fn(single_pk)
                     if stream_fn:
-                        for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
+                        async for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
                             yield event
                     else:
                         yield f'event: error\ndata: {{"type":"error","message":"No stream function for {single_pk}"}}\n\n'
@@ -289,43 +289,48 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     def stream_provider(pk):
         """Stream from a provider into the shared queue. Exit early if cancelled."""
-        provider_start = time.time()
-        logger.info("[PROVIDER START] %s", pk)
-        try:
-            if pk == "ollama":
-                from ai_router import ask_ollama_stream
-                stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature)
-            else:
-                resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
-                model_name = resolved[1]
-                stream_fn = get_stream_fn(pk)
-                if stream_fn is None:
-                    race_queue.put((pk, "ERROR", f"No stream function for {pk}"))
-                    race_queue.put((pk, "DONE", None))
-                    return
-                stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)
+        import asyncio
 
-            has_error = False
-            for event in stream_iter:
-                if cancel_flags[pk].is_set():
-                    logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time.time() - provider_start)
-                    race_queue.put((pk, "DONE", None))
-                    return
-                if "event: error" in event:
-                    has_error = True
-                    race_queue.put((pk, "ERROR", event))
+        async def _run():
+            provider_start = time.time()
+            logger.info("[PROVIDER START] %s", pk)
+            try:
+                if pk == "ollama":
+                    from ai_router import ask_ollama_stream
+                    stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature)
                 else:
-                    race_queue.put((pk, "EVENT", event))
+                    resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
+                    model_name = resolved[1]
+                    stream_fn = get_stream_fn(pk)
+                    if stream_fn is None:
+                        race_queue.put((pk, "ERROR", f"No stream function for {pk}"))
+                        race_queue.put((pk, "DONE", None))
+                        return
+                    stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)
 
-            if has_error:
-                logger.info("[PROVIDER ERROR DONE] %s in %.1fs", pk, time.time() - provider_start)
-            else:
-                logger.info("[PROVIDER DONE] %s in %.1fs", pk, time.time() - provider_start)
-            race_queue.put((pk, "DONE", None))
-        except Exception as e:
-            logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time.time() - provider_start)
-            race_queue.put((pk, "ERROR", "An internal error occurred"))
-            race_queue.put((pk, "DONE", None))
+                has_error = False
+                async for event in stream_iter:
+                    if cancel_flags[pk].is_set():
+                        logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time.time() - provider_start)
+                        race_queue.put((pk, "DONE", None))
+                        return
+                    if "event: error" in event:
+                        has_error = True
+                        race_queue.put((pk, "ERROR", event))
+                    else:
+                        race_queue.put((pk, "EVENT", event))
+
+                if has_error:
+                    logger.info("[PROVIDER ERROR DONE] %s in %.1fs", pk, time.time() - provider_start)
+                else:
+                    logger.info("[PROVIDER DONE] %s in %.1fs", pk, time.time() - provider_start)
+                race_queue.put((pk, "DONE", None))
+            except Exception as e:
+                logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time.time() - provider_start)
+                race_queue.put((pk, "ERROR", "An internal error occurred"))
+                race_queue.put((pk, "DONE", None))
+
+        asyncio.run(_run())
 
     # Start all provider threads
     threads = []
@@ -468,11 +473,11 @@ async def ask_with_image(
 
     # No screenshot — regular text streaming
     if not image_b64:
-        def text_generator():
+        async def text_generator():
             STATE["is_streaming"] = True
             try:
                 from ai_router import route_ai_stream
-                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
                     yield event
             except Exception as e:
                 yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
@@ -531,10 +536,10 @@ async def ask_with_image(
         stream_fn = get_vision_stream_fn(provider)
         model = VISION_PROVIDER_MAP[provider]
         if stream_fn:
-            def single_vision_gen():
+            async def single_vision_gen():
                 STATE["is_streaming"] = True
                 try:
-                    for event in stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature):
+                    async for event in stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature):
                         yield event
                 except Exception as e:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
@@ -545,11 +550,11 @@ async def ask_with_image(
     # Single Ollama vision
     if not vision_providers or (provider == "ollama" and has_ollama_vision):
         if has_ollama_vision:
-            def ollama_vision_gen():
+            async def ollama_vision_gen():
                 STATE["is_streaming"] = True
                 try:
                     from ai_router import ask_ollama_vision_stream
-                    for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=ollama_vision_model, temperature=temperature):
+                    async for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=ollama_vision_model, temperature=temperature):
                         yield event
                 except Exception as e:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
@@ -574,37 +579,42 @@ async def ask_with_image(
     cancel_flags = {p: threading.Event() for p in all_vision}
 
     def stream_vision_provider(provider_name):
-        p_start = time_module.time()
-        try:
-            if provider_name == "ollama":
-                from ai_router import ask_ollama_vision_stream
-                stream_iter = ask_ollama_vision_stream(
-                    query, image_b64=image_b64, mode=mode, style=style,
-                    messages=messages, model_name=ollama_vision_model, temperature=temperature
-                )
-            else:
-                stream_fn = get_vision_stream_fn(provider_name)
-                model = VISION_PROVIDER_MAP[provider_name]
-                if stream_fn is None:
-                    race_queue.put((provider_name, "ERROR", f"No vision stream for {provider_name}"))
-                    race_queue.put((provider_name, "DONE", None))
-                    return
-                stream_iter = stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature)
+        import asyncio
 
-            has_error = False
-            for event in stream_iter:
-                if cancel_flags[provider_name].is_set():
-                    race_queue.put((provider_name, "DONE", None))
-                    return
-                if "event: error" in event:
-                    has_error = True
-                    race_queue.put((provider_name, "ERROR", event))
+        async def _run():
+            p_start = time_module.time()
+            try:
+                if provider_name == "ollama":
+                    from ai_router import ask_ollama_vision_stream
+                    stream_iter = ask_ollama_vision_stream(
+                        query, image_b64=image_b64, mode=mode, style=style,
+                        messages=messages, model_name=ollama_vision_model, temperature=temperature
+                    )
                 else:
-                    race_queue.put((provider_name, "EVENT", event))
-            race_queue.put((provider_name, "DONE", None))
-        except Exception as e:
-            race_queue.put((provider_name, "ERROR", "An internal error occurred"))
-            race_queue.put((provider_name, "DONE", None))
+                    stream_fn = get_vision_stream_fn(provider_name)
+                    model = VISION_PROVIDER_MAP[provider_name]
+                    if stream_fn is None:
+                        race_queue.put((provider_name, "ERROR", f"No vision stream for {provider_name}"))
+                        race_queue.put((provider_name, "DONE", None))
+                        return
+                    stream_iter = stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature)
+
+                has_error = False
+                async for event in stream_iter:
+                    if cancel_flags[provider_name].is_set():
+                        race_queue.put((provider_name, "DONE", None))
+                        return
+                    if "event: error" in event:
+                        has_error = True
+                        race_queue.put((provider_name, "ERROR", event))
+                    else:
+                        race_queue.put((provider_name, "EVENT", event))
+                race_queue.put((provider_name, "DONE", None))
+            except Exception as e:
+                race_queue.put((provider_name, "ERROR", "An internal error occurred"))
+                race_queue.put((provider_name, "DONE", None))
+
+        asyncio.run(_run())
 
     for vp in all_vision:
         t = threading.Thread(target=stream_vision_provider, args=(vp,), daemon=True)
@@ -665,7 +675,7 @@ async def overlay_ask(
                 if not model_name:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
-                for event in ask_ollama_vision_stream(
+                async for event in ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
@@ -675,7 +685,7 @@ async def overlay_ask(
                 ):
                     yield event
             else:
-                for event in route_ai_stream(query, mode="fast", style="concise", temperature=temperature):
+                async for event in route_ai_stream(query, mode="fast", style="concise", temperature=temperature):
                     yield event
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
