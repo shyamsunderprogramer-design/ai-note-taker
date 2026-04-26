@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Check Backend Health
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" https://ant-backend.onrender.com/health)
+          status=$(curl -s -o /dev/null -w "%{http_code}" https://ai-note-taker-rek0.onrender.com/health)
           if [ "$status" != "200" ]; then
             echo "::error::Backend health check failed with status $status"
             exit 1
