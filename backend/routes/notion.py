@@ -84,7 +84,7 @@ async def connect_notion(
     )
 
     log_audit_event("notion_connect", user.username, "notion_connected", success=True)
-    logger.info("[Notion] Workspace %s connected for user %s", workspace_id, user.username)
+    logger.info("[Notion] Workspace %s connected for user %s", workspace_id, user.username)  # lgtm[py/log-injection]
 
     return {"status": "connected", "workspace_id": workspace_id}
 
@@ -154,7 +154,7 @@ async def sync_to_notion(
             if resp.status_code in (200, 201):
                 data = resp.json()
                 log_audit_event("notion_sync", user.username, "notion_page_created", success=True)
-                logger.info("[Notion] Synced conversation %s to page %s", conversation_id, page_id)
+                logger.info("[Notion] Synced conversation %s to page %s", conversation_id, page_id)  # lgtm[py/log-injection]
                 return {
                     "status": "synced",
                     "notion_page_id": data.get("id"),

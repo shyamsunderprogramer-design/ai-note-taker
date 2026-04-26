@@ -238,11 +238,15 @@ class JDAnalyzer:
         return skills[:25]  # Cap at 25 skills from JD
 
 
-class StudyPlanGenerator:
+class SpacedRepetitionPlanner:
     """
     SM-2 Algorithm implementation for spaced repetition scheduling.
     Optimizes review intervals based on performance.
     """
+
+    # NOTE: This class was previously named StudyPlanGenerator. It was renamed
+    # to avoid shadowing the main StudyPlanGenerator at line 609.
+    # See CodeQL alert #828/#829.
 
     def __init__(self):
         # Default intervals in days
@@ -304,7 +308,7 @@ class StudyPlanGenerator:
             # Review schedule
             review_date = current_date
             interval = 1
-            ef = 2.5
+            ef = 2.5  # lgtm[py/multiple-definition] — initial value before loop reassigns it
 
             for review_num in range(1, 6):  # 5 reviews over the period
                 interval, ef = self.calculate_next_review(

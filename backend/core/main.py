@@ -3120,9 +3120,6 @@ async def websocket_endpoint(ws: WebSocket):
 # The inline endpoints below are DEPRECATED and commented out to avoid route conflicts.
 # All cognitive graph, entity extraction, and predictive interview endpoints
 # are now handled by the cognitive_router (imported above).
-if False:  # DISABLED — use routes/cognitive.py instead
-  pass
-
 async def _disabled_cognitive_graph_status():
     if not COGNITIVE_GRAPH_AVAILABLE:
         return {"available": False, "error": "Cognitive graph module not installed"}

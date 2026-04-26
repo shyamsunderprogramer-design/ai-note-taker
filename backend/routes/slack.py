@@ -82,7 +82,7 @@ async def post_to_slack(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(  # nosec B611 — Slack webhook URL validated above
+            response = await client.post(  # nosec B611; lgtm[py/request-forgery] — Slack webhook URL validated above
                 webhook_url,
                 json={"text": slack_message},
                 timeout=10.0,

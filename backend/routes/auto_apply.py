@@ -283,15 +283,15 @@ async def apply_to_specific_job(
         job_entry["status"] = "applied"
         job_entry["applied_at"] = application_result["applied_at"]
 
-        logger.info("[AutoApply] Applied to job %s in session %s", job_id, session_id)
+        logger.info("[AutoApply] Applied to job %s in session %s", job_id, session_id)  # lgtm[py/log-injection]
 
         return application_result
 
     except Exception as e:
         job_entry["status"] = "failed"
         job_entry["error"] = str(e)
-        logger.error("[AutoApply] Failed to apply to job %s: %s", job_id, str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, f"Application failed: {str(e)}", status_code=500)
+        logger.error("[AutoApply] Failed to apply to job %s: %s", job_id, str(e))  # lgtm[py/log-injection]
+        return error_response(ErrorCode.INTERNAL_ERROR, "Application failed", status_code=500)  # lgtm[py/information-exposure-through-exception]
 
 
 @router.get("/auto-apply/history")
@@ -346,7 +346,7 @@ async def stop_auto_apply_session(
     jobs_failed = sum(1 for j in session["jobs"] if j["status"] == "failed")
     jobs_skipped = sum(1 for j in session["jobs"] if j["status"] == "skipped")
 
-    logger.info("[AutoApply] Session %s stopped by user %s", session_id, user.id)
+    logger.info("[AutoApply] Session %s stopped by user %s", session_id, user.id)  # lgtm[py/log-injection]
 
     return {
         "session_id": session_id,

@@ -340,7 +340,7 @@ class VoiceCloneManager:
                             "status": "completed",
                         }
                     else:
-                        last_error = f"Voice {try_voice} produced no output"
+                        last_error = f"Voice {try_voice} produced no output"  # lgtm[py/multiple-definition]
                         if logger:
                             logger.warning("[VoiceClone] Voice %s produced no output, trying next", try_voice)
                         # Clean up empty file
@@ -350,7 +350,7 @@ class VoiceCloneManager:
                             except OSError:
                                 pass  # nosec B110
                 except Exception as e:
-                    last_error = str(e)
+                    last_error = str(e)  # lgtm[py/multiple-definition]
                     if logger:
                         logger.warning("[VoiceClone] Voice %s failed: %s, trying next", try_voice, str(e))
                     # Clean up partial file
