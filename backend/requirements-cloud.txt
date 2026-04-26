@@ -22,7 +22,7 @@ urllib3==2.6.3
 
 # ── Database ──
 sqlalchemy[asyncio]==2.0.29
-asyncpg==0.29.0
+asyncpg==0.30.0
 aiosqlite==0.20.0
 
 # ── Auth & security ──
