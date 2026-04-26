@@ -188,6 +188,9 @@ let backendHealthCheckInterval = null
 let backendStatus = "unknown" // "unknown" | "starting" | "ready" | "error" | "dead"
 const MAX_BACKEND_RESTART_ATTEMPTS = 5
 const BACKEND_RESTART_BASE_DELAY_MS = 1000
+
+// T3: CSP nonce store — maps webContentsId → nonce for nonce-based CSP headers
+const _cspNonceMap = new Map()
 const BACKEND_HEALTH_CHECK_INTERVAL_MS = 5000
 
 // Exponential backoff delay calculation
@@ -301,6 +304,12 @@ function createSplashScreen() {
     }
   })
 
+  // T3: Register CSP nonce for splash screen
+  const splashNonce = crypto.randomBytes(16).toString("base64")
+  splashScreen.cspNonce = splashNonce
+  _cspNonceMap.set(splashScreen.webContents.id, splashNonce)
+  splashScreen.webContents.on("destroyed", () => { _cspNonceMap.delete(splashScreen.webContents.id) })
+
   // Load splash HTML
   const isProd = app.isPackaged
   const splashPath = isProd
@@ -388,6 +397,8 @@ async function createWindow() {
 
   // Store nonce on the window webContents for access in CSP headers
   win.cspNonce = cspNonce
+  _cspNonceMap.set(win.webContents.id, cspNonce)
+  win.webContents.on("destroyed", () => { _cspNonceMap.delete(win.webContents.id) })
 
   // Set always on top - "normal" level is most reliable on Windows
   // even though it sounds counter-intuitive
@@ -1509,10 +1520,11 @@ app.whenReady().then(async () => {
     }
 
     if (isOwnPage) {
-      // T25: CSP for our own Electron desktop app pages
-      // NOTE: 'unsafe-inline' retained for inline <style> blocks (Electron renderer)
-      // 'unsafe-eval' removed — hljs works without eval; if needed, add nonce-based approach
-      const csp = `default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      // T3: Nonce-based CSP — removes 'unsafe-inline' in favor of per-window nonce
+      const nonce = details.webContentsId ? _cspNonceMap.get(details.webContentsId) : null
+      const scriptNonce = nonce ? `'nonce-${nonce}'` : "'self'"
+      const styleNonce  = nonce ? `'nonce-${nonce}'` : "'self'"
+      const csp = `default-src 'self'; script-src 'self' ${scriptNonce}; style-src 'self' ${styleNonce} https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
       headers["Content-Security-Policy"] = [csp]
     }
 
@@ -1773,6 +1785,12 @@ app.whenReady().then(async () => {
         preload: path.join(__dirname, "preload.js"),
       },
     })
+
+    // T3: Register CSP nonce for caption window
+    const captionNonce = crypto.randomBytes(16).toString("base64")
+    captionWindow.cspNonce = captionNonce
+    _cspNonceMap.set(captionWindow.webContents.id, captionNonce)
+    captionWindow.webContents.on("destroyed", () => { _cspNonceMap.delete(captionWindow.webContents.id) })
 
     if (PLATFORM === "win32") {
       captionWindow.setAlwaysOnTop(true, "monitor", 2147483647)
