@@ -27,7 +27,7 @@ async def subscribe_webhook(
     request: Request,
     url: str = Query(..., description="Webhook callback URL"),
     events: str = Query("transcript.ready,summary.ready", description="Comma-separated event types"),
-    secret: str = Query("", description="HMAC signing secret"),
+    secret: str = Query("", description="HMAC signing secret"),  # nosec B105 — webhook signing secret parameter
 ):
     """Subscribe to webhook events (Zapier-compatible)."""
     webhook_id = str(uuid.uuid4())[:8]

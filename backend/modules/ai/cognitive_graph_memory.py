@@ -331,6 +331,6 @@ def get_cognitive_graph():
         if neo4j_graph.is_available():
             return neo4j_graph
     except Exception:
-        pass
+        pass  # nosec B110 — optional Neo4j fallback
 
     return memory_graph

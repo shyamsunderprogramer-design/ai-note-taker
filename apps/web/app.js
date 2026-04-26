@@ -2116,6 +2116,35 @@ function setBubbleText(bubble, text, showCursor = false) {
 }
 
 // ==============================
+// BATCHED DOM UPDATE UTILITIES
+// ==============================
+let _pendingText = ''
+let _rafId = null
+
+function batchUpdateBubble(text) {
+  _pendingText += text
+  if (!_rafId) {
+    _rafId = requestAnimationFrame(() => {
+      if (typeof setBubbleText === 'function' && latestBotMessage) {
+        setBubbleText(latestBotMessage.bubble, _pendingText, true)
+      }
+      scrollChat()
+      _pendingText = ''
+      _rafId = null
+    })
+  }
+}
+
+let _saveTimeout = null
+function debouncedSave() {
+  if (_saveTimeout) clearTimeout(_saveTimeout)
+  _saveTimeout = setTimeout(() => {
+    saveCurrentConversation()
+    _saveTimeout = null
+  }, 3000)
+}
+
+// ==============================
 // SSE STREAMING — READER + DISPATCH
 // ==============================
 
@@ -2395,8 +2424,7 @@ async function streamAIResponse(query) {
                 if (loadingIndicator) loadingIndicator.remove()
               }
 
-              setBubbleText(latestBotMessage.bubble, displayText, true)
-              scrollChat()
+              batchUpdateBubble(displayText)
             }
             continue
           }
@@ -2408,6 +2436,15 @@ async function streamAIResponse(query) {
 
     // Final cleanup for non-race mode
     if (latestBotMessage) {
+      // Flush any pending batch update
+      if (_rafId) {
+        cancelAnimationFrame(_rafId)
+        _rafId = null
+        if (typeof setBubbleText === 'function') {
+          setBubbleText(latestBotMessage.bubble, _pendingText, true)
+        }
+        _pendingText = ''
+      }
       let finalText = accumulatedText
         .replace(/^AI:\s*/i, "")
         .replace(/\[MODEL:[^\]]*\]\s*/g, "")
@@ -2445,7 +2482,7 @@ async function streamAIResponse(query) {
         const modeTag = document.querySelector(".mode-tag")
         const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
         currentMessages.push({ role: "assistant", text: finalText, timestamp: Date.now(), mode: currentMode })
-        saveCurrentConversation()
+        debouncedSave()
       }
 
       latestBotMessage = null
@@ -2598,7 +2635,7 @@ async function streamAIResponseWithImage(query, screenshotB64) {
               })()
               const textEl = visionEl.querySelector(".vision-text")
               if (textEl) textEl.textContent = visionDescription
-              scrollChat()
+              requestAnimationFrame(scrollChat)
             }
             continue
           }
@@ -2626,8 +2663,7 @@ async function streamAIResponseWithImage(query, screenshotB64) {
             accumulatedText += data.content
             if (latestBotMessage) {
               latestBotMessage.accumulatedText = accumulatedText
-              setBubbleText(latestBotMessage.bubble, accumulatedText, true)
-              scrollChat()
+              batchUpdateBubble(accumulatedText)
             }
             continue
           }
@@ -2639,6 +2675,15 @@ async function streamAIResponseWithImage(query, screenshotB64) {
 
     // Finalize
     if (latestBotMessage) {
+      // Flush any pending batch update
+      if (_rafId) {
+        cancelAnimationFrame(_rafId)
+        _rafId = null
+        if (typeof setBubbleText === 'function') {
+          setBubbleText(latestBotMessage.bubble, _pendingText, true)
+        }
+        _pendingText = ''
+      }
       latestBotMessage.accumulatedText = accumulatedText
       finalizeBubble(latestBotMessage.bubble, formatMessage(accumulatedText))
 
@@ -2666,7 +2711,7 @@ async function streamAIResponseWithImage(query, screenshotB64) {
         const modeTag = document.querySelector(".mode-tag")
         const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
         currentMessages.push({ role: "assistant", text: accumulatedText, timestamp: Date.now(), mode: currentMode })
-        saveCurrentConversation()
+        debouncedSave()
       }
 
       latestBotMessage = null
@@ -2858,8 +2903,7 @@ async function streamAIRace(query) {
                 if (loadingIndicator) loadingIndicator.remove()
               }
 
-              setBubbleText(latestBotMessage.bubble, displayText, true)
-              scrollChat()
+              batchUpdateBubble(displayText)
             }
             continue
           }
@@ -2921,7 +2965,7 @@ async function streamAIRace(query) {
         const modeTag = document.querySelector(".mode-tag")
         const currentMode = modeTag ? modeTag.textContent.replace(/[\[\]]/g, "").trim() : "adaptive"
         currentMessages.push({ role: "assistant", text: finalText, timestamp: Date.now(), mode: currentMode })
-        saveCurrentConversation()
+        debouncedSave()
       }
 
       latestBotMessage = null
@@ -3790,8 +3834,11 @@ summarizeBtn?.addEventListener("click", async () => {
       }
 
       // Render accumulated text using the existing formatMessage renderer
-      summaryContent.innerHTML = formatMessage(accumulated)
-      scrollChat()
+      requestAnimationFrame(() => {
+        summaryContent.innerHTML = formatMessage(accumulated)
+        scrollChat()
+      })
+
     }
 
     // Final render with full formatting

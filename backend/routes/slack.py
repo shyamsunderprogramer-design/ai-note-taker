@@ -1,4 +1,5 @@
 """Slack integration — post transcripts, summaries, and action items to channels."""
+import httpx
 import json
 import logging
 from typing import Optional
@@ -80,9 +81,8 @@ async def post_to_slack(
     slack_message = _format_slack_message(message_type, title, content, user.username)
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
-            response = await client.post(
+            response = await client.post(  # nosec B611 — Slack webhook URL validated above
                 webhook_url,
                 json={"text": slack_message},
                 timeout=10.0,

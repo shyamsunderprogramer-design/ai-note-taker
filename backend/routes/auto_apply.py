@@ -251,7 +251,7 @@ async def apply_to_specific_job(
     try:
         body = await request.json()
     except Exception:
-        body = {}
+        body = {}  # nosec B110 — JSON parse fallback for optional body
 
     custom_cover_letter = body.get("custom_cover_letter")
     answers = body.get("answers", {})

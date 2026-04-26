@@ -1,4 +1,5 @@
 """Route module for AI streaming, race, search, and configuration endpoints."""
+import hashlib
 import json
 import logging
 import os
@@ -13,6 +14,53 @@ from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 from security import sanitize_input, rate_limit, ErrorCode, error_response
 
 logger = logging.getLogger("routes.ai")
+
+# ── In-memory AI response cache ──────────────────────────────────────────
+# Simple TTL cache for repeated queries. Avoids re-running LLM on identical
+# requests within the cache window. Uses MemoryCache from cache_manager if
+# available, otherwise falls back to a simple dict.
+try:
+    from modules.ai.cache_manager import cache_manager
+    _HAS_CACHE = True
+except ImportError:
+    _HAS_CACHE = False
+
+_ai_response_cache: dict = {}
+_ai_response_cache_ttl: dict = {}
+_AI_CACHE_TTL = 300  # 5 minutes
+
+def _cache_ai_key(q: str, mode: str, style: str, provider: str) -> str:
+    """Deterministic cache key for an AI query."""
+    raw = f"{q}|{mode}|{style}|{provider}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+def _cache_ai_get(q: str, mode: str, style: str, provider: str):
+    """Check if an AI response is cached. Returns text or None."""
+    key = _cache_ai_key(q, mode, style, provider)
+    # Try cache_manager (async-compatible memory cache) first
+    if _HAS_CACHE:
+        val = cache_manager._memory.get(key)
+        if val is not None:
+            logger.debug("[Cache] AI response HIT (memory): %s", key[:8])
+            return val
+    # Fallback simple dict
+    if key in _ai_response_cache:
+        if time.time() < _ai_response_cache_ttl.get(key, 0):
+            logger.debug("[Cache] AI response HIT (dict): %s", key[:8])
+            return _ai_response_cache[key]
+        else:
+            del _ai_response_cache[key]
+            _ai_response_cache_ttl.pop(key, None)
+    return None
+
+def _cache_ai_set(q: str, mode: str, style: str, provider: str, text: str):
+    """Store an AI response in cache."""
+    key = _cache_ai_key(q, mode, style, provider)
+    ttl = time.time() + _AI_CACHE_TTL
+    if _HAS_CACHE:
+        cache_manager._memory.set(key, text, _AI_CACHE_TTL)
+    _ai_response_cache[key] = text
+    _ai_response_cache_ttl[key] = ttl
 
 
 def _sanitize_for_log(value: str) -> str:
@@ -54,7 +102,9 @@ router = APIRouter()
 
 @router.get("/stream")
 def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama", context: str = None, temperature: float = 0.3):
-    """SSE stream endpoint — yields event: meta/chunk/done/error"""
+    """SSE stream endpoint — yields event: meta/chunk/done/error
+    Includes response caching: repeated queries return from cache (~5ms) instead of LLM (~500ms).
+    """
     def generator():
         STATE["is_streaming"] = True
 
@@ -66,12 +116,39 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             except Exception:
                 pass  # nosec B110
 
+        # ── Cache check ────────────────────────────────────────────────
+        cached_text = _cache_ai_get(q, mode, style, provider)
+        if cached_text is not None and messages is None:
+            # Cache hit — replay as SSE events
+            yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\",\"cached\":true}}\n\n"
+            # Emit as a single chunk (client handles it identically)
+            yield f"event: chunk\ndata: {json.dumps({'type':'chunk','content':cached_text})}\n\n"
+            yield "event: done\ndata: {\"type\":\"done\"}\n\n"
+            STATE["is_streaming"] = False
+            return
+
+        # ── Cache miss — stream from LLM, collect for caching ─────────
         try:
-            # Yield provider/mode info as first event
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
+            collected_parts = []
             for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
                 yield event
+                # Collect text content for caching (parse SSE data)
+                if event.startswith("event: chunk"):
+                    continue  # next line has the data
+                elif event.startswith("data:"):
+                    try:
+                        data = json.loads(event[5:].strip())
+                        if data.get("type") == "chunk":
+                            collected_parts.append(data.get("content", ""))
+                    except Exception:
+                        pass  # nosec B110
+
+            # Cache the full response for future identical queries
+            full_text = "".join(collected_parts)
+            if full_text and messages is None:
+                _cache_ai_set(q, mode, style, provider, full_text)
 
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"

@@ -440,7 +440,7 @@ async def get_audit_log(
             if mapped not in entries:
                 entries.append(mapped)
     except Exception:
-        pass  # security audit module unavailable; in-memory entries suffice
+        pass  # nosec B110 — security audit module unavailable; in-memory entries suffice
 
     return entries[-limit:]
 

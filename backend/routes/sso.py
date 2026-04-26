@@ -1,8 +1,9 @@
 """Route module for Single Sign-On via Google and Microsoft OAuth2."""
+import os
 import logging
 import secrets
 import uuid
-from datetime import timedelta
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 
 import httpx
@@ -19,10 +20,10 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Environment configuration
 # ---------------------------------------------------------------------------
-GOOGLE_CLIENT_ID = __import__("os").getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = __import__("os").getenv("GOOGLE_CLIENT_SECRET", "")
-MICROSOFT_CLIENT_ID = __import__("os").getenv("MICROSOFT_CLIENT_ID", "")
-MICROSOFT_CLIENT_SECRET = __import__("os").getenv("MICROSOFT_CLIENT_SECRET", "")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID", "")
+MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET", "")
 
 # OAuth endpoints
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -62,9 +63,7 @@ def _auto_create_or_get_user(email: str, name: str, provider: str) -> User:
     for user in user_manager.users.values():
         if user.email == email:
             # Update last login
-            user.last_login = __import__("datetime").datetime.now(
-                __import__("datetime").timezone.utc
-            ).isoformat()
+            user.last_login = datetime.now(timezone.utc).isoformat()
             user_manager._save_users()
             return user
 

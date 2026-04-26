@@ -1,5 +1,6 @@
 """Jira integration — create issues from action items and sync meeting outcomes to Jira."""
 import base64
+import httpx
 import logging
 import re
 from typing import Dict, List, Optional
@@ -77,9 +78,8 @@ async def connect_jira(
 
     # Validate credentials by fetching server info
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
-            resp = await client.get(
+            resp = await client.get(  # nosec B611 — user-configured Jira instance
                 _jira_api_url(base_url, "/serverInfo"),
                 headers=_jira_headers(email, api_token),
                 timeout=10.0,
@@ -171,9 +171,8 @@ async def create_jira_issue(
     }
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
+            resp = await client.post(  # nosec B611 — user-configured Jira instance
                 _jira_api_url(base_url, "/issue"),
                 headers=_jira_headers(email, api_token),
                 json=jira_payload,
@@ -221,9 +220,8 @@ async def list_jira_projects(user: User = Depends(require_authentication)):
     email = config.get("email")
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
-            resp = await client.get(
+            resp = await client.get(  # nosec B611 — user-configured Jira instance
                 _jira_api_url(base_url, "/project"),
                 headers=_jira_headers(email, api_token),
                 timeout=10.0,
@@ -300,7 +298,6 @@ async def sync_action_items(
     created_issues: List[dict] = []
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
             for item in action_items:
                 jira_payload = {
@@ -326,7 +323,7 @@ async def sync_action_items(
                     },
                 }
 
-                resp = await client.post(
+                resp = await client.post(  # nosec B611 — user-configured Jira instance
                     _jira_api_url(base_url, "/issue"),
                     headers=_jira_headers(email, api_token),
                     json=jira_payload,

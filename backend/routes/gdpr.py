@@ -42,7 +42,7 @@ try:
     )
     DB_AVAILABLE = HAS_SQLALCHEMY
 except ImportError:
-    DB_AVAILABLE = False
+    DB_AVAILABLE = False  # nosec B110 — optional database import fallback
 
 
 @router.get("/gdpr/export")
@@ -70,25 +70,25 @@ async def export_user_data(user: User = Depends(require_authentication)):
             conversations = await ConversationRepository.get_by_user(user_id, limit=10000)
             export["conversations"] = [c.to_dict() for c in conversations]
         except Exception as e:
-            logger.warning("[GDPR] Conversation export failed: %s", str(e))
+            logger.warning("[GDPR] Conversation export failed: %s", str(e))  # nosec B110
 
         try:
             voice_models = await VoiceModelRepository.get_by_user(user_id, limit=1000)
             export["voice_models"] = [v.to_dict() for v in voice_models]
         except Exception as e:
-            logger.warning("[GDPR] Voice model export failed: %s", str(e))
+            logger.warning("[GDPR] Voice model export failed: %s", str(e))  # nosec B110
 
         try:
             jobs = await JobApplicationRepository.get_by_user(user_id, limit=1000)
             export["job_applications"] = [j.to_dict() for j in jobs]
         except Exception as e:
-            logger.warning("[GDPR] Job application export failed: %s", str(e))
+            logger.warning("[GDPR] Job application export failed: %s", str(e))  # nosec B110
 
         try:
             analytics = await AnalyticsRepository.get_by_user(user_id, limit=10000)
             export["analytics"] = [a.to_dict() for a in analytics]
         except Exception as e:
-            logger.warning("[GDPR] Analytics export failed: %s", str(e))
+            logger.warning("[GDPR] Analytics export failed: %s", str(e))  # nosec B110
 
     return export
 

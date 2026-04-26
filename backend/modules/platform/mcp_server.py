@@ -13,6 +13,7 @@ MCP Spec: https://spec.modelcontextprotocol.io/
 """
 
 import os
+import re
 import sys
 import json
 import logging
@@ -459,7 +460,7 @@ async def list_action_items_handler(arguments: Dict) -> Dict:
             if not content or not isinstance(content, str):
                 continue
             for pattern in action_patterns:
-                for match in __import__("re").finditer(pattern, content, __import__("re").IGNORECASE):
+                for match in re.finditer(pattern, content, re.IGNORECASE):
                     item_text = match.group(1).strip().rstrip(".,;:")
                     if len(item_text) > 5:
                         action_items.append({

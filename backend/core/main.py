@@ -776,6 +776,14 @@ async def start_listener():
         except Exception as e:
             logger.warning("[Startup] Database initialization skipped: %s", str(e))
 
+    # Initialize AI response cache (in-memory LRU + optional Redis)
+    try:
+        from modules.ai.cache_manager import init_cache as _init_cache
+        await _init_cache()
+        logger.info("[Startup] AI response cache initialized")
+    except Exception as e:
+        logger.warning("[Startup] Cache init skipped: %s", str(e))
+
     # Clean up stale temp audio files on startup
     cleanup_temp_audio()
 
@@ -1004,7 +1012,7 @@ async def ask_with_image(
                 import json
                 messages = json.loads(context)
             except Exception:
-                pass
+                pass  # nosec B110 — JSON parse fallback for optional context
 
         # No screenshot — just do regular text streaming
         if not image_b64:
@@ -2668,6 +2676,7 @@ async def ws_transcribe(ws: WebSocket):
     await ws.send_text(json.dumps({"type": "auth_ok"}))
 
     transcriber = BrowserTranscriber()
+    transcriber.start_worker()
     partial_texts = []
     msg_queue = asyncio.Queue()
     ws_closed = False

@@ -7,6 +7,7 @@ import re
 import threading
 import time
 import queue
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import psutil
@@ -49,6 +50,8 @@ logger = logging.getLogger("whisper")
 DEVICE = "auto"  # auto-detects GPU (cuda) vs CPU — GPU is ~10-20x faster
 SAMPLE_RATE = 16000
 RECORD_SECONDS = 4
+# Shared thread pool for all whisper transcription tasks — prevents unbounded thread creation
+_transcribe_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="whisper")
 
 
 # ==============================
@@ -63,11 +66,11 @@ def select_model(mode="adaptive", streaming=False):
     import psutil
     ram_gb = psutil.virtual_memory().total / (1024 ** 3)
 
-    # Streaming: prioritize speed — tiny/base are much faster than small
+    # Streaming: prioritize speed — tiny is 2-3x faster than small on CPU
     if streaming:
-        if ram_gb >= 16:
-            return "base"   # good balance for streaming on high-RAM systems
-        return "tiny"       # fastest, lowest latency
+        if DEVICE != "cpu" and ram_gb >= 16:
+            return "base"   # good balance for streaming on high-RAM GPU systems
+        return "tiny"       # fastest, lowest latency — best for CPU streaming
 
     if mode == "interview":
         return "small"   # better accuracy for important content
@@ -564,10 +567,19 @@ class BrowserTranscriber:
         self._first_done = False
         self.min_samples_first = int(0.5 * sample_rate)   # 0.5s before first transcribe (faster)
         self.min_samples_next = int(0.5 * sample_rate)   # 0.5s sliding window after first
+        self._chunk_queue = queue.Queue(maxsize=10)
 
     def add_callback(self, cb):
         """Add a callback(text) called when a partial transcription is ready."""
         self.callbacks.append(cb)
+
+    def _queue_worker(self):
+        """Background worker that processes transcription tasks from the bounded queue."""
+        while True:
+            segment = self._chunk_queue.get()
+            if segment is None:  # Sentinel
+                break
+            self._transcribe(segment)
 
     def add_chunk(self, chunk: np.ndarray):
         """Add a raw PCM Float32 chunk received from browser."""
@@ -582,12 +594,28 @@ class BrowserTranscriber:
             with self.lock:
                 self.buffer = self.buffer[threshold:]
             self._first_done = True
-            threading.Thread(target=self._transcribe, args=(segment,), daemon=True).start()
+            # Use bounded queue instead of unbounded threads — drop oldest if full
+            try:
+                self._chunk_queue.put_nowait(segment)
+            except queue.Full:
+                # Queue full — remove oldest segment, add newest
+                try:
+                    self._chunk_queue.get_nowait()
+                    self._chunk_queue.put_nowait(segment)
+                except queue.Empty:
+                    pass
+
+    def start_worker(self):
+        """Start the background queue worker thread."""
+        worker = threading.Thread(target=self._queue_worker, daemon=True, name="browser-transcriber")
+        worker.start()
+        return worker
 
     def _transcribe(self, segment):
-        """Transcribe a segment on a background thread using streaming-optimized settings."""
+        """Transcribe a segment using the shared thread pool."""
         try:
-            text = transcribe(segment, mode="adaptive", streaming=True)
+            future = _transcribe_executor.submit(transcribe, segment, "adaptive", True)
+            text = future.result(timeout=30)
             if text and text.strip():
                 for cb in self.callbacks:
                     try:

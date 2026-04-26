@@ -1,4 +1,5 @@
 """Notion integration — sync meeting notes, summaries, and action items to Notion pages."""
+import httpx
 import logging
 from typing import Optional
 
@@ -60,7 +61,6 @@ async def connect_notion(
 
     # Validate the key by calling the /users/me endpoint
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"{NOTION_API_BASE}/users/me",
@@ -144,7 +144,6 @@ async def sync_to_notion(
     }
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{NOTION_API_BASE}/pages",
@@ -188,7 +187,6 @@ async def list_notion_pages(
         raise HTTPException(status_code=400, detail="Notion API key not found. Re-configure Notion.")
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{NOTION_API_BASE}/search",
