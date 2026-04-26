@@ -40,6 +40,13 @@ DEFAULT_SQLITE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_POSTGRES_URL)
 USE_SQLITE = os.getenv("USE_SQLITE", "").lower() == "true"
 FORCE_SQLITE = os.getenv("FORCE_SQLITE", "true").lower() == "true"  # Default to SQLite until PostgreSQL is configured
+CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
+
+# In cloud mode, always use PostgreSQL (SQLite data doesn't persist on cloud containers)
+if CLOUD_MODE and DATABASE_URL and "postgresql" in DATABASE_URL:
+    FORCE_SQLITE = False
+    USE_SQLITE = False
+    logger.info("[Database] Cloud mode: using PostgreSQL at %s", re.sub(r'://[^@]+@', '://***@', DATABASE_URL))
 
 # Auto-detect: if DATABASE_URL contains sqlite, use it
 if "sqlite" in DATABASE_URL.lower():
