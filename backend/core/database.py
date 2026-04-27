@@ -35,18 +35,24 @@ logger = logging.getLogger("database")
 # Database configuration
 # T16: Try PostgreSQL first, fall back to SQLite for development
 DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
-DEFAULT_SQLITE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
+DEFAULT_SQLITE_URL = "sqlite+aiosqlite:////app/backend/data/ainotetaker.db"
 
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_POSTGRES_URL)
 USE_SQLITE = os.getenv("USE_SQLITE", "").lower() == "true"
 FORCE_SQLITE = os.getenv("FORCE_SQLITE", "true").lower() == "true"  # Default to SQLite until PostgreSQL is configured
 CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
 
-# In cloud mode, always use PostgreSQL (SQLite data doesn't persist on cloud containers)
+# In cloud mode, try PostgreSQL first; fall back to SQLite if connection fails
 if CLOUD_MODE and DATABASE_URL and "postgresql" in DATABASE_URL:
     FORCE_SQLITE = False
     USE_SQLITE = False
-    logger.info("[Database] Cloud mode: using PostgreSQL at %s", re.sub(r'://[^@]+@', '://***@', DATABASE_URL))
+    logger.info("[Database] Cloud mode: will attempt PostgreSQL at %s", re.sub(r'://[^@]+@', '://***@', DATABASE_URL))
+elif CLOUD_MODE:
+    # Cloud mode but no DATABASE_URL — use SQLite with persistent path
+    FORCE_SQLITE = True
+    USE_SQLITE = True
+    DATABASE_URL = DEFAULT_SQLITE_URL
+    logger.info("[Database] Cloud mode: no DATABASE_URL, using SQLite at %s", DATABASE_URL)
 
 # Auto-detect: if DATABASE_URL contains sqlite, use it
 if "sqlite" in DATABASE_URL.lower():

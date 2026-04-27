@@ -782,13 +782,25 @@ async def start_listener():
     # State is now in _state object
     CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
 
-    # T16: Initialize PostgreSQL database
+    # T16: Initialize database — try PostgreSQL, fall back to SQLite
     if DATABASE_AVAILABLE:
         try:
             await init_database()
             logger.info("[Startup] Database initialized successfully")
         except Exception as e:
-            logger.warning("[Startup] Database initialization skipped: %s", str(e))
+            logger.warning("[Startup] PostgreSQL failed: %s", str(e))
+            if CLOUD_MODE:
+                # Fall back to SQLite for cloud mode so the app is still usable
+                logger.info("[Startup] Falling back to SQLite (data won't persist across deploys)")
+                import core.database as db_mod
+                db_mod.DATABASE_URL = db_mod.DEFAULT_SQLITE_URL
+                db_mod.USE_SQLITE = True
+                db_mod.FORCE_SQLITE = True
+                try:
+                    await init_database()
+                    logger.info("[Startup] SQLite database initialized as fallback")
+                except Exception as e2:
+                    logger.error("[Startup] SQLite fallback also failed: %s", str(e2))
 
     # Initialize AI response cache (in-memory LRU + optional Redis)
     # Use importlib to avoid triggering modules/ai/__init__.py circular imports
