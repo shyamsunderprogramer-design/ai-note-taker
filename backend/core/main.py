@@ -788,11 +788,20 @@ async def start_listener():
             await init_database()
             logger.info("[Startup] Database initialized successfully")
         except Exception as e:
-            logger.warning("[Startup] PostgreSQL failed: %s", str(e))
+            logger.warning("[Startup] Database init failed: %s", str(e))
             if CLOUD_MODE:
                 # Fall back to SQLite for cloud mode so the app is still usable
                 logger.info("[Startup] Falling back to SQLite (data won't persist across deploys)")
                 import core.database as db_mod
+                # Reset manager state so it can reinitialize
+                db_mod.db_manager._initialized = False
+                if db_mod.db_manager.engine:
+                    try:
+                        await db_mod.db_manager.engine.dispose()
+                    except Exception:
+                        pass
+                    db_mod.db_manager.engine = None
+                    db_mod.db_manager.session_maker = None
                 db_mod.DATABASE_URL = db_mod.DEFAULT_SQLITE_URL
                 db_mod.USE_SQLITE = True
                 db_mod.FORCE_SQLITE = True
@@ -894,14 +903,19 @@ def health_check():
 @app.get("/health/config")
 def config_check():
     """Diagnostic endpoint to verify database configuration (no secrets exposed)"""
-    from core.database import DATABASE_URL as db_url, USE_SQLITE, FORCE_SQLITE
+    from core.database import DATABASE_URL as db_url, USE_SQLITE, FORCE_SQLITE, DEFAULT_SQLITE_URL
     _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
+    _db_type = "sqlite" if "sqlite" in db_url.lower() else "postgresql" if "postgresql" in db_url.lower() else "unknown"
     return {
-        "database_url_prefix": db_url[:30] + "..." if db_url and len(db_url) > 30 else _redacted,
+        "database_url_prefix": db_url[:40] + "..." if db_url and len(db_url) > 40 else _redacted,
+        "database_type": _db_type,
         "use_sqlite": USE_SQLITE,
         "force_sqlite": FORCE_SQLITE,
         "cloud_mode": os.getenv("CLOUD_MODE", "false"),
         "database_available": DATABASE_AVAILABLE,
+        "db_initialized": db_manager._initialized if db_manager else False,
+        "has_engine": db_manager.engine is not None if db_manager else False,
+        "default_sqlite_path": str(DEFAULT_SQLITE_URL)[:60],
     }
 
 
@@ -914,19 +928,35 @@ async def db_debug():
     try:
         from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
         from sqlalchemy import text
-        import ssl as _ssl
-        _ssl_ctx = _ssl.create_default_context()
-        _ssl_ctx.check_hostname = False
-        _ssl_ctx.verify_mode = _ssl.CERT_NONE
         _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
-        # Strip sslmode from URL for asyncpg
-        _test_url = db_url.split("?sslmode=")[0] if "?sslmode=" in db_url else db_url
-        engine = create_async_engine(_test_url, connect_args={"ssl": _ssl_ctx}, pool_size=1)
+        _is_sqlite = "sqlite" in db_url.lower()
+        _test_url = db_url
+        _engine_kwargs = {"echo": False}
+        if _is_sqlite:
+            # SQLite doesn't support pool_size, max_overflow, pool_pre_ping, or SSL
+            pass
+        else:
+            # PostgreSQL: strip sslmode from URL, add SSL context
+            import ssl as _ssl
+            _ssl_ctx = _ssl.create_default_context()
+            _ssl_ctx.check_hostname = False
+            _ssl_ctx.verify_mode = _ssl.CERT_NONE
+            if "sslmode=" in _test_url:
+                _test_url = _test_url.split("?sslmode=")[0]
+                if _test_url.endswith("?"):
+                    _test_url = _test_url[:-1]
+            _engine_kwargs["pool_size"] = 1
+            _engine_kwargs["connect_args"] = {"ssl": _ssl_ctx}
+        engine = create_async_engine(_test_url, **_engine_kwargs)
+        if _is_sqlite:
+            query = text("SELECT sqlite_version()")
+        else:
+            query = text("SELECT version()")
         async with engine.begin() as conn:
-            result = await conn.execute(text("SELECT version()"))
+            result = await conn.execute(query)
             version = result.scalar()
         await engine.dispose()
-        return {"status": "connected", "version": version, "url": _redacted}
+        return {"status": "connected", "version": version, "url": _redacted, "dialect": "sqlite" if _is_sqlite else "postgresql"}
     except Exception as e:
         return {"status": "failed", "error": str(e), "error_type": type(e).__name__, "url": re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"}
 
@@ -1451,13 +1481,18 @@ async def health_database():
         return {
             "available": True,
             "connected": connected,
-            "message": "Database connection OK" if connected else "Database connection failed"
+            "message": "Database connection OK" if connected else "Database connection failed",
+            "initialized": db_manager._initialized,
+            "has_engine": db_manager.engine is not None,
         }
     except Exception as e:
         return {
             "available": True,
             "connected": False,
-            "message": "An internal error occurred"
+            "message": f"Database error: {type(e).__name__}",
+            "initialized": db_manager._initialized if db_manager else False,
+            "has_engine": db_manager.engine is not None if db_manager else False,
+        }
         }
 
 

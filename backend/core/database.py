@@ -35,7 +35,12 @@ logger = logging.getLogger("database")
 # Database configuration
 # T16: Try PostgreSQL first, fall back to SQLite for development
 DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
-DEFAULT_SQLITE_URL = "sqlite+aiosqlite:////app/backend/data/ainotetaker.db"
+
+# SQLite path: use absolute path based on this file's location
+_BACKEND_DIR = Path(__file__).resolve().parent  # backend/core/
+_DATA_DIR = _BACKEND_DIR.parent / "data"  # backend/data/
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_SQLITE_URL = f"sqlite+aiosqlite:///{_DATA_DIR / 'ainotetaker.db'}"
 
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_POSTGRES_URL)
 USE_SQLITE = os.getenv("USE_SQLITE", "").lower() == "true"
@@ -63,11 +68,6 @@ if FORCE_SQLITE:
     USE_SQLITE = True
     DATABASE_URL = DEFAULT_SQLITE_URL
 elif USE_SQLITE:
-    DATABASE_URL = DEFAULT_SQLITE_URL
-
-# Ensure data directory exists for SQLite
-if USE_SQLITE or "sqlite" in DATABASE_URL.lower():
-    Path("data").mkdir(exist_ok=True)
     DATABASE_URL = DEFAULT_SQLITE_URL
 
 _redacted_url = re.sub(r'://[^@]+@', '://***@', DATABASE_URL) if DATABASE_URL else "(none)"
@@ -581,8 +581,24 @@ class DatabaseManager:
             return
 
         try:
+            # Dispose of any previous engine (e.g. from a failed PostgreSQL attempt)
+            if self.engine:
+                try:
+                    await self.engine.dispose()
+                except Exception:
+                    pass
+                self.engine = None
+                self.session_maker = None
+
             # Build the effective database URL for this connection
             _db_url = DATABASE_URL
+
+            # Ensure data directory exists for SQLite
+            _is_sqlite = "sqlite" in _db_url.lower()
+            if _is_sqlite:
+                _db_path = _db_url.split("///")[-1] if ":///" in _db_url else None
+                if _db_path:
+                    Path(_db_path).parent.mkdir(parents=True, exist_ok=True)
 
             # Build connection args for cloud databases
             # Neon requires SSL — pass as SSLContext via connect_args
@@ -607,7 +623,6 @@ class DatabaseManager:
             _max_overflow = 2 if _pool_size == 2 else 20
 
             # SQLite doesn't support pool_size, max_overflow, or pool_pre_ping
-            _is_sqlite = "sqlite" in _db_url
             _engine_kwargs = {
                 "echo": False,
             }
@@ -638,10 +653,18 @@ class DatabaseManager:
                 await conn.run_sync(Base.metadata.create_all)
 
             self._initialized = True
-            logger.info("[Database] Initialized successfully")
+            logger.info("[Database] Initialized successfully (%s)", "SQLite" if _is_sqlite else "PostgreSQL")
 
         except Exception as e:
             logger.error("[Database] Failed to initialize: %s", str(e))
+            # Clean up partially created engine
+            if self.engine:
+                try:
+                    await self.engine.dispose()
+                except Exception:
+                    pass
+                self.engine = None
+                self.session_maker = None
             raise
 
     async def close(self) -> None:
