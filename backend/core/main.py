@@ -389,7 +389,7 @@ RATE_LIMIT_AUTHED = int(os.getenv("RATE_LIMIT_AUTHED", "200"))    # 200/min for 
 RATE_LIMIT_SENSITIVE = int(os.getenv("RATE_LIMIT_SENSITIVE", "20"))  # 20/min for expensive ops
 
 # Paths that are always public (no auth required, lower rate limit)
-PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
+PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/auth/debug/users", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
 # Paths that are expensive/sensitive (lower rate limit even when authed)
 SENSITIVE_PATHS = {"/ask-with-image", "/transcribe", "/transcribe-cloud", "/transcribe-with-speakers",
                    "/voice-clone/create", "/voice-clone/create-rvc"}
@@ -507,7 +507,7 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
     "/", "/health", "/health/database", "/health/modules", "/health/config", "/health/db-debug",
-    "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password",
+    "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/auth/debug/users",
     "/docs", "/openapi.json", "/redoc",
     "/voice-clone/audio/{filename}",  # Audio playback
     "/providers",  # Listing available providers
@@ -1693,6 +1693,18 @@ async def auth_status():
     return {"auth_required": AUTH_REQUIRED}
 
 
+@app.get("/auth/debug/users")
+async def debug_users():
+    """Temporary debug endpoint — check user store status (remove after debugging)"""
+    from security.auth import user_manager
+    return {
+        "user_count": len(user_manager.users),
+        "usernames": list(user_manager.users.keys()),
+        "has_jwt": HAS_JWT,
+        "users_file": str(user_manager.USERS_FILE) if hasattr(user_manager, 'USERS_FILE') else "N/A",
+    }
+
+
 @app.post("/auth/register")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def register_user(
@@ -1737,8 +1749,9 @@ async def register_user(
             "username": user.username
         }
     except ValueError as e:
+        logger.error("[Auth] Registration failed for '%s': %s", username, str(e))
         log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
-        raise HTTPException(status_code=400, detail="Registration failed")
+        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
 
 @app.post("/auth/login")
