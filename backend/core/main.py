@@ -558,7 +558,7 @@ async def auth_enforcement_middleware(request: Request, call_next):
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required for this endpoint"}},
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
         )
 
     # In production mode, enforce auth on all non-public paths
@@ -568,7 +568,7 @@ async def auth_enforcement_middleware(request: Request, call_next):
             return JSONResponse(
                 status_code=401,
                 content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required. Set AUTH_REQUIRED=false for development mode."}},
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
             )
 
     return await call_next(request)
