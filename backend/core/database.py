@@ -606,16 +606,24 @@ class DatabaseManager:
             _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
             _max_overflow = 2 if _pool_size == 2 else 20
 
-            logger.info("[Database] Connecting to: %s", re.sub(r'://[^@]+@', '://***@', _db_url))
+            # SQLite doesn't support pool_size, max_overflow, or pool_pre_ping
+            _is_sqlite = "sqlite" in _db_url
+            _engine_kwargs = {
+                "echo": False,
+            }
+            if not _is_sqlite:
+                _engine_kwargs["pool_size"] = _pool_size
+                _engine_kwargs["max_overflow"] = _max_overflow
+                _engine_kwargs["pool_timeout"] = 30
+                _engine_kwargs["pool_pre_ping"] = True
+                if connect_args:
+                    _engine_kwargs["connect_args"] = connect_args
+
+            logger.info("[Database] Connecting to: %s (SQLite=%s)", re.sub(r'://[^@]+@', '://***@', _db_url) if _db_url else "(none)", _is_sqlite)
 
             self.engine = create_async_engine(
                 _db_url,
-                pool_size=_pool_size,
-                max_overflow=_max_overflow,
-                pool_timeout=30,
-                pool_pre_ping=True,
-                echo=False,
-                connect_args=connect_args if connect_args else None,
+                **_engine_kwargs,
             )
 
             self.session_maker = async_sessionmaker(
