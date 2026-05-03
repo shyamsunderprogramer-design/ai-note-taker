@@ -214,6 +214,17 @@ let backendStatus = "unknown" // "unknown" | "starting" | "ready" | "error" | "d
 const MAX_BACKEND_RESTART_ATTEMPTS = 5
 const BACKEND_RESTART_BASE_DELAY_MS = 1000
 
+// Splash visibility timing — ensures splash is visible for at least 2 seconds
+let _mainWindowReady = false
+let _splashMinTimeDone = false
+function _tryShowMain() {
+  if (_mainWindowReady && _splashMinTimeDone && win && !win.isDestroyed()) {
+    win.show()
+    win.focus()
+    closeSplashScreen()
+  }
+}
+
 // T3: CSP nonce store — maps webContentsId → nonce for nonce-based CSP headers
 const _cspNonceMap = new Map()
 const BACKEND_HEALTH_CHECK_INTERVAL_MS = 5000
@@ -311,6 +322,7 @@ function saveBounds() {
 // SPLASH SCREEN - For perceived fast startup
 // ═══════════════════════════════════════════════════════════════════════════════
 function createSplashScreen() {
+  logger.info("[Splash] Creating splash window...")
   // Show splash immediately for perceived speed
   splashScreen = new BrowserWindow({
     width: 420,
@@ -321,6 +333,7 @@ function createSplashScreen() {
     skipTaskbar: true,
     resizable: false,
     center: true,
+    show: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -331,8 +344,9 @@ function createSplashScreen() {
   // T3: Register CSP nonce for splash screen
   const splashNonce = crypto.randomBytes(16).toString("base64")
   splashScreen.cspNonce = splashNonce
-  _cspNonceMap.set(splashScreen.webContents.id, splashNonce)
-  splashScreen.webContents.on("destroyed", () => { _cspNonceMap.delete(splashScreen.webContents.id) })
+  const splashWcId = splashScreen.webContents.id
+  _cspNonceMap.set(splashWcId, splashNonce)
+  splashScreen.webContents.on("destroyed", () => { _cspNonceMap.delete(splashWcId) })
 
   // Load splash HTML
   const isProd = app.isPackaged
@@ -362,17 +376,11 @@ function createSplashScreen() {
 }
 
 function closeSplashScreen() {
-  if (splashScreen && !splashScreen.isDestroyed()) {
-    // Fade out effect
-    splashScreen.webContents.executeJavaScript(`
-      document.body.style.transition = "opacity 0.3s";
-      document.body.style.opacity = "0";
-    `).catch(() => {})
-
-    setTimeout(() => {
-      splashScreen.close()
-      splashScreen = null
-    }, 300)
+  if (splashScreen && !splashScreen.isDestroyed() && splashScreen.webContents) {
+    splashScreen.close()
+    splashScreen = null
+  } else {
+    splashScreen = null
   }
 }
 
@@ -419,19 +427,11 @@ async function createWindow() {
   // This is the highest normal window level, only below system notifications
   win = new BrowserWindow(windowOpts)
 
-  // Show window only when content is ready to avoid blank flashes
+  // Show window only when content is ready AND minimum splash time elapsed
   win.once("ready-to-show", () => {
-    if (win && !win.isDestroyed()) {
-      win.show()
-      win.focus()
-      closeSplashScreen()
-    }
-  })
-
-  // Log renderer console messages for debugging
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    const prefix = ["[Renderer]", "[Renderer warn]", "[Renderer error]", "[Renderer fatal]"][level] || "[Renderer]"
-    logger.info(`${prefix} ${message} (${sourceId}:${line})`)
+    logger.info(`[Window] ready-to-show: title="${win?.getTitle()}"`)
+    _mainWindowReady = true
+    _tryShowMain()
   })
 
   // Store nonce on the window webContents for access in CSP headers
@@ -1622,6 +1622,11 @@ app.whenReady().then(async () => {
       // Show splash first, then create main window
       createSplashScreen()
       createWindow()
+      // Keep splash visible for at least 2 seconds before showing main window
+      setTimeout(() => {
+        _splashMinTimeDone = true
+        _tryShowMain()
+      }, 2000)
       resolve(null)
     }
   })
@@ -1629,16 +1634,14 @@ app.whenReady().then(async () => {
   // Wait for both to complete
   await Promise.all([backendPromise, windowPromise])
 
-  // Fallback: close splash after 15s if ready-to-show never fired
+  // Fallback: force splash close and show main window after 15s
   setTimeout(() => {
     if (splashScreen && !splashScreen.isDestroyed()) {
       logger.info("[Splash] Fallback close after 15s timeout")
       closeSplashScreen()
-      if (win && !win.isDestroyed() && !win.isVisible()) {
-        win.show()
-        win.focus()
-      }
     }
+    _splashMinTimeDone = true
+    _tryShowMain()
   }, 15000)
 
   // ═══════════════════════════════════════════════════════════════════════════════

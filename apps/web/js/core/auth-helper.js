@@ -172,6 +172,10 @@ const AuthHelper = {
       window.location.href = 'signin.html';
       return;
     }
+    // Already on dedicated sign-in page — no overlay needed
+    if (page === 'signin.html') {
+      return;
+    }
     // Don't create duplicate overlays
     if (document.getElementById('auth-login-overlay')) return;
 

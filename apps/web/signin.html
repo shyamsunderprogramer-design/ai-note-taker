@@ -496,14 +496,11 @@
       document.getElementById('siRemember').checked = true;
     }
 
-    // Check if already authenticated
+    // Check if already authenticated — only redirect if token is valid
     async function checkAuth() {
       const token = localStorage.getItem('ainotetaker_auth_token');
       if (!token) return;
       try {
-        const r = await fetch(`${API_BASE}/auth/status`);
-        const d = await r.json();
-        if (d.auth_required === false) { window.location.href = 'index.html'; return; }
         const test = await fetch(`${API_BASE}/providers`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (test.ok) window.location.href = 'index.html';
       } catch {}
