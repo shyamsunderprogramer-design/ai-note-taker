@@ -975,6 +975,16 @@ class QuestionDatabase:
         except ImportError:
             pass
 
+        # T14: Load expansion questions
+        try:
+            from modules.interview.question_expansion import (
+                EXPANSION_CODING, EXPANSION_SYSTEM_DESIGN,
+            )
+            _bulk_coding += EXPANSION_CODING
+            _bulk_system_design += EXPANSION_SYSTEM_DESIGN
+        except ImportError:
+            pass
+
         all_questions = (
             BEHAVIORAL_QUESTIONS + _bulk_behavioral + _bulk_culture_fit + _bulk_case_study +
             CODING_QUESTIONS + _bulk_coding +

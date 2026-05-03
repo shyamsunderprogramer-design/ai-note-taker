@@ -2,13 +2,12 @@
 interview prep, salary insights, and skill gap analysis."""
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from security import ErrorCode, error_response
 from security.auth import User, get_current_user
 
 # ---------------------------------------------------------------------------
@@ -62,8 +61,6 @@ try:
     _interview_dir = str(Path(__file__).parent.parent / "modules" / "interview")
     if _interview_dir not in sys.path:
         sys.path.insert(0, _interview_dir)
-    from question_database_v2 import InterviewQuestion, QuestionCategory, Difficulty
-    from company_questions import GOOGLE_QUESTIONS, AMAZON_QUESTIONS, META_QUESTIONS
     COMPANY_QUESTIONS_AVAILABLE = True
 except ImportError:
     COMPANY_QUESTIONS_AVAILABLE = False
@@ -563,6 +560,7 @@ async def tailor_resume(
         "tailored_bullets": tailored_bullets,
         "missing_keywords": missing_skills,
         "strengths": strengths,
+        "missing_narrative": missing_narrative,
         "summary_suggestion": summary_suggestion,
         "keyword_match_count": len(matched_skills),
         "keyword_missing_count": len(missing_skills),

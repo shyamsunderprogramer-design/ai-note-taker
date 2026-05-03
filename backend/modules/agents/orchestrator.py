@@ -332,7 +332,7 @@ class AgentOrchestrator:
 
         provider = session.get("config", {}).get("provider", "ollama")
 
-        for event in route_ai_stream(prompt, mode="interview", style="concise", provider=provider):
+        async for event in route_ai_stream(prompt, mode="interview", style="concise", provider=provider):
             # Parse SSE events to extract content
             if "event: chunk" in event:
                 try:
@@ -401,7 +401,7 @@ class AgentOrchestrator:
                                 name=agent.display_name, provider=provider)
 
         # Stream LLM chunks
-        for event in route_ai_stream(prompt, mode="interview", style="concise", provider=provider):
+        async for event in route_ai_stream(prompt, mode="interview", style="concise", provider=provider):
             if "event: chunk" in event:
                 try:
                     data_line = [l for l in event.split("\n") if l.startswith("data:")]

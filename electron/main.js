@@ -177,6 +177,31 @@ function ensureConversationsDir() {
   }
 }
 
+// T4: AES-256 encryption for conversation files at rest
+const _convoKey = crypto.scryptSync(app.getPath("userData") + ":ant-conversations", "ai-note-taker-convo-salt-v1", 32)
+
+function _encryptConversation(plainText) {
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv("aes-256-cbc", _convoKey, iv)
+  let encrypted = cipher.update(plainText, "utf8", "hex")
+  encrypted += cipher.final("hex")
+  return JSON.stringify({ iv: iv.toString("hex"), data: encrypted })
+}
+
+function _decryptConversation(cipherText) {
+  try {
+    const parsed = JSON.parse(cipherText)
+    if (!parsed.iv || !parsed.data) return cipherText // plaintext fallback
+    const decipher = crypto.createDecipheriv("aes-256-cbc", _convoKey, Buffer.from(parsed.iv, "hex"))
+    let decrypted = decipher.update(parsed.data, "hex", "utf8")
+    decrypted += decipher.final("utf8")
+    return decrypted
+  } catch (e) {
+    // Fallback: may be old plaintext
+    return cipherText
+  }
+}
+
 let win
 let splashScreen = null
 let overlayAdapter = null
@@ -188,6 +213,9 @@ let backendHealthCheckInterval = null
 let backendStatus = "unknown" // "unknown" | "starting" | "ready" | "error" | "dead"
 const MAX_BACKEND_RESTART_ATTEMPTS = 5
 const BACKEND_RESTART_BASE_DELAY_MS = 1000
+
+// T3: CSP nonce store — maps webContentsId → nonce for nonce-based CSP headers
+const _cspNonceMap = new Map()
 const BACKEND_HEALTH_CHECK_INTERVAL_MS = 5000
 
 // Exponential backoff delay calculation
@@ -300,6 +328,12 @@ function createSplashScreen() {
     }
   })
 
+  // T3: Register CSP nonce for splash screen
+  const splashNonce = crypto.randomBytes(16).toString("base64")
+  splashScreen.cspNonce = splashNonce
+  _cspNonceMap.set(splashScreen.webContents.id, splashNonce)
+  splashScreen.webContents.on("destroyed", () => { _cspNonceMap.delete(splashScreen.webContents.id) })
+
   // Load splash HTML
   const isProd = app.isPackaged
   const splashPath = isProd
@@ -395,6 +429,8 @@ async function createWindow() {
 
   // Store nonce on the window webContents for access in CSP headers
   win.cspNonce = cspNonce
+  _cspNonceMap.set(win.webContents.id, cspNonce)
+  win.webContents.on("destroyed", () => { _cspNonceMap.delete(win.webContents.id) })
 
   // Set always on top - "normal" level is most reliable on Windows
   // even though it sounds counter-intuitive
@@ -824,7 +860,8 @@ ipcMain.handle("conversation:save", (_event, conversation) => {
     updatedAt: now
   }
   const filePath = path.join(conversationsDir, `${id}.json`)
-  fs.writeFileSync(filePath, JSON.stringify(record, null, 2), "utf-8")
+  const encrypted = _encryptConversation(JSON.stringify(record))
+  fs.writeFileSync(filePath, encrypted, "utf-8")
   return record
 })
 
@@ -836,7 +873,13 @@ ipcMain.handle("conversation:load", (_event, id) => {
   }
   const filePath = path.join(conversationsDir, `${id}.json`)
   if (!fs.existsSync(filePath)) return null
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"))
+  const decrypted = _decryptConversation(fs.readFileSync(filePath, "utf-8"))
+  try {
+    return JSON.parse(decrypted)
+  } catch (e) {
+    logger.warn("[conversation:load] Failed to parse conversation %s: %s", id, e.message)
+    return null
+  }
 })
 
 ipcMain.handle("conversation:list", () => {
@@ -844,16 +887,24 @@ ipcMain.handle("conversation:list", () => {
   return fs.readdirSync(conversationsDir)
     .filter(f => f.endsWith(".json"))
     .map(f => {
-      const data = JSON.parse(fs.readFileSync(path.join(conversationsDir, f), "utf-8"))
-      return {
-        id: data.id,
-        title: data.title,
-        pinned: data.pinned || false,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt,
-        messageCount: data.messages ? data.messages.length : 0
+      const raw = fs.readFileSync(path.join(conversationsDir, f), "utf-8")
+      const decrypted = _decryptConversation(raw)
+      try {
+        const data = JSON.parse(decrypted)
+        return {
+          id: data.id,
+          title: data.title,
+          pinned: data.pinned || false,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+          messageCount: data.messages ? data.messages.length : 0
+        }
+      } catch (e) {
+        logger.warn("[conversation:list] Failed to parse %s: %s", f, e.message)
+        return null
       }
     })
+    .filter(Boolean)
 })
 
 ipcMain.handle("conversation:delete", (_event, id) => {
@@ -1493,10 +1544,11 @@ app.whenReady().then(async () => {
     }
 
     if (isOwnPage) {
-      // T25: CSP for our own Electron desktop app pages
-      // NOTE: 'unsafe-inline' retained for inline <style> blocks (Electron renderer)
-      // 'unsafe-eval' removed — hljs works without eval; if needed, add nonce-based approach
-      const csp = `default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      // T3: Nonce-based CSP — removes 'unsafe-inline' in favor of per-window nonce
+      const nonce = details.webContentsId ? _cspNonceMap.get(details.webContentsId) : null
+      const scriptNonce = nonce ? `'nonce-${nonce}'` : "'self'"
+      const styleNonce  = nonce ? `'nonce-${nonce}'` : "'self'"
+      const csp = `default-src 'self'; script-src 'self' ${scriptNonce}; style-src 'self' ${styleNonce} https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
       headers["Content-Security-Policy"] = [csp]
     }
 
@@ -1745,6 +1797,12 @@ app.whenReady().then(async () => {
         preload: path.join(__dirname, "preload.js"),
       },
     })
+
+    // T3: Register CSP nonce for caption window
+    const captionNonce = crypto.randomBytes(16).toString("base64")
+    captionWindow.cspNonce = captionNonce
+    _cspNonceMap.set(captionWindow.webContents.id, captionNonce)
+    captionWindow.webContents.on("destroyed", () => { _cspNonceMap.delete(captionWindow.webContents.id) })
 
     if (PLATFORM === "win32") {
       captionWindow.setAlwaysOnTop(true, "monitor", 2147483647)

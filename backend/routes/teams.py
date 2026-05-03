@@ -1,8 +1,7 @@
 """Team workspace management — organizations, roles, shared conversations."""
 import logging
-from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from database import TeamRepository, TeamMemberRepository

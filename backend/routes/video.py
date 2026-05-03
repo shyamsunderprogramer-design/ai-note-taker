@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException
 
 from routes.deps import require_authentication
 from security import ErrorCode, error_response
@@ -155,3 +155,186 @@ async def list_slides(
     """List captured slides for a conversation."""
     slides = _captured_slides.get(conversation_id, [])
     return {"slides": slides, "total": len(slides)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VIDEO RECORDING (T23)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/recordings/start")
+async def start_recording(
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Start a screen/camera recording session."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        session = manager.start(
+            user_id=user.id,
+            title=body.get("title", ""),
+            source=body.get("source", "screen"),
+            metadata=body.get("metadata", {}),
+        )
+        return {"status": "recording", "session": {"id": session.id, "title": session.title, "source": session.source}}
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except Exception as e:
+        logger.error("[Recording] Start error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.post("/recordings/{session_id}/stop")
+async def stop_recording(
+    session_id: str,
+    body: dict,
+    user: User = Depends(require_authentication),
+):
+    """Stop a recording session."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        session = manager.stop(
+            session_id,
+            duration_seconds=body.get("duration_seconds", 0),
+            size_bytes=body.get("size_bytes", 0),
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Recording session not found")
+        return {"status": "completed", "session": {"id": session.id, "duration_seconds": session.duration_seconds}}
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[Recording] Stop error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/recordings")
+async def list_recordings(
+    limit: int = 50,
+    offset: int = 0,
+    user: User = Depends(require_authentication),
+):
+    """List recordings for the current user."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        sessions = manager.list_for_user(user.id, limit=limit, offset=offset)
+        return {
+            "recordings": [
+                {"id": s.id, "title": s.title, "source": s.source, "status": s.status,
+                 "duration_seconds": s.duration_seconds, "created_at": s.created_at.isoformat() if s.created_at else None}
+                for s in sessions
+            ],
+            "total": len(sessions),
+        }
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except Exception as e:
+        logger.error("[Recording] List error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/recordings/{session_id}")
+async def get_recording(
+    session_id: str,
+    user: User = Depends(require_authentication),
+):
+    """Get recording session details."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        session = manager.get(session_id)
+        if not session or session.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        return {
+            "id": session.id,
+            "title": session.title,
+            "source": session.source,
+            "status": session.status,
+            "duration_seconds": session.duration_seconds,
+            "size_bytes": session.size_bytes,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "metadata": session.metadata,
+        }
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[Recording] Get error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/recordings/search")
+async def search_recordings(
+    q: str,
+    user: User = Depends(require_authentication),
+):
+    """Search recordings by title."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        sessions = manager.search(user.id, q)
+        return {
+            "recordings": [
+                {"id": s.id, "title": s.title, "status": s.status,
+                 "duration_seconds": s.duration_seconds}
+                for s in sessions
+            ],
+            "total": len(sessions),
+        }
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except Exception as e:
+        logger.error("[Recording] Search error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.get("/recordings/{session_id}/export")
+async def export_recording(
+    session_id: str,
+    format: str = "json",
+    user: User = Depends(require_authentication),
+):
+    """Export recording metadata."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        session = manager.get(session_id)
+        if not session or session.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        result = manager.export(session_id, format=format)
+        return result
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[Recording] Export error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+
+
+@router.delete("/recordings/{session_id}")
+async def delete_recording(
+    session_id: str,
+    user: User = Depends(require_authentication),
+):
+    """Delete a recording session."""
+    try:
+        from modules.video.recording_manager import get_manager
+        manager = get_manager()
+        session = manager.get(session_id)
+        if not session or session.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        manager.delete(session_id)
+        return {"status": "deleted", "id": session_id}
+    except ImportError:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[Recording] Delete error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)

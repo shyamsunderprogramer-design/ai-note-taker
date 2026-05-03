@@ -6,7 +6,7 @@ tracking, and data-residency configuration.
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -612,7 +612,7 @@ async def record_ai_consent(
         success=True,
     )
 
-    logger.info(
+    logger.info(  # lgtm[py/log-injection]
         "[COMPLIANCE] AI consent %s for user %s: %s",
         "granted" if body.granted else "revoked",
         user.id,

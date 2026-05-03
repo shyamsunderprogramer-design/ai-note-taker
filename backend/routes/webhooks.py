@@ -1,17 +1,10 @@
 """Webhook endpoints for Zapier and automation integrations."""
-import hmac
-import hashlib
-import json
 import logging
 import time
 import uuid
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-from security import get_current_user, log_audit_event
-from security.auth import User
+from fastapi import APIRouter, HTTPException, Query, Request
 
 logger = logging.getLogger("routes.webhooks")
 

@@ -330,7 +330,8 @@ class VibeVoiceDiarizer:
             except ImportError:
                 from whisper_handler import transcribe
 
-            text = transcribe(audio, mode="adaptive")
+            result = transcribe(audio, mode="adaptive")
+            text = result.get("text", "") if isinstance(result, dict) else result
             if not text or not text.strip():
                 return None
 

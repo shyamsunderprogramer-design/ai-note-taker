@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -314,6 +315,15 @@ from fastapi.middleware.cors import CORSMiddleware
 # T2: CORS — Whitelist specific origins instead of ["*"]
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:3000,http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+
+# Cloud deployment: add Vercel frontend origin dynamically
+CORS_VERCEL_URL = os.getenv("CORS_VERCEL_URL", "")
+if CORS_VERCEL_URL:
+    ALLOWED_ORIGINS.extend([
+        f"https://{CORS_VERCEL_URL}",
+        f"https://www.{CORS_VERCEL_URL}",
+    ])
+
 # T2: Default to secure (whitelist); set CORS_ALLOW_ALL=true for dev convenience
 CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
 
@@ -379,7 +389,7 @@ RATE_LIMIT_AUTHED = int(os.getenv("RATE_LIMIT_AUTHED", "200"))    # 200/min for 
 RATE_LIMIT_SENSITIVE = int(os.getenv("RATE_LIMIT_SENSITIVE", "20"))  # 20/min for expensive ops
 
 # Paths that are always public (no auth required, lower rate limit)
-PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
+PUBLIC_PATHS = {"/", "/health", "/health/database", "/health/modules", "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/auth/debug/users", "/docs", "/openapi.json", "/redoc", "/providers", "/set-mode", "/ocr"}
 # Paths that are expensive/sensitive (lower rate limit even when authed)
 SENSITIVE_PATHS = {"/ask-with-image", "/transcribe", "/transcribe-cloud", "/transcribe-with-speakers",
                    "/voice-clone/create", "/voice-clone/create-rvc"}
@@ -496,8 +506,8 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
-    "/", "/health", "/health/database", "/health/modules",
-    "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password",
+    "/", "/health", "/health/database", "/health/modules", "/health/config", "/health/db-debug",
+    "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/auth/debug/users",
     "/docs", "/openapi.json", "/redoc",
     "/voice-clone/audio/{filename}",  # Audio playback
     "/providers",  # Listing available providers
@@ -548,7 +558,7 @@ async def auth_enforcement_middleware(request: Request, call_next):
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required for this endpoint"}},
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
         )
 
     # In production mode, enforce auth on all non-public paths
@@ -558,7 +568,7 @@ async def auth_enforcement_middleware(request: Request, call_next):
             return JSONResponse(
                 status_code=401,
                 content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required. Set AUTH_REQUIRED=false for development mode."}},
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
             )
 
     return await call_next(request)
@@ -755,8 +765,11 @@ def autonomous_listener():
                         continue
                     _state.last_query_time = time.time()
 
-                for _chunk in route_ai_stream(final_text, mode=_state.current_mode):
-                    pass
+                import asyncio
+                async def _warmup():
+                    async for _ in route_ai_stream(final_text, mode=_state.current_mode):
+                        pass
+                asyncio.run(_warmup())
 
             except Exception as e:
                 logger.error("[ERROR] Listener error: %s", str(e))
@@ -767,72 +780,110 @@ def autonomous_listener():
 @app.on_event("startup")
 async def start_listener():
     # State is now in _state object
+    CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
 
-    # T16: Initialize PostgreSQL database
+    # T16: Initialize database — try PostgreSQL, fall back to SQLite
     if DATABASE_AVAILABLE:
         try:
             await init_database()
             logger.info("[Startup] Database initialized successfully")
         except Exception as e:
-            logger.warning("[Startup] Database initialization skipped: %s", str(e))
+            logger.warning("[Startup] Database init failed: %s", str(e))
+            if CLOUD_MODE:
+                # Fall back to SQLite for cloud mode so the app is still usable
+                logger.info("[Startup] Falling back to SQLite (data won't persist across deploys)")
+                import core.database as db_mod
+                # Reset manager state so it can reinitialize
+                db_mod.db_manager._initialized = False
+                if db_mod.db_manager.engine:
+                    try:
+                        await db_mod.db_manager.engine.dispose()
+                    except Exception:
+                        pass
+                    db_mod.db_manager.engine = None
+                    db_mod.db_manager.session_maker = None
+                db_mod.DATABASE_URL = db_mod.DEFAULT_SQLITE_URL
+                db_mod.USE_SQLITE = True
+                db_mod.FORCE_SQLITE = True
+                try:
+                    await init_database()
+                    logger.info("[Startup] SQLite database initialized as fallback")
+                except Exception as e2:
+                    logger.error("[Startup] SQLite fallback also failed: %s", str(e2))
 
     # Initialize AI response cache (in-memory LRU + optional Redis)
-    try:
-        from modules.ai.cache_manager import init_cache as _init_cache
-        await _init_cache()
-        logger.info("[Startup] AI response cache initialized")
-    except Exception as e:
-        logger.warning("[Startup] Cache init skipped: %s", str(e))
+    # Use importlib to avoid triggering modules/ai/__init__.py circular imports
+    if not CLOUD_MODE:
+        try:
+            import importlib.util
+            _cache_spec = importlib.util.spec_from_file_location(
+                "cache_manager",
+                os.path.join(os.path.dirname(__file__), "..", "modules", "ai", "cache_manager.py")
+            )
+            if _cache_spec and _cache_spec.loader:
+                _cache_mod = importlib.util.module_from_spec(_cache_spec)
+                _cache_spec.loader.exec_module(_cache_mod)
+                await _cache_mod.init_cache()
+                logger.info("[Startup] AI response cache initialized")
+        except Exception as e:
+            logger.warning("[Startup] Cache init skipped: %s", str(e))
 
     # Clean up stale temp audio files on startup
-    cleanup_temp_audio()
+    if not CLOUD_MODE:
+        cleanup_temp_audio()
 
     # Start Whisper warmup in background — doesn't block uvicorn startup
     # Transcription requests will wait for the model via model_ready.wait()
-    if WHISPER_AVAILABLE:
+    if WHISPER_AVAILABLE and not CLOUD_MODE:
         threading.Thread(target=warmup, daemon=True).start()
     else:
-        logger.info("[Startup] Whisper warmup skipped — voice packages not installed")
+        logger.info("[Startup] Whisper warmup skipped — voice packages not installed or cloud mode")
 
     # Start embedding service and classifier warmup in background
     # These are optional — if they fail, existing keyword logic is used as fallback
-    try:
-        from config import EMBEDDING_ENABLED, CLASSIFIER_ENABLED
-        if EMBEDDING_ENABLED:
-            from modules.ai.embedding_service import warmup as embedding_warmup
-            threading.Thread(target=embedding_warmup, daemon=True, name="embedding-warmup").start()
-        if CLASSIFIER_ENABLED:
-            from modules.ai.smart_classifier import warmup as classifier_warmup
-            threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
-    except Exception as e:
-        logger.warning("[Startup] ML warmup skipped: %s", str(e))
+    if not CLOUD_MODE:
+        try:
+            from config import EMBEDDING_ENABLED, CLASSIFIER_ENABLED
+            if EMBEDDING_ENABLED:
+                from modules.ai.embedding_service import warmup as embedding_warmup
+                threading.Thread(target=embedding_warmup, daemon=True, name="embedding-warmup").start()
+            if CLASSIFIER_ENABLED:
+                from modules.ai.smart_classifier import warmup as classifier_warmup
+                threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
+        except Exception as e:
+            logger.warning("[Startup] ML warmup skipped: %s", str(e))
 
     # Pre-warm cloud provider connections (DNS + TLS handshake) for sub-second first-byte
-    def prewarm_connections():
-        import urllib.request
-        CLOUD_ENDPOINTS = [
-            ("groq", "https://api.groq.com", "GROQ_API_KEY"),
-            ("google", "https://generativelanguage.googleapis.com", "GOOGLE_API_KEY"),
-            ("openai", "https://api.openai.com", "OPENAI_API_KEY"),
-            ("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"),
-            ("deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY"),
-            ("xai", "https://api.x.ai", "XAI_API_KEY"),
-            ("perplexity", "https://api.perplexity.ai", "PERPLEXITY_API_KEY"),
-        ]
-        for name, url, env_var in CLOUD_ENDPOINTS:
-            if _has_provider_key(name, env_var):
-                try:
-                    urllib.request.urlopen(url, timeout=5)  # nosec B310
-                    logger.info("[Pre-warm] %s connection established", name)
-                except Exception:
-                    # Expected: most will return 401/403 — we just want the TCP/TLS handshake
-                    logger.debug("[Pre-warm] %s handshake done (non-200 OK)", name)
+    # Skip in cloud mode to save memory — connections warm up on first request
+    if not CLOUD_MODE:
+        def prewarm_connections():
+            import urllib.request
+            CLOUD_ENDPOINTS = [
+                ("groq", "https://api.groq.com", "GROQ_API_KEY"),
+                ("google", "https://generativelanguage.googleapis.com", "GOOGLE_API_KEY"),
+                ("openai", "https://api.openai.com", "OPENAI_API_KEY"),
+                ("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"),
+                ("deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+                ("xai", "https://api.x.ai", "XAI_API_KEY"),
+                ("perplexity", "https://api.perplexity.ai", "PERPLEXITY_API_KEY"),
+            ]
+            for name, url, env_var in CLOUD_ENDPOINTS:
+                if _has_provider_key(name, env_var):
+                    try:
+                        urllib.request.urlopen(url, timeout=5)  # nosec B310
+                        logger.info("[Pre-warm] %s connection established", name)
+                    except Exception:
+                        # Expected: most will return 401/403 — we just want the TCP/TLS handshake
+                        logger.debug("[Pre-warm] %s handshake done (non-200 OK)", name)
 
-    threading.Thread(target=prewarm_connections, daemon=True, name="connection-prewarm").start()
+        threading.Thread(target=prewarm_connections, daemon=True, name="connection-prewarm").start()
 
-    if _state.use_autonomous and _state.listener_thread is None:
+    if _state.use_autonomous and _state.listener_thread is None and not CLOUD_MODE:
         _state.listener_thread = threading.Thread(target=autonomous_listener, daemon=True)
         _state.listener_thread.start()
+
+    if CLOUD_MODE:
+        logger.info("[Startup] Cloud mode active — skipped ML warmup, cache init, connection pre-warming")
 
 
 @app.get("/")
@@ -847,6 +898,67 @@ def health_check():
             "https_required": False  # Set to True when SSL is configured
         }
     }
+
+
+@app.get("/health/config")
+def config_check():
+    """Diagnostic endpoint to verify database configuration (no secrets exposed)"""
+    from core.database import DATABASE_URL as db_url, USE_SQLITE, FORCE_SQLITE, DEFAULT_SQLITE_URL
+    _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
+    _db_type = "sqlite" if "sqlite" in db_url.lower() else "postgresql" if "postgresql" in db_url.lower() else "unknown"
+    return {
+        "database_url_prefix": db_url[:40] + "..." if db_url and len(db_url) > 40 else _redacted,
+        "database_type": _db_type,
+        "use_sqlite": USE_SQLITE,
+        "force_sqlite": FORCE_SQLITE,
+        "cloud_mode": os.getenv("CLOUD_MODE", "false"),
+        "database_available": DATABASE_AVAILABLE,
+        "db_initialized": db_manager._initialized if db_manager else False,
+        "has_engine": db_manager.engine is not None if db_manager else False,
+        "default_sqlite_path": str(DEFAULT_SQLITE_URL)[:60],
+    }
+
+
+@app.get("/health/db-debug")
+async def db_debug():
+    """Diagnostic endpoint that attempts a fresh database connection and returns the error"""
+    from core.database import DATABASE_URL as db_url, HAS_SQLALCHEMY
+    if not HAS_SQLALCHEMY:
+        return {"error": "SQLAlchemy not available"}
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        from sqlalchemy import text
+        _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
+        _is_sqlite = "sqlite" in db_url.lower()
+        _test_url = db_url
+        _engine_kwargs = {"echo": False}
+        if _is_sqlite:
+            # SQLite doesn't support pool_size, max_overflow, pool_pre_ping, or SSL
+            pass
+        else:
+            # PostgreSQL: strip sslmode from URL, add SSL context
+            import ssl as _ssl
+            _ssl_ctx = _ssl.create_default_context()
+            _ssl_ctx.check_hostname = False
+            _ssl_ctx.verify_mode = _ssl.CERT_NONE
+            if "sslmode=" in _test_url:
+                _test_url = _test_url.split("?sslmode=")[0]
+                if _test_url.endswith("?"):
+                    _test_url = _test_url[:-1]
+            _engine_kwargs["pool_size"] = 1
+            _engine_kwargs["connect_args"] = {"ssl": _ssl_ctx}
+        engine = create_async_engine(_test_url, **_engine_kwargs)
+        if _is_sqlite:
+            query = text("SELECT sqlite_version()")
+        else:
+            query = text("SELECT version()")
+        async with engine.begin() as conn:
+            result = await conn.execute(query)
+            version = result.scalar()
+        await engine.dispose()
+        return {"status": "connected", "version": version, "url": _redacted, "dialect": "sqlite" if _is_sqlite else "postgresql"}
+    except Exception as e:
+        return {"status": "failed", "error": str(e), "error_type": type(e).__name__, "url": re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"}
 
 
 # Provider key status cache — avoids flooding the key server on every /providers call
@@ -1016,11 +1128,11 @@ async def ask_with_image(
 
         # No screenshot — just do regular text streaming
         if not image_b64:
-            def text_generator():
+            async def text_generator():
                 _state.is_streaming = True
                 try:
                     from ai_router import route_ai_stream
-                    for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1085,11 +1197,11 @@ async def ask_with_image(
             logger.info("[ask-with-image] No paid vision keys, using free Ollama Cloud vision (gemma3)")
 
         if not vision_providers and not has_ollama_vision:
-            def text_only_gen():
+            async def text_only_gen():
                 _state.is_streaming = True
                 try:
                     from ai_router import route_ai_stream
-                    for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1100,11 +1212,11 @@ async def ask_with_image(
 
         if not vision_providers and has_ollama_vision:
             logger.info("[ask-with-image] No cloud vision keys, skipping Step 1 for speed")
-            def skip_vision_gen():
+            async def skip_vision_gen():
                 _state.is_streaming = True
                 try:
                     from ai_router import route_ai_stream
-                    for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1113,12 +1225,12 @@ async def ask_with_image(
                     _state.is_streaming = False
             return StreamingResponse(skip_vision_gen(), media_type="text/event-stream")
 
-        def two_step_vision_gen():
+        async def two_step_vision_gen():
             _state.is_streaming = True
             full_description = ""
 
             try:
-                for event in stream_vision_description(
+                async for event in stream_vision_description(
                     image_b64=image_b64,
                     vision_providers=vision_providers,
                     ollama_vision_model=ollama_vision_model if has_ollama_vision else None,
@@ -1171,7 +1283,7 @@ async def ask_with_image(
                         logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
 
                 from ai_router import route_ai_stream
-                for event in route_ai_stream(
+                async for event in route_ai_stream(
                     combined_prompt,
                     mode=mode,
                     style=style,
@@ -1288,7 +1400,7 @@ async def overlay_ask(
                     import json
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
-                for event in ask_ollama_vision_stream(
+                async for event in ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
@@ -1297,7 +1409,7 @@ async def overlay_ask(
                 ):
                     yield event
             else:
-                for event in route_ai_stream(query, mode="fast", style="concise"):
+                async for event in route_ai_stream(query, mode="fast", style="concise"):
                     yield event
         except Exception as e:
             import json
@@ -1369,13 +1481,18 @@ async def health_database():
         return {
             "available": True,
             "connected": connected,
-            "message": "Database connection OK" if connected else "Database connection failed"
+            "message": "Database connection OK" if connected else "Database connection failed",
+            "initialized": db_manager._initialized,
+            "has_engine": db_manager.engine is not None,
         }
     except Exception as e:
         return {
             "available": True,
             "connected": False,
-            "message": "An internal error occurred"
+            "message": f"Database error: {type(e).__name__}",
+            "initialized": db_manager._initialized if db_manager else False,
+            "has_engine": db_manager.engine is not None if db_manager else False,
+        }
         }
 
 
@@ -1576,6 +1693,18 @@ async def auth_status():
     return {"auth_required": AUTH_REQUIRED}
 
 
+@app.get("/auth/debug/users")
+async def debug_users():
+    """Temporary debug endpoint — check user store status (remove after debugging)"""
+    from security.auth import user_manager
+    return {
+        "user_count": len(user_manager.users),
+        "usernames": list(user_manager.users.keys()),
+        "has_jwt": HAS_JWT,
+        "users_file": str(user_manager.USERS_FILE) if hasattr(user_manager, 'USERS_FILE') else "N/A",
+    }
+
+
 @app.post("/auth/register")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def register_user(
@@ -1620,8 +1749,9 @@ async def register_user(
             "username": user.username
         }
     except ValueError as e:
+        logger.error("[Auth] Registration failed for '%s': %s", username, str(e))
         log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
-        raise HTTPException(status_code=400, detail="Registration failed")
+        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
 
 @app.post("/auth/login")
@@ -1679,6 +1809,38 @@ async def logout_user(user: User = Depends(require_authentication)):
     log_audit_event("auth_logout", user.username, "user_logged_out", resource=f"user:{user.id}", success=True)
     # Note: JWT tokens are stateless, actual logout is client-side
     return {"status": "success", "message": "Logged out successfully"}
+
+
+@app.post("/auth/refresh")
+@rate_limit(requests_per_minute=10)
+async def refresh_token(request: Request):
+    """Refresh access token using refresh token."""
+    try:
+        data = await request.json()
+        refresh_token_str = data.get("refresh_token")
+    except Exception:
+        refresh_token_str = None
+
+    if not refresh_token_str:
+        return error_response(ErrorCode.AUTHENTICATION_ERROR, "Refresh token required", status_code=401)
+
+    try:
+        from security import verify_refresh_token
+        payload = verify_refresh_token(refresh_token_str)
+        if not payload:
+            return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
+
+        username = payload.get("sub")
+        user = user_manager.get_user(username)
+        if not user:
+            return error_response(ErrorCode.AUTHENTICATION_ERROR, "User not found", status_code=401)
+
+        new_token = create_access_token(username)
+        log_audit_event("auth_refresh", username, "token_refreshed", resource=f"user:{user.id}", success=True)
+        return {"access_token": new_token, "token_type": "bearer"}
+    except Exception as e:
+        logger.error("[Auth] Refresh error: %s", str(e))
+        return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
 
 
 @app.post("/auth/forgot-password")
@@ -1783,14 +1945,32 @@ async def get_audit_stats_endpoint(
 # USER API KEY MANAGEMENT - BYOK (Bring Your Own Key)
 # ═══════════════════════════════════════════════════════════════════
 
-# Import user key management
-from user_api_keys import (
-    user_key_manager,
-    get_available_providers,
-    has_premium_access,
-    get_provider_cost_info,
-    PROVIDER_COSTS,
-)
+# Import user key management (optional — BYOK is a premium feature)
+try:
+    from user_api_keys import (
+        user_key_manager,
+        get_available_providers,
+        has_premium_access,
+        get_provider_cost_info,
+        PROVIDER_COSTS,
+    )
+    HAS_BYOK = True
+except ImportError:
+    HAS_BYOK = False
+    logger = logging.getLogger(__name__)
+    logger.info("[BYOK] user_api_keys module not available — BYOK disabled")
+    # Stubs so route handlers don't crash when BYOK is absent
+    user_key_manager = None
+    PROVIDER_COSTS = {}
+
+    def get_available_providers(user_id: str) -> list:
+        return []
+
+    def has_premium_access(user_id: str) -> bool:
+        return False
+
+    def get_provider_cost_info(provider: str) -> dict:
+        return {}
 
 
 @app.get("/providers/byok/status")
@@ -2100,10 +2280,20 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         return {"text": text, "response": "", "error": "An internal error occurred"}
 
 
+@app.get("/transcribe/languages")
+async def list_transcription_languages():
+    """T22: List supported transcription languages."""
+    try:
+        from modules.voice.whisper_handler import get_supported_languages
+        return {"languages": get_supported_languages()}
+    except ImportError:
+        return {"languages": {"en": "English"}, "note": "Whisper handler not available"}
+
+
 @app.get("/stream")
 def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama", context: str = None):
     """SSE stream endpoint — yields event: meta/chunk/done/error"""
-    def generator():
+    async def generator():
         _state.is_streaming = True
 
         # Parse context messages from JSON
@@ -2119,7 +2309,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             # Yield provider/mode info as first event
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
-            for event in route_ai_stream(q, mode, style, provider, messages):
+            async for event in route_ai_stream(q, mode, style, provider, messages):
                 yield event
 
         except Exception as e:
@@ -2245,19 +2435,19 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     # Single-provider fast path: skip race overhead
     if len(all_providers) <= 1:
         single_pk = all_providers[0] if all_providers else "ollama"
-        def single_generator():
+        async def single_generator():
             _state.is_streaming = True
             try:
                 if single_pk == "ollama":
                     from ai_router import ask_ollama_stream
-                    for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages):
+                    async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages):
                         yield event
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
                     model_name = resolved[1]
                     stream_fn = get_stream_fn(single_pk)
                     if stream_fn:
-                        for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages):
+                        async for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages):
                             yield event
                     else:
                         yield f'event: error\ndata: {{"type":"error","message":"No stream function for {single_pk}"}}\n\n'
@@ -2271,44 +2461,49 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     def stream_provider(pk):
         """Stream from a provider into the shared queue. Exit early if cancelled."""
-        provider_start = time_module.time()
-        logger.info("[PROVIDER START] %s", pk)
-        try:
-            if pk == "ollama":
-                from ai_router import ask_ollama_stream
-                stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages)
-            else:
-                resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
-                model_name = resolved[1]
-                stream_fn = get_stream_fn(pk)
-                if stream_fn is None:
-                    race_queue.put((pk, "ERROR", f"No stream function for {pk}"))
-                    race_queue.put((pk, "DONE", None))
-                    return
-                stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)
+        import asyncio
 
-            has_error = False
-            for event in stream_iter:
-                if cancel_flags[pk].is_set():
-                    logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time_module.time() - provider_start)
-                    race_queue.put((pk, "DONE", None))
-                    return
-                # Detect error events from the stream function
-                if "event: error" in event:
-                    has_error = True
-                    race_queue.put((pk, "ERROR", event))
+        async def _run():
+            provider_start = time_module.time()
+            logger.info("[PROVIDER START] %s", pk)
+            try:
+                if pk == "ollama":
+                    from ai_router import ask_ollama_stream
+                    stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages)
                 else:
-                    race_queue.put((pk, "EVENT", event))
+                    resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
+                    model_name = resolved[1]
+                    stream_fn = get_stream_fn(pk)
+                    if stream_fn is None:
+                        race_queue.put((pk, "ERROR", f"No stream function for {pk}"))
+                        race_queue.put((pk, "DONE", None))
+                        return
+                    stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)
 
-            if has_error:
-                logger.info("[PROVIDER ERROR DONE] %s in %.1fs", pk, time_module.time() - provider_start)
-            else:
-                logger.info("[PROVIDER DONE] %s in %.1fs", pk, time_module.time() - provider_start)
-            race_queue.put((pk, "DONE", None))
-        except Exception as e:
-            logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time_module.time() - provider_start)
-            race_queue.put((pk, "ERROR", "An internal error occurred"))
-            race_queue.put((pk, "DONE", None))
+                has_error = False
+                async for event in stream_iter:
+                    if cancel_flags[pk].is_set():
+                        logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time_module.time() - provider_start)
+                        race_queue.put((pk, "DONE", None))
+                        return
+                    # Detect error events from the stream function
+                    if "event: error" in event:
+                        has_error = True
+                        race_queue.put((pk, "ERROR", event))
+                    else:
+                        race_queue.put((pk, "EVENT", event))
+
+                if has_error:
+                    logger.info("[PROVIDER ERROR DONE] %s in %.1fs", pk, time_module.time() - provider_start)
+                else:
+                    logger.info("[PROVIDER DONE] %s in %.1fs", pk, time_module.time() - provider_start)
+                race_queue.put((pk, "DONE", None))
+            except Exception as e:
+                logger.error("[PROVIDER ERROR] %s: %s (%.1fs)", pk, e, time_module.time() - provider_start)
+                race_queue.put((pk, "ERROR", "An internal error occurred"))
+                race_queue.put((pk, "DONE", None))
+
+        asyncio.run(_run())
 
     # Start all provider threads
     threads = []
@@ -2784,6 +2979,208 @@ async def ws_transcribe(ws: WebSocket):
 
 
 # ==============================
+# VOICE AGENT ENDPOINTS (T17)
+# ==============================
+
+try:
+    from modules.voice.voice_agent import (
+        VoiceAgent, VoiceAgentConfig, create_session,
+        process_audio_chunk, end_session, get_status
+    )
+    VOICE_AGENT_AVAILABLE = True
+except ImportError as e:
+    VOICE_AGENT_AVAILABLE = False
+    logger.warning("[VoiceAgent] Module not available: %s", str(e))
+
+
+@app.post("/voice-agent/start")
+async def voice_agent_start(user: User = Depends(require_authentication)):
+    """Start a new voice agent session."""
+    if not VOICE_AGENT_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice agent not available", status_code=503)
+    result = await create_session(user.id)
+    return result
+
+
+@app.post("/voice-agent/stop")
+async def voice_agent_stop(user: User = Depends(require_authentication)):
+    """Stop the current voice agent session."""
+    if not VOICE_AGENT_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice agent not available", status_code=503)
+    result = await end_session("current")
+    return result
+
+
+@app.get("/voice-agent/status")
+async def voice_agent_status():
+    """Get voice agent availability status."""
+    if not VOICE_AGENT_AVAILABLE:
+        return {"available": False, "error": "Voice agent module not installed"}
+    return get_status()
+
+
+@app.websocket("/ws/voice-agent")
+async def ws_voice_agent(ws: WebSocket):
+    """
+    T17: Real-time voice agent WebSocket.
+    Receives audio chunks, returns VAD + AI response actions.
+    """
+    token = ws.query_params.get("token")
+    if AUTH_REQUIRED:
+        if not token:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
+            await ws.close(code=4001)
+            return
+        user = get_current_user(token)
+        if not user:
+            await ws.accept()
+            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
+            await ws.close(code=4001)
+            return
+
+    await ws.accept()
+
+    if not VOICE_AGENT_AVAILABLE:
+        await ws.send_text(json.dumps({"error": {"code": "MODULE_NOT_AVAILABLE", "message": "Voice agent module not installed"}}))
+        await ws.close(code=4002)
+        return
+
+    agent = VoiceAgent()
+    await agent.start_session(user.id if 'user' in dir() else "anonymous")
+
+    try:
+        while True:
+            message = await ws.receive_text()
+            try:
+                data = json.loads(message)
+                msg_type = data.get("type", "audio")
+
+                if msg_type == "audio":
+                    audio_b64 = data.get("audio", "")
+                    audio_bytes = base64.b64decode(audio_b64) if audio_b64 else b""
+                    result = await agent.process_audio(audio_bytes)
+                    await ws.send_text(json.dumps(result))
+
+                elif msg_type == "config":
+                    config_updates = data.get("config", {})
+                    for key, value in config_updates.items():
+                        if hasattr(agent.config, key):
+                            setattr(agent.config, key, value)
+                    await ws.send_text(json.dumps({"action": "config_updated", "config": {
+                        "voice": agent.config.voice,
+                        "enable_interruption": agent.config.enable_interruption,
+                    }}))
+
+                elif msg_type == "speak":
+                    text = data.get("text", "")
+                    success = await agent.speak_text(text)
+                    await ws.send_text(json.dumps({"action": "speak_result", "success": success}))
+
+                elif msg_type == "ping":
+                    await ws.send_text(json.dumps({"action": "pong"}))
+
+                else:
+                    await ws.send_text(json.dumps({"action": "unknown_type", "received_type": msg_type}))
+
+            except Exception as e:
+                logger.error("[WS VoiceAgent] Error: %s", str(e))
+                await ws.send_text(json.dumps({"error": "An internal error occurred"}))
+
+    except Exception:
+        pass
+    finally:
+        await agent.end_session()
+
+
+# ==============================
+# MCP SERVER ENDPOINTS (T18)
+# ==============================
+
+try:
+    from modules.platform.mcp_server import (
+        MCPServer, MCPTool, MCPResource,
+        create_mcp_server, mcp_server,
+        search_transcripts_handler, get_summary_handler,
+        list_action_items_handler, get_interview_notes_handler,
+        ask_about_conversation_handler
+    )
+    MCP_AVAILABLE = True
+except ImportError as e:
+    MCP_AVAILABLE = False
+    logger.warning("[MCP] Module not available: %s", str(e))
+
+
+@app.get("/mcp/status")
+async def mcp_status():
+    """Get MCP server status."""
+    if not MCP_AVAILABLE:
+        return {"available": False, "error": "MCP module not installed"}
+    return get_status()
+
+
+@app.post("/mcp/tools/{tool_name}")
+async def mcp_tool_call(tool_name: str, body: dict, user: User = Depends(require_authentication)):
+    """Call an MCP tool via HTTP."""
+    if not MCP_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
+
+    try:
+        from modules.platform.mcp_server import mcp_server
+        if tool_name not in mcp_server.tools:
+            return error_response(ErrorCode.NOT_FOUND, f"Tool not found: {tool_name}", status_code=404)
+
+        result = await mcp_server.tools[tool_name].handler(body)
+        return {"tool": tool_name, "result": result}
+    except Exception as e:
+        logger.error("[MCP] Tool call error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "Tool execution failed", status_code=500)
+
+
+@app.get("/mcp/tools")
+async def mcp_tools_list(user: User = Depends(require_authentication)):
+    """List all available MCP tools."""
+    if not MCP_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
+
+    try:
+        from modules.platform.mcp_server import mcp_server
+        tools = []
+        for tool in mcp_server.tools.values():
+            tools.append({
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema
+            })
+        return {"tools": tools}
+    except Exception as e:
+        logger.error("[MCP] Tools list error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "Failed to list tools", status_code=500)
+
+
+@app.get("/mcp/resources")
+async def mcp_resources_list(user: User = Depends(require_authentication)):
+    """List all available MCP resources."""
+    if not MCP_AVAILABLE:
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
+
+    try:
+        from modules.platform.mcp_server import mcp_server
+        resources = []
+        for resource in mcp_server.resources.values():
+            resources.append({
+                "uri": resource.uri,
+                "name": resource.name,
+                "description": resource.description,
+                "mime_type": resource.mime_type
+            })
+        return {"resources": resources}
+    except Exception as e:
+        logger.error("[MCP] Resources list error: %s", str(e))
+        return error_response(ErrorCode.INTERNAL_ERROR, "Failed to list resources", status_code=500)
+
+
+# ==============================
 # EXPORT/IMPORT ENDPOINTS
 # ==============================
 
@@ -3120,9 +3517,6 @@ async def websocket_endpoint(ws: WebSocket):
 # The inline endpoints below are DEPRECATED and commented out to avoid route conflicts.
 # All cognitive graph, entity extraction, and predictive interview endpoints
 # are now handled by the cognitive_router (imported above).
-if False:  # DISABLED — use routes/cognitive.py instead
-  pass
-
 async def _disabled_cognitive_graph_status():
     if not COGNITIVE_GRAPH_AVAILABLE:
         return {"available": False, "error": "Cognitive graph module not installed"}
@@ -6009,7 +6403,7 @@ async def get_cache_stats():
         from agents.cache import get_cache
         return get_cache().get_stats()
     except ImportError:
-        return {"error": "Cache module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cache module not available", status_code=503)
 
 
 @app.post("/agents/cache/cleanup")
@@ -6023,7 +6417,7 @@ async def cleanup_cache():
         removed = get_cache().cleanup_expired()
         return {"removed": removed}
     except ImportError:
-        return {"error": "Cache module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cache module not available", status_code=503)
 
 
 @app.get("/agents/learning/stats")
@@ -6036,7 +6430,7 @@ async def get_learning_stats(agent_type: Optional[str] = None):
         from agents.learning import get_learner
         return get_learner().get_performance_stats(agent_type)
     except ImportError:
-        return {"error": "Learning module not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Learning module not available", status_code=503)
 
 
 logger.info("[Agents] Agent endpoints loaded")

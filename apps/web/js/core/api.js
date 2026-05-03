@@ -3,7 +3,7 @@
  * Wraps Electron IPC and HTTP calls
  */
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = typeof window.API_BASE !== 'undefined' ? window.API_BASE : 'http://127.0.0.1:8000';
 
 class APIClient {
   constructor() {

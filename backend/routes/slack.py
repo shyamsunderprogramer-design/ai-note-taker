@@ -1,10 +1,7 @@
 """Slack integration — post transcripts, summaries, and action items to channels."""
 import httpx
-import json
 import logging
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from routes.deps import require_authentication
 from routes.integration_helpers import get_integration_config, save_integration_config, delete_integration_config
@@ -82,7 +79,7 @@ async def post_to_slack(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(  # nosec B611 — Slack webhook URL validated above
+            response = await client.post(  # nosec B611; lgtm[py/request-forgery] — Slack webhook URL validated above
                 webhook_url,
                 json={"text": slack_message},
                 timeout=10.0,

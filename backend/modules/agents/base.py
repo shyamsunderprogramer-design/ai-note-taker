@@ -172,11 +172,8 @@ class BaseAgent(ABC):
         agent_states[self.agent_type.value]["last_suggestion_time"] = time.time()
         session.agent_states = agent_states
 
-    def generate_suggestions(self, session: Any) -> Any:
+    async def generate_suggestions(self, session: Any) -> Any:
         """Stream suggestions via route_ai_stream. Yields SSE event strings.
-
-        This is a synchronous generator because route_ai_stream is synchronous.
-        The orchestrator wraps results for async delivery.
         """
         context = self.build_context(session)
         prompt = self.build_prompt(context)
@@ -191,7 +188,7 @@ class BaseAgent(ABC):
 
         provider = getattr(session, 'config', {}).get("provider", "ollama")
 
-        for event in route_ai_stream(
+        async for event in route_ai_stream(
             prompt,
             mode="interview",
             style="concise",

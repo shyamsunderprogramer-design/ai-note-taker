@@ -185,10 +185,32 @@ def record_audio(duration=RECORD_SECONDS, samplerate=SAMPLE_RATE):
 # TRANSCRIBE AUDIO
 # ==============================
 
-def transcribe(audio, mode="adaptive", streaming=False):
+# Supported languages for Whisper
+def get_supported_languages():
+    """Return dict of language code → name."""
+    return {
+        "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+        "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "pl": "Polish",
+        "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "ko": "Korean",
+        "ar": "Arabic", "hi": "Hindi", "tr": "Turkish", "vi": "Vietnamese",
+        "th": "Thai", "sv": "Swedish", "da": "Danish", "fi": "Finnish",
+        "no": "Norwegian", "cs": "Czech", "el": "Greek", "he": "Hebrew",
+        "id": "Indonesian", "ms": "Malay", "uk": "Ukrainian", "ro": "Romanian",
+        "hu": "Hungarian", "sk": "Slovak", "bg": "Bulgarian", "hr": "Croatian",
+        "sr": "Serbian", "sl": "Slovenian", "lt": "Lithuanian", "lv": "Latvian",
+        "et": "Estonian", "is": "Icelandic", "ga": "Irish", "mt": "Maltese",
+        "mk": "Macedonian", "sq": "Albanian", "ka": "Georgian", "hy": "Armenian",
+        "az": "Azerbaijani", "kk": "Kazakh", "uz": "Uzbek", "mn": "Mongolian",
+        "ne": "Nepali", "si": "Sinhala", "ta": "Tamil", "te": "Telugu",
+        "ml": "Malayalam", "kn": "Kannada", "gu": "Gujarati", "mr": "Marathi",
+        "bn": "Bengali", "pa": "Punjabi", "ur": "Urdu", "fa": "Persian",
+    }
+
+
+def transcribe(audio, mode="adaptive", streaming=False, language="en", auto_detect=False):
     """
     Convert audio to text using Whisper.
-    Optimized for speed: greedy decoding for streaming, small beam for batch.
+    T22: Multi-language support with auto-detection.
     """
 
     # Wait for warmup to complete (max 5s — return error if not ready)
@@ -198,34 +220,42 @@ def transcribe(audio, mode="adaptive", streaming=False):
     try:
         model = get_model(mode, streaming=streaming)
 
+        # T22: Auto-detect language if requested
+        if auto_detect:
+            # Whisper auto-detects when language is not specified
+            lang = None
+        else:
+            lang = language
+
         if streaming:
             # Greedy decoding for real-time — fastest possible path
-            segments, _ = model.transcribe(
+            segments, info = model.transcribe(
                 audio,
                 beam_size=1,
                 vad_filter=False,
                 condition_on_previous_text=False,
-                language="en",
+                language=lang,
                 best_of=1,
                 without_timestamps=True,  # skip timestamp prediction = faster
             )
         else:
-            segments, _ = model.transcribe(
+            segments, info = model.transcribe(
                 audio,
                 beam_size=3,          # reduced from 5 — minimal quality loss, faster
                 vad_filter=False,      # disabled — adds ~200ms overhead per call
                 condition_on_previous_text=False,
-                language="en",
+                language=lang,
                 best_of=3,             # replaces beam_size reduction with non-beam alternatives
                 patience=0.3           # less patience = faster
             )
 
         text = " ".join(seg.text for seg in segments)
-        return text.strip()
+        detected = info.language if info else language
+        return {"text": text.strip(), "language": detected}
 
     except Exception as e:
         logger.error("Transcription error: %s", str(e))
-        return ""
+        return {"text": "", "language": language}
 
 
 # ==============================
@@ -615,7 +645,8 @@ class BrowserTranscriber:
         """Transcribe a segment using the shared thread pool."""
         try:
             future = _transcribe_executor.submit(transcribe, segment, "adaptive", True)
-            text = future.result(timeout=30)
+            result = future.result(timeout=30)
+            text = result.get("text", "") if isinstance(result, dict) else (result or "")
             if text and text.strip():
                 for cb in self.callbacks:
                     try:

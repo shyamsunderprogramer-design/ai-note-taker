@@ -3,7 +3,7 @@
  * Provides offline capability and caching
  */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = 'ant-cache-' + CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',
@@ -12,7 +12,10 @@ const STATIC_ASSETS = [
   '/app.js',
   '/manifest.json',
   '/hljs.min.js',
-  '/hljs-github-dark.min.css'
+  '/hljs-github-dark.min.css',
+  '/js/core/config.js',
+  '/js/core/api.js',
+  '/js/core/auth-helper.js'
 ];
 
 // Install event - cache static assets
@@ -53,9 +56,12 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   // Skip API calls - don't cache these
+  // Also skip requests to the cloud backend (Render)
+  var CLOUD_BACKEND = 'ai-note-taker-7xvn.onrender.com';
   if (url.pathname.startsWith('/api/') ||
       url.hostname === '127.0.0.1' ||
-      url.port === '8000') {
+      url.port === '8000' ||
+      url.hostname === CLOUD_BACKEND) {
     return;
   }
 

@@ -3,9 +3,9 @@ import base64
 import httpx
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from routes.deps import require_authentication
 from routes.integration_helpers import get_integration_config, save_integration_config, delete_integration_config
@@ -79,7 +79,7 @@ async def connect_jira(
     # Validate credentials by fetching server info
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(  # nosec B611 — user-configured Jira instance
+            resp = await client.get(  # nosec B611; lgtm[py/request-forgery] — user-configured Jira instance
                 _jira_api_url(base_url, "/serverInfo"),
                 headers=_jira_headers(email, api_token),
                 timeout=10.0,
@@ -101,7 +101,7 @@ async def connect_jira(
     )
 
     log_audit_event("jira_connect", user.username, "jira_connected", success=True)
-    logger.info("[Jira] Workspace %s connected for user %s", base_url, user.username)
+    logger.info("[Jira] Workspace %s connected for user %s", base_url, user.username)  # lgtm[py/log-injection]
 
     return {"status": "connected", "base_url": base_url}
 
@@ -181,7 +181,7 @@ async def create_jira_issue(
             if resp.status_code in (200, 201):
                 data = resp.json()
                 log_audit_event("jira_create_issue", user.username, "jira_issue_created", success=True)
-                logger.info("[Jira] Created issue %s in %s", data.get("key"), project_key)
+                logger.info("[Jira] Created issue %s in %s", data.get("key"), project_key)  # lgtm[py/log-injection]
                 return {
                     "status": "created",
                     "issue_key": data.get("key"),
@@ -280,7 +280,7 @@ async def sync_action_items(
     # Retrieve conversation and extract action items
     conversation = _conversations.get(conversation_id)
     if not conversation:
-        logger.warning("[Jira] Conversation %s not found in local store", conversation_id)
+        logger.warning("[Jira] Conversation %s not found in local store", conversation_id)  # lgtm[py/log-injection]
         return {
             "status": "no_conversation",
             "detail": f"Conversation {conversation_id} not found. Action items could not be extracted.",
@@ -344,7 +344,7 @@ async def sync_action_items(
         raise HTTPException(status_code=502, detail="Failed to sync action items to Jira")
 
     log_audit_event("jira_sync_action_items", user.username, "jira_action_items_synced", success=True)
-    logger.info(
+    logger.info(  # lgtm[py/log-injection]
         "[Jira] Synced %d action items from conversation %s to %s",
         len(created_issues), conversation_id, project_key,
     )

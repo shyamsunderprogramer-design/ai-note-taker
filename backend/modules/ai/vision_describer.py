@@ -47,7 +47,7 @@ def _has_ollama_cloud_key():
         return False
 
 
-def stream_vision_description(
+async def stream_vision_description(
     image_b64: str,
     vision_providers: list,
     ollama_vision_model: str = None,
@@ -85,12 +85,14 @@ def stream_vision_description(
         stream_fn = get_vision_stream_fn(provider_prefix)
         model = resolved_model or VISION_PROVIDER_MAP.get(provider_prefix, "gpt-4o")
         if stream_fn:
-            yield from _single_provider_description(stream_fn, image_b64, model, provider_prefix, temperature)
+            async for event in _single_provider_description(stream_fn, image_b64, model, provider_prefix, temperature):
+                yield event
             return
 
     # Ollama-only: no cloud keys available (not even Ollama Cloud)
     if not vision_providers and ollama_vision_model:
-        yield from _ollama_description(image_b64, ollama_vision_model, temperature)
+        async for event in _ollama_description(image_b64, ollama_vision_model, temperature):
+            yield event
         return
 
     # No vision providers at all
@@ -99,15 +101,16 @@ def stream_vision_description(
         return
 
     # Race mode: all cloud providers + Ollama race, fastest description wins
-    yield from _race_description(image_b64, vision_providers, ollama_vision_model, temperature)
+    for event in _race_description(image_b64, vision_providers, ollama_vision_model, temperature):
+        yield event
 
 
-def _single_provider_description(stream_fn, image_b64, model, provider_prefix, temperature=0.3):
+async def _single_provider_description(stream_fn, image_b64, model, provider_prefix, temperature=0.3):
     """Stream description from a single selected provider."""
     start = time.time()
     full_description = ""
     try:
-        for event in stream_fn(
+        async for event in stream_fn(
             VISION_DESCRIPTION_PROMPT,
             image_b64=image_b64,
             model=model,
@@ -146,13 +149,13 @@ def _single_provider_description(stream_fn, image_b64, model, provider_prefix, t
         yield make_error(f"Vision description failed: {e}")
 
 
-def _ollama_description(image_b64, model_name, temperature=0.3):
+async def _ollama_description(image_b64, model_name, temperature=0.3):
     """Stream description from local Ollama vision model."""
     from ai_router import ask_ollama_vision_stream
     start = time.time()
     full_description = ""
     try:
-        for event in ask_ollama_vision_stream(
+        async for event in ask_ollama_vision_stream(
             VISION_DESCRIPTION_PROMPT,
             image_b64=image_b64,
             mode="race",

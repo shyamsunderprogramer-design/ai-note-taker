@@ -35,11 +35,29 @@ logger = logging.getLogger("database")
 # Database configuration
 # T16: Try PostgreSQL first, fall back to SQLite for development
 DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
-DEFAULT_SQLITE_URL = "sqlite+aiosqlite:///data/ainotetaker.db"
+
+# SQLite path: use absolute path based on this file's location
+_BACKEND_DIR = Path(__file__).resolve().parent  # backend/core/
+_DATA_DIR = _BACKEND_DIR.parent / "data"  # backend/data/
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_SQLITE_URL = f"sqlite+aiosqlite:///{_DATA_DIR / 'ainotetaker.db'}"
 
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_POSTGRES_URL)
 USE_SQLITE = os.getenv("USE_SQLITE", "").lower() == "true"
 FORCE_SQLITE = os.getenv("FORCE_SQLITE", "true").lower() == "true"  # Default to SQLite until PostgreSQL is configured
+CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
+
+# In cloud mode, try PostgreSQL first; fall back to SQLite if connection fails
+if CLOUD_MODE and DATABASE_URL and "postgresql" in DATABASE_URL:
+    FORCE_SQLITE = False
+    USE_SQLITE = False
+    logger.info("[Database] Cloud mode: will attempt PostgreSQL at %s", re.sub(r'://[^@]+@', '://***@', DATABASE_URL))
+elif CLOUD_MODE:
+    # Cloud mode but no DATABASE_URL — use SQLite with persistent path
+    FORCE_SQLITE = True
+    USE_SQLITE = True
+    DATABASE_URL = DEFAULT_SQLITE_URL
+    logger.info("[Database] Cloud mode: no DATABASE_URL, using SQLite at %s", DATABASE_URL)
 
 # Auto-detect: if DATABASE_URL contains sqlite, use it
 if "sqlite" in DATABASE_URL.lower():
@@ -50,11 +68,6 @@ if FORCE_SQLITE:
     USE_SQLITE = True
     DATABASE_URL = DEFAULT_SQLITE_URL
 elif USE_SQLITE:
-    DATABASE_URL = DEFAULT_SQLITE_URL
-
-# Ensure data directory exists for SQLite
-if USE_SQLITE or "sqlite" in DATABASE_URL.lower():
-    Path("data").mkdir(exist_ok=True)
     DATABASE_URL = DEFAULT_SQLITE_URL
 
 _redacted_url = re.sub(r'://[^@]+@', '://***@', DATABASE_URL) if DATABASE_URL else "(none)"
@@ -568,13 +581,64 @@ class DatabaseManager:
             return
 
         try:
+            # Dispose of any previous engine (e.g. from a failed PostgreSQL attempt)
+            if self.engine:
+                try:
+                    await self.engine.dispose()
+                except Exception:
+                    pass
+                self.engine = None
+                self.session_maker = None
+
+            # Build the effective database URL for this connection
+            _db_url = DATABASE_URL
+
+            # Ensure data directory exists for SQLite
+            _is_sqlite = "sqlite" in _db_url.lower()
+            if _is_sqlite:
+                _db_path = _db_url.split("///")[-1] if ":///" in _db_url else None
+                if _db_path:
+                    Path(_db_path).parent.mkdir(parents=True, exist_ok=True)
+
+            # Build connection args for cloud databases
+            # Neon requires SSL — pass as SSLContext via connect_args
+            connect_args = {}
+            if "postgresql" in _db_url and "sqlite" not in _db_url:
+                # Remove sslmode from URL if present — asyncpg doesn't use it in URL
+                if "sslmode=" in _db_url:
+                    _db_url = _db_url.split("?sslmode=")[0]
+                    if _db_url.endswith("?"):
+                        _db_url = _db_url[:-1]
+                try:
+                    import ssl as _ssl
+                    _ssl_ctx = _ssl.create_default_context()
+                    _ssl_ctx.check_hostname = False
+                    _ssl_ctx.verify_mode = _ssl.CERT_NONE
+                    connect_args["ssl"] = _ssl_ctx
+                except Exception:
+                    pass
+
+            # Cloud mode: smaller pool to fit in 512MB RAM
+            _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
+            _max_overflow = 2 if _pool_size == 2 else 20
+
+            # SQLite doesn't support pool_size, max_overflow, or pool_pre_ping
+            _engine_kwargs = {
+                "echo": False,
+            }
+            if not _is_sqlite:
+                _engine_kwargs["pool_size"] = _pool_size
+                _engine_kwargs["max_overflow"] = _max_overflow
+                _engine_kwargs["pool_timeout"] = 30
+                _engine_kwargs["pool_pre_ping"] = True
+                if connect_args:
+                    _engine_kwargs["connect_args"] = connect_args
+
+            logger.info("[Database] Connecting to: %s (SQLite=%s)", re.sub(r'://[^@]+@', '://***@', _db_url) if _db_url else "(none)", _is_sqlite)
+
             self.engine = create_async_engine(
-                DATABASE_URL,
-                pool_size=10,
-                max_overflow=20,
-                pool_timeout=30,
-                pool_pre_ping=True,
-                echo=False,
+                _db_url,
+                **_engine_kwargs,
             )
 
             self.session_maker = async_sessionmaker(
@@ -589,10 +653,18 @@ class DatabaseManager:
                 await conn.run_sync(Base.metadata.create_all)
 
             self._initialized = True
-            logger.info("[Database] Initialized successfully")
+            logger.info("[Database] Initialized successfully (%s)", "SQLite" if _is_sqlite else "PostgreSQL")
 
         except Exception as e:
             logger.error("[Database] Failed to initialize: %s", str(e))
+            # Clean up partially created engine
+            if self.engine:
+                try:
+                    await self.engine.dispose()
+                except Exception:
+                    pass
+                self.engine = None
+                self.session_maker = None
             raise
 
     async def close(self) -> None:
@@ -605,6 +677,7 @@ class DatabaseManager:
     async def health_check(self) -> bool:
         """Check database connectivity"""
         if not self.engine:
+            logger.error("[Database] Health check: engine is None, database not initialized")
             return False
         try:
             async with self.session_maker() as session:
@@ -1787,9 +1860,9 @@ class DataMigrator:
     @staticmethod
     async def migrate_users() -> Dict[str, str]:
         """Migrate users from data/users.json"""
-        users_file = Path("data/users.json")
+        users_file = Path(__file__).resolve().parent / "data" / "users.json"
         if not users_file.exists():
-            logger.info("[Migration] No users.json found")
+            logger.info("[Migration] No users.json found at %s", users_file)
             return {}
 
         id_mapping = {}

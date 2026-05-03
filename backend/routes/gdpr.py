@@ -1,8 +1,6 @@
 """GDPR compliance endpoints — data export and deletion (right to be forgotten)."""
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -35,7 +33,7 @@ router = APIRouter()
 # Try to import database for full export
 try:
     from database import (
-        db_manager, HAS_SQLALCHEMY,
+        HAS_SQLALCHEMY,
         ConversationRepository, VoiceModelRepository,
         JobApplicationRepository, AnalyticsRepository,
         UserRepository,

@@ -465,3 +465,44 @@ jobs:
           name: ant-backend-win
           path: backend/dist/ANTBackend.exe
           retention-days: 14
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # E2E TESTS (Playwright)
+  # ═══════════════════════════════════════════════════════════════════════
+  e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Playwright dependencies
+        run: |
+          cd e2e
+          npm ci
+          npx playwright install --with-deps
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+        working-directory: ./backend
+
+      - name: Run E2E tests
+        run: |
+          cd e2e
+          npx playwright test
+        env:
+          CI: true
