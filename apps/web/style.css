@@ -290,6 +290,8 @@ body {
   object-fit: cover;
   object-position: center;
   display: block;
+  opacity: var(--hero-opacity, 1);
+  transition: opacity 0.15s ease;
 }
 
 /* ==============================

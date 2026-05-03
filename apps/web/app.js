@@ -273,6 +273,7 @@ function updateGlassOpacity(value, skipBackend = false) {
   root.setProperty("--bg-secondary", `rgba(20,24,40,${(0.5 * f + 0.05).toFixed(2)})`)
   root.setProperty("--bg-tertiary", `rgba(30,35,55,${(0.45 * f + 0.05).toFixed(2)})`)
   root.setProperty("--glass-border", `rgba(255,255,255,${(0.1 * f + 0.02).toFixed(2)})`)
+  root.setProperty("--hero-opacity", f.toFixed(2))
   // Only sync to backend when user directly interacts with the slider
   if (!skipBackend && window.api && window.api.invoke) {
     window.api.invoke("overlay:set-opacity", Math.max(0.1, f))
