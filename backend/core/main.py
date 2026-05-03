@@ -1493,7 +1493,6 @@ async def health_database():
             "initialized": db_manager._initialized if db_manager else False,
             "has_engine": db_manager.engine is not None if db_manager else False,
         }
-        }
 
 
 @app.get("/health/modules")

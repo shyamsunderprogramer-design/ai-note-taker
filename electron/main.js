@@ -427,6 +427,12 @@ async function createWindow() {
     }
   })
 
+  // Log renderer console messages for debugging
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const prefix = ["[Renderer]", "[Renderer warn]", "[Renderer error]", "[Renderer fatal]"][level] || "[Renderer]"
+    logger.info(`${prefix} ${message} (${sourceId}:${line})`)
+  })
+
   // Store nonce on the window webContents for access in CSP headers
   win.cspNonce = cspNonce
   _cspNonceMap.set(win.webContents.id, cspNonce)
@@ -1545,10 +1551,13 @@ app.whenReady().then(async () => {
 
     if (isOwnPage) {
       // T3: Nonce-based CSP — removes 'unsafe-inline' in favor of per-window nonce
+      // For file:// URLs (local HTML), allow unsafe-inline since inline styles/scripts
+      // in static files can't be dynamically nonced before parse.
+      const isFile = details.url.startsWith("file://")
       const nonce = details.webContentsId ? _cspNonceMap.get(details.webContentsId) : null
-      const scriptNonce = nonce ? `'nonce-${nonce}'` : "'self'"
-      const styleNonce  = nonce ? `'nonce-${nonce}'` : "'self'"
-      const csp = `default-src 'self'; script-src 'self' ${scriptNonce}; style-src 'self' ${styleNonce} https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
+      const scriptNonce = isFile ? "'self' 'unsafe-inline'" : (nonce ? `'nonce-${nonce}'` : "'self'")
+      const styleNonce  = isFile ? "'self' 'unsafe-inline' https:" : (nonce ? `'nonce-${nonce}' https:` : "'self' https:")
+      const csp = `default-src 'self'; script-src ${scriptNonce}; style-src ${styleNonce}; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:* wss://localhost:* wss://127.0.0.1:* wss: https:; media-src 'self' mediastream: blob: https:`
       headers["Content-Security-Policy"] = [csp]
     }
 
