@@ -424,6 +424,7 @@ async function createWindow() {
     if (win && !win.isDestroyed()) {
       win.show()
       win.focus()
+      closeSplashScreen()
     }
   })
 
@@ -1609,7 +1610,7 @@ app.whenReady().then(async () => {
   const backendPromise = startBackend()
   const windowPromise = new Promise((resolve) => {
     if (startHidden && autoStartEnabled) {
-      // Start hidden
+      // Start hidden — no splash, no visible window
       createWindow()
       if (win) {
         win.hide()
@@ -1618,6 +1619,8 @@ app.whenReady().then(async () => {
       }
       resolve(null)
     } else {
+      // Show splash first, then create main window
+      createSplashScreen()
       createWindow()
       resolve(null)
     }
@@ -1625,6 +1628,18 @@ app.whenReady().then(async () => {
 
   // Wait for both to complete
   await Promise.all([backendPromise, windowPromise])
+
+  // Fallback: close splash after 15s if ready-to-show never fired
+  setTimeout(() => {
+    if (splashScreen && !splashScreen.isDestroyed()) {
+      logger.info("[Splash] Fallback close after 15s timeout")
+      closeSplashScreen()
+      if (win && !win.isDestroyed() && !win.isVisible()) {
+        win.show()
+        win.focus()
+      }
+    }
+  }, 15000)
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // POST-STARTUP INITIALIZATION (Lazy loading)
