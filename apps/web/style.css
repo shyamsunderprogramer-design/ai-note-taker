@@ -194,6 +194,7 @@ button, input, select {
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  -webkit-app-region: drag;
 }
 
 body {
@@ -236,10 +237,10 @@ body {
 .opacity-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 80px;
-  height: 4px;
+  width: 140px;
+  height: 6px;
   background: rgba(255,255,255,0.1);
-  border-radius: 2px;
+  border-radius: 3px;
   outline: none;
   cursor: pointer;
   transition: background 0.2s;
@@ -271,6 +272,24 @@ body {
   border: 2px solid rgba(255,255,255,0.2);
   cursor: pointer;
   box-shadow: 0 0 8px rgba(59,130,246,0.4);
+}
+
+/* ==============================
+   ROW 0: HERO BANNER
+   ============================== */
+.hero-banner {
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+.hero-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
 }
 
 /* ==============================
@@ -511,6 +530,27 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Traffic lights pinned to top-right corner of window */
+.traffic-corner {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 100;
+  -webkit-app-region: no-drag;
+}
+
+/* Make menu items and dropdowns clickable inside drag regions */
+.app-menu-item,
+.custom-dropdown,
+.custom-dropdown-menu,
+.custom-dropdown-item,
+.custom-dropdown-trigger,
+.settings-card-header,
+.app-menu-section-title,
+.history-item {
+  -webkit-app-region: no-drag;
 }
 
 .traffic-btn {
@@ -1074,7 +1114,7 @@ select option {
   border-color: rgba(34, 197, 94, 0.5);
   background: rgba(34, 197, 94, 0.15);
 }
-.auto-ss-icon { font-size: 14px; line-height: 1; }
+.auto-ss-icon { font-size: 14px; line-height: 1; color: rgba(255,255,255,0.9); }
 .auto-ss-dot {
   position: absolute;
   top: 4px;
@@ -1145,7 +1185,7 @@ select option {
   border-color: rgba(239, 68, 68, 0.5);
   background: rgba(239, 68, 68, 0.15);
 }
-.always-on-icon { font-size: 14px; line-height: 1; }
+.always-on-icon { font-size: 14px; line-height: 1; color: rgba(255,255,255,0.9); }
 .always-on-dot {
   position: absolute;
   top: 4px;
@@ -6588,6 +6628,7 @@ select option {
 
 .suggestions-icon {
   font-size: 16px;
+  color: rgba(255,255,255,0.9);
 }
 
 .suggestions-dot {

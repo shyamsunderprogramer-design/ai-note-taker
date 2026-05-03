@@ -37,11 +37,11 @@
     }
 
     .logo {
-      width: 80px;
-      height: 80px;
+      width: 220px;
+      height: 130px;
       background: rgba(15,20,35,0.55);
       border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 20px;
+      border-radius: 14px;
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       display: flex;
@@ -50,6 +50,7 @@
       margin: 0 auto 24px;
       box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
       animation: pulse 2s ease-in-out infinite;
+      overflow: hidden;
     }
 
     @keyframes pulse {
@@ -58,10 +59,10 @@
     }
 
     .logo-icon {
-      width: 60px;
-      height: 60px;
-      object-fit: contain;
-      transform: rotate(0deg);
+      width: 200px;
+      height: 110px;
+      object-fit: cover;
+      object-position: center;
       filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.5));
     }
 
@@ -164,7 +165,7 @@
       <button class="splash-btn sp-close" id="spCloseBtn" title="Close"><span class="si">✕</span></button>
     </div>
     <div class="logo">
-      <img class="logo-icon" src="ant-icon-new.png" alt="ANT">
+      <img class="logo-icon" src="assets/splash.png" alt="ANT">
     </div>
     <h1 class="title">ANT</h1>
     <p class="subtitle">AI Note Taker</p>

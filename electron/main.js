@@ -290,9 +290,8 @@ function createSplashScreen() {
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
-    alwaysOnTop: true,
     skipTaskbar: true,
-    resizable: true,
+    resizable: false,
     center: true,
     webPreferences: {
       nodeIntegration: false,
@@ -312,7 +311,7 @@ function createSplashScreen() {
     splashScreen.loadURL(`data:text/html,
       <html><body style="margin:0;background:transparent;display:flex;align-items:center;justify-content:center;height:100vh;">
         <div style="text-align:center;color:white;font-family:sans-serif;">
-          <img src="ant-icon-new.png" style="width:60px;height:60px;margin-bottom:20px;filter:drop-shadow(0 0 12px rgba(56,189,248,0.5));" alt="ANT">
+          <img src="assets/desktop-icon.png" style="width:60px;height:60px;margin-bottom:20px;filter:drop-shadow(0 0 12px rgba(56,189,248,0.5));" alt="ANT">
           <div style="font-size:24px;font-weight:bold;">ANT</div>
           <div style="font-size:14px;opacity:0.7;margin-top:10px;">Loading...</div>
         </div>
@@ -358,10 +357,10 @@ async function createWindow() {
     y: bounds.y,
     minWidth: 360,
     minHeight: 280,
+    show: false,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
-    // Note: alwaysOnTop is applied manually after window creation for more control
     skipTaskbar: true,
     resizable: true,
     webPreferences: {
@@ -386,6 +385,14 @@ async function createWindow() {
   // This is the highest normal window level, only below system notifications
   win = new BrowserWindow(windowOpts)
 
+  // Show window only when content is ready to avoid blank flashes
+  win.once("ready-to-show", () => {
+    if (win && !win.isDestroyed()) {
+      win.show()
+      win.focus()
+    }
+  })
+
   // Store nonce on the window webContents for access in CSP headers
   win.cspNonce = cspNonce
 
@@ -405,38 +412,15 @@ async function createWindow() {
     ? path.join(process.resourcesPath, "renderer")
     : path.join(__dirname, "..", "apps", "web")
 
-  // Check auth status and load signin.html if authentication is required
+  // Set window icon after webDir is known
+  win.setIcon(path.join(webDir, "assets", "desktop-icon.png"))
+
+  // Center the login window over the splash backdrop
+  win.center()
+
+  // Always load signin.html first — it will auto-redirect to index.html if already authenticated
   const loadAppropriatePage = () => {
-    return new Promise((resolve) => {
-      const http = require("http")
-      const req = http.get("http://127.0.0.1:8000/auth/status", { timeout: 2000 }, (res) => {
-        let body = ""
-        res.on("data", (chunk) => { body += chunk })
-        res.on("end", () => {
-          try {
-            const data = JSON.parse(body)
-            if (data.auth_required === false) {
-              win.loadFile(path.join(webDir, "index.html"))
-            } else {
-              win.loadFile(path.join(webDir, "signin.html"))
-            }
-          } catch {
-            win.loadFile(path.join(webDir, "signin.html"))
-          }
-          resolve()
-        })
-      })
-      req.on("error", () => {
-        // Backend not ready yet — load signin as safe default
-        win.loadFile(path.join(webDir, "signin.html"))
-        resolve()
-      })
-      req.on("timeout", () => {
-        req.destroy()
-        win.loadFile(path.join(webDir, "signin.html"))
-        resolve()
-      })
-    })
+    return win.loadFile(path.join(webDir, "signin.html"))
   }
   await loadAppropriatePage()
 
@@ -1560,11 +1544,6 @@ app.whenReady().then(async () => {
   const startHidden = process.argv.includes("--hidden") || process.argv.includes("--autostart")
   const autoStartEnabled = store.get(AUTO_START_SETTINGS_KEY, false)
 
-  // Show splash screen first (for perceived speed)
-  if (!startHidden) {
-    createSplashScreen()
-  }
-
   // Start backend and create window in parallel
   const backendPromise = startBackend()
   const windowPromise = new Promise((resolve) => {
@@ -1590,28 +1569,21 @@ app.whenReady().then(async () => {
   // POST-STARTUP INITIALIZATION (Lazy loading)
   // ═══════════════════════════════════════════════════════════════════════════════
 
-  // Close splash screen after main window is ready
+  // Lazy initialize non-critical features after splash fades
   if (win) {
-    win.webContents.once("dom-ready", () => {
-      // Delay close for smooth transition
-      setTimeout(closeSplashScreen, 500)
+    setTimeout(() => {
+      // Initialize overlay adapter
+      if (!overlayAdapter) {
+        overlayAdapter = new OverlayAdapter(win)
+        overlayAdapter.setupIpcHandlers()
+      }
 
-      // Lazy initialize non-critical features
-      setTimeout(() => {
-        // Initialize overlay adapter
-        if (!overlayAdapter) {
-          overlayAdapter = new OverlayAdapter(win)
-          overlayAdapter.setupIpcHandlers()
-        }
-
-        // Initialize screen recorder
-        if (!screenRecorder) {
-          screenRecorder = new ScreenRecorder(win)
-          screenRecorder.registerIpcHandlers()
-        }
-
-      }, 1000) // Delay 1s for UI responsiveness
-    })
+      // Initialize screen recorder
+      if (!screenRecorder) {
+        screenRecorder = new ScreenRecorder(win)
+        screenRecorder.registerIpcHandlers()
+      }
+    }, 6000) // Delay 6s (after splash fades)
   }
 
   // Machine lock detection - clear sensitive data when screen locks

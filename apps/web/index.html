@@ -35,6 +35,18 @@
 <body>
   <div class="shell">
 
+    <!-- ===== ROW 0: HERO BANNER ===== -->
+    <div class="hero-banner">
+      <img src="assets/web-top-banner.jpg" alt="ANT AI Note Taker" class="hero-banner-img">
+    </div>
+
+    <!-- Traffic lights — fixed to top right corner of window -->
+    <div class="traffic-lights traffic-corner">
+      <button id="minBtn" class="traffic-btn traffic-min" type="button" title="Minimize"><span class="traffic-icon">&#567;</span></button>
+      <button id="maxBtn" class="traffic-btn traffic-max" type="button" title="Maximize"><span class="traffic-icon">&#9633;</span></button>
+      <button id="closeBtn" class="traffic-btn traffic-close" type="button" title="Close"><span class="traffic-icon">&#215;</span></button>
+    </div>
+
     <!-- ===== ROW 1: HEADER ===== -->
     <div class="header-strip">
 
@@ -44,20 +56,15 @@
         <span id="stealthLabel">Detectable</span>
       </button>
 
-      <!-- Center: Title -->
+      <!-- Center: Backend status only (name is in splash image) -->
       <div class="header-center">
-        <img src="ant-icon-new.png" class="app-logo-icon" alt="ANT" style="">
-        <div class="header-center-text">
-          <span class="app-subtitle">ANT</span>
-          <span class="app-title">AI Note Taker</span>
-        </div>
         <div id="backendStatusIndicator" class="backend-status" title="Backend Status">
           <span class="backend-status-dot"></span>
           <span class="backend-status-text"></span>
         </div>
       </div>
 
-      <!-- Right: Opacity slider + Menu + Traffic lights -->
+      <!-- Right: Opacity slider + Menu -->
       <div class="header-right">
         <div class="opacity-control" title="Background Opacity">
           <svg class="opacity-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
@@ -66,11 +73,6 @@
         <button id="menuBtn" class="win-btn" type="button" title="Menu">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        <div class="traffic-lights">
-          <button id="minBtn" class="traffic-btn traffic-min" type="button" title="Minimize"><span class="traffic-icon">&#567;</span></button>
-          <button id="maxBtn" class="traffic-btn traffic-max" type="button" title="Maximize"><span class="traffic-icon">&#9633;</span></button>
-          <button id="closeBtn" class="traffic-btn traffic-close" type="button" title="Close"><span class="traffic-icon">&#215;</span></button>
-        </div>
       </div>
 
     </div>
