@@ -965,6 +965,268 @@ class UserRepository:
             logger.error("[UserRepository] List failed: %s", str(e))
             return []
 
+    # ------------------------------------------------------------------
+    # Auth-flow helpers (Fix #35 wire SQLAlchemy User into auth flow).
+    #
+    # These methods are the new persistence-layer surface the
+    # `security.auth.user_manager` async shim delegates to. They are
+    # pure additions — no callers until Commit 3 — and follow the same
+    # `@staticmethod async def` + `async with db_manager.session_maker()`
+    # pattern as the rest of UserRepository.
+    #
+    # Every method checks `HAS_SQLALCHEMY` and returns a safe sentinel
+    # (None / False / 0) if SQLAlchemy is unavailable. The bcrypt
+    # hashing helpers live in `security.auth` (`pwd_context`) and are
+    # imported by the callers — these repository methods take already-
+    # hashed values so the bcrypt<4.1 pin stays in one place.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def count() -> int:
+        """Return the number of users in the table.
+
+        Used by the auth path's "first user becomes admin" rule. Returns
+        0 if SQLAlchemy is unavailable or the table is empty.
+        """
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(select(func.count(User.id)))
+                return int(result.scalar() or 0)
+        except Exception as e:
+            logger.error("[UserRepository] count failed: %s", str(e))
+            return 0
+
+    @staticmethod
+    async def authenticate_and_rotate_session(
+        username: str,
+        plain_password: str,
+        ip: str = "",
+        user_agent: str = "",
+    ) -> Optional[User]:
+        """Verify credentials, rotate the user's active session, return ORM User.
+
+        On success: generates a fresh `uuid4()` jti, stamps the 4
+        active_session_* columns, updates `last_login`, and commits. On
+        failure (unknown user, inactive user, wrong password): returns
+        None without mutating any row.
+
+        The caller passes the **plain** password. The hashing is done
+        here so the auth path doesn't thread `pwd_context` through. The
+        `ip` / `user_agent` strings are optional (empty string = "no
+        change" for that field; a non-empty value is recorded).
+        """
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            # Lazy import to avoid a circular dep — security.auth imports
+            # `core.database.User` (the model) and that triggers the SA
+            # engine init; importing `pwd_context` here only at call
+            # time keeps the import order clean.
+            from security.auth import pwd_context
+
+            async with db_manager.session_maker() as db:
+                result = await db.execute(select(User).where(User.username == username))
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return None
+                if not user.is_active:
+                    return None
+                if not pwd_context.verify(plain_password, user.hashed_password):
+                    return None
+                # Rotate session atomically with the verify.
+                import uuid as _uuid
+                user.active_session_id = str(_uuid.uuid4())
+                if ip:
+                    user.active_session_ip = ip
+                if user_agent:
+                    user.active_session_user_agent = user_agent
+                user.active_session_started_at = datetime.now(timezone.utc)
+                user.last_login = datetime.now(timezone.utc)
+                await db.commit()
+                await db.refresh(user)
+                return user
+        except Exception as e:
+            logger.error("[UserRepository] authenticate_and_rotate_session failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def rotate_session(
+        user_id: str,
+        ip: str = "",
+        user_agent: str = "",
+    ) -> Optional[User]:
+        """Rotate the user's active session without a password check.
+
+        Used by SSO (`_rotate_session_for` in `routes/sso.py`) — the
+        OAuth flow already verified the user, so this just stamps a new
+        jti and updates IP/UA. Returns the ORM User on success, None on
+        unknown user_id.
+        """
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return None
+                import uuid as _uuid
+                user.active_session_id = str(_uuid.uuid4())
+                if ip:
+                    user.active_session_ip = ip
+                if user_agent:
+                    user.active_session_user_agent = user_agent
+                user.active_session_started_at = datetime.now(timezone.utc)
+                await db.commit()
+                await db.refresh(user)
+                return user
+        except Exception as e:
+            logger.error("[UserRepository] rotate_session failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def clear_session(user_id: str) -> bool:
+        """Zero out the 4 active_session_* columns on the user. Returns
+        True if a row was updated, False otherwise.
+
+        Called by `routes.auth.logout_user` (Fix #34). After this,
+        any jti-bearing token for this user is rejected (the back-compat
+        rule in `_enforce_single_session` says "jti-bearing token +
+        active_session_id=None => reject (user logged out)").
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.active_session_id = None
+                user.active_session_ip = None
+                user.active_session_user_agent = None
+                user.active_session_started_at = None
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] clear_session failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def update_password(user_id: str, new_hashed: str) -> bool:
+        """Replace the user's hashed password. Returns True on success.
+
+        The caller hashes the new password (using `security.auth._hash_password`)
+        and passes the bcrypt hash. We don't hash here so the bcrypt<4.1
+        pin stays in one place.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.hashed_password = new_hashed
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] update_password failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def set_security_question(
+        user_id: str, question: str, hashed_answer: str
+    ) -> bool:
+        """Set the security question and the bcrypt-hashed answer. Returns
+        True on success. The caller is responsible for hashing the answer
+        (using `security.auth._hash_password`) and validating the
+        question against the allow-list (the route does both).
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.security_question = question
+                user.hashed_security_answer = hashed_answer
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] set_security_question failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def verify_security_answer(
+        user_id: str, plain_answer: str, hashed_answer: str
+    ) -> bool:
+        """Constant-time bcrypt comparison of the user's stored
+        `hashed_security_answer` against a freshly-hashed plain answer.
+
+        The caller fetches the user's stored `hashed_security_answer`
+        and passes both. This signature keeps the repository method
+        DB-free (no User coupling) and lets the auth path stay
+        straightforward.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        if not hashed_answer:
+            # No question set — treat as "cannot verify" rather than
+            # raising. The route layer falls back to admin-reset in
+            # this case.
+            return False
+        try:
+            from security.auth import pwd_context
+            return pwd_context.verify(plain_answer, hashed_answer)
+        except Exception as e:
+            logger.error("[UserRepository] verify_security_answer failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def auth_headers_set_jti(user_id: str, jti: str) -> bool:
+        """Test-fixture-only helper.
+
+        Stamps `active_session_id = jti` on the user. This is what
+        `tests/conftest.py:auth_headers` and the Fix #34 tests use to
+        pre-stamp a user so a freshly-minted JWT passes the single-
+        session check.
+
+        Lives in UserRepository (not in test code) so the conftest
+        fixture and the production login path call the same helper —
+        the contract is "stamp jti on the user, then mint a token with
+        the same jti" and both sides must use the same write.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.active_session_id = jti
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] auth_headers_set_jti failed: %s", str(e))
+            return False
+
 
 class ConversationRepository:
     """Conversation data access layer with encryption at rest"""
