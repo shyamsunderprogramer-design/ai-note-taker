@@ -112,7 +112,7 @@ Personal knowledge graph powered by Neo4j to store and analyze your interview hi
 
 **Access:** App menu (☰) → "Cognitive Graph" or "Pre-Interview Prep"
 
-**Setup:** [docs/SETUP_COGNITIVE_GRAPH.md](docs/SETUP_COGNITIVE_GRAPH.md)
+**Setup:** [docs/backend/setup/SETUP_COGNITIVE_GRAPH.md](docs/backend/setup/SETUP_COGNITIVE_GRAPH.md)
 
 ---
 
@@ -223,9 +223,9 @@ ai-note-taker/
 ├── e2e/                           # Workspace 4: Playwright e2e tests
 │   └── tests/                     # 10 spec files
 │
-├── docs/                          # 50+ markdown docs (8 categories, see docs/README.md)
-│                                  #   (getting-started, backend, devops, security,
-│                                  #    product, performance, research, archive)
+├── docs/                          # 50+ markdown docs, per-role layout (see docs/README.md)
+│                                  #   roles: backend, uiux, devops, qa, devsecops
+│                                  #   topics: shared, business, competitive, research, archive
 │
 ├── assets/                        # Design source files (icons, splash, etc.)
 ├── scripts/                       # Repo-helper scripts (PWA icons, dead-imports)
@@ -396,50 +396,84 @@ helm template ant-backend k8s/helm/backend/ \
 ## Documentation
 
 > Pick the area you need. The full index is at [docs/README.md](docs/README.md).
+> Docs are organized by role (the same 5 roles defined in
+> [`OWNERS.*.md`](OWNERS.backend.md) and enforced by
+> [`.github/CODEOWNERS`](.github/CODEOWNERS)).
 
 ### Start here
 
-- [docs/COMPREHENSIVE_GUIDE.md](docs/COMPREHENSIVE_GUIDE.md) — 60KB deep-dive into every feature
-- [docs/INSTALL.md](docs/INSTALL.md) — Step-by-step install for Windows / macOS / Linux
+- [docs/shared/COMPREHENSIVE_GUIDE.md](docs/shared/COMPREHENSIVE_GUIDE.md) — 60KB deep-dive into every feature
+- [docs/devops/development/INSTALL.md](docs/devops/development/INSTALL.md) — Step-by-step install for Windows / macOS / Linux
 - [MONOREPO.md](MONOREPO.md) — Monorepo layout + workspace commands
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
-- [SECURITY.md](SECURITY.md) — Vulnerability disclosure policy
+- [docs/devsecops/compliance/SECURITY.md](docs/devsecops/compliance/SECURITY.md) — Vulnerability disclosure policy
 - [docs/README.md](docs/README.md) — Index of all 50+ docs
 
-### Operations
+### Operations (devops)
 
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Day-to-day dev commands
-- [docs/OPERATIONS.md](docs/OPERATIONS.md) — Production runbook
-- [docs/MIGRATIONS.md](docs/MIGRATIONS.md) — Alembic migration guide
-- [docs/MOBILE.md](docs/MOBILE.md) — React Native mobile setup
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Common errors + fixes
+- [docs/devops/development/DEVELOPMENT.md](docs/devops/development/DEVELOPMENT.md) — Day-to-day dev commands
+- [docs/devops/operations/OPERATIONS.md](docs/devops/operations/OPERATIONS.md) — Production runbook
+- [docs/devops/development/MIGRATIONS.md](docs/devops/development/MIGRATIONS.md) — Alembic migration guide
+- [docs/devops/development/MOBILE.md](docs/devops/development/MOBILE.md) — React Native mobile setup
+- [docs/devops/development/TROUBLESHOOTING.md](docs/devops/development/TROUBLESHOOTING.md) — Common errors + fixes
+- [docs/devops/deployment/DEPLOYMENT_GUIDE.md](docs/devops/deployment/DEPLOYMENT_GUIDE.md) — Production deployment
+- [docs/devops/deployment/PRODUCTION_CHECKLIST.md](docs/devops/deployment/PRODUCTION_CHECKLIST.md) — Pre-launch checklist
+- [docs/devops/deployment/RELEASE_CHECKLIST.md](docs/devops/deployment/RELEASE_CHECKLIST.md) — Release process
 
-### API & data
+### API & data (backend)
 
-- [docs/api/API_REFERENCE.md](docs/api/API_REFERENCE.md) — REST + WebSocket reference (280+ paths)
-- [docs/database/SCHEMA.md](docs/database/SCHEMA.md) — 13 SQLAlchemy models
-- [docs/architecture/TECHNICAL_SPECIFICATION.md](docs/architecture/TECHNICAL_SPECIFICATION.md) — Architecture spec
-- [docs/COGNITIVE_GRAPH_API.md](docs/COGNITIVE_GRAPH_API.md) — Neo4j graph API
-- [docs/SETUP_COGNITIVE_GRAPH.md](docs/SETUP_COGNITIVE_GRAPH.md) — Neo4j setup
-- [docs/API_REFERENCE_PHASE2.md](docs/API_REFERENCE_PHASE2.md) — Phase 2 endpoint reference
+- [docs/backend/api/API_REFERENCE.md](docs/backend/api/API_REFERENCE.md) — REST + WebSocket reference (280+ paths)
+- [docs/backend/api/API_REFERENCE_PHASE2.md](docs/backend/api/API_REFERENCE_PHASE2.md) — Phase 2 endpoint reference
+- [docs/backend/database/SCHEMA.md](docs/backend/database/SCHEMA.md) — 13 SQLAlchemy models
+- [docs/backend/architecture/TECHNICAL_SPECIFICATION.md](docs/backend/architecture/TECHNICAL_SPECIFICATION.md) — Architecture spec
+- [docs/backend/architecture/PROJECT_STRUCTURE.md](docs/backend/architecture/PROJECT_STRUCTURE.md) — File layout
+- [docs/backend/COGNITIVE_GRAPH_API.md](docs/backend/COGNITIVE_GRAPH_API.md) — Neo4j graph API
+- [docs/backend/setup/SETUP_COGNITIVE_GRAPH.md](docs/backend/setup/SETUP_COGNITIVE_GRAPH.md) — Neo4j setup
 
-### Security
+### Security (devsecops)
 
-- [docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md](docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md)
-- [BROWSER_EXTENSION_SAFETY.md](BROWSER_EXTENSION_SAFETY.md)
-- [SECURITY.md](SECURITY.md)
+- [docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md](docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md)
+- [docs/devsecops/security/BROWSER_EXTENSION_SAFETY.md](docs/devsecops/security/BROWSER_EXTENSION_SAFETY.md)
+- [docs/devsecops/security/threat-model.md](docs/devsecops/security/threat-model.md)
+- [docs/devsecops/supply-chain/dependabot-policy.md](docs/devsecops/supply-chain/dependabot-policy.md)
+- [docs/devsecops/compliance/audit-log-policy.md](docs/devsecops/compliance/audit-log-policy.md)
+
+### UI/UX
+
+- [docs/uiux/README.md](docs/uiux/README.md) — web SPA, mobile, Chrome extension, Electron UI
+- [docs/uiux/design-system/README.md](docs/uiux/design-system/README.md) — tokens, typography, spacing
+- [docs/uiux/components/README.md](docs/uiux/components/README.md) — per-component docs
+- [docs/uiux/accessibility/README.md](docs/uiux/accessibility/README.md) — a11y patterns, keyboard shortcuts
+
+### QA
+
+- [docs/qa/test-strategy.md](docs/qa/test-strategy.md) — the layered test strategy
+- [docs/qa/test-environment.md](docs/qa/test-environment.md) — versions in use + known gotchas
+- [docs/qa/DIY_TEST_GUIDE.md](docs/qa/DIY_TEST_GUIDE.md) — how to manually test the desktop app
 
 ### Business & competitive
 
-- [docs/BYOK_BUSINESS_MODEL.md](docs/BYOK_BUSINESS_MODEL.md) — Bring-Your-Own-Key model
-- [docs/COMPETITIVE_GAP_ANALYSIS_UPDATED_APRIL_2026.md](docs/COMPETITIVE_GAP_ANALYSIS_UPDATED_APRIL_2026.md) — Competitor matrix
+- [docs/business/BYOK_BUSINESS_MODEL.md](docs/business/BYOK_BUSINESS_MODEL.md) — Bring-Your-Own-Key model
+- [docs/business/PHASE2_PLAN.md](docs/business/PHASE2_PLAN.md) — Phase 2 product plan
+- [docs/business/resume-builder/](docs/business/resume-builder/) — resume builder deep-dive
+- [docs/competitive/](docs/competitive/) — competitor matrix + Pluely
 
-### Architecture
+### Cross-cutting
 
-- [docs/architecture/PROJECT_STRUCTURE.md](docs/architecture/PROJECT_STRUCTURE.md)
-- [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) — Production deployment
-- [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) — Pre-launch checklist
-- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) — Release process
+- [docs/shared/AUDIT_2026-06-05_Project_Audit.md](docs/shared/AUDIT_2026-06-05_Project_Audit.md) — June-2026 project audit
+- [docs/shared/PRODUCTION_DEEP_DIVE_2026.md](docs/shared/PRODUCTION_DEEP_DIVE_2026.md) — production-readiness deep dive
+- [docs/shared/CRITICAL_GAPS_FIXED.md](docs/shared/CRITICAL_GAPS_FIXED.md) — historical record of critical bugs
+
+### Per-role charters
+
+The 5 roles that own this repo (each has a charter at the root
+and a CODEOWNERS block in `.github/CODEOWNERS`):
+
+- [`OWNERS.backend.md`](OWNERS.backend.md) — FastAPI, services, DB, AI integration
+- [`OWNERS.uiux.md`](OWNERS.uiux.md) — web SPA, mobile, Chrome extension, design
+- [`OWNERS.devops.md`](OWNERS.devops.md) — deploy, runtime shell, CI, infra
+- [`OWNERS.qa.md`](OWNERS.qa.md) — tests, fixtures, e2e, performance
+- [`OWNERS.devsecops.md`](OWNERS.devsecops.md) — security, supply chain, secrets, compliance
 
 ---
 

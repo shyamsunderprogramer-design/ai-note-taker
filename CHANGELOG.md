@@ -7,15 +7,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — 2026-06-11
 
 This release adds the **role-based ownership refactor**. It is split into
-5 sequential PRs (PR 1 through PR 5); PRs 1, 2, 3, and 4 are in this
-changelog, with PR 5 (root link fixes) to follow. See
+5 sequential PRs (PR 1 through PR 5); PRs 1, 2, 3, 4, and 5 are in this
+changelog. See
 [`OWNERS.{backend,uiux,devops,qa,devsecops}.md`](OWNERS.backend.md) for the
 per-role charters and [`.github/CODEOWNERS`](.github/CODEOWNERS) for the
 file-to-role routing.
 
-### Added (PR 4 — `docs/` reorganization into per-role subfolders, 2026-06-11)
+### Added (PR 5 — root-file link fixes after docs/ move, 2026-06-11)
 
-- **`docs/` reorganized** into a per-role layout that mirrors the 5
+- **`README.md` Documentation section rewritten** to point at the
+  new per-role doc paths. All ~20 broken `docs/<file>.md` links
+  replaced with the new `docs/<role>/<file>.md` paths. The
+  section is now organized by role (devops / backend / devsecops /
+  uiux / qa / business / cross-cutting) and ends with a "per-role
+  charters" block linking the 5 `OWNERS.*.md` files.
+- **`README.md` Project Structure tree** updated: the `docs/`
+  comment block changed from "8 categories" to the new per-role
+  layout (5 roles + 5 topics).
+- **`README.md`** two one-liners fixed: `docs/SETUP_COGNITIVE_GRAPH.md`
+  → `docs/backend/setup/SETUP_COGNITIVE_GRAPH.md`; the
+  `BROWSER_EXTENSION_SAFETY.md` and `SECURITY.md` Security
+  bullets point at the new `docs/devsecops/...` paths.
+- **`CONTRIBUTING.md`** cleaned: the security-contact line had
+  malformed link text; fixed. "8 categories" reference updated
+  to the new role-based layout. The "new API endpoint →
+  `docs/api/API_REFERENCE.md`" example updated to
+  `docs/backend/api/API_REFERENCE.md`, with a second example
+  for a new design token → `docs/uiux/design-system/README.md`.
+- **`MONOREPO.md`** audit-doc link updated to
+  `docs/shared/AUDIT_2026-06-05_Project_Audit.md`; a new
+  blockquote at the top points readers at `OWNERS.*.md` and
+  `.github/CODEOWNERS` for the role-ownership model.
+
+### Migration notes (PR 5)
+
+- All in-repo links to `docs/<file>.md` paths that moved in PR 4
+  are now fixed. If a downstream doc (e.g. an external blog post
+  or a Slack message) still links at the old path, it will 404
+  on github.com; the new `docs/README.md` index is the canonical
+  starting point.
+
+### Added (PR 4 — `docs/` reorganization into per-role subfolders, 2026-06-11)- **`docs/` reorganized** into a per-role layout that mirrors the 5
   role charters and the new CODEOWNERS routing. All 56 doc files
   moved via `git mv` (no delete+create) so `git log --follow`
   continues to work. New top-level structure:

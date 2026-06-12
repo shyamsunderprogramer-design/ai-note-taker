@@ -1,6 +1,8 @@
 # ANT Monorepo
 
-This document explains the npm workspaces setup created on 2026-06-05 (Fix #21 of [`docs/AUDIT_2026-06-05_Project_Audit.md`](docs/AUDIT_2026-06-05_Project_Audit.md)).
+This document explains the npm workspaces setup created on 2026-06-05 (Fix #21 of [`docs/shared/AUDIT_2026-06-05_Project_Audit.md`](docs/shared/AUDIT_2026-06-05_Project_Audit.md)).
+
+> **Role ownership:** the 5 roles (`backend` / `uiux` / `devops` / `qa` / `devsecops`) and their file-to-role mapping are defined in [`OWNERS.*.md`](OWNERS.backend.md) at the repo root and enforced by [`.github/CODEOWNERS`](.github/CODEOWNERS).
 
 ## Layout
 

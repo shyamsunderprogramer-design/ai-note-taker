@@ -114,19 +114,22 @@ Example: `fix: prevent stub recordings from silently loading on app start`
 
 ## Security
 
-Found a security issue? **Do NOT open a public issue.** Email
-[security contact — see `docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md`](docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md)
-or DM the maintainer directly. We follow responsible disclosure and
-will credit reporters in the CHANGELOG once a fix lands.
+Found a security issue? **Do NOT open a public issue.** Email the
+maintainer (or see [`docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md`](docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md)
+for the security contact path). We follow responsible disclosure
+and will credit reporters in the CHANGELOG once a fix lands.
 
 ## Documentation
 
 - The [`docs/`](docs/) folder is the canonical source for design
   docs, API reference, and architecture. The [`docs/README.md`](docs/README.md)
-  index organizes them into 8 categories (getting started, backend,
-  devops, security, product, performance, research, archive).
+  index organizes them by role (`backend` / `uiux` / `devops` / `qa` /
+  `devsecops`) and by topic (`shared` / `business` / `competitive` /
+  `research` / `archive`).
 - New features should add an entry to the relevant `docs/` file
-  (e.g. new API endpoint → update `docs/api/API_REFERENCE.md`).
+  (e.g. new API endpoint → update
+  `docs/backend/api/API_REFERENCE.md`; new design token → update
+  `docs/uiux/design-system/README.md`).
 - README files in subfolders (e.g. `electron/README.md`,
   `apps/web/README.md`) are intended as the first stop for someone
   landing in that folder.
