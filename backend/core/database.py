@@ -125,6 +125,13 @@ class User(Base if Base else object):
         active_session_user_agent = Column(String(500), nullable=True)
         active_session_started_at = Column(DateTime, nullable=True)
         on_new_login_pref = Column(String(20), default="auto_kick")
+        # Security question for password reset (Fix #35 wire SQLAlchemy
+        # User into auth flow). Both nullable so the migration is a
+        # pure add-column, no backfill needed. NULL when the user has
+        # never set a question; the `/auth/reset-password` route falls
+        # back to the admin-reset path when both columns are NULL.
+        security_question = Column(String(200), nullable=True)
+        hashed_security_answer = Column(String(255), nullable=True)
 
         # Relationships
         conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
