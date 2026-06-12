@@ -6,6 +6,22 @@ labels: ["enhancement", "needs-triage"]
 assignees: []
 ---
 
+## Primary role owner
+
+<!--
+ANT is organized by 5 roles. Pick the role that will own the
+implementation. CODEOWNERS routes the issue to that role's GitHub
+Team. See OWNERS.{role}.md at the repo root for each role's
+charter and docs/{role}/README.md for the role's docs.
+-->
+
+- [ ] **backend** — FastAPI, services, DB, AI integration, Neo4j (`backend/`)
+- [ ] **uiux** — web SPA, mobile, Chrome extension, Electron UI, design (`apps/`, `mobile/`, `electron/features/`)
+- [ ] **devops** — deploy, runtime shell, CI, infra, mobile-native build (`Dockerfile`, `k8s/`, `infrastructure/`, `electron/main.js`/`preload.js`/`stealth.js`, `.github/workflows/`)
+- [ ] **qa** — tests, fixtures, e2e, performance (`e2e/`, `qa/`, `backend/tests/`, `mobile/__tests__/`, `electron/tests/`)
+- [ ] **devsecops** — security, supply chain, secrets, compliance (`.claude/`, `.pre-commit-config.yaml`, `.github/`, `SECURITY.md`, `backend/security/`)
+- [ ] **Cross-cutting** — touches 2+ roles; describe in "Additional context" which secondary roles need to review
+
 ## Problem
 
 <!--

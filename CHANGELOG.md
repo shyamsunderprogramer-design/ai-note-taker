@@ -30,6 +30,40 @@ file-to-role routing.
   - `agents/shared/rag-indexes.md` — planning stub for the future
     role-scoped RAG indexes (not implemented)
 
+### Added (PR 2 — role-aware templates, 2026-06-11)
+
+- **`.github/PULL_REQUEST_TEMPLATE.md` rewritten** with a "Role(s)
+  affected" checklist at the top — the 5 roles (`backend` / `uiux` /
+  `devops` / `qa` / `devsecops`) with their owned file paths inline so
+  the author can pick the right ones. Followed by a per-role checklist
+  the reviewer confirms (e.g., "Backend: pytest passes + API ref
+  updated", "Devops: CHANGELOG entry + CSP / secret / base-image
+  change flagged"). Last section is the original summary / type /
+  test plan / checklist, plus one new line: "If this PR touched a
+  co-owned file (runtime shell, deploy manifest, test infra, API
+  contract), the second role's reviewer has been tagged in a PR
+  comment".
+- **`.github/ISSUE_TEMPLATE/bug_report.md` edited** to add an
+  "Affected role" block at the top — same 5 roles + an "Unclear /
+  other" escape. The "Affected area" prompt asks for a file path or
+  feature name so the role can route the issue.
+- **`.github/ISSUE_TEMPLATE/feature_request.md` edited** to add a
+  "Primary role owner" block — same 5 roles + a "Cross-cutting"
+  escape (for issues that touch 2+ roles; the body describes which
+  secondary roles need to review).
+- **`.github/ISSUE_TEMPLATE/question.md` edited** to add a "Role
+  context" block — same 5 roles + a "General" escape (for
+  project-layout / monorepo / docs-structure questions that aren't
+  tied to one role).
+- **`.github/dependabot.yml` comment block added** at the top —
+  documents the role ownership (devops owns the config, devsecops
+  owns the supply-chain review, co-owned in CODEOWNERS last-match
+  block), points at `docs/devsecops/supply-chain/README.md` and
+  `docs/devsecops/supply-chain/dependabot-policy.md` for the policy
+  and triage SLA, and re-flags the known-watch dep
+  (`bcrypt 5.0.0 + passlib 1.7.4`). **No config change** — purely
+  documentation.
+
 ### Changed (PR 1)
 
 - **`.github/CODEOWNERS` rewritten** to map files to role teams

@@ -1,5 +1,19 @@
 # Dependabot config — keeps the monorepo's 4 package managers fresh.
 # Group minor/patch updates so PRs are reviewable.
+#
+# Role owners (see OWNERS.*.md at the repo root for the charters):
+#   - **devops** owns this file's config syntax
+#   - **devsecops** owns the supply-chain review for every dependabot PR
+#   The co-ownership is expressed in `.github/CODEOWNERS` (last-match-wins).
+#
+# For the supply-chain review policy and dependabot triage SLA, see
+# `docs/devsecops/supply-chain/README.md` and
+# `docs/devsecops/supply-chain/dependabot-policy.md`.
+#
+# Known-watch deps (review with extra care):
+#   - **bcrypt 5.0.0 + passlib 1.7.4** — incompatible (no user can register).
+#     Pin `bcrypt<4.1` until passlib is migrated off. Tracked in
+#     root `MEMORY.md` "bcrypt/passlib incompatibility".
 version: 2
 updates:
   # ── npm (workspaces) ───────────────────────────────────────────────

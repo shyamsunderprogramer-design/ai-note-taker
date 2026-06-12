@@ -6,6 +6,32 @@ labels: ["bug", "needs-triage"]
 assignees: []
 ---
 
+## Affected role
+
+<!--
+ANT is organized by 5 roles. Pick the role whose owned files contain
+the bug — CODEOWNERS routes the issue to that role's GitHub Team.
+See OWNERS.{role}.md at the repo root for each role's charter and
+docs/{role}/README.md for the role's docs.
+-->
+
+- [ ] **backend** — FastAPI, services, DB, AI integration, Neo4j (`backend/`)
+- [ ] **uiux** — web SPA, mobile, Chrome extension, Electron UI, design (`apps/`, `mobile/`, `electron/features/`)
+- [ ] **devops** — deploy, runtime shell, CI, infra, mobile-native build (`Dockerfile`, `k8s/`, `infrastructure/`, `electron/main.js`/`preload.js`/`stealth.js`, `.github/workflows/`)
+- [ ] **qa** — tests, fixtures, e2e, performance (`e2e/`, `qa/`, `backend/tests/`, `mobile/__tests__/`, `electron/tests/`)
+- [ ] **devsecops** — security, supply chain, secrets, compliance (`.claude/`, `.pre-commit-config.yaml`, `.github/`, `SECURITY.md`, `backend/security/`)
+- [ ] **Unclear / other** — describe in "Additional context"
+
+## Affected area
+
+<!--
+File path or feature name. Examples:
+  - `backend/routes/agents.py` (backend)
+  - `apps/web/app.js` (uiux)
+  - `electron/main.js` window-bounds (devops, co-owned with backend)
+  - `vercel.json` CSP (devops, co-owned with devsecops)
+-->
+
 ## Describe the bug
 
 <!-- A clear, concise description of what the bug is. -->
