@@ -7,10 +7,84 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — 2026-06-11
 
 This release adds the **role-based ownership refactor**. It is split into
-5 sequential PRs (PR 1 through PR 5); this is the PR-1 entry. See
+5 sequential PRs (PR 1 through PR 5); PRs 1, 2, 3, and 4 are in this
+changelog, with PR 5 (root link fixes) to follow. See
 [`OWNERS.{backend,uiux,devops,qa,devsecops}.md`](OWNERS.backend.md) for the
 per-role charters and [`.github/CODEOWNERS`](.github/CODEOWNERS) for the
 file-to-role routing.
+
+### Added (PR 4 — `docs/` reorganization into per-role subfolders, 2026-06-11)
+
+- **`docs/` reorganized** into a per-role layout that mirrors the 5
+  role charters and the new CODEOWNERS routing. All 56 doc files
+  moved via `git mv` (no delete+create) so `git log --follow`
+  continues to work. New top-level structure:
+  - `docs/backend/` — FastAPI / services / DB / Neo4j cognitive graph
+    (`api/`, `architecture/`, `database/`, `modules/`, `setup/`,
+    `COGNITIVE_GRAPH_API.md`, `README.md`)
+  - `docs/uiux/` — web SPA / mobile / Chrome extension / Electron UI
+    / design system (`design-system/`, `components/`,
+    `accessibility/`, `README.md`)
+  - `docs/devops/` — deploy / runtime shell / CI / infra / Docker /
+    mobile-native build (`development/`, `deployment/`,
+    `operations/`, `docker/`, `mobile-native/{ios,android}/`,
+    `README.md`)
+  - `docs/qa/` — test strategy / test environment (`test-strategy.md`,
+    `test-environment.md`, `DIY_TEST_GUIDE.md`, `README.md`)
+  - `docs/devsecops/` — threat model / supply chain / compliance
+    (`security/{README,SECURITY_IMPLEMENTATION_SUMMARY,
+    BROWSER_EXTENSION_SAFETY,threat-model}.md`,
+    `supply-chain/{README,dependabot-policy}.md`,
+    `compliance/{README,SECURITY,audit-log-policy}.md`,
+    `README.md`)
+  - `docs/shared/` — cross-cutting docs (COMPREHENSIVE_GUIDE,
+    AUDIT_2026-06-05, FULL_IMPLEMENTATION_COMPLETE,
+    CRITICAL_GAPS_FIXED, PRODUCTION_DEEP_DIVE_2026,
+    ANALYSIS_2026-04-07)
+  - `docs/business/` — product / business (BYOK, job tools,
+    ENTITY_EXTRACTION, PHASE2_PLAN, speed-opt history,
+    resume-builder/)
+  - `docs/competitive/` — competitor matrix + Pluely deep-dive
+  - `docs/archive/` — empty stub, populated as docs are
+    superseded
+  - `docs/research/` — kept as-is (time-bounded research
+    artifacts)
+- **`docs/README.md` rewritten** as the new role-based index. Replaces
+  the old 8-category layout with a 5-role + 4-topic layout. Each
+  role's `README.md` is now the entry point for that role.
+- **Two root-level docs moved**: `SECURITY.md` →
+  `docs/devsecops/compliance/SECURITY.md`,
+  `BROWSER_EXTENSION_SAFETY.md` → `docs/devsecops/security/`.
+- **Empty old subfolders removed**: `docs/api/`,
+  `docs/architecture/`, `docs/database/`, `docs/development/`,
+  `docs/security/`. (No file was deleted; only empty containers
+  were `rmdir`'d after their files were `git mv`'d out.)
+- **New stub docs** (intentionally short — to be expanded as the
+  role matures):
+  - `docs/devsecops/security/threat-model.md` — repo-wide
+    threat model with assets / adversaries / mitigations
+  - `docs/devsecops/supply-chain/dependabot-policy.md` —
+    Dependabot triage workflow + SLA, with the known-watch
+    `bcrypt 5.0.0 + passlib 1.7.4` block
+  - `docs/devsecops/compliance/audit-log-policy.md` — what gets
+    audited, retention windows, access control
+  - `docs/qa/test-strategy.md` — the layered test strategy (unit
+    / e2e / perf / manual) and regression-test convention
+  - `docs/qa/test-environment.md` — versions in use + CI
+    environment + known gotchas (bcrypt pin, TestClient 405
+    workaround, etc.)
+
+### Migration notes (PR 4)
+
+- All doc links that pointed at the old `docs/<file>.md` paths
+  need updating. The new `docs/README.md` index is the canonical
+  starting point. Root files (`README.md`, `MONOREPO.md`,
+  `CONTRIBUTING.md`) will be fixed in PR 5.
+- 5 GitHub Teams (`role-backend`, `role-uiux`, `role-devops`,
+  `role-qa`, `role-devsecops`) need to be created manually in
+  github.com (Settings → Teams) with `@shyamsunderprogramer-design`
+  as the sole member. Until then the new CODEOWNERS lines are
+  silently ignored by GitHub, but the file is still valid.
 
 ### Added (PR 1 — role charters + CODEOWNERS + agents/ scaffold, 2026-06-11)
 
