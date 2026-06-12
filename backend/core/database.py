@@ -116,6 +116,15 @@ class User(Base if Base else object):
         api_quota = Column(JSON, default=dict)
         display_name = Column(String(100), nullable=True)
         timezone = Column(String(50), default="UTC")
+        # Single-session enforcement (Fix #34). All nullable so the
+        # migration is a pure add-column, no backfill needed. Existing
+        # users (no active_session_id) keep working: a token's jti is
+        # only enforced when the user has an active_session_id set.
+        active_session_id = Column(String(64), nullable=True, index=True)
+        active_session_ip = Column(String(45), nullable=True)
+        active_session_user_agent = Column(String(500), nullable=True)
+        active_session_started_at = Column(DateTime, nullable=True)
+        on_new_login_pref = Column(String(20), default="auto_kick")
 
         # Relationships
         conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
@@ -134,10 +143,27 @@ class User(Base if Base else object):
             "last_login": getattr(self, 'last_login', None),
             "display_name": getattr(self, 'display_name', None),
             "timezone": getattr(self, 'timezone', "UTC"),
+            "active_session_id": getattr(self, 'active_session_id', None),
+            "active_session_started_at": self._iso(getattr(self, 'active_session_started_at', None)),
+            "on_new_login_pref": getattr(self, 'on_new_login_pref', "auto_kick"),
         }
         if include_sensitive:
             data["api_quota"] = getattr(self, 'api_quota', {})
+            data["active_session_ip"] = getattr(self, 'active_session_ip', None)
+            data["active_session_user_agent"] = getattr(self, 'active_session_user_agent', None)
         return data
+
+    @staticmethod
+    def _iso(dt):
+        if dt is None:
+            return None
+        # Some callers (test fixtures) pass a string; let those through.
+        if isinstance(dt, str):
+            return dt
+        try:
+            return dt.isoformat()
+        except AttributeError:
+            return None
 
 
 class Conversation(Base if Base else object):
