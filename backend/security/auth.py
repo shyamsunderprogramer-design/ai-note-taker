@@ -489,6 +489,13 @@ def _enforce_single_session(token_data: TokenData) -> Optional[TokenData]:
     """If the token has a jti AND the matching user has an
     active_session_id set AND they differ, return None (rejected).
     Otherwise return token_data unchanged. Pure helper, no I/O.
+
+    Back-compat rule (Fix #34): a token with no jti claim is always
+    accepted (pre-Fix-34 issuance). A token with a jti whose matching
+    user has active_session_id=None is rejected (the user logged out
+    after the token was issued, so the token must be invalid). A
+    token with a jti whose matching user has active_session_id set
+    is rejected on mismatch (a 2nd-device login rotated the session).
     """
     if not token_data.jti:
         return token_data
@@ -496,14 +503,33 @@ def _enforce_single_session(token_data: TokenData) -> Optional[TokenData]:
     # for a single-operator install; add a username->User + id->User
     # index in UserManager.__init__ if user count exceeds ~1000.
     # The user may not exist (deleted), or the active_session_id may be
-    # None (legacy user who hasn't logged in since Fix #34 shipped).
+    # None (user logged out, or legacy user who never logged in after
+    # the fix shipped — but a jti-bearing token implies a post-fix
+    # issuance, so a None active_session_id here means logout, not
+    # legacy).
     user = None
     for u in user_manager.users.values():
         if u.username == token_data.username or u.id == token_data.user_id:
             user = u
             break
-    if user is None or user.active_session_id is None:
-        return token_data
+    if user is None:
+        return token_data  # user not found — let get_current_user handle the "user_not_found" reason
+    if user.active_session_id is None:
+        # jti-bearing token, no active session: user logged out since
+        # the token was issued. Reject.
+        try:
+            from security.audit import log_audit_event as _log_audit
+            _log_audit(
+                "auth_session_invalidated",
+                user.username,
+                "token_rejected_after_logout",
+                resource=f"user:{user.id}",
+                details={"token_jti": token_data.jti},
+                success=False,
+            )
+        except Exception:
+            pass  # nosec B110
+        return None
     if user.active_session_id != token_data.jti:
         # Log the rejection so the kicked device's silent failures aren't
         # actually silent. Imported lazily to avoid a circular dependency

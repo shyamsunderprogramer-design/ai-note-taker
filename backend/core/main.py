@@ -47,7 +47,7 @@ from ocr_service import extract_text_from_image
 
 # SECURITY: Import security modules
 from security import (
-    create_access_token, verify_token, get_current_user, require_auth,
+    create_access_token, verify_token, get_current_user, get_current_user_with_reason, require_auth,
     rate_limiter, rate_limit, RateLimiter,
     SecurityHeaders, sanitize_input, validate_file_upload, InputValidator,
     log_audit_event, get_audit_log, get_audit_stats,
@@ -644,11 +644,17 @@ async def auth_enforcement_middleware(request: Request, call_next):
     path = request.url.path
     auth_header = request.headers.get("authorization", "")
 
-    # Try to identify user from token
+    # Try to identify user from token. We use get_current_user_with_reason
+    # (not get_current_user) so the 401 response can carry an
+    # X-Error-Code header that distinguishes a kicked session
+    # (Fix #34: another device logged in) from a malformed/expired
+    # token. The route layer's require_authentication does the same
+    # thing for per-route 401s; this keeps the two layers in sync.
     user = None
+    rejected_reason = None
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
-        user = get_current_user(token)
+        user, rejected_reason = get_current_user_with_reason(token)
 
     # Set user in request state
     if user:
@@ -665,10 +671,13 @@ async def auth_enforcement_middleware(request: Request, call_next):
             break
 
     if always_required and not user:
+        kick_headers = {"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
+        if rejected_reason == "session_invalidated":
+            kick_headers["X-Error-Code"] = "session_invalidated"
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required for this endpoint"}},
-            headers={"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
+            headers=kick_headers,
         )
 
     # In production mode, enforce auth on all non-public paths
@@ -1828,9 +1837,19 @@ async def register_user(
 
 @app.post("/auth/login")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
-async def login_user(username: str = Form(...), password: str = Form(...)):  # nosec B105 — form parameter
-    """Login and get JWT token"""
-    user = user_manager.authenticate_user(username, password)
+async def login_user(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),  # nosec B105 — form parameter
+):
+    """Login and get JWT token pair (legacy duplicate in core/main.py;
+    the live handler is routes/auth.py:login_user). Single-session
+    enforcement (Fix #34): jti on both tokens is the freshly rotated
+    user.active_session_id."""
+    from routes.auth import _client_ip, _user_agent
+    user = user_manager.authenticate_user(
+        username, password, ip=_client_ip(request), user_agent=_user_agent(request),
+    )
     if not user:
         log_audit_event("auth_failure", username, "login_failed", resource="auth", success=False)
         raise HTTPException(
@@ -1840,10 +1859,11 @@ async def login_user(username: str = Form(...), password: str = Form(...)):  # n
 
     log_audit_event("auth_login", username, "user_logged_in", resource=f"user:{user.id}", success=True)
 
-    # Create access token
+    jti = user.active_session_id
     access_token = create_access_token(
         data={"sub": user.id, "username": user.username},
-        expires_delta=timedelta(hours=24)
+        expires_delta=timedelta(hours=24),
+        jti=jti,
     )
 
     return {
@@ -1886,7 +1906,10 @@ async def logout_user(user: User = Depends(require_authentication)):
 @app.post("/auth/refresh")
 @rate_limit(requests_per_minute=10)
 async def refresh_token(request: Request):
-    """Refresh access token using refresh token."""
+    """Refresh access token using refresh token (legacy duplicate in
+    core/main.py; the live handler is routes/auth.py:refresh_access_token).
+    Single-session enforcement (Fix #34): a refresh token whose jti
+    no longer matches the user's active_session_id is rejected."""
     try:
         data = await request.json()
         refresh_token_str = data.get("refresh_token")
@@ -1907,8 +1930,33 @@ async def refresh_token(request: Request):
         if not user:
             return error_response(ErrorCode.AUTHENTICATION_ERROR, "User not found", status_code=401)
 
-        new_token = create_access_token(username)
-        log_audit_event("auth_refresh", username, "token_refreshed", resource=f"user:{user.id}", success=True)
+        # Single-session enforcement (Fix #34): the jti on the refresh
+        # token must match the user's active session, or a 2nd-device
+        # login has rotated the session since this refresh was issued.
+        if payload.jti and user.active_session_id and payload.jti != user.active_session_id:
+            log_audit_event(
+                "auth_session_invalidated", user.username,
+                "refresh_rejected_session_rotated",
+                resource=f"user:{user.id}",
+                details={"token_jti": payload.jti, "active_jti": user.active_session_id},
+                success=False,
+            )
+            return error_response(
+                ErrorCode.AUTHENTICATION_ERROR,
+                "Session invalidated: another device has logged in as this user",
+                status_code=401,
+            )
+
+        # Incidental fix: previously called create_access_token(username)
+        # which passed a str instead of a dict and would have crashed
+        # under the jti path. The data shape is what the jti kwarg
+        # requires.
+        new_token = create_access_token(
+            data={"sub": user.id, "username": user.username},
+            expires_delta=timedelta(hours=24),
+            jti=(payload.jti or user.active_session_id),
+        )
+        log_audit_event("auth_refresh", user.username, "token_refreshed", resource=f"user:{user.id}", success=True)
         return {"access_token": new_token, "token_type": "bearer"}
     except Exception as e:
         logger.error("[Auth] Refresh error: %s", str(e))

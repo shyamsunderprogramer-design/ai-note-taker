@@ -6,10 +6,11 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from routes.auth import _client_ip, _user_agent
 from routes.deps import require_authentication
-from security import create_access_token, log_audit_event
+from security import create_access_token, log_audit_event, session_bus
 from security.auth import user_manager, User
 
 logger = logging.getLogger("routes.sso")
@@ -84,12 +85,45 @@ def _auto_create_or_get_user(email: str, name: str, provider: str) -> User:
     return user
 
 
-def _issue_token(user: User) -> dict:
-    """Create a JWT and return the standard login response payload."""
+def _rotate_session_for(user: User, ip: str = "", user_agent: str = "") -> str:
+    """Rotate the user's active session and return the new jti.
+
+    Mirrors ``UserManager.authenticate_user`` for the password login
+    path, but is callable from SSO callbacks that don't have a
+    password to verify. Single-session enforcement (Fix #34): any
+    previously-issued token for this user becomes invalid as soon as
+    the new jti is persisted.
+    """
+    import uuid as _uuid
+    user.active_session_id = str(_uuid.uuid4())
+    user.active_session_ip = ip or user.active_session_ip
+    user.active_session_user_agent = user_agent or user.active_session_user_agent
+    user.active_session_started_at = datetime.now(timezone.utc).isoformat()
+    user.last_login = datetime.now(timezone.utc).isoformat()
+    user_manager._save_users()
+    return user.active_session_id
+
+
+def _issue_token(user: User, ip: str = "", user_agent: str = "") -> dict:
+    """Create a JWT and return the standard login response payload.
+
+    Rotates the user's active session (single-session enforcement,
+    Fix #34) so any previously-issued token for this user is
+    invalidated atomically with the new token mint, and publishes a
+    ``session_kicked`` event on the session_bus so any open SSE
+    stream on the old session is notified.
+    """
+    jti = _rotate_session_for(user, ip=ip, user_agent=user_agent)
     access_token = create_access_token(
         data={"sub": user.id, "username": user.username},
         expires_delta=timedelta(hours=24),
+        jti=jti,
     )
+    session_bus.publish(user.id, {
+        "type": "session_kicked",
+        "reason": "new_login",
+        "new_session_started_at": user.active_session_started_at,
+    })
     return {
         "status": "success",
         "access_token": access_token,
@@ -134,7 +168,11 @@ async def google_sso_initiate():
 
 
 @router.get("/sso/google/callback")
-async def google_sso_callback(code: str = Query(...), state: str = Query(...)):
+async def google_sso_callback(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+):
     """Handle Google OAuth2 callback — exchange code for tokens & log in."""
     # Validate state
     if state not in _pending_states or _pending_states.pop(state) != "google":
@@ -204,8 +242,14 @@ async def google_sso_callback(code: str = Query(...), state: str = Query(...)):
     # Auto-create or retrieve user
     user = _auto_create_or_get_user(email=email, name=name, provider="google")
     log_audit_event("sso_login", user.username, "google_sso_login", resource=f"user:{user.id}", success=True)
-
-    return _issue_token(user)
+    # Kick any prior local session for this user (Fix #34). SSO from
+    # a new browser counts as a 2nd-device login.
+    session_bus.publish(user.id, {
+        "type": "session_kicked",
+        "reason": "sso_login",
+        "new_session_started_at": user.active_session_started_at,
+    })
+    return _issue_token(user, ip=_client_ip(request), user_agent=_user_agent(request))
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +281,11 @@ async def microsoft_sso_initiate():
 
 
 @router.get("/sso/microsoft/callback")
-async def microsoft_sso_callback(code: str = Query(...), state: str = Query(...)):
+async def microsoft_sso_callback(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+):
     """Handle Microsoft OAuth2 callback — exchange code for tokens & log in."""
     # Validate state
     if state not in _pending_states or _pending_states.pop(state) != "microsoft":
@@ -308,8 +356,12 @@ async def microsoft_sso_callback(code: str = Query(...), state: str = Query(...)
     # Auto-create or retrieve user
     user = _auto_create_or_get_user(email=email, name=name, provider="microsoft")
     log_audit_event("sso_login", user.username, "microsoft_sso_login", resource=f"user:{user.id}", success=True)
-
-    return _issue_token(user)
+    session_bus.publish(user.id, {
+        "type": "session_kicked",
+        "reason": "sso_login",
+        "new_session_started_at": user.active_session_started_at,
+    })
+    return _issue_token(user, ip=_client_ip(request), user_agent=_user_agent(request))
 
 
 # ---------------------------------------------------------------------------

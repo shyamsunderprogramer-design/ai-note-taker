@@ -177,7 +177,15 @@ class TestFix31AuthBehavior:
         email = f"{username}@example.com"
         password = "TestPass123!"  # nosec B105 — test credential
         user = user_manager.create_user(username=username, email=email, password=password)
-        token = create_access_token({"sub": str(user.id), "username": user.username})
+        # Stamp the jti on the user so single-session enforcement
+        # (Fix #34) accepts the token. Same reason as in test_routes_deps.
+        jti = str(uuid.uuid4())
+        user.active_session_id = jti
+        user_manager._save_users()
+        token = create_access_token(
+            {"sub": str(user.id), "username": user.username},
+            jti=jti,
+        )
 
         with patch("routes.agents.AGENTS_AVAILABLE", True), \
              patch("routes.agents.session_manager", stub_manager):

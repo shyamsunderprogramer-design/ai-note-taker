@@ -9,6 +9,7 @@ from .auth import (
     verify_refresh_token,
     verify_token,
     get_current_user,
+    get_current_user_with_reason,
     require_auth,
     TokenData,
     User,
@@ -30,6 +31,10 @@ from .audit import (
     get_audit_log,
     get_audit_stats,
     AuditEvent,
+)
+from .session_bus import (
+    session_bus,
+    SessionBus,
 )
 from .errors import (
     ErrorCode,
@@ -58,6 +63,7 @@ __all__ = [
     "verify_refresh_token",
     "verify_token",
     "get_current_user",
+    "get_current_user_with_reason",
     "require_auth",
     "TokenData",
     "User",
@@ -76,6 +82,9 @@ __all__ = [
     "get_audit_log",
     "get_audit_stats",
     "AuditEvent",
+    # Session bus (single-session enforcement, Fix #34)
+    "session_bus",
+    "SessionBus",
     # Errors
     "ErrorCode",
     "APIError",

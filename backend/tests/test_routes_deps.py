@@ -114,8 +114,17 @@ class TestRequireAuthentication:
         )
         assert user is not None, "user_manager.create_user() returned None"
 
+        # Stamp the jti on the user so single-session enforcement
+        # (Fix #34) accepts the token. Without this, a jti-bearing
+        # token whose user has no active_session_id is rejected as a
+        # post-logout token.
+        jti = str(uuid.uuid4())
+        user.active_session_id = jti
+        user_manager._save_users()
+
         token = create_access_token(
-            data={"sub": str(user.id), "username": user.username}
+            data={"sub": str(user.id), "username": user.username},
+            jti=jti,
         )
         result = await require_authentication(token=token)
         assert result is not None
