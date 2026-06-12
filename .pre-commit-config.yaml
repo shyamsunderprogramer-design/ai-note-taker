@@ -1,0 +1,85 @@
+# ─────────────────────────────────────────────────────────────────────
+# ANT (AI Note Taker) — Pre-commit hooks
+#
+# Install:  pip install pre-commit
+#           pre-commit install
+# Run all:  pre-commit run --all-files
+#
+# Hooks run on every commit. If a hook fails, the commit is rejected
+# — fix the issue and re-stage. Use `git commit --no-verify` only for
+# emergency hotfixes; never for first-time contributions.
+#
+# Why these specific hooks:
+# - trailing-whitespace / end-of-file-fixer: keep the diff clean
+# - check-yaml / check-json: catch syntax errors before CI
+# - check-merge-conflict: prevent committing "<<<<<<<" markers
+# - detect-private-key: prevent committing API keys (we had a
+#   near-miss with a .pem file in 2025; the project is private but
+#   this is a belt-and-suspenders defense)
+# - ruff: linter + formatter for Python (replaces black + flake8 +
+#   isort; one tool, ~10x faster)
+# - terraform_fmt: keeps .tf files canonically formatted
+# ─────────────────────────────────────────────────────────────────────
+
+repos:
+  # ── General hygiene ─────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Markdown uses 2 trailing spaces to mean a line break.
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # kubernetes/Helm YAML often has legitimate duplicates
+        # (e.g. multiple resource kinds in one file).
+        args: ['--allow-multiple-documents', '--unsafe']
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+        # Allow the source design assets (PNG icon master files)
+        # which can be 5+ MB before they're compressed.
+        exclude: '^assets/design/source/.*\.png$'
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+        # Windows-native files (bat/cmd/ps1) are CRLF by design.
+        exclude: '\.(bat|cmd|ps1)$'
+
+  # ── Python (ruff: linter + formatter, one tool, very fast) ─────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.9
+    hooks:
+      - id: ruff
+        # Auto-fix lint issues (unused imports, etc.) on commit.
+        args: ['--fix', '--exit-non-zero-on-fix']
+        # Don't lint vendored venvs, generated migrations, etc.
+        exclude: |
+          (?x)^(
+              backend/venv/.*|
+              AINT_Venv/.*|
+              backend/migrations/versions/.*|
+              .*\.pyc
+          )$
+      - id: ruff-format
+        # Format Python files in place. Runs after `ruff` so the
+        # formatter doesn't undo the linter's fixes.
+        exclude: |
+          (?x)^(
+              backend/venv/.*|
+              AINT_Venv/.*|
+              backend/migrations/versions/.*
+          )$
+
+  # ── Terraform (canonical formatting) ───────────────────────────
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.2
+    hooks:
+      - id: terraform_fmt
+        # Only format the 3 stack roots; the .terraform/ cache dir
+        # is gitignored and contains downloaded modules we must not
+        # touch.
+        args:
+          - --terraform-init

@@ -1,0 +1,54 @@
+{{- /*
+  Service template for ANT Backend
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ant-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort | default 8000 }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "ant-backend.selectorLabels" . | nindent 4 }}
+---
+{{- /*
+  Horizontal Pod Autoscaler template
+*/ -}}
+{{- if .Values.autoscaling.enabled }}
+{{- /* HPA moved to templates/hpa.yaml in Phase 7 cleanup (2026-06-08) */ -}}
+{{- end }}
+---
+{{- /*
+  Pod Disruption Budget template
+*/ -}}
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ant-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ant-backend.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- /* ServiceMonitor moved to templates/service-monitor.yaml in Phase 7 cleanup (2026-06-08) */ -}}

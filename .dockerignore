@@ -1,0 +1,133 @@
+# ─────────────────────────────────────────────────────────────────
+# ANT (AI Note Taker) — .dockerignore
+# Keep the Docker image lean — exclude everything not needed at runtime
+# ─────────────────────────────────────────────────────────────────
+
+# ── Git & VCS ────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# ── CI / editor / OS ─────────────────────────────────────────────
+.circleci/
+.gitlab-ci.yml
+.travis.yml
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+.editorconfig
+
+# ── Docs (not needed in image) ───────────────────────────────────
+docs/
+*.md
+LICENSE
+CHANGELOG.md
+README.md
+!backend/README.md
+
+# ── Design assets / media ────────────────────────────────────────
+Ant Images/
+
+# ── Node / frontend ──────────────────────────────────────────────
+node_modules/
+**/node_modules/
+apps/web/node_modules/
+apps/web/dist/
+apps/web/data/
+apps/landing/node_modules/
+apps/landing/dist/
+electron/node_modules/
+electron/dist/
+chrome-extension/dist/
+browser-extension/dist/
+e2e/node_modules/
+mobile/node_modules/
+**/package-lock.json
+
+# ── Python (most of it) ──────────────────────────────────────────
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+
+# Virtual envs (huge)
+AINT_Venv/
+.venv/
+venv/
+backend/venv/
+**/venv/
+
+# Test artifacts
+backend/coverage.xml
+backend/tests/
+
+# ── Databases & runtime data (NEVER bake into image) ──────────────
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/ainotetaker.db
+backend/data/ainotetaker.db
+backend/core/data/ainotetaker.db
+data/
+backend/data/
+backend/core/data/
+backend/temp_audio/
+
+# User data / keys
+users.json
+users.json.backup
+audit.jsonl
+audit_logs/
+user_keys/
+recordings/
+conversations/
+meeting_templates/
+
+# Voice models (large audio)
+voice_models/
+backend/data/voice_models/
+backend/core/data/voice_models/
+
+# Document stores
+modules/platform/data/documents/
+modules/platform/data/vectors/
+modules/ai/data/
+modules/ai/embeddings/
+modules/crm/data/
+
+# ── Infra / terraform / k8s (not in backend image) ────────────────
+infrastructure/
+k8s/
+docker/
+*.tf
+*.tfstate
+*.tfvars
+
+# ── Build outputs ────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+target/
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
+backend/core/data/audit_logs/
+
+# ── Misc ─────────────────────────────────────────────────────────
+*.pid
+*.seed
+.cache/
+.tmp/
+tmp/

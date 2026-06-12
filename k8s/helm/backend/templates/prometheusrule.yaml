@@ -1,0 +1,30 @@
+{{- /*
+  PrometheusRule template for ANT Backend
+
+  Wired to .Values.metrics.prometheusRule. The default rules in
+  values.yaml are:
+    - BackendDown: zero-up pods for >1m (critical)
+    - HighErrorRate: >5% 5xx responses for >5m (warning)
+
+  This file renders the `groups` array as-is — values are passed
+  through with toYaml. If you want to extend with more rules, just
+  append to .Values.metrics.prometheusRule.groups[].rules[].
+
+  Requires the Prometheus Operator CRDs to be installed
+  (kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/...).
+*/ -}}
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "ant-backend.fullname" . }}
+  namespace: {{ .Values.metrics.serviceMonitor.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    {{- toYaml .Values.metrics.prometheusRule.groups | nindent 4 }}
+{{- end }}

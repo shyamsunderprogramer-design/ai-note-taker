@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Plan - ANT (AI Note Taker)</title>
+  <link rel="stylesheet" href="style.css?v=25">
+  <style>
+    .hidden { display: none !important; }
+    /* Fixed Header Layout */
+    .study-plan-page {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .study-plan-header-fixed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary, #1a1a1a);
+      border-bottom: 1px solid var(--border-color, #333);
+      z-index: 100;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .study-plan-back-arrow {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-primary, #fff);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    .study-plan-back-arrow:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .study-plan-header-content {
+      flex: 1;
+    }
+
+    .study-plan-header-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+      background: linear-gradient(135deg, #10b981, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .study-plan-header-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin: 2px 0 0 0;
+    }
+
+    /* Scrollable Content */
+    .study-plan-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 80px 20px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Scrollbar styling */
+    .study-plan-content::-webkit-scrollbar {
+      width: 8px;
+    }
+    .study-plan-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .study-plan-content::-webkit-scrollbar-thumb {
+      background: var(--border-color, #333);
+      border-radius: 4px;
+    }
+
+    .study-plan-container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .study-plan-title {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #10b981, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Progress Section */
+    .progress-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .progress-bar-container {
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      height: 20px;
+      overflow: hidden;
+      margin: 15px 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+      border-radius: 10px;
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .progress-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .progress-stat {
+      text-align: center;
+      padding: 15px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+    }
+
+    .progress-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent-color, #3b82f6);
+    }
+
+    .progress-stat-label {
+      font-size: 13px;
+      color: var(--text-secondary, #888);
+      margin-top: 5px;
+    }
+
+    /* Task Card Styles (used inside focus area cards) */
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 8px;
+    }
+
+    .task-title {
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .task-checkbox {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 2px solid var(--border-color, #555);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .task-checkbox:hover {
+      border-color: #3b82f6;
+    }
+
+    .task-checkbox.checked {
+      background: #10b981;
+      border-color: #10b981;
+    }
+
+    .task-checkbox.checked::after {
+      content: "\2713";
+      color: white;
+      font-size: 12px;
+    }
+
+    .task-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .task-difficulty {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .difficulty-easy {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .difficulty-medium {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+    }
+
+    .difficulty-hard {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .task-time {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .task-category {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+    }
+
+    .task-resources {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .resource-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #3b82f6;
+      text-decoration: none;
+      margin-right: 12px;
+    }
+
+    .resource-link:hover {
+      text-decoration: underline;
+    }
+
+    .task-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .focus-badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .stretch-badge {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .task-description {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* Focus Area Stepper */
+    .focus-area-stepper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      padding: 12px 0;
+      margin-bottom: 24px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .focus-area-stepper::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .focus-area-stepper::-webkit-scrollbar-thumb {
+      background: var(--border-color, #333);
+      border-radius: 2px;
+    }
+
+    .stepper-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: default;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+      flex-shrink: 0;
+    }
+
+    .stepper-step.completed {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.3);
+      cursor: pointer;
+    }
+
+    .stepper-step.completed:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    .stepper-step.active {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border-color: rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+    }
+
+    .stepper-step.locked {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-secondary, #555);
+      border-color: var(--border-color, #222);
+    }
+
+    .stepper-connector {
+      width: 20px;
+      height: 2px;
+      background: var(--border-color, #333);
+      flex-shrink: 0;
+    }
+
+    .stepper-connector.completed {
+      background: #10b981;
+    }
+
+    .stepper-icon {
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    /* Focus Area Cards */
+    .focus-area-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .focus-area-card {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      border: 1px solid var(--border-color, #333);
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .focus-area-card.active {
+      border-color: rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+    }
+
+    .focus-area-card.completed {
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .focus-area-card.locked {
+      opacity: 0.5;
+      border-color: var(--border-color, #222);
+    }
+
+    .focus-area-card.locked:hover {
+      opacity: 0.6;
+    }
+
+    .focus-area-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .focus-area-header:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .focus-area-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .focus-area-card.active .focus-area-icon {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+    }
+
+    .focus-area-card.completed .focus-area-icon {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .focus-area-card.locked .focus-area-icon {
+      background: rgba(255, 255, 255, 0.05);
+      color: #555;
+    }
+
+    .focus-area-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .focus-area-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+      margin-bottom: 4px;
+    }
+
+    .focus-area-card.locked .focus-area-name {
+      color: var(--text-secondary, #666);
+    }
+
+    .focus-area-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+    }
+
+    .focus-area-meta .task-count {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .focus-area-progress-mini {
+      width: 80px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .focus-area-progress-mini-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    .focus-area-card.active .focus-area-progress-mini-fill {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+
+    .focus-area-card.completed .focus-area-progress-mini-fill {
+      background: #10b981;
+    }
+
+    .focus-area-card.locked .focus-area-progress-mini-fill {
+      background: #444;
+    }
+
+    .focus-area-status-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    .focus-area-card.active .focus-area-status-badge {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+    }
+
+    .focus-area-card.completed .focus-area-status-badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .focus-area-card.locked .focus-area-status-badge {
+      background: rgba(255, 255, 255, 0.03);
+      color: #555;
+    }
+
+    .focus-area-chevron {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      transition: transform 0.3s ease;
+    }
+
+    .focus-area-card.active .focus-area-chevron {
+      transform: rotate(180deg);
+    }
+
+    /* Focus Area Card Body (expanded) */
+    .focus-area-body {
+      padding: 0 24px 24px;
+    }
+
+    .focus-area-confidence-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .focus-area-confidence-label {
+      font-size: 13px;
+      color: var(--text-secondary, #888);
+      white-space: nowrap;
+    }
+
+    .focus-area-confidence-bar {
+      flex: 1;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .focus-area-confidence-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .focus-area-confidence-pct {
+      font-size: 13px;
+      font-weight: 600;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .focus-area-source-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+
+    .focus-area-source-jd {
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+    }
+
+    .focus-area-source-company {
+      background: rgba(139, 92, 246, 0.1);
+      color: #a78bfa;
+    }
+
+    .focus-area-source-role {
+      background: rgba(245, 158, 11, 0.1);
+      color: #f59e0b;
+    }
+
+    .focus-area-source-graph {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+    }
+
+    /* Task list inside focus area cards */
+    .focus-area-task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .focus-area-task-card {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      padding: 14px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .focus-area-task-card:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .focus-area-task-card.completed {
+      opacity: 0.5;
+      border-left: 3px solid #10b981;
+    }
+
+    .focus-area-task-card.completed .task-title {
+      text-decoration: line-through;
+      color: var(--text-secondary, #888);
+    }
+
+    /* Unlock Animation */
+    @keyframes focusAreaUnlock {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .focus-area-card.unlocking {
+      animation: focusAreaUnlock 0.5s ease-out;
+    }
+
+    @keyframes stepperPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+      50% { box-shadow: 0 0 12px 4px rgba(59, 130, 246, 0.2); }
+    }
+
+    .stepper-step.active.pulse {
+      animation: stepperPulse 1s ease-in-out 2;
+    }
+
+    /* Focus area completed celebration */
+    @keyframes completedBounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .focus-area-card.just-completed {
+      animation: completedBounce 0.4s ease;
+    }
+
+    /* Milestone Roadmap */
+    .milestone-roadmap {
+      margin-top: 28px;
+      padding: 24px;
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 16px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .milestone-roadmap-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 0 0 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-primary, #fff);
+    }
+
+    .milestone-roadmap-title span {
+      font-size: 20px;
+    }
+
+    .milestone-timeline-track {
+      position: relative;
+      padding-left: 28px;
+    }
+
+    /* Vertical connecting line */
+    .milestone-timeline-track::before {
+      content: '';
+      position: absolute;
+      left: 9px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(180deg, #10b981 0%, var(--border-color, #333) 100%);
+      border-radius: 1px;
+    }
+
+    .milestone-timeline-track.all-complete::before {
+      background: #10b981;
+    }
+
+    .milestone-node {
+      position: relative;
+      margin-bottom: 20px;
+      padding-left: 16px;
+    }
+
+    .milestone-node:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Circle on the line */
+    .milestone-dot {
+      position: absolute;
+      left: -28px;
+      top: 14px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      z-index: 1;
+      transition: all 0.3s ease;
+    }
+
+    .milestone-dot.completed {
+      background: #10b981;
+      color: #fff;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+    }
+
+    .milestone-dot.upcoming {
+      background: #3b82f6;
+      color: #fff;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+      animation: milestonePulse 2s ease-in-out infinite;
+    }
+
+    .milestone-dot.pending {
+      background: var(--bg-secondary, #1a1a1a);
+      border: 2px solid var(--border-color, #555);
+      color: var(--text-secondary, #666);
+    }
+
+    @keyframes milestonePulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2); }
+      50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1); }
+    }
+
+    .milestone-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 12px;
+      padding: 16px 18px;
+      transition: all 0.2s ease;
+    }
+
+    .milestone-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .milestone-node.completed .milestone-card {
+      border-color: rgba(16, 185, 129, 0.25);
+      background: rgba(16, 185, 129, 0.04);
+    }
+
+    .milestone-node.upcoming .milestone-card {
+      border-color: rgba(59, 130, 246, 0.25);
+      background: rgba(59, 130, 246, 0.04);
+    }
+
+    .milestone-node.completion .milestone-card {
+      border-color: rgba(139, 92, 246, 0.25);
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(139, 92, 246, 0.06));
+    }
+
+    .milestone-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary, #fff);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .milestone-node.completed .milestone-name {
+      color: #10b981;
+    }
+
+    .milestone-node.upcoming .milestone-name {
+      color: #60a5fa;
+    }
+
+    .milestone-progress-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .milestone-progress-badge.done {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .milestone-progress-badge.in-progress {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+    }
+
+    .milestone-progress-badge.pending {
+      background: rgba(255, 255, 255, 0.05);
+      color: #666;
+    }
+
+    .milestone-desc {
+      font-size: 12px;
+      color: var(--text-secondary, #999);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .milestone-focus-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .milestone-focus-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+    }
+
+    .milestone-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+    }
+
+    .milestone-date {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .milestone-reward {
+      font-size: 11px;
+      color: #f59e0b;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .milestone-progress-bar {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    .milestone-progress-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .milestone-node.completed .milestone-progress-bar-fill {
+      background: #10b981;
+    }
+
+    .milestone-node.upcoming .milestone-progress-bar-fill {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+
+    .milestone-node.pending .milestone-progress-bar-fill {
+      background: #555;
+    }
+
+    /* Skill Gap Badges (used inline in focus area cards) */
+    .skill-gap-priority {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+    .priority-high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .priority-medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .priority-low { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+    /* Generate Button */
+    .generate-btn {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 20px auto;
+    }
+
+    .generate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Loading */
+    .study-plan-loading {
+      text-align: center;
+      padding: 60px;
+    }
+
+    .study-plan-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid var(--border-color, #333);
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px;
+      color: var(--text-secondary, #888);
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+
+    /* Setup Section */
+    .setup-section {
+      max-width: 600px;
+      margin: 80px auto 40px;
+      padding: 30px;
+      text-align: center;
+    }
+    .setup-icon { font-size: 48px; margin-bottom: 10px; }
+    .setup-title { font-size: 24px; color: var(--text-primary, #fff); margin-bottom: 8px; }
+    .setup-description { color: var(--text-secondary, #888); margin-bottom: 24px; line-height: 1.5; }
+    .setup-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .setup-field { display: flex; flex-direction: column; text-align: left; }
+    .setup-field.full-width { grid-column: 1 / -1; }
+    .setup-field label { font-size: 14px; color: var(--text-secondary, #ccc); margin-bottom: 6px; font-weight: 500; }
+    .setup-field label small { color: var(--text-secondary, #888); font-weight: normal; }
+    .setup-field input, .setup-field textarea, .setup-field select {
+      background: var(--bg-secondary, #1a1a1a);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text-primary, #fff);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .setup-field input:focus, .setup-field textarea:focus, .setup-field select:focus {
+      border-color: #10b981;
+    }
+    .setup-field textarea { resize: vertical; font-family: inherit; }
+    .start-btn {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .start-btn:hover { opacity: 0.9; }
+    .start-btn:active { transform: scale(0.98); }
+    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @media (max-width: 600px) {
+      .setup-form { grid-template-columns: 1fr; }
+      .setup-section { margin: 70px 16px 30px; padding: 20px; }
+    }
+
+    /* Task Badges */
+    .task-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .focus-badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+    .stretch-badge {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+    .task-description {
+      font-size: 12px;
+      color: var(--text-secondary, #888);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* Personalization Context */
+    .personalization-context {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 16px 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 20px;
+    }
+    .personalization-context h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      color: var(--text-primary, #fff);
+    }
+    .context-stats {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .context-stats span {
+      font-size: 12px;
+      color: var(--text-secondary, #aaa);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+
+    /* Study Tips */
+    .study-tips-section {
+      background: var(--bg-secondary, #1a1a1a);
+      border-radius: 12px;
+      padding: 16px 20px;
+      border: 1px solid var(--border-color, #333);
+      margin-bottom: 24px;
+    }
+    .study-tips-section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      color: var(--text-primary, #fff);
+    }
+    .tips-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tips-list li {
+      font-size: 13px;
+      color: var(--text-secondary, #ccc);
+      padding: 6px 0 6px 20px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .tips-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="study-plan-page">
+    <!-- Fixed Header -->
+    <header class="study-plan-header-fixed">
+      <button class="study-plan-back-arrow" onclick="window.location.href='index.html'" title="Back to App">←</button>
+      <div class="study-plan-header-content">
+        <h1 class="study-plan-header-title">📚 Study Plan</h1>
+        <p class="study-plan-header-subtitle">Personalized learning path</p>
+      </div>
+    </header>
+
+    <!-- Scrollable Content -->
+    <main class="study-plan-content">
+      <div class="study-plan-container">
+
+    <!-- Setup Section - Input Form -->
+    <div id="setupSection" class="setup-section">
+      <div class="setup-icon">📚</div>
+      <h1 class="setup-title">Study Plan Generator</h1>
+      <p class="setup-description">
+        Create a personalized study plan tailored to your target role and company.
+        Paste the job description for maximum relevance.
+      </p>
+
+      <div class="setup-form">
+        <div class="setup-field">
+          <label for="roleInput">Target Role <span style="color:#ef4444">*</span></label>
+          <input type="text" id="roleInput" placeholder="e.g., Senior DevOps Engineer, Frontend Developer" required>
+        </div>
+        <div class="setup-field">
+          <label for="companyInput">Target Company</label>
+          <input type="text" id="companyInput" placeholder="e.g., Google, Amazon, Stripe">
+        </div>
+        <div class="setup-field full-width">
+          <label for="jdInput">Job Description <small>(paste the JD for personalized skill targeting)</small></label>
+          <textarea id="jdInput" rows="5" placeholder="Paste the job description here to extract key skills and focus areas..."></textarea>
+        </div>
+        <div class="setup-field">
+          <label for="skillsInput">Current Skills <small>(comma-separated)</small></label>
+          <input type="text" id="skillsInput" placeholder="e.g., Python, React, SQL, Git">
+        </div>
+        <div class="setup-field">
+          <label for="daysInput">Preparation Time</label>
+          <select id="daysInput">
+            <option value="1">1 day</option>
+            <option value="3">3 days</option>
+            <option value="7">1 week</option>
+            <option value="14">2 weeks</option>
+            <option value="21">3 weeks</option>
+            <option value="30" selected>1 month</option>
+            <option value="60">2 months</option>
+            <option value="90">3 months</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="start-btn" id="generateBtn">Generate Personalized Plan</button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="study-plan-loading" style="display: none;">
+      <div class="study-plan-spinner"></div>
+      <p>Loading your personalized study plan...</p>
+    </div>
+
+    <!-- Content -->
+    <div id="planContent" style="display: none;">
+      <!-- Progress Section -->
+      <div class="progress-section">
+        <h2 style="font-size: 18px; margin-bottom: 10px;">Overall Progress</h2>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progressBar" style="width: 0%">
+            <span id="progressText">0%</span>
+          </div>
+        </div>
+        <div class="progress-stats">
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="totalTasks">0</div>
+            <div class="progress-stat-label">Total Tasks</div>
+          </div>
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="completedTasks">0</div>
+            <div class="progress-stat-label">Completed</div>
+          </div>
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="daysLeft">30</div>
+            <div class="progress-stat-label">Days Left</div>
+          </div>
+          <div class="progress-stat">
+            <div class="progress-stat-value" id="studyHours">0</div>
+            <div class="progress-stat-label">Study Hours</div>
+          </div>
+        </div>
+        <!-- Milestone Roadmap -->
+        <div class="milestone-roadmap" id="milestoneRoadmap">
+          <div class="milestone-roadmap-title"><span>🏆</span> Milestone Roadmap</div>
+          <div class="milestone-timeline-track" id="milestonesList">
+            <!-- Milestones rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Focus Area Stepper -->
+      <div class="focus-area-stepper" id="focusAreaStepper">
+        <!-- Steps rendered dynamically -->
+      </div>
+
+      <!-- Focus Area Cards -->
+      <div class="focus-area-cards" id="focusAreaCards">
+        <!-- Cards rendered dynamically -->
+      </div>
+
+      <!-- Generate New Plan Button -->
+      <div style="text-align: center; margin-top: 40px;">
+        <button class="generate-btn" onclick="studyPlan.generateNewPlan()">
+          🔄 Generate New Plan
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <div class="empty-icon">📚</div>
+      <h2>No Study Plan Yet</h2>
+      <p>Generate your personalized study plan based on your interview history</p>
+      <button class="generate-btn" onclick="studyPlan.showSetup()" style="margin-top: 20px;">
+        ✨ Generate New Plan
+      </button>
+      </div>
+    </div>
+    </main>
+  </div>
+
+  <script src="js/core/config.js"></script>
+  <script src="js/core/auth-helper.js"></script>
+  <script src="js/core/window-controls.js"></script>
+  <script src="study-plan.js"></script>
+</body>
+</html>

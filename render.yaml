@@ -1,0 +1,104 @@
+services:
+  - type: web
+    name: ant-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: FORCE_SQLITE
+        value: "false"
+      - key: EMBEDDING_ENABLED
+        value: "false"
+      - key: CLASSIFIER_ENABLED
+        value: "false"
+      - key: CLOUD_MODE
+        value: "true"
+      # CORS — secure by default. Set CORS_ALLOW_ALL=true ONLY for local dev.
+      # Production must list explicit origins via CORS_ORIGINS.
+      - key: CORS_ALLOW_ALL
+        value: "false"
+      - key: CORS_ORIGINS
+        value: "https://ant-note-taker.vercel.app"
+      - key: AUTH_REQUIRED
+        value: "true"
+      # Render terminates TLS at the proxy, so HTTPS_REQUIRED=false is correct here.
+      - key: HTTPS_REQUIRED
+        value: "false"
+      # Required for stable auth tokens across restarts
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      # Ollama — defaults to localhost:11434. On Render free tier the local
+      # server is not available; users must rely on the cloud providers
+      # (OPENAI_API_KEY etc.) or self-host.
+      - key: OLLAMA_URL
+        value: "http://localhost:11434"
+      - key: DATABASE_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: CORS_VERCEL_URL
+        sync: false
+      # AI provider keys (set at least one for cloud functionality)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # Additional AI providers (optional — leave empty to disable)
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      # Cognitive graph (Neo4j)
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        value: "neo4j"
+      - key: NEO4J_PASSWORD
+        sync: false
+      # SSO
+      - key: SSO_BASE_URL
+        value: "https://ant-note-taker.vercel.app"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      # CRM / workspace integrations (optional)
+      - key: HUBSPOT_API_KEY
+        sync: false
+      - key: SALESFORCE_ACCESS_TOKEN
+        sync: false
+      - key: NOTION_API_KEY
+        sync: false
+      - key: JIRA_API_KEY
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: TEAMS_WEBHOOK_URL
+        sync: false
+      # Phone / VoIP (optional — Twilio integration is a stub route today)
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false

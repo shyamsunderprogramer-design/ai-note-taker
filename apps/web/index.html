@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ANT (AI Note Taker)</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <!-- Web fonts: inlined @font-face so the font is guaranteed to load even if the external CSS has a parse error -->
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 100 900;
+      font-display: swap;
+      src: url('assets/fonts/Inter-Latin.woff2') format('woff2-variations'),
+           url('assets/fonts/Inter-Latin.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 100 800;
+      font-display: swap;
+      src: url('assets/fonts/JetBrainsMono-Latin.woff2') format('woff2-variations'),
+           url('assets/fonts/JetBrainsMono-Latin.woff2') format('woff2');
+    }
+    html, body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif !important;
+    }
+  </style>
+  <link rel="preload" href="style.css?v=30" as="style">
+  <link rel="stylesheet" href="style.css?v=30">
+  <link rel="stylesheet" href="hljs-github-dark.min.css" media="print" onload="this.media='all'">
+  <script src="js/inline/platform-class.js"></script>
+  <script src="js/core/config.js"></script>
+  <script src="hljs.min.js" defer></script>
+  <script src="js/inline/sw-register.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+
+    <!-- ===== ROW 0: HERO BANNER ===== -->
+    <div class="hero-banner">
+      <img src="assets/web-top-banner.jpg" alt="ANT AI Note Taker" class="hero-banner-img">
+    </div>
+
+    <!-- Traffic lights — fixed to top right corner of window -->
+    <div class="traffic-lights traffic-corner">
+      <button id="minBtn" class="traffic-btn traffic-min" type="button" title="Minimize"><span class="traffic-icon">&#567;</span></button>
+      <button id="maxBtn" class="traffic-btn traffic-max" type="button" title="Maximize"><span class="traffic-icon">&#9633;</span></button>
+      <button id="closeBtn" class="traffic-btn traffic-close" type="button" title="Close"><span class="traffic-icon">&#215;</span></button>
+    </div>
+
+    <!-- ===== ROW 1: HEADER ===== -->
+    <div class="header-strip">
+
+      <!-- Left: Stealth button -->
+      <button id="stealthBtn" class="stealth-btn" type="button">
+        <span class="stealth-dot" id="stealthDot"></span>
+        <span id="stealthLabel">Detectable</span>
+      </button>
+
+      <!-- Center: Backend status only (name is in splash image) -->
+      <div class="header-center">
+        <div id="backendStatusIndicator" class="backend-status" title="Backend Status">
+          <span class="backend-status-dot"></span>
+          <span class="backend-status-text"></span>
+        </div>
+      </div>
+
+      <!-- Right: Opacity slider + Menu -->
+      <div class="header-right">
+        <div class="opacity-control" title="Background Opacity (10–150%; >100% = darker glass, CSS-only)">
+          <svg class="opacity-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
+          <input type="range" id="opacitySlider" min="10" max="150" value="55" class="opacity-slider">
+        </div>
+        <button id="menuBtn" class="win-btn" type="button" title="Menu">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ===== ROW 2: CONTROLS ===== -->
+    <div class="controls-strip">
+
+      <!-- Mode: dropdown -->
+      <div class="ctrl-group">
+        <label>Mode</label>
+        <select id="modeSelect">
+          <option value="instant">Instant</option>
+          <option value="auto">Auto</option>
+          <option value="fast">Fast</option>
+          <option value="turbo">Turbo</option>
+          <option value="adaptive">Adaptive</option>
+          <option value="universal">Universal</option>
+          <option value="interview">Interview</option>
+          <option value="reasoning">Reasoning</option>
+          <option value="cloud">Cloud</option>
+          <option value="code">Code</option>
+        </select>
+      </div>
+
+      <!-- Interview Context (shown when interview mode active) -->
+      <div class="ctrl-group interview-context-group" id="interviewContextGroup" style="display:none;">
+        <label>Company</label>
+        <input type="text" id="interviewCompanyInput" class="interview-context-input" placeholder="Google" />
+      </div>
+      <div class="ctrl-group interview-context-group" id="interviewRoleGroup" style="display:none;">
+        <label>Role</label>
+        <input type="text" id="interviewRoleInput" class="interview-context-input" placeholder="Software Engineer" />
+      </div>
+      <div class="ctrl-group interview-context-group" id="interviewOverlayGroup" style="display:none;">
+        <button id="interviewOverlayBtn" class="interview-context-input" type="button" title="Open Interview Overlay (Ctrl+Shift+I)" style="cursor:pointer; text-align:center; width:auto; padding:4px 10px;">🎯 Overlay</button>
+      </div>
+
+      <!-- Model: dropdown -->
+      <div class="ctrl-group">
+        <div class="model-label-row">
+          <label>Model</label>
+        </div>
+        <select id="modelSelect">
+          <option value="auto" selected>Auto (best available)</option>
+
+          <optgroup label="Fast & Affordable">
+            <option value="openai-gpt-4o-mini" data-provider="openai">GPT-4o Mini</option>
+            <option value="openai-gpt-3.5-turbo" data-provider="openai">GPT-3.5 Turbo</option>
+            <option value="anthropic-claude-3-5-haiku" data-provider="anthropic">Claude 3.5 Haiku</option>
+            <option value="google-gemini-1-5-flash" data-provider="google">Gemini 1.5 Flash</option>
+            <option value="deepseek-deepseek-chat" data-provider="deepseek">DeepSeek Chat</option>
+            <option value="groq-llama-3-2-1b" data-provider="groq">Llama 3.2 1B</option>
+            <option value="groq-llama-3-2-3b" data-provider="groq">Llama 3.2 3B</option>
+            <option value="groq-llama-3-1-8b" data-provider="groq">Llama 3.1 8B</option>
+            <option value="gemma3:cloud" data-provider="ollama-cloud">Gemma 3 (Vision)</option>
+            <option value="gemma4:cloud" data-provider="ollama-cloud">Gemma 4 (Vision)</option>
+            <option value="qwen3-vl:235b-cloud" data-provider="ollama-cloud">Qwen3-VL 235B (Vision)</option>
+            <option value="qwen3.5:397b-cloud" data-provider="ollama-cloud">Qwen 3.5 397B</option>
+            <option value="minimax-m2.7:cloud" data-provider="ollama-cloud">MiniMax M2.7</option>
+            <option value="glm-4.7:cloud" data-provider="ollama-cloud">GLM 4.7</option>
+            <option value="glm-5.1:cloud" data-provider="ollama-cloud">GLM 5.1</option>
+            <option value="kimi-k2.5:cloud" data-provider="ollama-cloud">Kimi K2.5</option>
+            <option value="nemotron-3-nano:30b-cloud" data-provider="ollama-cloud">Nemotron 3 Nano 30B</option>
+            <option value="nemotron-3-super:cloud" data-provider="ollama-cloud">Nemotron 3 Super</option>
+            <option value="rnj-1:8b-cloud" data-provider="ollama-cloud">RNJ-1 8B</option>
+            <option value="gemini-3-flash-preview:cloud" data-provider="ollama-cloud">Gemini 3 Flash Preview</option>
+          </optgroup>
+
+          <optgroup label="Best Quality">
+            <option value="openai-gpt-4o" data-provider="openai">GPT-4o</option>
+            <option value="openai-gpt-4-turbo" data-provider="openai">GPT-4 Turbo</option>
+            <option value="openai-o1-mini" data-provider="openai">o1 Mini</option>
+            <option value="openai-o3-mini" data-provider="openai">o3 Mini</option>
+            <option value="anthropic-claude-3-5-sonnet" data-provider="anthropic">Claude 3.5 Sonnet</option>
+            <option value="anthropic-claude-sonnet-4-20250514" data-provider="anthropic">Claude Sonnet 4</option>
+            <option value="anthropic-claude-opus-4-20250514" data-provider="anthropic">Claude Opus 4</option>
+            <option value="google-gemini-2-0-flash" data-provider="google">Gemini 2.0 Flash</option>
+            <option value="google-gemini-2-0-flash-exp" data-provider="google">Gemini 2.0 Flash Exp</option>
+            <option value="google-gemini-1-5-pro" data-provider="google">Gemini 1.5 Pro</option>
+            <option value="google-gemini-pro" data-provider="google">Gemini Pro</option>
+            <option value="groq-llama-3-3-70b" data-provider="groq">Llama 3.3 70B</option>
+            <option value="groq-mixtral-8x7b" data-provider="groq">Mixtral 8x7B</option>
+            <option value="groq-qwen-2-5-72b" data-provider="groq">Qwen 2.5 72B</option>
+          </optgroup>
+
+          <optgroup label="Local & Private" id="ollamaLocalGroup">
+            <!-- Populated dynamically by loadLocalOllamaModels() -->
+          </optgroup>
+
+          <optgroup label="Research & Special">
+            <option value="xai-grok-2-mini" data-provider="xai">Grok 2 Mini</option>
+            <option value="xai-grok-2" data-provider="xai">Grok 2</option>
+            <option value="xai-grok-beta" data-provider="xai">Grok Beta</option>
+            <option value="deepseek-deepseek-coder" data-provider="deepseek">DeepSeek Coder</option>
+            <option value="deepseek-deepseek-math" data-provider="deepseek">DeepSeek Math</option>
+          </optgroup>
+        </select>
+        <div class="model-provider-bar" id="modelProviderBar" style="display:none">
+          <span class="model-provider-badge" id="modelProviderBadge"></span>
+          <span class="model-provider-status" id="modelProviderStatus"></span>
+          <button type="button" class="model-provider-config-btn" id="modelProviderConfigBtn" style="display:none">Add Key</button>
+        </div>
+      </div>
+
+      <!-- Font: dropdown -->
+      <div class="ctrl-group">
+        <label>Font</label>
+        <select id="fontSizeSelect">
+          <option value="10">10px</option>
+          <option value="12">12px</option>
+          <option value="14" selected>14px</option>
+          <option value="16">16px</option>
+          <option value="18">18px</option>
+          <option value="20">20px</option>
+          <option value="24">24px</option>
+          <option value="28">28px</option>
+          <option value="32">32px</option>
+          <option value="40">40px</option>
+          <option value="48">48px</option>
+          <option value="64">64px</option>
+          <option value="80">80px</option>
+          <option value="96">96px</option>
+          <option value="128">128px</option>
+          <option value="160">160px</option>
+          <option value="192">192px</option>
+        </select>
+      </div>
+
+      <!-- Response: dropdown -->
+      <div class="ctrl-group">
+        <label>Response</label>
+        <select id="responseStyleSelect">
+          <option value="concise" selected>Concise</option>
+          <option value="detailed">Detailed</option>
+          <option value="bulletpoint">Bullet</option>
+        </select>
+      </div>
+
+      <!-- Temperature: dropdown -->
+      <div class="ctrl-group">
+        <label>Creativity</label>
+        <select id="temperatureSelect">
+          <option value="0.0">Precise</option>
+          <option value="0.1">Focused</option>
+          <option value="0.3" selected>Balanced</option>
+          <option value="0.5">Creative</option>
+          <option value="0.7">Imaginative</option>
+          <option value="1.0">Max</option>
+        </select>
+      </div>
+
+      <!-- Context: dropdown -->
+      <div class="ctrl-group">
+        <label>Context</label>
+        <select id="contextLengthSelect">
+          <option value="0">Off</option>
+          <option value="1">1 msg</option>
+          <option value="3" selected>3 msg</option>
+          <option value="5">5 msg</option>
+          <option value="10">10 msg</option>
+        </select>
+      </div>
+
+      <!-- Tokens: dropdown -->
+      <div class="ctrl-group">
+        <label>Tokens</label>
+        <select id="tokenLimitSelect">
+          <option value="8000">8K</option>
+          <option value="32000">32K</option>
+          <option value="128000" selected>128K</option>
+          <option value="256000">256K</option>
+          <option value="512000">512K</option>
+          <option value="1024000">1024K</option>
+        </select>
+      </div>
+
+      <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
+
+      <!-- Smart mode — code-focused AI toggle -->
+      <button id="smartModeBtn" class="smart-mode-btn" type="button" title="Smart mode: enhanced code assistance">
+        <svg class="smart-mode-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span class="smart-mode-label">Smart</span>
+      </button>
+
+      <!-- Auto-screenshot indicator -->
+      <button id="autoSSBtn" class="auto-ss-btn" type="button" title="Auto screenshot (background)">
+        <span class="auto-ss-dot" id="autoSSDot" style="display:none"></span>
+        <svg class="auto-ss-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </button>
+
+      <!-- Always-on mic indicator -->
+      <button id="alwaysOnBtn" class="always-on-btn" type="button" title="Always-on microphone">
+        <span class="always-on-dot" id="alwaysOnDot" style="display:none"></span>
+        <svg class="always-on-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+
+      <!-- Real-time suggestions toggle (Phase 2) -->
+      <button id="suggestionsBtn" class="suggestions-btn" type="button" title="Toggle interview suggestions" style="display:none;">
+        <span class="suggestions-dot" id="suggestionsDot" style="display:none"></span>
+        <svg class="suggestions-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+      </button>
+
+    </div>
+
+    <!-- ===== ROW 3: INPUT + ACTION ===== -->
+    <div class="input-row">
+      <div class="input-pill">
+        <div class="text-input-wrap">
+          <input type="text" id="textInput" placeholder="Ask anything, capture your screen, or speak..." />
+        </div>
+
+        <div class="input-pill-actions">
+          <button id="captureBtn" class="capture-btn" type="button" title="Capture screenshot + OCR">
+            <svg class="capture-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+
+          <button id="listenBtn" class="action-btn" type="button" title="Toggle voice recording">
+            <svg class="mic-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <span id="listenLabel">Start</span>
+          </button>
+        </div>
+
+        <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- OCR preview badge (shown when screenshot is captured) -->
+    <div id="ocrBadge" class="ocr-badge" style="display:none">
+      <svg class="ocr-badge-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span id="ocrBadgeText" class="ocr-badge-text"></span>
+      <span id="ocrBadgeRemove" class="ocr-badge-remove" title="Remove screenshot">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </span>
+    </div>
+
+    <!-- ===== ROW 4: AI RESPONSE ===== -->
+    <div class="response-area">
+      <div class="response-area-header">
+        <button id="summarizeBtn" class="summarize-btn" type="button" title="Generate structured summary">
+          <svg class="summarize-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M13 2v7h7"/></svg>
+          <span class="summarize-btn-label">Summarize</span>
+        </button>
+      </div>
+
+      <!-- Suggestions Panel (Phase 2) -->
+      <div id="suggestionsPanel" class="suggestions-panel" style="display:none;">
+        <div class="suggestions-header">
+          <span class="suggestions-title">Suggestions</span>
+          <button id="closeSuggestionsBtn" class="close-suggestions-btn" type="button" aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div id="suggestionsContent" class="suggestions-content">
+          <div class="suggestions-empty">
+            Listening for interview questions...
+          </div>
+        </div>
+
+        <div class="suggestions-controls">
+          <div class="suggestions-confidence">
+            <label>Min Confidence: <span id="confidenceValue">60%</span></label>
+            <input type="range" id="confidenceSlider" min="0" max="100" value="60" class="confidence-slider">
+          </div>
+          <button id="clearSuggestionsBtn" class="clear-suggestions-btn">Clear History</button>
+        </div>
+      </div>
+
+      <div class="chat-area" id="chatArea">
+        <div class="chat-welcome" id="chatWelcome">
+          <div class="welcome-brand">
+            <img src="ant-icon-new.png" class="welcome-logo" alt="ANT" />
+            <div class="welcome-text">What can I help you with today?</div>
+          </div>
+          <div class="welcome-sub">Press <kbd>Enter</kbd> to speak, or type below</div>
+          <div class="welcome-suggestion">
+            <button class="welcome-suggestion-btn" data-prompt="Help me prepare for a software engineering interview">
+              <span class="wsb-icon wsb-blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+              </span>
+              <span class="wsb-label">Prepare for interview</span>
+              <span class="wsb-desc">Mock questions, system design, behavioral prep</span>
+            </button>
+            <button class="welcome-suggestion-btn" data-prompt="Explain time complexity of quicksort">
+              <span class="wsb-icon wsb-green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              </span>
+              <span class="wsb-label">Explain algorithm</span>
+              <span class="wsb-desc">Code analysis, complexity, visual walkthrough</span>
+            </button>
+            <button class="welcome-suggestion-btn" data-prompt="Review my resume for a PM role">
+              <span class="wsb-icon wsb-amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+              </span>
+              <span class="wsb-label">Review resume</span>
+              <span class="wsb-desc">ATS scoring, improvements, tailoring</span>
+            </button>
+            <button class="welcome-suggestion-btn" data-prompt="Summarize my last meeting and extract action items">
+              <span class="wsb-icon wsb-purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </span>
+              <span class="wsb-label">Summarize meeting</span>
+              <span class="wsb-desc">Key points, decisions, next steps</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scroll to bottom button -->
+      <button id="scrollToBottomBtn" class="scroll-to-bottom" title="Scroll to bottom" aria-label="Scroll to bottom">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Resize handle at bottom (outside shell) -->
+  <div class="resize-handle"></div>
+
+  <!-- Panel backdrop overlay -->
+  <div class="panel-backdrop" id="panelBackdrop"></div>
+
+  <!-- History panel -->
+  <div class="history-panel" id="historyPanel">
+    <div class="history-header">
+      <button id="historyBackBtn" class="history-back-btn" type="button" title="Back" aria-label="Back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <span>Conversations <span class="history-conversation-count" id="historyCount"></span></span>
+      <button id="newChatBtn" class="history-action-btn" type="button">+ New</button>
+    </div>
+    <div class="history-toolbar">
+      <input type="text" id="historySearch" class="history-search" placeholder="Search conversations..." />
+      <select id="historySort" class="history-sort">
+        <option value="updatedAt">Recent</option>
+        <option value="createdAt">Oldest</option>
+        <option value="title">A–Z</option>
+        <option value="messageCount">Messages</option>
+      </select>
+    </div>
+    <div class="history-actions-bar">
+      <button id="selectBtn" class="history-action-btn-secondary" type="button" title="Select conversations">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg> Select
+      </button>
+      <button id="clearChatBtn" class="history-action-btn-secondary danger" type="button" title="Clear current chat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Clear Chat
+      </button>
+      <button id="exportAllBtn" class="history-action-btn-secondary" type="button" title="Export all conversations">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export
+      </button>
+      <button id="importBtn" class="history-action-btn-secondary" type="button" title="Import conversations">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Import
+      </button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+    <div class="history-footer">
+      <span class="shortcut-hint">Alt+D stealth</span>
+      <span class="history-footer-divider">·</span>
+      <span class="shortcut-hint">Esc close</span>
+      <span class="history-footer-divider">·</span>
+      <span class="shortcut-hint">Enter talk</span>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <span class="settings-title">Settings</span>
+      <button class="settings-close-btn" id="closeSettingsBtn" type="button" title="Close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Settings Tabs -->
+    <div class="settings-tabs" id="settingsTabs">
+      <button class="settings-tab active" data-tab="general">General</button>
+      <button class="settings-tab" data-tab="providers">Providers</button>
+      <button class="settings-tab" data-tab="models">Models</button>
+      <button class="settings-tab" data-tab="voice">Voice</button>
+      <button class="settings-tab" data-tab="clone">Clone</button>
+      <button class="settings-tab" data-tab="data">Data</button>
+      <button class="settings-tab" data-tab="integrations">Integrations</button>
+    </div>
+
+    <div class="settings-body">
+
+      <!-- Provider config panel (inline) -->
+      <div class="provider-config-panel" id="providerConfigPanel">
+        <div class="config-inline">
+          <div class="config-back-bar">
+            <button class="config-back-btn" id="configBackBtn" type="button" title="Back to providers" aria-label="Back">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            </button>
+          </div>
+          <div class="config-inline-header">
+            <span class="config-provider-icon" id="configProviderIcon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+            </span>
+            <span class="config-provider-name" id="configProviderName">Provider</span>
+            <span class="config-status-badge" id="configStatusBadge">Not configured</span>
+          </div>
+          <div class="config-inline-body">
+            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" maxlength="256" />
+            <button id="configSaveBtn" class="config-inline-save" type="button">Save</button>
+          </div>
+          <label class="config-inline-checkbox-row">
+            <input type="checkbox" id="configSyncEnvCheckbox" class="config-inline-checkbox" />
+            <span class="config-inline-checkbox-label">Also save to backend/.env</span>
+          </label>
+          <div class="config-inline-warning" id="configEnvWarning">Plain text on disk — do not commit to git.</div>
+          <div class="config-inline-result" id="configTestResult"></div>
+          <div class="config-inline-restart" id="configRestartHint" style="display:none">
+            <span class="restart-icon">&#x21bb;</span>
+            <span>Restart backend for .env changes to take effect</span>
+            <button id="configRestartBackendBtn" class="config-inline-restart-btn" type="button">Restart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: General -->
+      <div class="settings-tab-content active" data-content="general">
+
+        <!-- Quick Actions Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="quick-actions">
+            <span class="settings-card-title">Quick Actions</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="quick-actions">
+            <button class="settings-action-btn" id="viewAnalyticsBtn"><span>&#128200;</span> Analytics</button>
+            <button class="settings-action-btn" id="exportAnalyticsBtn"><span>&#129093;</span> Export Data</button>
+          </div>
+        </div>
+
+        <!-- Startup Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="startup">
+            <span class="settings-card-title">Startup</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="startup">
+            <div class="provider-row compact">
+              <span class="provider-logo">&#128640;</span>
+              <div class="provider-info">
+                <span class="provider-name">Start on Login</span>
+                <span class="provider-status dimmed">Launch ANT when you log in</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="toggle-autostart" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div class="provider-row compact" style="margin-top:8px;padding-left:40px;opacity:0.8;" id="autostartHiddenRow">
+              <div class="provider-info">
+                <span class="provider-name" style="font-size:12px;">Start Hidden</span>
+                <span class="provider-status dimmed" style="font-size:11px;">Launch in system tray only</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="toggle-autostart-hidden" checked />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div class="provider-row compact" style="margin-top:12px;">
+              <span class="provider-logo">&#128230;</span>
+              <div class="provider-info">
+                <span class="provider-name">Portable Mode</span>
+                <span class="provider-status dimmed" id="portableModeStatus">Checking...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="privacy">
+            <span class="settings-card-title">Privacy</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="privacy">
+            <div class="provider-row compact">
+              <span class="provider-logo">&#128275;</span>
+              <div class="provider-info">
+                <span class="provider-name">Screen Capture</span>
+                <span class="provider-status dimmed">Auto-screenshots</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="toggle-screenshot" checked />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+              <span id="screenshotStatusText" class="provider-status dimmed" style="font-size:11px;margin-left:4px;">Screenshots enabled</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CRM Integration Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="crm">
+            <span class="settings-card-title">CRM Integration</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="crm">
+            <div class="custom-dropdown" id="crmProviderDropdown">
+              <button class="custom-dropdown-trigger" id="crmProviderTrigger">
+                <span id="crmProviderText">Disabled</span>
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              <div class="custom-dropdown-menu" id="crmProviderMenu">
+                <div class="custom-dropdown-item" data-value="">Disabled</div>
+                <div class="custom-dropdown-item" data-value="webhook">Webhook</div>
+                <div class="custom-dropdown-item" data-value="salesforce">Salesforce</div>
+                <div class="custom-dropdown-item" data-value="hubspot">HubSpot</div>
+              </div>
+            </div>
+            <input type="hidden" id="crmProviderSelect" value="">
+            <div class="crm-fields" id="crmFields">
+              <input type="url" id="crmWebhookUrl" class="settings-input" placeholder="Webhook URL" style="display:none" />
+              <input type="url" id="crmSalesforceUrl" class="settings-input" placeholder="Instance URL" style="display:none" />
+              <input type="password" id="crmSalesforceToken" class="settings-input" placeholder="OAuth Token" style="display:none" maxlength="256" />
+              <input type="password" id="crmHubspotKey" class="settings-input" placeholder="API Key" style="display:none" maxlength="256" />
+            </div>
+            <div class="crm-options" id="crmOptions" style="display:none">
+              <label class="crm-check">
+                <input type="checkbox" id="crmAutoLog" checked />
+                <span>Auto-log conversations to CRM</span>
+              </label>
+              <label class="crm-check">
+                <input type="checkbox" id="crmContactMatch" checked />
+                <span>Enable contact matching</span>
+              </label>
+              <label class="crm-label">Log Format</label>
+              <select id="crmLogFormat">
+                <option value="summary">Summary</option>
+                <option value="full">Full Summary</option>
+                <option value="transcript">Full Transcript</option>
+              </select>
+            </div>
+            <div class="crm-actions-compact">
+              <button id="crmSaveBtn" class="settings-btn-small">Save</button>
+              <button id="crmTestBtn" class="settings-btn-small secondary">Test</button>
+            </div>
+            <div class="crm-status" id="crmStatus"></div>
+          </div>
+        </div>
+
+        <!-- Module Health Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="modules">
+            <span class="settings-card-title">Module Health</span>
+            <span id="moduleHealthBadge" class="health-badge healthy">—</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="modules">
+            <div class="module-health-summary" id="moduleHealthSummary">Loading...</div>
+            <div class="module-health-grid" id="moduleHealthGrid">
+              <div class="module-loading">Loading module status...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Providers -->
+      <div class="settings-tab-content" data-content="providers">
+
+        <!-- Smart Recommendation Banner -->
+        <div class="provider-recommendation" id="providerRecommendation">
+          <div class="rec-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span>Recommended for <strong id="recModeName">Adaptive</strong> mode</span>
+          </div>
+          <div class="rec-providers" id="recProviders"></div>
+        </div>
+
+        <!-- AI Providers Card -->
+        <div class="settings-card" id="settingsProvidersView">
+          <div class="settings-card-header">
+            <div class="settings-card-titles">
+              <span class="settings-card-title">AI Providers</span>
+              <span class="settings-card-subtitle">Enable providers and add API keys</span>
+            </div>
+          </div>
+          <div class="settings-card-body">
+            <div class="provider-list compact">
+
+              <!-- Section: Local & Private -->
+              <div class="provider-section-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span>Local & Private</span>
+                <span class="provider-section-desc">Free, offline, your data stays local</span>
+              </div>
+
+              <div class="provider-row compact" id="card-ollama">
+                <span class="provider-logo provider-logo-ollama">O</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">Ollama Local</span>
+                    <span class="provider-req-tag tag-free">Free</span>
+                    <span class="provider-req-tag tag-private">Private</span>
+                  </div>
+                  <span class="provider-status">Runs on your machine — no API key needed</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-ollama" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+
+              <!-- Section: Fast & Affordable -->
+              <div class="provider-section-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Fast & Affordable</span>
+                <span class="provider-section-desc">Sub-second responses, low cost</span>
+              </div>
+
+              <div class="provider-row compact" id="card-groq">
+                <span class="provider-logo provider-logo-groq">G</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">Groq</span>
+                    <span class="provider-req-tag tag-fast">Fastest</span>
+                    <span class="provider-req-tag tag-cheap">Cheap</span>
+                  </div>
+                  <span class="provider-status">Best inference speed — great for real-time</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-groq" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-groq" data-provider="groq"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <div class="provider-row compact" id="card-deepseek">
+                <span class="provider-logo provider-logo-deepseek">D</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">DeepSeek</span>
+                    <span class="provider-req-tag tag-cheap">Cheap</span>
+                    <span class="provider-req-tag tag-smart">Smart</span>
+                  </div>
+                  <span class="provider-status">Excellent reasoning at low cost</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-deepseek" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-deepseek" data-provider="deepseek"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <div class="provider-row compact" id="card-ollama-cloud">
+                <span class="provider-logo provider-logo-ollama-cloud">OC</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">Ollama Cloud</span>
+                    <span class="provider-req-tag tag-free">Free</span>
+                    <span class="provider-req-tag tag-fast">Fast</span>
+                  </div>
+                  <span class="provider-status">Free tier with generous limits</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-ollama-cloud" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-ollama-cloud" data-provider="ollama-cloud"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <!-- Section: Best Quality -->
+              <div class="provider-section-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Best Quality</span>
+                <span class="provider-section-desc">Highest accuracy, reasoning, reliability</span>
+              </div>
+
+              <div class="provider-row compact" id="card-openai">
+                <span class="provider-logo provider-logo-openai">O</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">OpenAI</span>
+                    <span class="provider-req-tag tag-quality">Top Quality</span>
+                    <span class="provider-req-tag tag-reliable">Reliable</span>
+                  </div>
+                  <span class="provider-status">GPT-4o, GPT-4o-mini — industry standard</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-openai" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-openai" data-provider="openai"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <div class="provider-row compact" id="card-anthropic">
+                <span class="provider-logo provider-logo-anthropic">A</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">Anthropic</span>
+                    <span class="provider-req-tag tag-quality">Top Quality</span>
+                    <span class="provider-req-tag tag-safe">Safe</span>
+                  </div>
+                  <span class="provider-status">Claude Sonnet, Opus — excellent reasoning</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-anthropic" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-anthropic" data-provider="anthropic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <div class="provider-row compact" id="card-google">
+                <span class="provider-logo provider-logo-google">G</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">Google</span>
+                    <span class="provider-req-tag tag-quality">Top Quality</span>
+                    <span class="provider-req-tag tag-fast">Fast</span>
+                  </div>
+                  <span class="provider-status">Gemini 2.0 Flash — fast and capable</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-google" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-google" data-provider="google"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <!-- Section: Research & Special -->
+              <div class="provider-section-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                <span>Research & Special</span>
+                <span class="provider-section-desc">Niche use cases, uncensored, real-time web</span>
+              </div>
+
+              <div class="provider-row compact" id="card-xai">
+                <span class="provider-logo provider-logo-xai">x</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">xAI</span>
+                    <span class="provider-req-tag tag-research">Research</span>
+                  </div>
+                  <span class="provider-status">Grok — real-time web access, uncensored</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-xai" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-xai" data-provider="xai"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+              <div class="provider-row compact" id="card-perplexity">
+                <span class="provider-logo provider-logo-perplexity">P</span>
+                <div class="provider-info">
+                  <div class="provider-name-row">
+                    <span class="provider-name">Perplexity</span>
+                    <span class="provider-req-tag tag-research">Research</span>
+                    <span class="provider-req-tag tag-citations">Citations</span>
+                  </div>
+                  <span class="provider-status">Real-time search with source citations</span>
+                </div>
+                <label class="provider-toggle">
+                  <input type="checkbox" id="toggle-perplexity" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+                <button class="provider-config-btn" id="cfg-perplexity" data-provider="perplexity"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Models -->
+      <div class="settings-tab-content" data-content="models">
+
+        <!-- Default Model -->
+        <div class="settings-card model-card-highlight">
+          <div class="settings-card-header" data-collapsible="cloud-model">
+            <span class="settings-card-title">Default Cloud Model</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="cloud-model">
+            <div class="model-default-desc">Select the default model used for cloud AI responses. Auto picks the best available based on your configured providers.</div>
+            <div class="custom-dropdown" id="cloudModelDropdown">
+              <button class="custom-dropdown-trigger" id="cloudModelTrigger">
+                <span id="cloudModelText">Auto (best available)</span>
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              <div class="custom-dropdown-menu" id="cloudModelMenu">
+                <div class="custom-dropdown-item selected" data-value="auto">Auto (best available)</div>
+                <div class="custom-dropdown-group">OpenAI</div>
+                <div class="custom-dropdown-item" data-value="openai-gpt-4o-mini">GPT-4o Mini</div>
+                <div class="custom-dropdown-item" data-value="openai-gpt-4o">GPT-4o</div>
+                <div class="custom-dropdown-item" data-value="openai-gpt-4-turbo">GPT-4 Turbo</div>
+                <div class="custom-dropdown-item" data-value="openai-o3-mini">o3 Mini</div>
+                <div class="custom-dropdown-group">Anthropic</div>
+                <div class="custom-dropdown-item" data-value="anthropic-claude-3-5-haiku">Claude 3.5 Haiku</div>
+                <div class="custom-dropdown-item" data-value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</div>
+                <div class="custom-dropdown-item" data-value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</div>
+                <div class="custom-dropdown-group">Google</div>
+                <div class="custom-dropdown-item" data-value="google-gemini-2-0-flash">Gemini 2.0 Flash</div>
+                <div class="custom-dropdown-item" data-value="google-gemini-1-5-pro">Gemini 1.5 Pro</div>
+                <div class="custom-dropdown-group">xAI</div>
+                <div class="custom-dropdown-item" data-value="xai-grok-2-mini">Grok 2 Mini</div>
+                <div class="custom-dropdown-item" data-value="xai-grok-2">Grok 2</div>
+                <div class="custom-dropdown-group">DeepSeek</div>
+                <div class="custom-dropdown-item" data-value="deepseek-deepseek-chat">DeepSeek Chat</div>
+                <div class="custom-dropdown-item" data-value="deepseek-deepseek-coder">DeepSeek Coder</div>
+                <div class="custom-dropdown-group">Groq</div>
+                <div class="custom-dropdown-item" data-value="groq-llama-3-3-70b">Llama 3.3 70B</div>
+                <div class="custom-dropdown-item" data-value="groq-llama-3-1-8b">Llama 3.1 8B</div>
+                <div class="custom-dropdown-group">Perplexity</div>
+                <div class="custom-dropdown-item" data-value="perplexity-sonar">Sonar</div>
+                <div class="custom-dropdown-item" data-value="perplexity-sonar-pro">Sonar Pro</div>
+                <div class="custom-dropdown-group">Ollama Cloud</div>
+                <div class="custom-dropdown-item" data-value="gemma3:cloud">Gemma 3 (Vision)</div>
+                <div class="custom-dropdown-item" data-value="gemma4:cloud">Gemma 4 (Vision)</div>
+                <div class="custom-dropdown-item" data-value="qwen3-vl:235b-cloud">Qwen3-VL 235B (Vision)</div>
+                <div class="custom-dropdown-item" data-value="qwen3.5:397b-cloud">Qwen 3.5 397B</div>
+                <div class="custom-dropdown-item" data-value="minimax-m2.7:cloud">MiniMax M2.7</div>
+                <div class="custom-dropdown-item" data-value="glm-4.7:cloud">GLM 4.7</div>
+                <div class="custom-dropdown-item" data-value="glm-5.1:cloud">GLM 5.1</div>
+                <div class="custom-dropdown-item" data-value="kimi-k2.5:cloud">Kimi K2.5</div>
+                <div class="custom-dropdown-item" data-value="nemotron-3-nano:30b-cloud">Nemotron 3 Nano 30B</div>
+                <div class="custom-dropdown-item" data-value="nemotron-3-super:cloud">Nemotron 3 Super</div>
+                <div class="custom-dropdown-item" data-value="rnj-1:8b-cloud">RNJ-1 8B</div>
+                <div class="custom-dropdown-item" data-value="gemini-3-flash-preview:cloud">Gemini 3 Flash Preview</div>
+                <div id="customModelsContainer"></div>
+                <div class="custom-dropdown-item add-custom-model" data-value="__add_custom__" style="color: #60a5fa; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4px; padding-top: 8px;">+ Add Custom Model</div>
+              </div>
+            </div>
+            <input type="hidden" id="cloudModelSelect" value="auto">
+          </div>
+        </div>
+
+        <!-- Model Manager: Unified view of all models with provider groups -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="model-manager">
+            <span class="settings-card-title">Model Manager</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body" id="model-manager">
+            <div class="model-manager-desc">Enable or disable models for the AI race. Disabled models are excluded from auto-race. Models from providers without an API key are shown dimmed.</div>
+            <div id="modelManagerList"></div>
+          </div>
+        </div>
+
+        <!-- Local Ollama Models -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="ollama-models">
+            <span class="settings-card-title">Local Ollama Models</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="ollama-models">
+            <div class="ollama-models-list compact" id="ollamaModelsList">
+              <div class="ollama-models-loading">Loading...</div>
+            </div>
+            <div class="ollama-pull-row compact">
+              <input type="text" id="ollamaPullInput" class="ollama-pull-input" placeholder="llama3:latest" />
+              <button id="ollamaPullBtn" class="ollama-pull-btn">Pull Model</button>
+            </div>
+            <div class="ollama-pull-status" id="ollamaPullStatus"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Data -->
+      <div class="settings-tab-content" data-content="data">
+
+        <!-- Documents Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="documents">
+            <span class="settings-card-title">Knowledge Base</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="documents">
+            <div class="document-upload-area compact" id="documentUploadArea">
+              <div class="document-upload-dropzone" id="documentDropzone">
+                <span class="document-upload-icon">&#128193;</span>
+                <span class="document-upload-text">Drop files or click</span>
+                <span class="document-upload-hint">PDF, DOCX, TXT, MD</span>
+                <input type="file" id="documentFileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" />
+              </div>
+              <div class="document-list" id="documentList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interview Data Import Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="ingestion">
+            <span class="settings-card-title">Interview Data Import</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="ingestion">
+            <div class="ingestion-section">
+              <p class="ingestion-desc">Import interview Q&A and PDF books into the knowledge graph and document search.</p>
+
+              <div class="ingestion-sources">
+                <label class="ingestion-label">GitHub Repos</label>
+                <input type="text" id="ingestionRepoInput" placeholder="e.g. ShyamSunder89/DevOps-Interview-Questions1" class="ingestion-input" />
+                <div id="ingestionRepoTags" class="ingestion-tags"></div>
+              </div>
+
+              <div class="ingestion-options">
+                <label class="ingestion-option">
+                  <input type="radio" name="ingestionMode" value="full" checked /> Full (Graph + RAG)
+                </label>
+                <label class="ingestion-option">
+                  <input type="radio" name="ingestionMode" value="graph_only" /> Graph Only
+                </label>
+                <label class="ingestion-option">
+                  <input type="radio" name="ingestionMode" value="rag_only" /> RAG Only
+                </label>
+              </div>
+
+              <div class="ingestion-actions">
+                <button id="ingestionDryRunBtn" class="ingestion-btn secondary">Dry Run</button>
+                <button id="ingestionStartBtn" class="ingestion-btn primary">Start Import</button>
+              </div>
+
+              <div class="ingestion-status" id="ingestionStatus" style="display:none">
+                <div class="ingestion-progress">
+                  <div class="ingestion-progress-bar" id="ingestionProgressBar"></div>
+                </div>
+                <div class="ingestion-stats" id="ingestionStats"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytics Preview Card -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="analytics">
+            <span class="settings-card-title">Analytics</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="analytics">
+            <div class="analytics-preview compact" id="analyticsPreview">
+              <div class="analytics-loading">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Voice -->
+      <div class="settings-tab-content" data-content="voice">
+
+        <!-- Voice Selection Card -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <span class="settings-card-title">Text-to-Speech Voice</span>
+          </div>
+          <div class="settings-card-body">
+            <p class="voice-description">Choose a voice for the AI to use when reading responses aloud.</p>
+
+            <div class="voice-controls">
+              <div class="voice-select-row">
+                <label class="voice-label">Voice</label>
+                <div class="custom-dropdown" id="voiceDropdown">
+                  <button class="custom-dropdown-trigger" id="voiceDropdownTrigger">
+                    <span id="voiceSelectedText">Loading voices...</span>
+                    <span class="dropdown-arrow">▼</span>
+                  </button>
+                  <div class="custom-dropdown-menu" id="voiceDropdownMenu"></div>
+                </div>
+                <input type="hidden" id="voiceSelect" value="">
+              </div>
+
+              <div class="voice-rate-row">
+                <label class="voice-label">Speed</label>
+                <input type="range" id="voiceRateSlider" min="0.5" max="2" step="0.1" value="1.2" class="voice-slider">
+                <span id="voiceRateValue" class="voice-rate-value">1.2x</span>
+              </div>
+
+              <div class="voice-pitch-row">
+                <label class="voice-label">Pitch</label>
+                <input type="range" id="voicePitchSlider" min="0.5" max="2" step="0.1" value="1" class="voice-slider">
+                <span id="voicePitchValue" class="voice-pitch-value">1.0</span>
+              </div>
+            </div>
+
+            <div class="voice-preview">
+              <button id="voiceTestBtn" class="voice-test-btn">
+                <span>&#127908;</span> Test Voice
+              </button>
+              <span class="voice-status" id="voiceStatus"></span>
+            </div>
+
+            <div class="voice-info">
+              <strong>Note:</strong> Voice availability depends on your operating system.
+              Windows, macOS, and Linux each have different system voices installed.
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab: Voice Clone -->
+      <div class="settings-tab-content" data-content="clone">
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <span class="settings-card-title">AI Voice Cloning</span>
+          </div>
+          <div class="settings-card-body">
+            <p class="clone-description">Clone your voice for interview practice. Upload audio samples to create a personalized AI voice model.</p>
+
+            <div class="clone-create-section">
+              <div class="clone-workflow-hint">
+                <span class="workflow-step">1</span> Record audio → <span class="workflow-step">2</span> Enter name & click Create → <span class="workflow-step">3</span> Test
+              </div>
+
+              <div class="clone-input-row">
+                <label class="clone-label">Model Name</label>
+                <input type="text" id="cloneModelName" class="clone-input" placeholder="e.g., My Interview Voice">
+              </div>
+
+              <div class="clone-upload-area" id="cloneUploadArea">
+                <input type="file" id="cloneAudioFiles" accept="audio/*" multiple style="display:none">
+                <div class="clone-upload-content">
+                  <span class="clone-upload-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span>
+                  <span class="clone-upload-text">Drop audio files here or click to browse</span>
+                  <span class="clone-upload-hint">MP3, WAV, or M4A files (10-60 seconds each)</span>
+                </div>
+              </div>
+
+              <!-- Live Recording Section -->
+              <div class="clone-record-section">
+                <div class="clone-record-divider">
+                  <span>OR</span>
+                </div>
+                <div class="clone-record-controls" id="cloneRecordControls">
+                  <button id="cloneRecordBtn" class="clone-record-btn">
+                    <span class="record-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" stroke="none"><circle cx="12" cy="12" r="10"/></svg></span>
+                    <span class="record-text">Record Voice Sample</span>
+                  </button>
+                  <div class="clone-recording-ui" id="cloneRecordingUi" style="display:none">
+                    <div class="clone-recording-timer" id="cloneRecordingTimer">00:00</div>
+                    <div class="clone-recording-wave" id="cloneRecordingWave"></div>
+                    <button id="cloneStopRecordBtn" class="clone-stop-record-btn">
+                      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></span> Stop Recording
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="clone-selected-files" id="cloneSelectedFiles"></div>
+
+              <button id="cloneCreateBtn" class="clone-create-btn" disabled>
+                <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Create Voice Model
+              </button>
+
+              <div class="clone-status" id="cloneCreateStatus"></div>
+            </div>
+
+            <div class="clone-models-section">
+              <div class="clone-section-title">Voice Gallery</div>
+              <div id="voiceGallery" class="clone-models-list">
+                <div class="clone-empty">Loading gallery...</div>
+              </div>
+            </div>
+
+            <div class="clone-models-section">
+              <div class="clone-section-title">Your Voice Models</div>
+              <div class="clone-models-list" id="cloneModelsList">
+                <div class="clone-empty">No voice models yet. Create one above.</div>
+              </div>
+            </div>
+
+            <div class="clone-test-section">
+              <div class="clone-section-title">Test Voice Synthesis</div>
+              <div class="clone-test-info" id="cloneTestInfo">
+                <span class="info-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></span>
+                <span>Create a voice model above to enable testing</span>
+              </div>
+              <div class="clone-test-row">
+                <select id="cloneTestModel" class="clone-select" disabled>
+                  <option value="">No voice models available - create one first</option>
+                </select>
+              </div>
+              <textarea id="cloneTestText" class="clone-textarea" rows="3" placeholder="Enter text to synthesize with your cloned voice..." disabled></textarea>
+              <button id="cloneTestBtn" class="clone-test-btn" disabled>
+                <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></span> Synthesize Speech
+              </button>
+              <div class="clone-test-result" id="cloneTestResult"></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Integrations Tab -->
+      <div class="settings-tab-content" data-content="integrations">
+
+        <!-- Slack -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-slack">
+            <span class="settings-card-icon">&#128172;</span>
+            <span class="settings-card-title">Slack</span>
+            <span class="settings-card-status" id="int-slack-status">Not connected</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-slack">
+            <div class="int-field-group">
+              <label class="int-label">Webhook URL</label>
+              <input type="url" id="int-slack-webhook" class="settings-input" placeholder="https://hooks.slack.com/..." />
+            </div>
+            <div class="int-field-group">
+              <label class="int-label">Default Channel</label>
+              <input type="text" id="int-slack-channel" class="settings-input" placeholder="#general" />
+            </div>
+            <div class="int-field-group">
+              <label class="int-toggle-label">
+                <input type="checkbox" id="int-slack-autopost" />
+                <span>Auto-post after meetings</span>
+              </label>
+            </div>
+            <div class="int-actions">
+              <button class="settings-btn-small" id="int-slack-save">Connect</button>
+              <button class="settings-btn-small secondary" id="int-slack-test">Test</button>
+              <button class="settings-btn-small danger" id="int-slack-disconnect" style="display:none">Disconnect</button>
+            </div>
+            <div class="int-status" id="int-slack-msg"></div>
+          </div>
+        </div>
+
+        <!-- Notion -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-notion">
+            <span class="settings-card-icon">&#128220;</span>
+            <span class="settings-card-title">Notion</span>
+            <span class="settings-card-status" id="int-notion-status">Not connected</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-notion">
+            <div class="int-field-group">
+              <label class="int-label">API Key</label>
+              <input type="password" id="int-notion-apikey" class="settings-input" placeholder="ntn_xxx..." />
+            </div>
+            <div class="int-field-group">
+              <label class="int-label">Workspace ID</label>
+              <input type="text" id="int-notion-workspace" class="settings-input" placeholder="Notion workspace ID" />
+            </div>
+            <div class="int-actions">
+              <button class="settings-btn-small" id="int-notion-connect">Connect</button>
+              <button class="settings-btn-small secondary" id="int-notion-pages">List Pages</button>
+              <button class="settings-btn-small danger" id="int-notion-disconnect" style="display:none">Disconnect</button>
+            </div>
+            <div id="int-notion-pages-list" class="int-pages-list" style="display:none"></div>
+            <div class="int-status" id="int-notion-msg"></div>
+          </div>
+        </div>
+
+        <!-- Jira -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-jira">
+            <span class="settings-card-icon">&#128203;</span>
+            <span class="settings-card-title">Jira</span>
+            <span class="settings-card-status" id="int-jira-status">Not connected</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-jira">
+            <div class="int-field-group">
+              <label class="int-label">Base URL</label>
+              <input type="url" id="int-jira-url" class="settings-input" placeholder="https://yourcompany.atlassian.net" />
+            </div>
+            <div class="int-field-group">
+              <label class="int-label">Email</label>
+              <input type="email" id="int-jira-email" class="settings-input" placeholder="you@company.com" />
+            </div>
+            <div class="int-field-group">
+              <label class="int-label">API Token</label>
+              <input type="password" id="int-jira-token" class="settings-input" placeholder="Jira API token" />
+            </div>
+            <div class="int-actions">
+              <button class="settings-btn-small" id="int-jira-connect">Connect</button>
+              <button class="settings-btn-small secondary" id="int-jira-projects">List Projects</button>
+              <button class="settings-btn-small danger" id="int-jira-disconnect" style="display:none">Disconnect</button>
+            </div>
+            <div class="int-status" id="int-jira-msg"></div>
+          </div>
+        </div>
+
+        <!-- Calendar -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-calendar">
+            <span class="settings-card-icon">&#128197;</span>
+            <span class="settings-card-title">Calendar</span>
+            <span class="settings-card-status" id="int-calendar-status">Not connected</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-calendar">
+            <div class="int-field-group">
+              <label class="int-label">Provider</label>
+              <select id="int-calendar-provider" class="settings-select">
+                <option value="">Select provider</option>
+                <option value="google">Google Calendar</option>
+                <option value="outlook">Outlook</option>
+              </select>
+            </div>
+            <div class="int-field-group">
+              <label class="int-toggle-label">
+                <input type="checkbox" id="int-calendar-autojoin" />
+                <span>Auto-join detected meetings</span>
+              </label>
+            </div>
+            <div class="int-actions">
+              <button class="settings-btn-small" id="int-calendar-connect">Connect</button>
+              <button class="settings-btn-small danger" id="int-calendar-disconnect" style="display:none">Disconnect</button>
+            </div>
+            <div class="int-status" id="int-calendar-msg"></div>
+          </div>
+        </div>
+
+        <!-- Phone -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-phone">
+            <span class="settings-card-icon">&#128222;</span>
+            <span class="settings-card-title">Phone</span>
+            <span class="settings-card-status" id="int-phone-status">Not connected</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-phone">
+            <div class="int-field-group">
+              <label class="int-label">Phone Number (E.164)</label>
+              <input type="tel" id="int-phone-number" class="settings-input" placeholder="+1234567890" />
+            </div>
+            <div class="int-field-group">
+              <label class="int-label">Provider</label>
+              <select id="int-phone-provider" class="settings-select">
+                <option value="twilio">Twilio</option>
+                <option value="vonage">Vonage</option>
+              </select>
+            </div>
+            <div class="int-actions">
+              <button class="settings-btn-small" id="int-phone-connect">Connect</button>
+              <button class="settings-btn-small danger" id="int-phone-disconnect" style="display:none">Disconnect</button>
+            </div>
+            <div class="int-status" id="int-phone-msg"></div>
+          </div>
+        </div>
+
+        <!-- Video -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-video">
+            <span class="settings-card-icon">&#127909;</span>
+            <span class="settings-card-title">Video Clips</span>
+            <span class="settings-card-status connected" id="int-video-status">Available</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-video">
+            <div class="int-info-text">Video clips are created from conversations. No connection required — clips, highlight reels, and slide captures work automatically during meetings.</div>
+          </div>
+        </div>
+
+        <!-- SSO -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-sso">
+            <span class="settings-card-icon">&#128274;</span>
+            <span class="settings-card-title">Single Sign-On</span>
+            <span class="settings-card-status" id="int-sso-status">Checking...</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-sso">
+            <div class="int-sso-buttons">
+              <button class="int-sso-btn int-sso-google" id="int-sso-google">
+                <span class="int-sso-icon">G</span>
+                <span>Google SSO</span>
+              </button>
+              <button class="int-sso-btn int-sso-microsoft" id="int-sso-microsoft">
+                <span class="int-sso-icon">M</span>
+                <span>Microsoft SSO</span>
+              </button>
+            </div>
+            <div class="int-status" id="int-sso-msg"></div>
+          </div>
+        </div>
+
+        <!-- Teams -->
+        <div class="settings-card">
+          <div class="settings-card-header" data-collapsible="int-teams">
+            <span class="settings-card-icon">&#128101;</span>
+            <span class="settings-card-title">Teams</span>
+            <span class="settings-card-status" id="int-teams-status">0 teams</span>
+            <span class="settings-card-arrow">&#9662;</span>
+          </div>
+          <div class="settings-card-body collapsed" id="int-teams">
+            <div class="int-field-group">
+              <label class="int-label">Team Name</label>
+              <input type="text" id="int-teams-name" class="settings-input" placeholder="My Team" />
+            </div>
+            <div class="int-field-group">
+              <label class="int-label">Description</label>
+              <input type="text" id="int-teams-desc" class="settings-input" placeholder="Optional description" />
+            </div>
+            <div class="int-actions">
+              <button class="settings-btn-small" id="int-teams-create">Create Team</button>
+            </div>
+            <div id="int-teams-list" class="int-teams-list"></div>
+            <div class="int-status" id="int-teams-msg"></div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+  <div class="modal-overlay" id="onboardingModal">
+    <div class="modal-box onboarding-box">
+      <div class="modal-title">Welcome to AI Note Taker</div>
+      <p class="onboarding-desc">Let's get you set up. We checked a few things:</p>
+      <ul class="onboarding-checklist" id="onboardingChecklist">
+        <li data-step="mic" class="checking">Checking microphone...</li>
+        <li data-step="ollama" class="checking">Checking Ollama...</li>
+        <li data-step="vision" class="checking">Checking vision model...</li>
+      </ul>
+      <p class="onboarding-note" id="onboardingNote"></p>
+      <button class="settings-btn modal-save-btn" id="onboardingClose">Get Started</button>
+    </div>
+  </div>
+
+  <!-- API Key modal -->
+  <div class="modal-overlay" id="apiKeyModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backApiKeyModal" type="button" title="Back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="modal-title">Configure API Key</div>
+      </div>
+      <div class="modal-provider-name" id="modalProviderName"></div>
+      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." maxlength="256" />
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="modalCancel">Cancel</button>
+        <button class="settings-btn modal-save-btn" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App menu (triggered by menuBtn) -->
+  <div class="app-menu" id="appMenu">
+    <!-- Section: Conversation -->
+    <div class="app-menu-section">
+      <div class="app-menu-section-title">Conversation</div>
+      <div class="app-menu-item" data-action="new-chat">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>New Chat</span>
+        <kbd class="app-menu-shortcut">Ctrl+N</kbd>
+      </div>
+      <div class="app-menu-item" data-action="history">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        <span>History</span>
+      </div>
+      <div class="app-menu-item" data-action="export">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Export</span>
+      </div>
+    </div>
+
+    <!-- Section: Features -->
+    <div class="app-menu-section">
+      <div class="app-menu-section-title">Features</div>
+      <div class="app-menu-item" data-action="cognitive-graph">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        <span>Cognitive Graph</span>
+      </div>
+      <div class="app-menu-item" data-action="pre-interview">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 16a1 1 0 111-1 1 1 0 01-1 1zm1-5h-2V7h2z"/></svg>
+        <span>Pre-Interview Prep</span>
+      </div>
+      <div class="app-menu-item" data-action="analytics">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analytics Dashboard</span>
+      </div>
+      <div class="app-menu-item" data-action="study-plan">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+        <span>Study Plan</span>
+      </div>
+      <div class="app-menu-item" data-action="interview-simulator">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Interview Simulator</span>
+      </div>
+      <div class="app-menu-item" data-action="job-tracker">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+        <span>Job Tracker</span>
+      </div>
+      <div class="app-menu-item" data-action="resume-review">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>Resume Review</span>
+      </div>
+    </div>
+
+    <!-- Section: Tools -->
+    <div class="app-menu-section">
+      <div class="app-menu-section-title">Tools</div>
+      <div class="app-menu-item" data-action="settings">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span>Settings</span>
+      </div>
+      <div class="app-menu-item" data-action="shortcuts">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="7" y1="7" x2="7" y2="7"/><line x1="12" y1="7" x2="12" y2="7"/><line x1="17" y1="7" x2="17" y2="7"/><line x1="7" y1="12" x2="7" y2="12"/><line x1="12" y1="12" x2="12" y2="12"/><line x1="17" y1="12" x2="17" y2="12"/><line x1="7" y1="17" x2="7" y2="17"/><line x1="12" y1="17" x2="12" y2="17"/><line x1="17" y1="17" x2="17" y2="17"/></svg>
+        <span>Keyboard Shortcuts</span>
+      </div>
+      <div class="app-menu-item" data-action="logs">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>Open Logs</span>
+      </div>
+    </div>
+
+    <!-- Section: About -->
+    <div class="app-menu-section">
+      <div class="app-menu-item" data-action="about">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>About ANT</span>
+      </div>
+      <div class="app-menu-item" data-action="signout">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Sign Out</span>
+      </div>
+      <div class="app-menu-item danger" data-action="quit">
+        <svg class="app-menu-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+        <span>Quit</span>
+        <kbd class="app-menu-shortcut">Alt+F4</kbd>
+      </div>
+    </div>
+
+    <!-- Recent Conversations (populated dynamically) -->
+    <div class="app-menu-section" id="recentConversationsSection" style="display: none;">
+      <div class="app-menu-section-title">Recent</div>
+      <div id="recentConversationsList"></div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts modal -->
+  <div class="modal-overlay" id="shortcutsModal">
+    <div class="modal-box shortcuts-modal-box">
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backShortcutsModal" type="button" title="Back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="modal-title">Keyboard Shortcuts</div>
+      </div>
+      <div class="shortcuts-list">
+        <div class="shortcut-row">
+          <span class="shortcut-key">Enter</span>
+          <span class="shortcut-desc">Toggle voice recording / Submit text</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">F</span>
+          <span class="shortcut-desc">Toggle maximize</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Alt+D</span>
+          <span class="shortcut-desc">Toggle stealth mode (capture protection + show/hide)</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Alt+Space</span>
+          <span class="shortcut-desc">Hide / show window</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+←→↑↓</span>
+          <span class="shortcut-desc">Move window in any direction</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-save-btn" id="closeShortcutsModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export modal -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backExportModal" type="button" title="Back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="modal-title">Export Conversation</div>
+      </div>
+      <div class="export-options">
+        <label class="export-option">
+          <input type="radio" name="exportFormat" value="markdown" checked />
+          <span class="export-option-label">Markdown (.md)</span>
+          <span class="export-option-desc">Formatted text with headers and metadata</span>
+        </label>
+        <label class="export-option">
+          <input type="radio" name="exportFormat" value="json" />
+          <span class="export-option-label">JSON (.json)</span>
+          <span class="export-option-desc">Full conversation data with timestamps</span>
+        </label>
+        <label class="export-option">
+          <input type="radio" name="exportFormat" value="txt" />
+          <span class="export-option-label">Plain Text (.txt)</span>
+          <span class="export-option-desc">Simple transcript format</span>
+        </label>
+      </div>
+      <div class="export-preview">
+        <label class="export-check">
+          <input type="checkbox" id="includeMetadata" checked />
+          <span>Include metadata (date, mode, model)</span>
+        </label>
+        <label class="export-check">
+          <input type="checkbox" id="includeTimestamps" />
+          <span>Include timestamps</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="cancelExportBtn">Cancel</button>
+        <button class="settings-btn modal-save-btn" id="confirmExportBtn">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backImportModal" type="button" title="Back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="modal-title">Import Conversations</div>
+      </div>
+      <div class="import-area">
+        <div class="import-dropzone" id="importDropzone">
+          <span class="import-icon">&#128449;</span>
+          <span class="import-text">Drop JSON file here or click to browse</span>
+          <input type="file" id="importFileInput" accept=".json" style="display:none" />
+        </div>
+        <div class="import-warning">
+          <strong>Note:</strong> Importing will merge conversations with existing ones.
+          Duplicate IDs will be overwritten.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="cancelImportBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics modal -->
+  <div class="modal-overlay" id="analyticsModal">
+    <div class="modal-box analytics-modal-box">
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backAnalyticsModal" type="button" title="Back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="modal-title">Conversation Analytics</div>
+      </div>
+      <div class="analytics-content" id="analyticsContent">
+        <div class="analytics-summary">
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsTotalConversations">-</div>
+            <div class="analytics-card-label">Conversations</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsTotalMessages">-</div>
+            <div class="analytics-card-label">Total Messages</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsAvgDuration">-</div>
+            <div class="analytics-card-label">Avg Duration</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card-value" id="analyticsSpeakerRatio">-</div>
+            <div class="analytics-card-label">User/AI Ratio</div>
+          </div>
+        </div>
+
+        <div class="analytics-section">
+          <h3>Daily Activity (Last 7 Days)</h3>
+          <div class="analytics-chart" id="analyticsChart">
+            <div class="analytics-chart-bars"></div>
+          </div>
+        </div>
+
+        <div class="analytics-grid">
+          <div class="analytics-section">
+            <h3>Mode Usage</h3>
+            <div class="analytics-list" id="analyticsModes"></div>
+          </div>
+          <div class="analytics-section">
+            <h3>Model Usage</h3>
+            <div class="analytics-list" id="analyticsModels"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-cancel-btn" id="closeAnalyticsBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- About modal -->
+  <div class="modal-overlay" id="aboutModal">
+    <div class="modal-box shortcuts-modal-box">
+      <div class="modal-header">
+        <button class="modal-back-btn" id="backAboutModal" type="button" title="Back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="modal-title">About AI Note Taker</div>
+      </div>
+      <div class="about-content">
+        <div class="about-logo">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="about-version">Version <span id="aboutVersion">1.0.0</span></div>
+        <div class="about-desc">AI-powered voice note taker with local transcription and intelligent routing.</div>
+        <div class="about-status">
+          <div class="about-status-row">
+            <span class="about-status-label">Backend</span>
+            <span class="about-status-value" id="aboutBackend">Checking...</span>
+          </div>
+          <div class="about-status-row">
+            <span class="about-status-label">Ollama</span>
+            <span class="about-status-value" id="aboutOllama">Checking...</span>
+          </div>
+          <div class="about-status-row">
+            <span class="about-status-label">Whisper Model</span>
+            <span class="about-status-value" id="aboutWhisper">Checking...</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="settings-btn modal-save-btn" id="closeAboutModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/core/auth-helper.js?v=8" defer></script>
+  <script src="app.js?v=103" defer></script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+# ANT Backend Helm Chart - Production Ready
+# Repository: https://github.com/your-org/ai-note-taker
+#
+# This is the DEFAULT values file. For environment-specific overrides, use
+# -f values-production.yaml or -f values-staging.yaml (both are flat
+# overrides at the top level — see how their keys match the keys below).
+
+# ─── Global Defaults ───────────────────────────────────────────────────────
+global:
+  imageRegistry: ghcr.io
+  imagePullSecrets:
+    - ghcr-secret
+  storageClass: standard-ssd
+
+# ─── Common Parameters ────────────────────────────────────────────────────
+common:
+  labels:
+    app.kubernetes.io/part-of: ant
+    app.kubernetes.io/managed-by: Helm
+
+# ─── Image Configuration ───────────────────────────────────────────────────
+image:
+  registry: ghcr.io
+  repository: your-org/ant-backend
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets:
+    - ghcr-secret
+
+  # Build args for Docker
+  buildArgs:
+    ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+# ─── Replica Configuration ────────────────────────────────────────────────
+replicaCount: 3
+
+# ─── Strategy ─────────────────────────────────────────────────────────────
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# ─── Pod Configuration ────────────────────────────────────────────────────
+podSecurityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  enabled: true
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+# ─── Resources ────────────────────────────────────────────────────────────
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+    ephemeral-storage: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+    ephemeral-storage: 100Mi
+
+# ─── Autoscaling ──────────────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPU: 70
+  targetMemory: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+
+# ─── Service Configuration ────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+# ─── Ingress ──────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  hostname: api.ant.example.com
+  path: /
+  pathType: Prefix
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    prometheus.io/scrape: "true"
+  tls:
+    - secretName: ant-backend-tls
+      hosts:
+        - api.ant.example.com
+
+# ─── Health Checks ────────────────────────────────────────────────────────
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+  successThreshold: 1
+
+# ─── Persistence ───────────────────────────────────────────────────────────
+persistence:
+  enabled: true
+  storageClass: standard-ssd
+  size: 10Gi
+  accessMode: ReadWriteOnce
+  existingClaim: null
+
+# ─── Environment Variables ────────────────────────────────────────────────
+env:
+  # Database
+  - name: USE_SQLITE
+    value: "false"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: ant-secrets
+        key: database-url
+
+  # Security
+  - name: AUTH_REQUIRED
+    value: "true"
+  - name: ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ant-secrets
+        key: encryption-key
+        optional: true
+
+  # AI Providers
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ant-secrets
+        key: openai-api-key
+        optional: true
+  - name: ANTHROPIC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ant-secrets
+        key: anthropic-api-key
+        optional: true
+  - name: GOOGLE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ant-secrets
+        key: google-api-key
+        optional: true
+
+  # Neo4j
+  - name: NEO4J_URI
+    value: "bolt://ant-neo4j:7687"
+  - name: NEO4J_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: ant-secrets
+        key: neo4j-password
+        optional: true
+
+# ─── Pod Disruption Budget ────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+  # maxUnavailable: 1  # Use either minAvailable OR maxUnavailable
+
+# ─── Network Policies ─────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+  allowCloud: false
+  extraPolicies:
+    - fromNamespaces:
+        - name: monitoring
+      ports:
+        - port: 9090
+
+# ─── Service Account ──────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ant-backend
+  annotations:
+    iam.gke.io/gcp-service-account: ant-backend@project.iam.gserviceaccount.com
+
+# ─── Sealed Secret (Fix #25) ─────────────────────────────────────────────
+# The deployment env vars reference a Secret named "ant-secrets" for
+# DATABASE_URL, ENCRYPTION_KEY, and the BYOK AI provider keys. This
+# values block controls the SealedSecret manifest that produces that
+# Secret at install time. The encryptedData field in the template is
+# intentionally empty — see templates/sealedsecret.yaml for the
+# kubeseal workflow that populates it.
+sealedSecret:
+  enabled: true
+  name: ant-secrets
+  annotations: {}
+  templateLabels: {}
+
+# ─── Monitoring ───────────────────────────────────────────────────────────
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: monitoring
+  prometheusRule:
+    enabled: true
+    additionalLabels: {}
+    groups:
+      - name: ant-backend
+        rules:
+          - alert: BackendDown
+            expr: up{job="ant-backend"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Backend pod is down"
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High error rate detected"
+
+# ─── Pod Annotations ─────────────────────────────────────────────────────
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+  sidecar.istio.io/inject: "true"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argo Rollouts Configuration (Canary)
+# ─────────────────────────────────────────────────────────────────────────────
+rollouts:
+  enabled: true
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 50
+    metricRetention: 10m
+    templates:
+      - name: error-rate
+        template: error-rate-template
+      - name: latency
+        template: latency-template
+  experiment:
+    templates:
+      - name: baseline
+        weight: 90
+      - name: canary
+        weight: 10
+    analyses:
+      - name: test
+        templates:
+          - template: error-rate-template
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HPA Configuration (when native HPA insufficient)
+# ─────────────────────────────────────────────────────────────────────────────
+customHPA:
+  enabled: false
+  # Uses KEDA for advanced scaling scenarios
+  keda:
+    enabled: true
+    pollingInterval: 15
+    cooldownPeriod: 300
+    minReplicas: 2
+    maxReplicas: 100
+    triggers:
+      - type: cpu
+        metricType: Utilization
+        value: "70"
+      - type: memory
+        metricType: Utilization
+        value: "80"
+      - type: kafka
+        metadata:
+          bootstrapServers: ant-kafka:9092
+          consumerGroup: ant-backend
+          topic: transcription-requests
+          lagThreshold: "1000"

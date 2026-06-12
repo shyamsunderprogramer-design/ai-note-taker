@@ -1,0 +1,197 @@
+version: '3.8'
+
+# ANT AI Note Taker - Local Development Compose
+# Usage: docker-compose -f docker/docker-compose.yml up
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API Service
+  # ─────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: production
+    image: ant-backend:local
+    container_name: ant-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      - USE_SQLITE=true
+      - DATABASE_URL=sqlite:///./data/ai_note_taker.db
+
+      # AI Providers (configure your keys)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+
+      # Security
+      - AUTH_REQUIRED=false
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+
+      # Neo4j (optional)
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
+
+      # Whisper
+      - WHISPER_MODEL=base
+
+    volumes:
+      - ../backend:/app
+      - ../data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ant-network
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Neo4j Knowledge Graph (Optional)
+  # ─────────────────────────────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5.18-community
+    container_name: ant-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-password}
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2g
+    volumes:
+      - neo4j-data:/data
+      # Cypher scripts in this directory run automatically on first
+      # start (when the database is empty). See:
+      # https://neo4j.com/docs/operations-manual/current/docker/maintenance/#docker-initialise
+      - ./neo4j/init/01-create-indexes.cypher:/docker-entrypoint-initdb.d/01-create-indexes.cypher:ro
+      - ./neo4j/init/02-seed-defaults.cypher:/docker-entrypoint-initdb.d/02-seed-defaults.cypher:ro
+    networks:
+      - ant-network
+    profiles:
+      - with-neo4j
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL (Production-ready)
+  # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ant-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=ai_note_taker
+      - POSTGRES_USER=${POSTGRES_USER:-antuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-antpass}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U antuser -d ai_note_taker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ant-network
+    profiles:
+      - with-postgres
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Redis (For session caching & rate limiting)
+  # ─────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ant-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ant-network
+    profiles:
+      - with-redis
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Prometheus (Observability)
+  # ─────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: ant-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - ant-network
+    profiles:
+      - with-monitoring
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Grafana (Dashboards)
+  # ─────────────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: ant-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ant-network
+    profiles:
+      - with-monitoring
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Jaeger (Distributed Tracing)
+  # ─────────────────────────────────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: ant-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - ant-network
+    profiles:
+      - with-monitoring
+
+networks:
+  ant-network:
+    driver: bridge
+
+volumes:
+  neo4j-data:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:

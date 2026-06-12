@@ -1,0 +1,33 @@
+{{- /*
+  PersistentVolumeClaim template for ANT Backend
+
+  Wired to .Values.persistence. The deployment template
+  (deployment.yaml:80) mounts a volume at /data and points it at
+  `claimName: {{ include "ant-backend.fullname" . }}` when
+  .Values.persistence.enabled is true — which is the default.
+
+  The data dir holds the SQLite DB (when USE_SQLITE=true) and the
+  generated data (recordings, voice model files, etc.). For production
+  cloud deployments, set .Values.persistence.storageClass to the
+  appropriate provisioner (e.g. "gp3" on AWS, "standard-ssd" on GKE,
+  "managed-premium" on AKS).
+*/ -}}
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "ant-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode | default "ReadWriteOnce" }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | default "10Gi" | quote }}
+{{- end }}

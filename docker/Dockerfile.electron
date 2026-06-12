@@ -1,0 +1,96 @@
+# ANT Electron App Dockerfile
+# Build: docker build -f docker/Dockerfile.electron -t ant-electron:latest .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1: Build dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine3.19 AS deps
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    libc-dev \
+    libsecret-1-dev
+
+# Copy package files
+COPY electron/package*.json /app/
+
+# Install dependencies
+RUN npm ci --prefer-offline
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: Build Electron app
+# ─────────────────────────────────────────────────────────────────────────────
+FROM deps AS builder
+
+WORKDIR /app
+
+# Copy source code
+COPY electron/ /app/
+
+# Build argument for electron builder
+ARG ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+
+# Build the app
+RUN npm run build || npm run dist
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3: Package for distribution
+# ─────────────────────────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS packager
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    fuse \
+    libgtk-3-0 \
+    libnotify4 \
+    libnss3 \
+    libxss1 \
+    xdg-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy built artifacts from builder
+COPY --from=builder /app/dist /app/dist
+COPY --from=builder /app/dist-linux /app/dist-linux
+COPY --from=builder /app/dist-win /app/dist-win
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 4: Minimal runtime image
+# ─────────────────────────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS production
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libgtk-3-0 \
+    libnotify4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libgbm1 \
+    wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 1000 --gid 1000 --shell /bin/bash appuser
+
+WORKDIR /app
+
+# Copy from packager
+COPY --from=packager /app/dist /app/dist
+COPY --from=packager /app/dist-linux /app/dist-linux
+
+# For Windows, we'd copy dist-win
+COPY --from=packager /app/dist-win /app/dist-win
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+# Default to linux build, can be overridden
+CMD ["ls", "-la", "/app/dist-linux"]

@@ -1,0 +1,82 @@
+{{- /*
+  NOTES.txt — printed after `helm install` succeeds. Tells the operator
+  what to do next (verify the rollout, populate the SealedSecret, etc.).
+*/ -}}
+Thanks for installing {{ .Chart.Name }} version {{ .Chart.Version }} (app version {{ .Chart.AppVersion }}).
+
+Your release is named "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+═══════════════════════════════════════════════════════════════════════════════
+  VERIFY THE INSTALL
+═══════════════════════════════════════════════════════════════════════════════
+
+  # Watch the rollout
+  kubectl rollout status deployment/{{ include "ant-backend.fullname" . }} -n {{ .Release.Namespace }}
+
+  # Tail the backend logs
+  kubectl logs -f deployment/{{ include "ant-backend.fullname" . }} -n {{ .Release.Namespace }}
+
+  # Port-forward for local testing
+  kubectl port-forward service/{{ include "ant-backend.fullname" . }} 8000:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+═══════════════════════════════════════════════════════════════════════════════
+  {{- if .Values.ingress.enabled }}
+
+  INGRESS
+  ────────
+  Your backend is reachable at:
+      https://{{ .Values.ingress.hostname }}
+
+  cert-manager should issue a Let's Encrypt certificate within ~2 minutes.
+  Watch the Certificate resource:
+      kubectl get certificate -n {{ .Release.Namespace }}
+      kubectl describe certificate {{ .Values.ingress.tls | default (list (dict "secretName" "ant-backend-tls")) | first | default (dict) | dig "secretName" "ant-backend-tls" }} -n {{ .Release.Namespace }}
+  {{- end }}
+
+═══════════════════════════════════════════════════════════════════════════════
+  {{- if .Values.sealedSecret.enabled }}
+
+  SECRETS — IMPORTANT
+  ───────────────────
+  The SealedSecret manifest is included but contains no encrypted data
+  yet (see k8s/helm/backend/templates/sealedsecret.yaml). Until you
+  populate it, the deployment will be missing DATABASE_URL, ENCRYPTION_KEY,
+  and the AI provider API keys, and will fail its readiness probe.
+
+  To populate the SealedSecret:
+      1. Install kubeseal:
+            brew install kubeseal                                # macOS
+            # or: https://github.com/bitnami-labs/sealed-secrets#installing
+      2. Create a regular Secret and pipe through kubeseal:
+            kubectl create secret generic {{ .Values.sealedSecret.name | default "ant-secrets" }} \
+              --from-literal=database-url='postgres://user:pass@host:5432/db' \
+              --from-literal=encryption-key='$(openssl rand -hex 32)' \
+              --from-literal=openai-api-key='sk-...' \
+              --from-literal=anthropic-api-key='sk-ant-...' \
+              --from-literal=google-api-key='...' \
+              --from-literal=neo4j-password='...' \
+              --dry-run=client -o yaml \
+            | kubeseal --format yaml > /tmp/ant-secrets.sealed.yaml
+      3. Paste the resulting encryptedData into
+         k8s/helm/backend/templates/sealedsecret.yaml (replace the
+         empty `{}` on the last line of spec).
+      4. Re-run `helm upgrade`.
+  {{- end }}
+
+═══════════════════════════════════════════════════════════════════════════════
+  {{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+
+  MONITORING
+  ──────────
+  Prometheus will start scraping the backend at /metrics in ~1 minute.
+  Check that the ServiceMonitor was discovered:
+      kubectl get servicemonitor -n {{ .Values.metrics.serviceMonitor.namespace | default .Release.Namespace }} {{ include "ant-backend.fullname" . }}
+  {{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+
+  AUTOSCALING
+  ───────────
+  HPA is enabled (min {{ .Values.autoscaling.minReplicas }}, max {{ .Values.autoscaling.maxReplicas }}).
+  CPU target: {{ .Values.autoscaling.targetCPU }}%, Memory target: {{ .Values.autoscaling.targetMemory }}%.
+  {{- end }}

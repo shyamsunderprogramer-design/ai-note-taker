@@ -1,0 +1,18 @@
+{{- /*
+  ConfigMap template for ANT Backend
+  Rolling deployments are triggered when this ConfigMap changes (checksum annotation in deployment.yaml).
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ant-backend.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+data:
+  {{- with .Values.configMap }}
+  {{- range $key, $value := . }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}

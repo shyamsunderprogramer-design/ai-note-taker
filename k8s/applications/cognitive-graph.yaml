@@ -1,0 +1,38 @@
+# Cognitive Graph — Neo4j instance for the AI knowledge graph
+# Runs Neo4j 5.x as a single-pod StatefulSet with a PersistentVolume
+# for the graph storage. Production should use a Neo4j Causal Cluster
+# (3+ nodes), but for development this single-node setup is fine.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ant-cognitive-graph
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: ant-cognitive-graph
+    app.kubernetes.io/part-of: ant
+spec:
+  source:
+    repoURL: https://github.com/shyamsunderprogramer-design/ai-note-taker.git
+    targetRevision: HEAD
+    path: k8s/applications/cognitive-graph
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ant-graph
+
+  syncPolicy:
+    automated:
+      prune: false  # Don't auto-prune Neo4j data volumes
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

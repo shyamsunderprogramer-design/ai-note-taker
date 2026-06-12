@@ -1,0 +1,47 @@
+{{- /*
+  Ingress template for ANT Backend
+
+  Wired to .Values.ingress. Provides:
+    - TLS via cert-manager (default cluster issuer: letsencrypt-prod)
+    - NGINX-specific rate-limit + body-size annotations
+    - Prometheus scrape annotation
+    - Optional additional hosts/rules via .Values.ingress.extraRules
+
+  Requires:
+    - ingress-nginx controller installed
+    - cert-manager installed with a ClusterIssuer named "letsencrypt-prod"
+      (override with .Values.ingress.annotations."cert-manager.io/cluster-issuer")
+*/ -}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ant-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.hostname | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "ant-backend.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+  {{- with .Values.ingress.extraRules }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

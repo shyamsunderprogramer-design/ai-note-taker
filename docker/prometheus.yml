@@ -1,0 +1,60 @@
+# ANT - Prometheus Monitoring Configuration
+# Place in: ./prometheus.yml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ant-backend'
+    environment: 'production'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - 'alerts/*.yml'
+  - 'alert_rules.yml'
+
+scrape_configs:
+  # ─── ANT Backend ────────────────────────────────────────────────────────
+  - job_name: 'ant-backend'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - ant
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: ant-backend
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        regex: "8000"
+        action: keep
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - action: replace
+        source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # ─── Node Exporter ──────────────────────────────────────────────────────
+  - job_name: 'node-exporter'
+    kubernetes_sd_configs:
+      - role: daemonset
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_daemonset_name]
+        regex: node-exporter
+        action: keep
+
+  # ─── Prometheus ────────────────────────────────────────────────────────
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alert Rules moved to alert_rules.yml (referenced in rule_files above)
+# ─────────────────────────────────────────────────────────────────────────────

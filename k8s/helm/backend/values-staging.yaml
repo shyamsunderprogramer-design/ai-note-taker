@@ -1,0 +1,58 @@
+# ANT Backend - Staging Environment Values
+# For GitHub Actions deployment (auto-deploy on merge to main)
+
+environment: staging
+
+# ─── Replica Configuration ────────────────────────────────────────────────
+replicaCount: 2
+
+# ─── Image ────────────────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/your-org/ant-backend
+  tag: main-latest
+  pullPolicy: Always
+
+# ─── Autoscaling ──────────────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPU: 80
+  targetMemory: 90
+
+# ─── Ingress ──────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  hostname: api.staging.ant.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/rate-limit: "50"
+
+# ─── Resources ────────────────────────────────────────────────────────────
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# ─── Pod Disruption Budget ────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ─── Monitoring ───────────────────────────────────────────────────────────
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false  # Disable in staging to reduce costs
+  prometheusRule:
+    enabled: false
+
+# ─── Environment ─────────────────────────────────────────────────────────
+env:
+  - name: AUTH_REQUIRED
+    value: "false"
+  - name: USE_SQLITE
+    value: "true"

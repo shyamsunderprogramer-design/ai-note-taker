@@ -1,0 +1,45 @@
+{
+  "name": "ant-monorepo",
+  "version": "2.0.0",
+  "private": true,
+  "description": "ANT (AI Note Taker) — multi-platform monorepo. Privacy-first AI notepad with Electron desktop, web SPA, mobile (React Native), Chrome/browser extensions, all backed by a FastAPI Python backend.",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "electron",
+    "mobile",
+    "e2e"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "web:dev": "npm --workspace ant-web run dev",
+    "web:build": "npm --workspace ant-web run build",
+    "web:preview": "npm --workspace ant-web run preview",
+    "electron:start": "npm --workspace ai-note-taker start",
+    "electron:dev": "npm --workspace ai-note-taker run dev",
+    "electron:build": "npm --workspace ai-note-taker run build",
+    "electron:build:win": "npm --workspace ai-note-taker run build:win",
+    "electron:build:mac": "npm --workspace ai-note-taker run build:mac",
+    "electron:build:linux": "npm --workspace ai-note-taker run build:linux",
+    "electron:icons": "npm --workspace ai-note-taker run icons",
+    "mobile:start": "npm --workspace ant-mobile start",
+    "mobile:android": "npm --workspace ant-mobile run android",
+    "mobile:ios": "npm --workspace ant-mobile run ios",
+    "mobile:test": "npm --workspace ant-mobile test",
+    "mobile:lint": "npm --workspace ant-mobile run lint",
+    "e2e:test": "npm --workspace ant-e2e-tests test",
+    "e2e:test:ui": "npm --workspace ant-e2e-tests run test:ui",
+    "e2e:install:browsers": "npm --workspace ant-e2e-tests run install:browsers",
+    "extension:package": "npm --workspace ant-chrome-extension run package",
+    "extension:lint": "npm --workspace ant-chrome-extension run lint",
+    "lint": "npm run mobile:lint && npm run extension:lint",
+    "test": "npm run e2e:test",
+    "build": "npm run web:build && npm run electron:build"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  }
+}

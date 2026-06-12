@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognitive Graph - ANT (AI Note Taker)</title>
+  <link rel="stylesheet" href="css/base/variables.css">
+  <style>
+    /* Full page reset and base */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: transparent;
+      color: rgba(255,255,255,0.9);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background mesh */
+    .cg-bg-mesh {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 600px 400px at 20% 30%, rgba(59,130,246,0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 500px 500px at 80% 70%, rgba(139,92,246,0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 400px 300px at 50% 50%, rgba(34,197,94,0.04) 0%, transparent 70%);
+    }
+
+    /* Page layout */
+    .cg-page { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* Header */
+    .cg-header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,14,26,0.55);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 16px 28px;
+      display: flex; align-items: center; gap: 16px;
+      -webkit-app-region: drag;
+    }
+    .cg-back-btn {
+      width: 36px; height: 36px; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px; background: rgba(255,255,255,0.04); color: #fff;
+      font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; -webkit-app-region: no-drag; flex-shrink: 0;
+    }
+    .cg-back-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+    .cg-header-logo {
+      display: flex; align-items: center; gap: 10px; -webkit-app-region: no-drag;
+    }
+    .cg-header-logo img {
+      width: 28px; height: 28px; transform: rotate(0deg);
+      filter: drop-shadow(0 0 8px rgba(56,189,248,0.4));
+    }
+    .cg-header-logo h1 { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+
+    /* Status pill */
+    .cg-status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      margin-left: 12px;
+    }
+    .cg-status-pill.connected { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .cg-status-pill.disconnected { background: rgba(239,68,68,0.15); color: #f87171; }
+    .cg-status-pill .dot {
+      width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+      animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Tab nav */
+    .cg-tabs {
+      margin-left: auto; display: flex; gap: 4px;
+      background: rgba(255,255,255,0.04); border-radius: 10px; padding: 3px;
+      -webkit-app-region: no-drag;
+    }
+    .cg-tab-btn {
+      padding: 7px 16px; border: none; border-radius: 8px;
+      background: transparent; color: rgba(255,255,255,0.5);
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .cg-tab-btn:hover { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.05); }
+    .cg-tab-btn.active { background: rgba(59,130,246,0.2); color: #93c5fd; }
+
+    /* Content area */
+    .cg-body { flex: 1; padding: 28px; max-width: 1280px; margin: 0 auto; width: 100%; }
+    .cg-tab-content { display: none; animation: fadeIn 0.3s ease; }
+    .cg-tab-content.active { display: block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+    /* Stat cards */
+    .cg-stat-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px;
+    }
+    .cg-stat-card {
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px; padding: 20px; text-align: center;
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      transition: all 0.3s; position: relative; overflow: hidden;
+    }
+    .cg-stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent, #3b82f6), transparent);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .cg-stat-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); }
+    .cg-stat-card:hover::before { opacity: 1; }
+    .cg-stat-num { font-size: 32px; font-weight: 800; color: #fff; line-height: 1; margin-bottom: 6px; }
+    .cg-stat-label { font-size: 12px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Two-column panels */
+    .cg-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    @media(max-width:860px) { .cg-grid-2 { grid-template-columns: 1fr; } .cg-stat-row { grid-template-columns: repeat(2,1fr); } }
+
+    /* Panel */
+    .cg-panel {
+      background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-radius: 14px; overflow: hidden;
+    }
+    .cg-panel-head {
+      padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .cg-panel-head h3 { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); }
+    .cg-panel-icon { font-size: 16px; }
+    .cg-panel-body { padding: 16px 20px; max-height: 320px; overflow-y: auto; }
+
+    /* Interview list items */
+    .cg-interview-item {
+      padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .cg-interview-item:last-child { border-bottom: none; }
+    .cg-interview-item:hover { padding-left: 6px; }
+    .cg-interview-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .cg-interview-name { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.9); }
+    .cg-interview-date { font-size: 11px; color: rgba(255,255,255,0.35); }
+    .cg-interview-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cg-badge {
+      padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 500;
+    }
+    .cg-badge-questions { background: rgba(59,130,246,0.12); color: #60a5fa; }
+    .cg-badge-company { background: rgba(139,92,246,0.12); color: #a78bfa; }
+
+    /* Company cards */
+    .cg-company-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+    }
+    .cg-company-card {
+      padding: 16px; border-radius: 12px; text-align: center; cursor: pointer;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      transition: all 0.25s;
+    }
+    .cg-company-card:hover { border-color: rgba(59,130,246,0.3); transform: translateY(-2px); background: rgba(59,130,246,0.05); }
+    .cg-company-avatar {
+      width: 44px; height: 44px; border-radius: 12px; margin: 0 auto 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: #fff;
+    }
+    .cg-company-avatar.google { background: linear-gradient(135deg, #4285f4, #34a853); }
+    .cg-company-avatar.meta { background: linear-gradient(135deg, #0668e1, #1877f2); }
+    .cg-company-avatar.amazon { background: linear-gradient(135deg, #ff9900, #ffb84d); }
+    .cg-company-avatar.default { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+    .cg-company-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 2px; }
+    .cg-company-sub { font-size: 11px; color: rgba(255,255,255,0.35); }
+
+    /* Bar chart */
+    .cg-bar-chart { display: flex; align-items: flex-end; justify-content: space-around; height: 140px; padding: 8px 0; }
+    .cg-bar {
+      flex: 1; max-width: 36px; border-radius: 6px 6px 0 0; margin: 0 3px;
+      background: linear-gradient(180deg, #3b82f6, #60a5fa); position: relative;
+      min-height: 4px; transition: all 0.3s;
+    }
+    .cg-bar:hover { filter: brightness(1.2); }
+    .cg-bar-label {
+      position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; color: rgba(255,255,255,0.35); white-space: nowrap;
+    }
+    .cg-bar-value {
+      position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 600;
+    }
+
+    /* Pie chart */
+    .cg-pie-wrap { display: flex; align-items: center; gap: 24px; padding: 8px; }
+    .cg-pie {
+      width: 110px; height: 110px; border-radius: 50%; position: relative; flex-shrink: 0;
+    }
+    .cg-pie-hole {
+      position: absolute; inset: 28px; background: rgba(10,14,26,0.55); border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .cg-pie-total { font-size: 20px; font-weight: 800; color: #fff; }
+    .cg-pie-label { font-size: 10px; color: rgba(255,255,255,0.35); }
+    .cg-legend { display: flex; flex-direction: column; gap: 6px; }
+    .cg-legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255,255,255,0.6); }
+    .cg-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+    /* Search */
+    .cg-search-wrap {
+      background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px; padding: 24px; margin-bottom: 20px;
+    }
+    .cg-search-row { display: flex; gap: 10px; margin-bottom: 14px; }
+    .cg-input {
+      flex: 1; padding: 10px 14px; border-radius: 10px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s;
+    }
+    .cg-input:focus { border-color: rgba(59,130,246,0.5); }
+    .cg-input::placeholder { color: rgba(255,255,255,0.25); }
+    .cg-btn {
+      padding: 10px 20px; border: none; border-radius: 10px; font-size: 14px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .cg-btn-primary { background: #3b82f6; color: #fff; }
+    .cg-btn-primary:hover { background: #2563eb; }
+    .cg-btn-ghost { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); }
+    .cg-btn-ghost:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); }
+    .cg-filters {
+      display: flex; gap: 8px; flex-wrap: wrap; padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .cg-select {
+      padding: 8px 12px; border-radius: 8px; font-size: 13px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      color: #fff; outline: none; cursor: pointer;
+    }
+    .cg-select:focus { border-color: rgba(59,130,246,0.5); }
+    .cg-select option { background: rgba(20,24,40,0.9); }
+
+    /* Search results */
+    .cg-result-count { font-size: 13px; color: rgba(255,255,255,0.4); margin-bottom: 12px; }
+    .cg-result-card {
+      padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .cg-result-card:last-child { border-bottom: none; }
+    .cg-result-q { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.9); margin-bottom: 4px; line-height: 1.4; }
+    .cg-result-a { font-size: 13px; color: rgba(255,255,255,0.4); line-height: 1.4; margin-bottom: 6px; }
+    .cg-result-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cg-tag {
+      padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 500;
+    }
+    .cg-tag-node { background: rgba(59,130,246,0.12); color: #60a5fa; }
+    .cg-tag-cat { background: rgba(139,92,246,0.12); color: #a78bfa; }
+    .cg-tag-score { background: rgba(34,197,94,0.12); color: #4ade80; }
+
+    /* Skills */
+    .cg-skill-row {
+      display: flex; align-items: center; gap: 12px; padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .cg-skill-row:last-child { border-bottom: none; }
+    .cg-skill-name { width: 120px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.85); flex-shrink: 0; }
+    .cg-skill-track { flex: 1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+    .cg-skill-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+    .cg-skill-fill.expert { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+    .cg-skill-fill.advanced { background: linear-gradient(90deg, #22c55e, #4ade80); }
+    .cg-skill-fill.intermediate { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .cg-skill-fill.beginner { background: linear-gradient(90deg, #ef4444, #f87171); }
+    .cg-skill-level { font-size: 12px; color: rgba(255,255,255,0.4); width: 90px; text-align: right; }
+
+    /* Extract */
+    .cg-textarea {
+      width: 100%; min-height: 120px; padding: 14px; border-radius: 10px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      color: #fff; font-family: inherit; font-size: 14px; resize: vertical;
+      outline: none; transition: border-color 0.2s; line-height: 1.5;
+    }
+    .cg-textarea:focus { border-color: rgba(59,130,246,0.5); }
+    .cg-textarea::placeholder { color: rgba(255,255,255,0.25); }
+    .cg-extract-result {
+      margin-top: 16px; padding: 18px; border-radius: 12px;
+      background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06);
+    }
+    .cg-entity-group { margin-bottom: 14px; }
+    .cg-entity-group:last-child { margin-bottom: 0; }
+    .cg-entity-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.5); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .cg-entity-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cg-chip {
+      padding: 4px 12px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    }
+    .cg-chip-company { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .cg-chip-skill { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .cg-chip-topic { background: rgba(34,197,94,0.15); color: #4ade80; }
+
+    /* Company detail */
+    .cg-detail-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .cg-detail-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px; }
+    .cg-detail-stat { text-align: center; padding: 14px; background: rgba(255,255,255,0.03); border-radius: 10px; }
+    .cg-detail-val { font-size: 24px; font-weight: 800; color: #3b82f6; }
+    .cg-detail-label { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; text-transform: uppercase; }
+    .cg-detail-topics { padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); }
+    .cg-detail-topics strong { display: block; margin-bottom: 10px; font-size: 13px; color: rgba(255,255,255,0.7); }
+    .cg-topic-chip {
+      display: inline-block; padding: 4px 12px; border-radius: 8px; font-size: 12px;
+      background: rgba(59,130,246,0.1); color: #93c5fd; margin: 0 4px 6px 0;
+    }
+
+    /* Empty state */
+    .cg-empty { text-align: center; padding: 40px 20px; }
+    .cg-empty-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.4; }
+    .cg-empty-title { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
+    .cg-empty-sub { font-size: 13px; color: rgba(255,255,255,0.3); }
+
+    /* Loading */
+    .cg-loading { text-align: center; padding: 40px; color: rgba(255,255,255,0.35); }
+    .cg-spinner {
+      display: inline-block; width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toast */
+    .cg-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 500;
+      background: rgba(30,30,50,0.55); border: 1px solid rgba(255,255,255,0.1);
+      color: #fff; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 99999;
+      opacity: 0; transition: all 0.3s ease;
+    }
+    .cg-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="cg-bg-mesh"></div>
+  <div class="cg-page">
+    <!-- Header -->
+    <header class="cg-header">
+      <button class="cg-back-btn" onclick="window.location.href='index.html'" title="Back">←</button>
+      <div class="cg-header-logo">
+        <img src="ant-icon-new.png" alt="ANT">
+        <h1>Cognitive Graph</h1>
+      </div>
+      <div id="statusPill" class="cg-status-pill disconnected">
+        <span class="dot"></span>
+        <span id="statusLabel">Connecting...</span>
+      </div>
+      <nav class="cg-tabs">
+        <button class="cg-tab-btn active" data-tab="overview">Overview</button>
+        <button class="cg-tab-btn" data-tab="search">Search</button>
+        <button class="cg-tab-btn" data-tab="companies">Companies</button>
+        <button class="cg-tab-btn" data-tab="skills">Skills</button>
+        <button class="cg-tab-btn" data-tab="extract">Extract</button>
+      </nav>
+    </header>
+
+    <!-- Content -->
+    <main class="cg-body">
+      <!-- Overview Tab -->
+      <div id="tab-overview" class="cg-tab-content active">
+        <div class="cg-stat-row">
+          <div class="cg-stat-card">
+            <div class="cg-stat-num" id="statInterviews">0</div>
+            <div class="cg-stat-label">Interviews</div>
+          </div>
+          <div class="cg-stat-card">
+            <div class="cg-stat-num" id="statQuestions">0</div>
+            <div class="cg-stat-label">Questions</div>
+          </div>
+          <div class="cg-stat-card">
+            <div class="cg-stat-num" id="statCompanies">0</div>
+            <div class="cg-stat-label">Companies</div>
+          </div>
+          <div class="cg-stat-card">
+            <div class="cg-stat-num" id="statTopics">0</div>
+            <div class="cg-stat-label">Topics</div>
+          </div>
+        </div>
+
+        <div class="cg-grid-2">
+          <div class="cg-panel">
+            <div class="cg-panel-head"><span class="cg-panel-icon">📈</span><h3>Interview Activity</h3></div>
+            <div class="cg-panel-body" id="activityChart">
+              <div class="cg-empty"><div class="cg-empty-icon">📈</div><div class="cg-empty-title">Loading...</div></div>
+            </div>
+          </div>
+          <div class="cg-panel">
+            <div class="cg-panel-head"><span class="cg-panel-icon">🥧</span><h3>Question Categories</h3></div>
+            <div class="cg-panel-body" id="categoryChart">
+              <div class="cg-empty"><div class="cg-empty-icon">🥧</div><div class="cg-empty-title">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cg-grid-2">
+          <div class="cg-panel">
+            <div class="cg-panel-head"><span class="cg-panel-icon">📋</span><h3>Recent Interviews</h3></div>
+            <div class="cg-panel-body" id="recentInterviews">
+              <div class="cg-empty"><div class="cg-empty-icon">📋</div><div class="cg-empty-title">Loading...</div></div>
+            </div>
+          </div>
+          <div class="cg-panel">
+            <div class="cg-panel-head"><span class="cg-panel-icon">🏢</span><h3>Top Companies</h3></div>
+            <div class="cg-panel-body" id="topCompanies">
+              <div class="cg-empty"><div class="cg-empty-icon">🏢</div><div class="cg-empty-title">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search Tab -->
+      <div id="tab-search" class="cg-tab-content">
+        <div class="cg-search-wrap">
+          <div class="cg-search-row">
+            <input type="text" id="searchInput" class="cg-input" placeholder="Search your knowledge graph (e.g., 'linked list', 'system design')...">
+            <button class="cg-btn cg-btn-primary" id="searchBtn">Search</button>
+          </div>
+          <div class="cg-filters">
+            <select id="filterCompany" class="cg-select"><option value="">All Companies</option></select>
+            <select id="filterCategory" class="cg-select">
+              <option value="">All Categories</option>
+              <option value="coding">Coding</option>
+              <option value="system_design">System Design</option>
+              <option value="behavioral">Behavioral</option>
+              <option value="knowledge">Knowledge</option>
+            </select>
+            <select id="filterDifficulty" class="cg-select">
+              <option value="">All Difficulties</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+            <button class="cg-btn cg-btn-primary" id="advancedSearchBtn">Filter</button>
+            <button class="cg-btn cg-btn-ghost" id="clearFiltersBtn">Clear</button>
+          </div>
+        </div>
+        <div id="searchStats" class="cg-result-count" style="display:none"></div>
+        <div class="cg-panel">
+          <div class="cg-panel-body" id="searchResults">
+            <div class="cg-empty"><div class="cg-empty-icon">🔍</div><div class="cg-empty-title">Search your knowledge graph</div><div class="cg-empty-sub">Enter keywords to find questions, topics, and skills</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Companies Tab -->
+      <div id="tab-companies" class="cg-tab-content">
+        <div class="cg-panel">
+          <div class="cg-panel-head"><span class="cg-panel-icon">🏢</span><h3>Company Insights</h3></div>
+          <div class="cg-panel-body" id="companyInsights">
+            <div class="cg-empty"><div class="cg-empty-icon">🏢</div><div class="cg-empty-title">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Skills Tab -->
+      <div id="tab-skills" class="cg-tab-content">
+        <div class="cg-panel">
+          <div class="cg-panel-head"><span class="cg-panel-icon">📈</span><h3>Skill Progression</h3></div>
+          <div class="cg-panel-body" id="skillsList">
+            <div class="cg-empty"><div class="cg-empty-icon">📈</div><div class="cg-empty-title">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Extract Tab -->
+      <div id="tab-extract" class="cg-tab-content">
+        <div class="cg-panel">
+          <div class="cg-panel-head"><span class="cg-panel-icon">🏷️</span><h3>Entity Extraction</h3></div>
+          <div class="cg-panel-body">
+            <p style="color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:14px;">Paste interview text to extract companies, skills, and topics.</p>
+            <textarea id="extractText" class="cg-textarea" placeholder="Paste interview transcript here..."></textarea>
+            <button class="cg-btn cg-btn-primary" id="extractBtn" style="margin-top:12px">Extract Entities</button>
+            <div id="extractResult"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/core/config.js"></script>
+  <script src="js/core/auth-helper.js"></script>
+  <script src="js/core/window-controls.js"></script>
+  <script type="module" src="js/cognitive-graph.js"></script>
+</body>
+</html>

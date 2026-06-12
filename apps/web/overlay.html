@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANT Overlay</title>
+  <link rel="stylesheet" href="style.css?v=28">
+  <style>
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       TRANSLUCENT OVERLAY
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    :root {
+      /* Overlay-specific variables */
+      --overlay-bg: rgba(15, 23, 42, 0.55);
+      --overlay-bg-click-through: rgba(15, 23, 42, 0.35);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-highlight: rgba(255, 255, 255, 0.05);
+      --accent-glow: rgba(59, 130, 246, 0.5);
+      --drag-active: rgba(59, 130, 246, 0.3);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --overlay-bg: rgba(255, 255, 255, 0.85);
+        --overlay-bg-click-through: rgba(255, 255, 255, 0.65);
+        --glass-border: rgba(0, 0, 0, 0.1);
+        --glass-highlight: rgba(0, 0, 0, 0.03);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: transparent;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       OVERLAY CONTAINER
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .overlay-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--overlay-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .overlay-container.click-through {
+      background: var(--overlay-bg-click-through);
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .overlay-container.drag-active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--drag-active);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       HEADER - Draggable area
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .overlay-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, var(--glass-highlight), transparent);
+      border-bottom: 1px solid var(--glass-border);
+      -webkit-app-region: drag;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .overlay-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .overlay-title .icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: white;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       CONTROL BUTTONS
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .control-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid var(--glass-border);
+      background: var(--surface);
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 12px;
+    }
+
+    .control-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-main);
+      border-color: var(--line-bright);
+    }
+
+    .control-btn:active {
+      transform: scale(0.95);
+    }
+
+    .control-btn.active {
+      background: var(--primary-light);
+      color: var(--primary);
+      border-color: var(--primary);
+      box-shadow: 0 0 12px var(--primary-glow);
+    }
+
+    .control-btn.danger:hover {
+      background: var(--danger-dim);
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       MAIN CONTENT
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .overlay-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar styling */
+    .overlay-content::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .overlay-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .overlay-content::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 2px;
+    }
+
+    .overlay-content::-webkit-scrollbar-thumb:hover {
+      background: var(--line-bright);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       LIVE TRANSCRIPTION SECTION
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .section-title .indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+
+    .section-title .indicator.recording {
+      background: var(--danger);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .section-content {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-main);
+      min-height: 60px;
+    }
+
+    .placeholder {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       AI SUGGESTIONS SECTION
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .suggestion-card {
+      background: linear-gradient(135deg, var(--primary-light), var(--surface));
+      border: 1px solid var(--glass-border);
+      border-left: 3px solid var(--primary);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+
+    .suggestion-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    .suggestion-text {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-main);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       QUICK ACTIONS BAR
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      flex: 1;
+      min-width: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 8px;
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      background: var(--surface-hover);
+      border-color: var(--line-bright);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+
+    .action-btn:active {
+      transform: scale(0.98);
+    }
+
+    .action-btn.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .action-btn .icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .action-btn .label {
+      font-size: 10px;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       OPACITY CONTROL
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .opacity-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+    }
+
+    .opacity-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .opacity-slider {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--line);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .opacity-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      box-shadow: 0 2px 6px var(--primary-glow);
+      transition: transform 0.1s ease;
+    }
+
+    .opacity-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    .opacity-value {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       FOOTER BAR
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .overlay-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-top: 1px solid var(--glass-border);
+      flex-shrink: 0;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .status-indicator .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .status-indicator.offline .dot {
+      background: var(--text-dim);
+    }
+
+    .status-indicator.error .dot {
+      background: var(--danger);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       FILE DROP ZONE
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .drop-zone {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(59, 130, 246, 0.1);
+      border: 2px dashed var(--primary);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 100;
+    }
+
+    .drop-zone.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .drop-zone .icon {
+      font-size: 48px;
+      opacity: 0.6;
+    }
+
+    .drop-zone .text {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--primary);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       HOTKEY CHEATSHEET
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .hotkey-hint {
+      font-size: 10px;
+      color: var(--text-dim);
+      opacity: 0.7;
+      text-align: center;
+      padding: 4px;
+    }
+
+    .hotkey-hint kbd {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 9px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       EMPTY STATE
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 32px 16px;
+      text-align: center;
+      opacity: 0.6;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      opacity: 0.4;
+    }
+
+    .empty-state .title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .empty-state .subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       FILE PREVIEW
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .file-preview {
+      background: var(--surface);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .file-preview .icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--primary-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .file-preview .info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-preview .name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-preview .meta {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       RESPONSIVE
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    @media (max-width: 360px) {
+      .overlay-header {
+        padding: 10px 12px;
+      }
+
+      .overlay-content {
+        padding: 12px;
+      }
+
+      .quick-actions {
+        gap: 6px;
+      }
+
+      .action-btn {
+        padding: 8px 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay-container" id="overlayContainer">
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════
+         HEADER
+         ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="overlay-header">
+      <div class="overlay-title">
+        <div class="icon">AI</div>
+        <span>ANT Overlay</span>
+      </div>
+      <div class="header-controls">
+        <button class="control-btn" id="clickThroughBtn" title="Toggle Click-Through (Alt+T)">
+          👁️
+        </button>
+        <button class="control-btn" id="minimizeBtn" title="Minimize">
+          −
+        </button>
+        <button class="control-btn danger" id="closeBtn" title="Close (Alt+H)">
+          ×
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════
+         DROP ZONE (shown on drag)
+         ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">📁</div>
+      <div class="text">Drop file to analyze</div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════
+         MAIN CONTENT
+         ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="overlay-content" id="overlayContent">
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <button class="action-btn" id="micBtn" title="Toggle Microphone (Ctrl+Shift+M)">
+          <span class="icon">🎤</span>
+          <span class="label">Audio</span>
+        </button>
+        <button class="action-btn" id="voiceBtn" title="Voice Input (Ctrl+Shift+A)">
+          <span class="icon">🎙️</span>
+          <span class="label">Voice</span>
+        </button>
+        <button class="action-btn" id="screenshotBtn" title="Screenshot (Ctrl+Shift+S)">
+          <span class="icon">📷</span>
+          <span class="label">Capture</span>
+        </button>
+        <button class="action-btn" id="fileBtn" title="Open File">
+          <span class="icon">📎</span>
+          <span class="label">File</span>
+        </button>
+      </div>
+
+      <!-- Live Transcription -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">
+            <span class="indicator" id="recordingIndicator"></span>
+            Live Transcription
+          </div>
+        </div>
+        <div class="section-content" id="transcriptionContent">
+          <span class="placeholder">Transcription will appear here...</span>
+        </div>
+      </div>
+
+      <!-- AI Suggestion -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">AI Suggestion</div>
+        </div>
+        <div class="section-content" id="suggestionContent">
+          <div class="empty-state">
+            <div class="icon">💡</div>
+            <div class="subtitle">AI suggestions will appear here</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Opacity Control -->
+      <div class="opacity-control">
+        <span class="opacity-label">Opacity</span>
+        <input type="range" class="opacity-slider" id="opacitySlider" min="50" max="100" value="90">
+        <span class="opacity-value" id="opacityValue">90%</span>
+      </div>
+
+      <!-- Hotkey Cheatsheet -->
+      <div class="hotkey-hint">
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> Mic &nbsp;•&nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> Voice &nbsp;•&nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> Capture &nbsp;•&nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> Toggle
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════
+         FOOTER
+         ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="overlay-footer">
+      <div class="footer-left">
+        <div class="status-indicator" id="backendStatus">
+          <span class="dot"></span>
+          <span>Ready</span>
+        </div>
+      </div>
+      <div class="header-controls">
+        <button class="control-btn" id="settingsBtn" title="Settings">
+          ⚙️
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       JAVASCRIPT
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <script src="js/core/config.js"></script>
+  <script>
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    const state = {
+      isClickThrough: false,
+      opacity: 0.9,
+      isRecording: false,
+      backendReady: false
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DOM ELEMENTS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    const elements = {
+      container: document.getElementById('overlayContainer'),
+      content: document.getElementById('overlayContent'),
+      dropZone: document.getElementById('dropZone'),
+      clickThroughBtn: document.getElementById('clickThroughBtn'),
+      minimizeBtn: document.getElementById('minimizeBtn'),
+      closeBtn: document.getElementById('closeBtn'),
+      micBtn: document.getElementById('micBtn'),
+      voiceBtn: document.getElementById('voiceBtn'),
+      screenshotBtn: document.getElementById('screenshotBtn'),
+      fileBtn: document.getElementById('fileBtn'),
+      settingsBtn: document.getElementById('settingsBtn'),
+      opacitySlider: document.getElementById('opacitySlider'),
+      opacityValue: document.getElementById('opacityValue'),
+      recordingIndicator: document.getElementById('recordingIndicator'),
+      transcriptionContent: document.getElementById('transcriptionContent'),
+      suggestionContent: document.getElementById('suggestionContent'),
+      backendStatus: document.getElementById('backendStatus')
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // IPC BRIDGE (Electron API)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    const ipc = window.api || {
+      send: () => {},
+      receive: () => {},
+      invoke: async () => null
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // EVENT HANDLERS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Close overlay
+    elements.closeBtn.addEventListener('click', () => {
+      ipc.send('overlay:hide');
+      window.close();
+    });
+
+    // Minimize overlay
+    elements.minimizeBtn.addEventListener('click', () => {
+      if (window.api?.minimizeWindow) {
+        window.api.minimizeWindow();
+      }
+    });
+
+    // Toggle click-through
+    elements.clickThroughBtn.addEventListener('click', () => {
+      toggleClickThrough();
+    });
+
+    // Opacity slider
+    elements.opacitySlider.addEventListener('input', (e) => {
+      const value = e.target.value / 100;
+      setOpacity(value);
+    });
+
+    // Quick action buttons
+    elements.micBtn.addEventListener('click', () => {
+      toggleRecording();
+      ipc.send('hotkey-toggle-mic');
+    });
+
+    elements.voiceBtn.addEventListener('click', () => {
+      ipc.send('hotkey-start-voice');
+    });
+
+    elements.screenshotBtn.addEventListener('click', () => {
+      ipc.send('hotkey-screenshot');
+    });
+
+    elements.fileBtn.addEventListener('click', async () => {
+      const fileInfo = await ipc.invoke('overlay:open-file-dialog');
+      if (fileInfo) {
+        showFilePreview(fileInfo);
+      }
+    });
+
+    elements.settingsBtn.addEventListener('click', () => {
+      ipc.send('open-settings');
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    function toggleClickThrough() {
+      state.isClickThrough = !state.isClickThrough;
+      elements.container.classList.toggle('click-through', state.isClickThrough);
+      elements.clickThroughBtn.classList.toggle('active', state.isClickThrough);
+
+      // Notify main process
+      ipc.invoke('overlay:toggle-click-through');
+    }
+
+    function setOpacity(value) {
+      state.opacity = value;
+      elements.opacitySlider.value = Math.round(value * 100);
+      elements.opacityValue.textContent = Math.round(value * 100) + '%';
+
+      // Notify main process
+      ipc.invoke('overlay:set-opacity', value);
+    }
+
+    function toggleRecording() {
+      state.isRecording = !state.isRecording;
+      elements.recordingIndicator.classList.toggle('recording', state.isRecording);
+      elements.micBtn.classList.toggle('active', state.isRecording);
+
+      if (state.isRecording) {
+        elements.transcriptionContent.innerHTML = '<span class="placeholder">Listening...</span>';
+      }
+    }
+
+    function showFilePreview(fileInfo) {
+      const typeIcons = {
+        image: '🖼️',
+        document: '📄',
+        code: '💻',
+        audio: '🎵',
+        video: '🎬',
+        unknown: '📎'
+      };
+
+      const sizeStr = fileInfo.size < 1024 ? fileInfo.size + ' B' :
+                      fileInfo.size < 1024 * 1024 ? (fileInfo.size / 1024).toFixed(1) + ' KB' :
+                      (fileInfo.size / (1024 * 1024)).toFixed(1) + ' MB';
+
+      const html = `
+        <div class="file-preview">
+          <div class="icon">${typeIcons[fileInfo.type] || typeIcons.unknown}</div>
+          <div class="info">
+            <div class="name">${fileInfo.name}</div>
+            <div class="meta">${fileInfo.type} • ${sizeStr}</div>
+          </div>
+        </div>
+      `;
+
+      elements.suggestionContent.innerHTML = html;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DRAG AND DROP
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Track drag state
+    let dragCounter = 0;
+
+    document.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      elements.dropZone.classList.add('active');
+      elements.container.classList.add('drag-active');
+    });
+
+    document.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) {
+        elements.dropZone.classList.remove('active');
+        elements.container.classList.remove('drag-active');
+      }
+    });
+
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    document.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      elements.dropZone.classList.remove('active');
+      elements.container.classList.remove('drag-active');
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const filePath = files[0].path || files[0].name;
+        const fileInfo = await ipc.invoke('overlay:process-file', filePath);
+        if (fileInfo) {
+          showFilePreview(fileInfo);
+        }
+      }
+    });
+
+    // Expose drag state setter for preload
+    window.setDragState = (active) => {
+      if (active) {
+        elements.dropZone.classList.add('active');
+        elements.container.classList.add('drag-active');
+      } else {
+        elements.dropZone.classList.remove('active');
+        elements.container.classList.remove('drag-active');
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // IPC LISTENERS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Click-through changed from main process
+    ipc.receive('click-through-changed', (enabled) => {
+      state.isClickThrough = enabled;
+      elements.container.classList.toggle('click-through', enabled);
+      elements.clickThroughBtn.classList.toggle('active', enabled);
+    });
+
+    // Opacity changed from main process
+    ipc.receive('opacity-changed', (value) => {
+      setOpacity(value);
+    });
+
+    // Transcription update
+    ipc.receive('transcription-update', (text) => {
+      elements.transcriptionContent.textContent = text;
+    });
+
+    // AI suggestion
+    ipc.receive('ai-suggestion', (suggestion) => {
+      const html = `
+        <div class="suggestion-card">
+          <div class="suggestion-label">AI Suggestion</div>
+          <div class="suggestion-text">${suggestion}</div>
+        </div>
+      `;
+      elements.suggestionContent.innerHTML = html;
+    });
+
+    // File dropped from main process
+    ipc.receive('file-dropped', (fileInfo) => {
+      showFilePreview(fileInfo);
+    });
+
+    // Backend status
+    ipc.receive('backend:status', ({ status }) => {
+      state.backendReady = status === 'ready';
+      elements.backendStatus.classList.toggle('offline', !state.backendReady);
+      elements.backendStatus.querySelector('span:last-child').textContent =
+        state.backendReady ? 'Ready' : 'Offline';
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // KEYBOARD SHORTCUTS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    document.addEventListener('keydown', (e) => {
+      // Alt + T - Toggle click-through
+      if (e.altKey && e.key === 't') {
+        e.preventDefault();
+        toggleClickThrough();
+      }
+
+      // Alt + O/P - Decrease/Increase opacity
+      if (e.altKey && e.key === 'o') {
+        e.preventDefault();
+        setOpacity(Math.max(0.5, state.opacity - 0.05));
+      }
+      if (e.altKey && e.key === 'p') {
+        e.preventDefault();
+        setOpacity(Math.min(1, state.opacity + 0.05));
+      }
+
+      // Escape - Exit click-through mode
+      if (e.key === 'Escape' && state.isClickThrough) {
+        toggleClickThrough();
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // INITIALIZATION
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Load initial state
+    async function init() {
+      try {
+        const overlayState = await ipc.invoke('overlay:state');
+        if (overlayState) {
+          setOpacity(overlayState.opacity || 0.9);
+          if (overlayState.clickThrough) {
+            toggleClickThrough();
+          }
+        }
+      } catch (e) {
+        console.log('Failed to load overlay state:', e);
+      }
+    }
+
+    init();
+
+    // Notify that overlay is ready
+    ipc.send('overlay-ready');
+
+    console.log('[Overlay] Translucent overlay initialized');
+  </script>
+</body>
+</html>

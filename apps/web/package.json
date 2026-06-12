@@ -1,0 +1,19 @@
+{
+  "name": "ant-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ANT (AI Note Taker) — web app, served by Vercel and embedded in the Electron desktop app",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.60.2",
+    "highlight.js": "^11.10.0"
+  }
+}

@@ -1,0 +1,85 @@
+# Dependabot config — keeps the monorepo's 4 package managers fresh.
+# Group minor/patch updates so PRs are reviewable.
+version: 2
+updates:
+  # ── npm (workspaces) ───────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "npm"
+    # workspace subdirs are covered by the root / directory glob; no
+    # need for separate package-ecosystem entries per workspace.
+
+  # ── pip (backend) ──────────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      pip-minor:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "pip"
+    commit-message:
+      prefix: "pip"
+
+  # ── GitHub Actions ─────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+
+  # ── Docker (base images) ───────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    groups:
+      docker-minor:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "docker"

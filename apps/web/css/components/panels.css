@@ -1,0 +1,98 @@
+/* ==============================
+   SIDE PANELS - History, Settings Base
+   ============================== */
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: var(--z-overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+.panel-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Base Panel */
+.side-panel {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 85vw;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border-left: 1px solid var(--glass-border);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--duration-slow) var(--ease-spring);
+}
+
+.side-panel.right {
+  right: 0;
+  transform: translateX(100%);
+}
+
+.side-panel.left {
+  left: 0;
+  transform: translateX(-100%);
+  border-left: none;
+  border-right: 1px solid var(--glass-border);
+}
+
+.side-panel.open {
+  transform: translateX(0);
+}
+
+/* Panel Header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.panel-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.panel-close-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.panel-close-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-bright);
+}
+
+/* Panel Body */
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+/* Panel Footer */
+.panel-footer {
+  padding: var(--space-4);
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}

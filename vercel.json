@@ -1,0 +1,47 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": "apps/web",
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/caption-overlay", "destination": "/caption-overlay.html" },
+    { "source": "/cognitive-graph", "destination": "/cognitive-graph.html" },
+    { "source": "/interview-overlay", "destination": "/interview-overlay.html" },
+    { "source": "/interview-simulator", "destination": "/interview-simulator.html" },
+    { "source": "/job-tracker", "destination": "/job-tracker.html" },
+    { "source": "/overlay", "destination": "/overlay.html" },
+    { "source": "/pre-interview", "destination": "/pre-interview.html" },
+    { "source": "/resume-review", "destination": "/resume-review.html" },
+    { "source": "/resume-review-v2", "destination": "/resume-review-v2.html" },
+    { "source": "/signin", "destination": "/signin.html" },
+    { "source": "/splash", "destination": "/splash.html" },
+    { "source": "/study-plan", "destination": "/study-plan.html" },
+    { "source": "/analytics-dashboard", "destination": "/analytics-dashboard.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains; preload" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://api.github.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https://ai-note-taker-7xvn.onrender.com wss://ai-note-taker-7xvn.onrender.com https://api.github.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+  "trailingSlash": false
+}

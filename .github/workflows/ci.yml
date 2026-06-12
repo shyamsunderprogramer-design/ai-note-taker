@@ -1,0 +1,358 @@
+name: CI
+
+# Trigger on PRs (every push to a PR branch) and on pushes to main.
+# Per project scope, e2e runs on every PR — no manual/nightly split.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-flight PR runs when a new commit lands on the same PR.
+# We do NOT cancel on pushes to main: a fix that just landed on
+# main should not be cancelled by the next push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Tests don't push back to the repo. Scope GITHUB_TOKEN down to
+# read-only contents so a compromised dep can't write to the repo
+# via the token. (upload-artifact still works with this scope.)
+permissions:
+  contents: read
+
+# Shared checkout step. Reused by all three jobs via the *checkout
+# alias below. Standard GitHub Actions YAML-anchor pattern.
+x-checkout: &checkout
+  uses: actions/checkout@v4
+
+jobs:
+  backend-tests:
+    name: Backend (pytest, all 7 files)
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          # 3.12 matches what the developer runs locally. The repo
+          # does not pin a Python version (no .python-version, no
+          # pyproject.toml, no runtime.txt). Adjust if/when the
+          # repo grows a pin.
+          cache: 'pip'
+          # Key the cache on the TEST requirements file, not the
+          # full requirements.txt — a production-deps change
+          # should not bust the lighter test-deps cache used here.
+          # The e2e job uses a separate, heavier cache below.
+          cache-dependency-path: backend/requirements-test.txt
+
+      - name: Install test dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          # requirements-test.txt is curated for CI: it deliberately
+          # omits torch / ctranslate2 / faster-whisper / spacy that
+          # the e2e job needs but these unit tests do not. It DOES
+          # include pytest / pytest-asyncio / pytest-cov / httpx,
+          # so we do not install them again here.
+          pip install -r requirements-test.txt
+
+      - name: Run all 7 backend test files
+        working-directory: backend
+        # Collects 7 files (1 script-style + 6 module-style):
+        #   core/test_startup.py                (script-style; def test_imports/test_functionality)
+        #   tests/test_realtime_suggestions.py
+        #   tests/test_agent_integrations.py
+        #   tests/test_api_integration.py       (auto-skips when no uvicorn on :8000)
+        #   tests/test_performance_analyzer.py
+        #   tests/test_study_plan_generator.py
+        #   tests/test_phase4_features.py
+        # Per project scope: "try all 7, accept the flakiness" —
+        # no exclude / xfail markers are added here.
+        #
+        # `asyncio_mode = auto` is set in backend/pytest.ini (created
+        # in Fix #17) — it covers test_api_integration.py's
+        # `async def test_*` functions. We do not need to pass
+        # `-o asyncio_mode=auto` on the CLI anymore.
+        run: |
+          python -m pytest \
+            core/test_startup.py \
+            tests/ \
+            --tb=short \
+            -v
+
+  web-build:
+    name: Web (Vite build)
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # Root package.json declares engines.node ">=20.0.0";
+          # no .nvmrc in the repo, so 20 is the lowest LTS that
+          # satisfies the floor. Vite 6 requires Node 18+; 20
+          # is the modern default.
+          cache: 'npm'
+          # Cache keyed on the root lockfile (monorepo root,
+          # created in Fix #21). apps/web does not ship its own
+          # lockfile — its deps are hoisted to the root.
+          cache-dependency-path: package-lock.json
+
+      - name: Install root + workspace deps
+        # Monorepo root install: brings in root devDeps (eslint
+        # ^8.56.0 etc.) and the apps/web workspace via npm
+        # workspaces. `npm ci` is strict about the lockfile
+        # matching package.json — it will fail loudly if the
+        # lockfile is out of date, which is what we want for CI.
+        run: npm ci
+
+      - name: Build apps/web SPA
+        working-directory: apps/web
+        # apps/web/package.json (Fix #18) ships only "dev", "build",
+        # and "preview" scripts — no eslint config, no test script.
+        # Per scope we only verify the production build succeeds;
+        # we deliberately do not run `eslint` here.
+        run: npm run build
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Don't waste a 10+ min e2e run if the backend or the web
+    # build is already broken — gate on both. e2e is the only
+    # job that needs `needs:`.
+    needs: [backend-tests, web-build]
+    steps:
+      - *checkout
+
+      # Full Python deps this time: e2e/playwright.config.js
+      # boots the REAL backend (`uvicorn core.main:app --port
+      # 8000`) via its webServer config, which transitively
+      # imports modules that need torch / neo4j / redis / spacy
+      # that requirements-test.txt strips out.
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          # Heavier cache: the e2e job pulls in the full ML
+          # dependency tree. Cache key is the production
+          # requirements.txt so a test-only change does not
+          # bust this cache.
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm'
+          # The e2e workspace does not currently ship a
+          # package-lock.json (verified 2026-06-05). We fall
+          # back to `npm install` in that case — see the
+          # install step below.
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright deps
+        working-directory: e2e
+        # We do NOT need `npm install` inside apps/web here:
+        # e2e/playwright.config.js serves apps/web/ statically
+        # via `python -m http.server 3000` straight from the
+        # Vite source dir (index.html, src/, etc. — NOT a built
+        # dist/), which requires no Node tooling. The web-build
+        # job above already validated that the production build
+        # works.
+        #
+        # The lockfile-existence guard matches the reality that
+        # e2e/package-lock.json is not yet committed: if it
+        # appears in the future, use `npm ci` for reproducible
+        # installs.
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npx playwright install --with-deps
+
+      - name: Run Playwright tests
+        working-directory: e2e
+        env:
+          # CI=true flips Playwright config: forbidOnly (no .only()
+          # in committed specs), retries: 2, workers: 1, etc.
+          # The config already reads process.env.CI for these.
+          CI: "true"
+        # NOTE on disk space: GitHub-hosted ubuntu-latest runners
+        # ship with ~14 GB free. The torch / spacy / ctranslate2 /
+        # faster-whisper stack pulled in by requirements.txt
+        # routinely blows past that. If this job starts failing
+        # with "No space left on device", the escape hatches are:
+        #   (a) move e2e to workflow_dispatch (manual) only, or
+        #   (b) move it to a self-hosted runner with more disk.
+        # Risk acknowledged per project scope.
+        run: npx playwright test
+
+      - name: Upload Playwright report (failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/html-report
+            e2e/test-results
+          retention-days: 7
+          # if-no-files-found: ignore guards against the rare case
+          # where the job fails before Playwright has produced
+          # report files (e.g. install/setup error).
+          if-no-files-found: ignore
+
+  security-scan:
+    # Static analysis + dependency audit + secret scan. Runs in
+    # parallel with the build/test jobs so a security regression
+    # doesn't gate on a 10-minute e2e. Gated only on the backend
+    # test job because we need to know the test code itself
+    # imports cleanly before running bandit on it.
+    name: Security (bandit, pip-audit, gitleaks)
+    runs-on: ubuntu-latest
+    needs: [backend-tests]
+    steps:
+      - *checkout
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-security.txt
+
+      - name: Install security tooling
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-security.txt
+          # pip-audit replaces the deprecated `safety check` for
+          # dependency CVE scanning. It's the modern PyPA-recommended
+          # tool. Not in requirements-security.txt because it's a
+          # dev-time tool, not a runtime dep.
+          pip install pip-audit
+
+      - name: Run bandit (Python static analysis)
+        # Bandit scans for common security issues: hardcoded
+        # passwords, SQL injection patterns, weak crypto, eval/exec
+        # usage, etc. We use the `security` profile (medium+
+        # severity) so low-severity style nits don't fail the build.
+        # -lll skips low/medium; we keep high.
+        working-directory: backend
+        run: |
+          bandit -r . \
+            --skip B101,B601 \
+            --severity-level high \
+            --confidence-level high \
+            --exclude ./venv,./node_modules,./__pycache__ \
+            --format json --output bandit-report.json || true
+          # Always print a human-readable summary; the JSON is
+          # uploaded as an artifact below.
+          bandit -r . \
+            --skip B101,B601 \
+            --severity-level high \
+            --confidence-level high \
+            --exclude ./venv,./node_modules,./__pycache__ \
+            --format screen || true
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: backend/bandit-report.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Run pip-audit (dependency CVE scan)
+        # Scans the resolved dependency tree for known CVEs in the
+        # National Vulnerability Database. Non-fatal by design —
+        # we want visibility, not a hard failure on every new CVE
+        # (the audit team triages separately). The --strict flag
+        # would fail the job on any vuln; we deliberately omit it.
+        working-directory: backend
+        run: |
+          pip-audit --requirement requirements.txt \
+            --format json --output pip-audit-report.json || true
+          pip-audit --requirement requirements.txt \
+            --format columns || true
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: backend/pip-audit-report.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Run gitleaks (secret scan)
+        # Catches accidentally-committed API keys, tokens, passwords.
+        # Uses the official gitleaks-action. Config-free mode scans
+        # the entire git history. Public repos get the free
+        # GitHub-hosted version; private repos need GH_PAT.
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # No `with:` block — uses defaults. The action exits
+        # non-zero if it finds a leak; that fails the job.
+
+      - name: Fail job on bandit/pip-audit findings
+        # The bandit and pip-audit steps above use `|| true` so the
+        # job keeps running and uploads the JSON reports. This
+        # final step reads the JSON and fails the job if there are
+        # any high-severity findings. Trade-off: a 5-line Python
+        # script is simpler than juggling matrix outputs.
+        if: always()
+        working-directory: backend
+        run: |
+          python3 - <<'PY'
+          import json, sys, pathlib
+
+          failed = False
+
+          # Bandit: any high-severity + high-confidence result fails.
+          bp = pathlib.Path("bandit-report.json")
+          if bp.exists():
+              data = json.loads(bp.read_text())
+              high = [
+                  r for r in data.get("results", [])
+                  if r.get("issue_severity") == "HIGH"
+                  and r.get("issue_confidence") == "HIGH"
+              ]
+              if high:
+                  print(f"::error::bandit found {len(high)} high-severity findings")
+                  for r in high[:5]:
+                      print(f"  - {r['test_id']} at {r['filename']}:{r['line_number']}: {r['issue_text']}")
+                  failed = True
+              else:
+                  print("bandit: no high-severity findings")
+
+          # pip-audit: any vuln with a known fix fails.
+          pp = pathlib.Path("pip-audit-report.json")
+          if pp.exists():
+              data = json.loads(pp.read_text())
+              vulns = data.get("dependencies", [])
+              fixable = [d for d in vulns if d.get("vulns") and any(
+                  v.get("fix_versions") for v in d["vulns"]
+              )]
+              if fixable:
+                  print(f"::error::pip-audit found {len(fixable)} dependencies with fixable CVEs")
+                  for d in fixable[:5]:
+                      for v in d["vulns"][:3]:
+                          if v.get("fix_versions"):
+                              print(f"  - {d['name']} {v['id']}: fix in {v['fix_versions'][:2]}")
+                              break
+                  # Non-fatal: visibility, not gating. Flip to `failed=True`
+                  # if you want to enforce dependency freshness.
+
+          sys.exit(1 if failed else 0)
+          PY

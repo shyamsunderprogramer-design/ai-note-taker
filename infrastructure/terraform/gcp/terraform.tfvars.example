@@ -1,0 +1,11 @@
+# terraform.tfvars.example — Copy to terraform.tfvars and customize.
+# terraform.tfvars is gitignored; this is the committed template.
+#
+# Each var has a one-line description; see variables.tf for full docs.
+
+environment = "production"   # production | staging | dev
+image_tag   = "latest"       # Docker image tag for the ant-backend chart
+project     = "your-project-id"  # GCP Project ID
+region      = "us-central1"  # Region for regional resources
+zone        = "us-central1-a"  # Zone for the GKE cluster + node pool
+domain_name = ""             # Public DNS name (e.g. api.ant.example.com); empty skips cert

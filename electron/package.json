@@ -1,0 +1,209 @@
+{
+  "name": "ai-note-taker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered voice note taker with stealth mode",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder -mwl",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "pack": "electron-builder --dir",
+    "icons": "node scripts/generate-icons.js",
+    "icons:win": "node scripts/generate-icons.js",
+    "icons:mac": "node scripts/generate-icons.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [
+    "ai",
+    "notes",
+    "voice",
+    "electron"
+  ],
+  "author": {
+    "name": "AI Note Taker",
+    "email": "dev@ainotetaker.com"
+  },
+  "license": "ISC",
+  "homepage": "https://github.com/shyamsunderprogramer-design/ai-note-taker",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.ainotetaker.app",
+    "productName": "ANT (AI Note Taker)",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "shyamsunderprogramer-design",
+      "repo": "ai-note-taker",
+      "releaseType": "release"
+    },
+    "forceCodeSigning": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+      "signingHashAlgorithms": ["sha256"],
+      "publisherName": "AI Note Taker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ANT (AI Note Taker)",
+      "license": "../LICENSE",
+      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false,
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "ANT needs microphone access for voice transcription.",
+        "NSScreenCaptureUsageDescription": "ANT uses screen capture APIs only when you explicitly enable screenshots for AI vision features.",
+        "LSApplicationCategoryType": "public.app-category.productivity"
+      }
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "icon": "assets/icon.icns",
+      "contents": [
+        { "x": 130, "y": 220, "type": "file" },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icons",
+      "category": "Utility",
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "synopsis": "Privacy-first AI note taker with voice transcription and stealth mode",
+      "description": "ANT is a privacy-first AI notepad that runs entirely on your machine. Local speech-to-text, multi-provider AI, floating overlay, and screen capture protection."
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "stealth.js",
+      "assets/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../apps/web",
+        "to": "apps/web",
+        "filter": [
+          "**/*",
+          "!**/node_modules/**",
+          "!**/dist/**",
+          "!**/data/**",
+          "!**/.env",
+          "!**/.env.*"
+        ]
+      },
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*.py",
+          "**/*.txt",
+          "**/*.md",
+          "**/*.json",
+          "**/modules/**",
+          "**/routes/**",
+          "**/security/**",
+          "**/lib/**",
+          "**/core/**",
+          "**/start_server.py",
+          "**/generate_ssl.py",
+          "**/fast_startup.py",
+          "**/backfill_cognitive_graph.py",
+          "**/test_startup.py",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo",
+          "!**/venv/**",
+          "!**/.venv/**",
+          "!**/AINT_Venv/**",
+          "!**/data/ainotetaker.db",
+          "!**/data/ainotetaker.db-*",
+          "!**/data/users.json",
+          "!**/data/users.json.*",
+          "!**/data/audit_logs/**",
+          "!**/data/audit.jsonl",
+          "!**/data/recordings/**",
+          "!**/data/temp_audio/**",
+          "!**/data/user_keys/**",
+          "!**/data/meeting_templates/**",
+          "!**/data/voice_models/**",
+          "!**/data/conversations/**",
+          "!**/tests/**",
+          "!**/coverage.xml",
+          "!**/*.egg-info/**"
+        ]
+      }
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    },
+    "asarUnpack": [
+      "node_modules/electron-updater/**",
+      "main.js",
+      "preload.js",
+      "stealth.js"
+    ]
+  },
+  "dependencies": {
+    "electron-log": "^5.2.4",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3"
+  },
+  "devDependencies": {
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9.0.0",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.0"
+  },
+  "optionalDependencies": {
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.0"
+  }
+}

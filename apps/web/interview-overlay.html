@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANT Interview Copilot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: rgba(10, 14, 28, 0.75);
+      --bg-click: rgba(10, 14, 28, 0.45);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(59, 130, 246, 0.4);
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      --accent: #60a5fa;
+      --accent-glow: rgba(96, 165, 250, 0.3);
+      --success: #34d399;
+      --warning: #fbbf24;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font);
+      font-size: 12px;
+      background: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .interview-overlay {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .interview-overlay.click-through {
+      background: var(--bg-click);
+      border-color: var(--border-active);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       HEADER
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+      border-bottom: 1px solid var(--border);
+      -webkit-app-region: drag;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ant-badge {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .header-title {
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+
+    .header-context {
+      font-size: 10px;
+      color: var(--text-dim);
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      -webkit-app-region: no-drag;
+    }
+
+    .ctrl-btn {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      border: none;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 10px;
+      transition: all 0.15s ease;
+    }
+
+    .ctrl-btn:hover {
+      background: rgba(255,255,255,0.12);
+      color: var(--text);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       LIVE TRANSCRIPT
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .transcript-box {
+      flex-shrink: 0;
+      max-height: 80px;
+      overflow-y: auto;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text);
+      scrollbar-width: none;
+    }
+
+    .transcript-box::-webkit-scrollbar { display: none; }
+
+    .transcript-box .placeholder {
+      color: var(--text-dim);
+      font-style: italic;
+      font-size: 11px;
+    }
+
+    .transcript-box .partial {
+      opacity: 0.7;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       AI HINT / SUGGESTION
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .hint-box {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 12px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    .hint-box::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .hint-box::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+    }
+
+    .hint-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+      margin-bottom: 6px;
+      flex-shrink: 0;
+    }
+
+    .hint-label .pulse {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .hint-text {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .hint-text code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 11px;
+    }
+
+    .hint-text pre {
+      background: rgba(0,0,0,0.25);
+      padding: 8px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 6px 0;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .hint-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      opacity: 0.5;
+    }
+
+    .hint-empty .icon {
+      font-size: 24px;
+    }
+
+    .hint-empty .msg {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: rgba(0,0,0,0.15);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.05);
+      font-size: 9px;
+      color: var(--text-dim);
+    }
+
+    .status-pill .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    .status-pill.recording .dot { background: var(--warning); animation: pulse 1s infinite; }
+    .status-pill.listening .dot { background: var(--accent); }
+    .status-pill.ready .dot { background: var(--success); }
+    .status-pill.offline .dot { background: var(--text-dim); }
+
+    .footer-hint {
+      font-size: 9px;
+      color: var(--text-dim);
+      opacity: 0.6;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       HOTKEY BAR
+       ═══════════════════════════════════════════════════════════════════════════════ */
+
+    .hotkeys {
+      display: flex;
+      gap: 6px;
+      padding: 4px 12px 8px;
+      flex-shrink: 0;
+    }
+
+    .hk-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 5px 4px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--text-dim);
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .hk-btn:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .hk-btn:active {
+      transform: scale(0.96);
+    }
+
+    .hk-btn kbd {
+      font-family: inherit;
+      font-size: 9px;
+      background: rgba(255,255,255,0.08);
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="interview-overlay" id="overlay">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="ant-badge">AI</div>
+        <span class="header-title">Interview Copilot</span>
+        <span class="header-context" id="contextLabel"></span>
+      </div>
+      <div class="header-controls">
+        <button class="ctrl-btn" id="pinBtn" title="Toggle Click-Through (Alt+T)">👁</button>
+        <button class="ctrl-btn" id="minBtn" title="Minimize">−</button>
+        <button class="ctrl-btn" id="closeBtn" title="Close (Alt+H)">×</button>
+      </div>
+    </div>
+
+    <!-- Live Transcript -->
+    <div class="transcript-box" id="transcriptBox">
+      <span class="placeholder">Waiting for speech...</span>
+    </div>
+
+    <!-- AI Hint -->
+    <div class="hint-box" id="hintBox">
+      <div class="hint-empty" id="hintEmpty">
+        <div class="icon">💡</div>
+        <div class="msg">AI hints will appear here during the interview</div>
+      </div>
+      <div class="hint-label" id="hintLabel" style="display:none">
+        <span class="pulse"></span>
+        <span>Live Suggestion</span>
+      </div>
+      <div class="hint-text" id="hintText" style="display:none"></div>
+    </div>
+
+    <!-- Hotkeys -->
+    <div class="hotkeys">
+      <button class="hk-btn" id="hkMic" title="Toggle Microphone">
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> Mic
+      </button>
+      <button class="hk-btn" id="hkStealth" title="Stealth Answer">
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↵</kbd> Hint
+      </button>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="status-row">
+        <div class="status-pill offline" id="statusPill">
+          <span class="dot"></span>
+          <span id="statusText">Offline</span>
+        </div>
+      </div>
+      <div class="footer-hint">Alt+T click-through • Alt+H hide</div>
+    </div>
+
+  </div>
+
+  <script src="js/core/config.js"></script>
+  <script>
+    const ipc = window.api || { send: () => {}, receive: () => {}, invoke: async () => null };
+
+    const els = {
+      overlay: document.getElementById('overlay'),
+      contextLabel: document.getElementById('contextLabel'),
+      transcriptBox: document.getElementById('transcriptBox'),
+      hintEmpty: document.getElementById('hintEmpty'),
+      hintLabel: document.getElementById('hintLabel'),
+      hintText: document.getElementById('hintText'),
+      statusPill: document.getElementById('statusPill'),
+      statusText: document.getElementById('statusText'),
+      pinBtn: document.getElementById('pinBtn'),
+      closeBtn: document.getElementById('closeBtn'),
+      minBtn: document.getElementById('minBtn'),
+      hkMic: document.getElementById('hkMic'),
+      hkStealth: document.getElementById('hkStealth'),
+    };
+
+    let clickThrough = false;
+    let ws = null;
+    let reconnectTimer = null;
+
+    // ── Click-through toggle ──
+    function toggleClickThrough() {
+      clickThrough = !clickThrough;
+      els.overlay.classList.toggle('click-through', clickThrough);
+      els.pinBtn.style.opacity = clickThrough ? '1' : '0.6';
+      ipc.invoke('interview-overlay:click-through', clickThrough);
+    }
+
+    els.pinBtn.addEventListener('click', toggleClickThrough);
+    els.closeBtn.addEventListener('click', () => {
+      ipc.send('interview-overlay:hide');
+      window.close();
+    });
+    els.minBtn.addEventListener('click', () => {
+      if (window.api?.minimizeWindow) window.api.minimizeWindow();
+    });
+
+    // ── Hotkey buttons ──
+    els.hkMic.addEventListener('click', () => ipc.send('hotkey-toggle-mic'));
+    els.hkStealth.addEventListener('click', () => ipc.send('hotkey-stealth-answer'));
+
+    // ── Keyboard shortcuts ──
+    document.addEventListener('keydown', (e) => {
+      if (e.altKey && e.key === 't') { e.preventDefault(); toggleClickThrough(); }
+      if (e.altKey && e.key === 'h') { e.preventDefault(); ipc.send('interview-overlay:hide'); window.close(); }
+      if (e.altKey && e.key === 'o') { e.preventDefault(); ipc.invoke('interview-overlay:opacity', -0.05); }
+      if (e.altKey && e.key === 'p') { e.preventDefault(); ipc.invoke('interview-overlay:opacity', +0.05); }
+    });
+
+    // ── WebSocket for live transcription + suggestions ──
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.hostname}:8000/ws/transcribe`;
+
+      setStatus('connecting', 'Connecting...');
+
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch (e) {
+        setStatus('offline', 'WebSocket failed');
+        scheduleReconnect();
+        return;
+      }
+
+      ws.onopen = () => {
+        setStatus('ready', 'Ready');
+        clearTimeout(reconnectTimer);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'partial') {
+            setTranscript(data.text, true);
+          } else if (data.type === 'final') {
+            setTranscript(data.text, false);
+          } else if (data.type === 'suggestion') {
+            setHint(data.text);
+          }
+        } catch (e) {}
+      };
+
+      ws.onclose = () => {
+        setStatus('offline', 'Disconnected');
+        scheduleReconnect();
+      };
+
+      ws.onerror = () => {
+        setStatus('offline', 'Error');
+      };
+    }
+
+    function scheduleReconnect() {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, 3000);
+    }
+
+    // ── UI helpers ──
+    function setStatus(type, text) {
+      els.statusPill.className = 'status-pill ' + type;
+      els.statusText.textContent = text;
+    }
+
+    function setTranscript(text, isPartial) {
+      if (!text) return;
+      els.transcriptBox.innerHTML = `<span class="${isPartial ? 'partial' : ''}">${escapeHtml(text)}</span>`;
+      els.transcriptBox.scrollTop = els.transcriptBox.scrollHeight;
+    }
+
+    function setHint(html) {
+      if (!html) return;
+      els.hintEmpty.style.display = 'none';
+      els.hintLabel.style.display = 'flex';
+      els.hintText.style.display = 'block';
+      els.hintText.innerHTML = html;
+      els.hintBox.scrollTop = 0;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ── IPC listeners ──
+    ipc.receive('interview:context', (ctx) => {
+      const parts = [];
+      if (ctx.company) parts.push(ctx.company);
+      if (ctx.role) parts.push(ctx.role);
+      els.contextLabel.textContent = parts.join(' · ');
+    });
+
+    ipc.receive('interview:transcript', (text) => setTranscript(text, false));
+    ipc.receive('interview:hint', (html) => setHint(html));
+    ipc.receive('interview:status', (type) => setStatus(type, type));
+
+    // ── Init ──
+    connect();
+    ipc.send('interview-overlay:ready');
+    console.log('[InterviewOverlay] Initialized');
+  </script>
+</body>
+</html>

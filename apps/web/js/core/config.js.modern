@@ -1,0 +1,35 @@
+// Config singleton - API base URL management
+const DEFAULT_API_BASE = 'http://127.0.0.1:8000';
+
+function getStoredBase() {
+  try {
+    return localStorage.getItem('ant:apiBase');
+  } catch {
+    return null;
+  }
+}
+
+function setStoredBase(url) {
+  try {
+    if (url) localStorage.setItem('ant:apiBase', url);
+    else localStorage.removeItem('ant:apiBase');
+  } catch {
+    // ignore
+  }
+}
+
+export const Config = {
+  get apiBase() {
+    return getStoredBase() || DEFAULT_API_BASE;
+  },
+
+  get apiBaseSource() {
+    return getStoredBase() ? 'manual' : 'default';
+  },
+
+  setApiBase(url) {
+    if (url && typeof url === 'string') {
+      setStoredBase(url.trim());
+    }
+  }
+};

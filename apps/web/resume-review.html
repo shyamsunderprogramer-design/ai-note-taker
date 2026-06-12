@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Review - ANT</title>
+    <link rel="stylesheet" href="style.css?v=25">
+    <style>
+        .resume-page { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .resume-header-fixed {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: var(--bg-secondary, #1a1a1a);
+            border-bottom: 1px solid var(--border-color, #333);
+            z-index: 100; padding: 15px 20px;
+            display: flex; align-items: center; gap: 15px;
+            -webkit-app-region: drag;
+        }
+        .resume-back-arrow {
+            width: 36px; height: 36px; border: none; border-radius: 8px;
+            background: rgba(255,255,255,0.05); color: var(--text-primary, #fff);
+            font-size: 18px; cursor: pointer; display: flex;
+            align-items: center; justify-content: center; -webkit-app-region: no-drag;
+        }
+        .resume-header-content { flex: 1; }
+        .resume-header-title {
+            font-size: 20px; font-weight: 600; margin: 0;
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .resume-content {
+            flex: 1; overflow-y: auto; padding: 80px 20px 20px;
+            max-width: 1200px; margin: 0 auto; width: 100%;
+        }
+        .resume-container { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        @media (max-width: 900px) { .resume-container { grid-template-columns: 1fr; } }
+
+        .input-section {
+            background: var(--bg-secondary, #1a1a1a); border-radius: 16px;
+            padding: 25px; border: 1px solid var(--border-color, #333);
+        }
+        .section-title {
+            font-size: 18px; font-weight: 600; margin-bottom: 20px;
+        }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-weight: 500; margin-bottom: 5px; }
+        .form-group textarea {
+            width: 100%; min-height: 300px; padding: 12px;
+            border: 1px solid var(--border-color, #333); border-radius: 8px;
+            background: var(--bg-primary, #0a0a0a); color: var(--text-primary, #fff);
+            font-family: monospace; font-size: 13px; resize: vertical;
+        }
+        .form-group textarea:focus { outline: none; border-color: #8b5cf6; }
+        .btn-analyze {
+            width: 100%; background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            color: white; border: none; padding: 12px; border-radius: 8px;
+            font-weight: 600; cursor: pointer; font-size: 16px;
+        }
+        .btn-analyze:hover { transform: translateY(-2px); }
+        .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* File Upload Styles */
+        .file-upload-area {
+            border: 2px dashed var(--border-color, #333);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.02);
+        }
+        .file-upload-area:hover {
+            border-color: #8b5cf6;
+            background: rgba(139, 92, 246, 0.05);
+        }
+        .file-upload-area.dragover {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .file-upload-icon { font-size: 48px; margin-bottom: 10px; }
+        .file-upload-text { color: var(--text-primary, #fff); font-weight: 500; margin-bottom: 5px; }
+        .file-upload-hint { color: var(--text-secondary, #888); font-size: 13px; }
+
+        .or-divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--text-secondary, #888);
+            margin: 20px 0;
+        }
+        .or-divider::before, .or-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--border-color, #333);
+        }
+        .or-divider span { padding: 0 10px; }
+
+        .file-info {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid #10b981;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-info-name { flex: 1; font-weight: 500; }
+        .file-info-size { color: var(--text-secondary, #888); font-size: 12px; }
+        .file-remove-btn {
+            background: rgba(239, 68, 68, 0.2);
+            border: none;
+            color: #ef4444;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .results-section {
+            background: var(--bg-secondary, #1a1a1a); border-radius: 16px;
+            padding: 25px; border: 1px solid var(--border-color, #333);
+        }
+        .score-card {
+            text-align: center; padding: 30px;
+            background: rgba(255,255,255,0.03); border-radius: 12px;
+            margin-bottom: 25px;
+        }
+        .score-value {
+            font-size: 72px; font-weight: 700;
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .score-label { color: var(--text-secondary, #888); margin-top: 10px; }
+
+        .result-section { margin-bottom: 25px; }
+        .result-title {
+            font-weight: 600; margin-bottom: 12px; font-size: 16px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .result-list { list-style: none; padding: 0; margin: 0; }
+        .result-item {
+            padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; align-items: flex-start; gap: 10px;
+        }
+        .result-item:last-child { border-bottom: none; }
+        .result-icon { font-size: 16px; flex-shrink: 0; }
+        .strength { color: #10b981; }
+        .improvement { color: #f59e0b; }
+        .missing { color: #ef4444; }
+
+        .section-scores {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+            margin-bottom: 20px;
+        }
+        .section-score-item {
+            background: rgba(255,255,255,0.03); padding: 10px;
+            border-radius: 8px; text-align: center;
+        }
+        .section-score-value { font-size: 24px; font-weight: 600; color: #8b5cf6; }
+        .section-score-label { font-size: 12px; color: var(--text-secondary, #888); }
+
+        .hidden { display: none !important; }
+        .loading { text-align: center; padding: 40px; }
+        .loading-spinner {
+            width: 40px; height: 40px; border: 3px solid var(--border-color, #333);
+            border-top-color: #8b5cf6; border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="resume-page">
+        <header class="resume-header-fixed">
+            <button class="resume-back-arrow" onclick="window.location.href='index.html'">←</button>
+            <div class="resume-header-content">
+                <h1 class="resume-header-title">📄 AI Resume Review</h1>
+            </div>
+        </header>
+
+        <main class="resume-content">
+            <div class="resume-container">
+                <div class="input-section">
+                    <h2 class="section-title">Upload or Paste Resume</h2>
+
+                    <!-- File Upload -->
+                    <div class="form-group">
+                        <label>Upload Resume File (PDF, DOCX, TXT)</label>
+                        <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('resumeFile').click()">
+                            <input type="file" id="resumeFile" accept=".pdf,.docx,.doc,.txt,.md,.rtf" style="display: none;" onchange="resumeReview.handleFileUpload(this)">
+                            <div class="file-upload-icon">📄</div>
+                            <div class="file-upload-text">Click to upload or drag and drop</div>
+                            <div class="file-upload-hint">Supports PDF, DOCX, TXT, MD, RTF</div>
+                        </div>
+                        <div id="fileInfo" class="file-info hidden"></div>
+                    </div>
+
+                    <div class="or-divider">OR</div>
+
+                    <!-- Text Input -->
+                    <div class="form-group">
+                        <label>Paste Resume Text</label>
+                        <textarea id="resumeInput" placeholder="Paste your resume content here..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Job Description (optional but recommended)</label>
+                        <textarea id="jobInput" rows="5" placeholder="Paste job description to compare and extract relevant keywords..."></textarea>
+                    </div>
+
+                    <button class="btn-analyze" id="analyzeBtn" onclick="resumeReview.analyze()">Analyze Resume</button>
+                </div>
+
+                <div class="results-section">
+                    <h2 class="section-title">Analysis Results</h2>
+
+                    <div id="loadingState" class="loading hidden">
+                        <div class="loading-spinner"></div>
+                        <p>Analyzing your resume...</p>
+                    </div>
+
+                    <div id="emptyState">
+                        <p style="text-align: center; color: var(--text-secondary, #888); padding: 40px;">
+                            Paste your resume and click Analyze to get AI-powered feedback
+                        </p>
+                    </div>
+
+                    <div id="resultsContent" class="hidden">
+                        <div class="score-card">
+                            <div class="score-value" id="overallScore">75</div>
+                            <div class="score-label">Overall Score</div>
+                            <div id="semanticFit" style="font-size: 14px; color: #8b5cf6; margin-top: 5px; font-weight: 600;"></div>
+                        </div>
+
+                        <div class="dashboard-grid">
+                            <!-- AI Rewrites Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">✨ AI Rewrites (XYZ Formula)</div>
+                                <div id="rewritesList"></div>
+                            </div>
+
+                            <!-- Keyword Heatmap Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">🔍 Keyword Match</div>
+                                <div class="keyword-grid" id="keywordHeatmap"></div>
+                            </div>
+
+                            <!-- Section Scores Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">📊 Section Analysis</div>
+                                <div class="section-scores" id="sectionScores"></div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-grid" style="margin-top: 20px;">
+                            <!-- Strengths Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">✅ Strengths</div>
+                                <ul class="result-list" id="strengthsList"></ul>
+                            </div>
+
+                            <!-- Improvements Card -->
+                            <div class="dashboard-card">
+                                <div class="card-title">🎯 Areas for Improvement</div>
+                                <ul class="result-list" id="improvementsList"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/core/config.js"></script>
+    <script src="js/core/auth-helper.js"></script>
+  <script src="js/core/window-controls.js"></script>
+    <script src="resume-review.js"></script>
+</body>
+</html>

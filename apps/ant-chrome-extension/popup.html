@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      padding: 16px;
+      text-align: center;
+    }
+    .logo { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; opacity: 0.9; }
+
+    .content { padding: 16px; }
+
+    /* Connection Status */
+    .status {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px; background: rgba(255,255,255,0.05);
+      border-radius: 8px; margin-bottom: 16px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e; animation: pulse 2s infinite;
+    }
+    .status-dot.disconnected { background: #ef4444; animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .status-text { font-size: 13px; color: #aaa; }
+
+    .error-message {
+      display: none;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #ef4444; padding: 12px;
+      border-radius: 8px; font-size: 12px; margin-bottom: 12px;
+    }
+    .error-message.show { display: block; }
+
+    /* Meeting Section */
+    .meeting-section { display: none; margin-bottom: 16px; }
+    .meeting-section.active { display: block; }
+
+    .meeting-card {
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 10px; padding: 14px; margin-bottom: 12px;
+    }
+    .meeting-platform {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 16px; font-weight: 600; margin-bottom: 8px;
+    }
+    .meeting-platform-icon { font-size: 20px; }
+    .meeting-meta { font-size: 12px; color: #888; }
+    .meeting-id { color: #aaa; font-family: monospace; }
+    .meeting-timer {
+      font-size: 18px; font-weight: 700; color: #ef4444;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Recording Controls */
+    .recording-controls { margin-bottom: 12px; }
+    .source-selector {
+      display: flex; gap: 4px; margin-bottom: 10px;
+    }
+    .source-btn {
+      flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.05); color: #aaa;
+      border-radius: 6px; font-size: 12px; cursor: pointer;
+      transition: all 0.2s; font-weight: 500;
+    }
+    .source-btn.active {
+      background: rgba(59,130,246,0.2); color: #3b82f6;
+      border-color: rgba(59,130,246,0.4);
+    }
+    .source-btn:hover { background: rgba(255,255,255,0.1); }
+
+    .record-btn {
+      width: 100%; padding: 14px; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; margin-bottom: 8px;
+    }
+    .record-btn-start {
+      background: linear-gradient(135deg, #ef4444, #dc2626); color: white;
+    }
+    .record-btn-start:hover { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+    .record-btn-stop {
+      background: rgba(239,68,68,0.2); color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.4);
+    }
+    .record-btn-pause {
+      background: rgba(245,158,11,0.2); color: #f59e0b;
+      border: 1px solid rgba(245,158,11,0.4);
+    }
+    .record-btn-resume {
+      background: rgba(34,197,94,0.2); color: #22c55e;
+      border: 1px solid rgba(34,197,94,0.4);
+    }
+
+    .record-btn-row {
+      display: flex; gap: 8px;
+    }
+    .record-btn-row .record-btn { flex: 1; padding: 10px; font-size: 13px; }
+
+    /* Transcription Preview */
+    .transcription-section {
+      display: none; margin-bottom: 16px;
+    }
+    .transcription-section.active { display: block; }
+
+    .transcription-box {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px; padding: 12px;
+      max-height: 120px; overflow-y: auto;
+      font-size: 13px; line-height: 1.5; color: #e0e0e0;
+    }
+    .transcription-box::-webkit-scrollbar { width: 4px; }
+    .transcription-box::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2); border-radius: 2px;
+    }
+    .transcription-partial { color: #22c55e; font-style: italic; }
+    .transcription-empty { color: #666; font-style: italic; text-align: center; padding: 12px; }
+
+    .volume-bar {
+      height: 3px; background: rgba(255,255,255,0.1);
+      border-radius: 2px; overflow: hidden; margin-top: 6px;
+    }
+    .volume-fill {
+      height: 100%; background: linear-gradient(90deg, #22c55e, #3b82f6);
+      border-radius: 2px; width: 0%; transition: width 0.1s;
+    }
+
+    /* Job Stats */
+    .stats {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.05); padding: 12px;
+      border-radius: 8px; text-align: center;
+    }
+    .stat-value { font-size: 20px; font-weight: 700; color: #3b82f6; }
+    .stat-label { font-size: 11px; color: #888; margin-top: 4px; }
+
+    .actions {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .btn {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white; border: none; padding: 12px;
+      border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-secondary { background: rgba(255,255,255,0.1); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+
+    .platforms {
+      margin-top: 16px; padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .platforms-title { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .platform-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .platform-tag {
+      background: rgba(59,130,246,0.2); color: #3b82f6;
+      padding: 4px 8px; border-radius: 4px; font-size: 11px;
+    }
+
+    .footer {
+      padding: 12px 16px; background: rgba(0,0,0,0.2);
+      font-size: 11px; color: #666; text-align: center;
+    }
+    .settings-link {
+      color: #3b82f6; text-decoration: none; cursor: pointer;
+    }
+    .settings-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Productivity Helper</div>
+    <div class="subtitle">Meeting & Job Tools</div>
+  </div>
+
+  <div class="content">
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="status-text" id="statusText">Checking connection...</div>
+    </div>
+
+    <div class="error-message" id="errorMessage">
+      Cannot connect to backend. Please make sure the app is running.
+    </div>
+
+    <!-- Meeting Section (shown when on a meeting tab) -->
+    <div class="meeting-section" id="meetingSection">
+      <div class="meeting-card">
+        <div class="meeting-platform">
+          <span class="meeting-platform-icon" id="meetingIcon">📺</span>
+          <span id="meetingPlatformName">Meeting</span>
+        </div>
+        <div class="meeting-meta">
+          <span class="meeting-id" id="meetingId"></span>
+        </div>
+        <div class="meeting-timer" id="meetingTimer">00:00</div>
+      </div>
+
+      <div class="recording-controls" id="recordingControls">
+        <div class="source-selector" id="sourceSelector">
+          <button class="source-btn active" data-source="tab">Tab Audio</button>
+          <button class="source-btn" data-source="mic">Microphone</button>
+          <button class="source-btn" data-source="both">Both</button>
+        </div>
+        <button class="record-btn record-btn-start" id="startBtn">Start Recording</button>
+        <div class="record-btn-row" id="activeControls" style="display:none">
+          <button class="record-btn record-btn-pause" id="pauseBtn">Pause</button>
+          <button class="record-btn record-btn-stop" id="stopBtn">Stop</button>
+        </div>
+      </div>
+
+      <div class="transcription-section" id="transcriptionSection">
+        <div class="transcription-box" id="transcriptionBox">
+          <div class="transcription-empty">Waiting for audio...</div>
+        </div>
+        <div class="volume-bar">
+          <div class="volume-fill" id="volumeFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Job Stats -->
+    <div class="stats" id="statsSection">
+      <div class="stat">
+        <div class="stat-value" id="jobsCount">-</div>
+        <div class="stat-label">Jobs Saved</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="appsCount">-</div>
+        <div class="stat-label">Applications</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="openAppBtn">Open App</button>
+      <button class="btn btn-secondary" id="viewJobsBtn">View Saved Jobs</button>
+    </div>
+
+    <div class="platforms">
+      <div class="platforms-title">Supported Platforms</div>
+      <div class="platform-list">
+        <span class="platform-tag">LinkedIn</span>
+        <span class="platform-tag">Indeed</span>
+        <span class="platform-tag">Glassdoor</span>
+        <span class="platform-tag">Zoom</span>
+        <span class="platform-tag">Meet</span>
+        <span class="platform-tag">Teams</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    v1.1.0 • <a class="settings-link" id="settingsLink">Settings</a> • Free & Open Source
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

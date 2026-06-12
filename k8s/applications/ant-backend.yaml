@@ -1,0 +1,55 @@
+# ANT AI Note Taker - ArgoCD Application for GitOps Deployment
+# Reference: https://argo-cd.readthedocs.io/en/stable/
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ant-backend
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: ant-backend
+    app.kubernetes.io/part-of: ant
+spec:
+  # ─── Source ────────────────────────────────────────────────────────────
+  source:
+    repoURL: https://github.com/shyamsunderprogramer-design/ai-note-taker.git
+    targetRevision: HEAD
+    path: k8s/helm/backend
+    helm:
+      valueFiles:
+        - values-production.yaml
+      parameters:
+        - name: image.tag
+          value: latest
+
+  # ─── Destination ──────────────────────────────────────────────────────
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ant
+
+  # ─── Sync Policy ───────────────────────────────────────────────────────
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - ServerSideApply=true
+
+  # ─── Ignore Differences ────────────────────────────────────────────────
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+  # ─── Project ───────────────────────────────────────────────────────────
+  project: default
