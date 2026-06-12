@@ -1144,6 +1144,33 @@ class UserRepository:
             return False
 
     @staticmethod
+    async def bump_last_login(user_id: str, at: Optional[datetime] = None) -> bool:
+        """Set ``last_login = now()`` for the user. Returns True on success.
+
+        Used by ``routes.sso._auto_create_or_get_user`` after a successful
+        SSO login. Not on the hot path for password login — that path
+        uses ``authenticate_and_rotate_session`` which sets ``last_login``
+        as a side effect of the rotation. SSO has no password, so the
+        rotation is called separately and we need a dedicated bump.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            from sqlalchemy import update as _sa_update
+            stamp = at or datetime.now(timezone.utc)
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    _sa_update(User)
+                    .where(User.id == uuid.UUID(user_id))
+                    .values(last_login=stamp)
+                )
+                await db.commit()
+                return result.rowcount > 0
+        except Exception as e:
+            logger.error("[UserRepository] bump_last_login failed: %s", str(e))
+            return False
+
+    @staticmethod
     async def set_security_question(
         user_id: str, question: str, hashed_answer: str
     ) -> bool:

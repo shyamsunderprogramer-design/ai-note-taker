@@ -71,7 +71,7 @@ async def require_authentication(token: str = _Depends(get_token_from_request)):
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -190,16 +190,12 @@ async def auth_status():
     return {"auth_required": _AUTH_REQUIRED}
 
 
-@router.get("/auth/debug/users")
-async def debug_users():
-    """Temporary debug endpoint — check user store status (remove after debugging)."""
-    from security.auth import HAS_JWT
-    return {
-        "user_count": len(user_manager.users),
-        "usernames": list(user_manager.users.keys()),
-        "has_jwt": HAS_JWT,
-        "users_file": str(user_manager.USERS_FILE) if hasattr(user_manager, 'USERS_FILE') else "N/A",
-    }
+# NOTE: ``GET /auth/debug/users`` was removed in Fix #35 Commit 3. It
+# was a temporary debug endpoint that returned the in-memory user
+# dict. The user store is now the SQLAlchemy ``users`` table — use
+# ``POST /admin/users`` (or a dev tool) to inspect users. Keeping a
+# debug endpoint that enumerates usernames on the public API was a
+# small enumeration-attack surface, even with auth required.
 
 
 @router.post("/auth/forgot-password")
@@ -207,7 +203,7 @@ async def debug_users():
 async def forgot_password(username: str = Form(...)):
     """Step 1 of password reset: look up user's security question.
     Always returns 200 to prevent username enumeration."""
-    question = user_manager.has_security_question(username)
+    question = await user_manager.has_security_question(username)
     if question:
         return {
             "status": "success",
@@ -235,5 +231,5 @@ async def set_security_question_endpoint(
         raise HTTPException(status_code=400, detail="Security question must be 5-200 characters")
     if not valid_answer:
         raise HTTPException(status_code=400, detail="Security answer must be 2-100 characters")
-    user_manager.set_security_question(user.username, valid_question, valid_answer)
+    await user_manager.set_security_question(user.username, valid_question, valid_answer)
     return {"status": "success", "message": "Security question set successfully"}

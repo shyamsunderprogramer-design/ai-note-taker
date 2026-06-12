@@ -114,7 +114,7 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Invalid email format")
 
     try:
-        user = user_manager.create_user(username=username, email=email, password=password)
+        user = await user_manager.create_user(username=username, email=email, password=password)
         log_audit_event("auth_register", username, "user_registered", resource=f"user:{user.id}", success=True)
         return {
             "status": "success",
@@ -144,7 +144,7 @@ async def login_user(
     """
     ip = _client_ip(request)
     ua = _user_agent(request)
-    user = user_manager.authenticate_user(username, password, ip=ip, user_agent=ua)
+    user = await user_manager.authenticate_user(username, password, ip=ip, user_agent=ua)
     if not user:
         log_audit_event("auth_failure", username, "login_failed", resource="auth", success=False)
         raise HTTPException(
@@ -209,12 +209,13 @@ async def logout_user(user: User = Depends(require_authentication)):
     """Logout. Clears the server-side active_session_id so the token is
     rejected at verify_token even if a client holds onto it (defence in
     depth on top of client-side deletion). Without this, a stolen
-    access token would remain valid until the 8h ACCESS_TOKEN_EXPIRE."""
-    user.active_session_id = None
-    user.active_session_ip = None
-    user.active_session_user_agent = None
-    user.active_session_started_at = None
-    user_manager._save_users()
+    access token would remain valid until the 8h ACCESS_TOKEN_EXPIRE.
+
+    Fix #35: the JSON ``_save_users`` is gone. We delegate to
+    ``UserRepository.clear_session`` which zeros the 4 active_session_*
+    columns in a single UPDATE.
+    """
+    await user_manager.clear_session(user.id)
     log_audit_event("auth_logout", user.username, "user_logged_out", resource=f"user:{user.id}", success=True)
     return {"status": "success", "message": "Logged out successfully"}
 
@@ -225,11 +226,11 @@ async def reset_password(
     new_password: str = Form(..., min_length=8)  # nosec B105
 ):
     """Reset password for a user account (for local/self-hosted use)"""
-    user = user_manager.get_user(username)
+    user = await user_manager.get_user(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_manager.update_password(username, new_password)
+    await user_manager.update_password(username, new_password)
     log_audit_event("auth_reset_password", username, "password_reset", resource=f"user:{user.id}", success=True)
     return {"status": "success", "message": "Password reset successfully"}
 
@@ -250,7 +251,7 @@ async def refresh_access_token(refresh_token: str = Form(...)):
     if not token_data:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    user = user_manager.get_user(token_data.username)
+    user = await user_manager.get_user(token_data.username)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 

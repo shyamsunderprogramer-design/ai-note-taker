@@ -12,7 +12,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
-from pathlib import Path
 
 try:
     from jose import JWTError, jwt
@@ -22,6 +21,20 @@ except ImportError:
     HAS_JWT = False
     logging.getLogger("auth").warning("[WARNING] PyJWT or passlib not installed. Authentication will be limited.")
     logging.getLogger("auth").warning("  Install: pip install python-jose[cryptography] passlib[bcrypt]")
+
+# UserRepository is the SQLAlchemy persistence layer (Fix #35). Imported
+# lazily so this module can be imported for type annotations even when
+# the database has not been initialized (e.g. in unit tests for
+# token-shape logic). The `core.database` import pulls in the engine
+# and Base, which is a heavy cost on cold paths; we only want to pay
+# it on the first call into UserManager.
+try:
+    from core.database import UserRepository as _UserRepository
+    UserRepository = _UserRepository
+    HAS_USER_REPOSITORY = True
+except Exception:  # noqa: BLE001 — see comment above
+    UserRepository = None
+    HAS_USER_REPOSITORY = False
 
 # Configuration
 _is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
@@ -51,23 +64,12 @@ if HAS_JWT:
 else:
     pwd_context = None
 
-# In-memory user storage (replace with database in production)
-# Path: backend/data/users.json — same directory as the SQLAlchemy SQLite DB
-# so all user data lives in one place. (Phase 16 migration: SQLAlchemy users
-# table will become the source of truth; this file is the JSON fallback.)
-USERS_FILE = Path(__file__).resolve().parent.parent / "data" / "users.json"
-USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-# Legacy location — older installs wrote to backend/core/data/users.json
-# (because the path was relative to the security/ directory). On first load
-# we silently migrate any file from the old path to the new one so users
-# don't lose accounts after upgrading.
-_LEGACY_USERS_FILE = Path(__file__).resolve().parent / "data" / "users.json"
-if _LEGACY_USERS_FILE.exists() and not USERS_FILE.exists():
-    import shutil
-    shutil.copy2(_LEGACY_USERS_FILE, USERS_FILE)
-    # Don't delete the legacy file — let the next write to USERS_FILE take
-    # over. Operators can clean it up after verifying the migration.
+# In-memory user storage is GONE as of Fix #35 — the SQLAlchemy users
+# table is the single source of truth. The legacy USERS_FILE was the
+# JSON-file fallback. The DataMigrator (Fix #35 Commit 5) backfills
+# any existing data/users.json into the users table on first boot.
+# See `core.database.UserRepository` for the persistence layer and
+# `core.database.DataMigrator` for the one-time backfill.
 
 
 @dataclass
@@ -99,6 +101,56 @@ class User:
     active_session_started_at: Optional[str] = None
     on_new_login_pref: str = "auto_kick"
 
+    @classmethod
+    def from_orm(cls, orm_user) -> "User":
+        """Bridge an ORM ``User`` row to the public ``User`` DTO.
+
+        Centralises the ORM → DTO conversion at the boundary so all read
+        paths produce the same shape. The ``id`` becomes a ``str``
+        (UUID-stringified); datetime fields become ISO 8601 strings.
+        This is the only public conversion API; ``UserManager._orm_to_dto``
+        delegates here.
+
+        Usage::
+
+            orm = await UserRepository.get_by_username("alice")
+            user = User.from_orm(orm)
+        """
+        def _to_iso(value):
+            if value is None:
+                return None
+            if isinstance(value, str):
+                return value
+            try:
+                return value.isoformat()
+            except AttributeError:
+                return None
+
+        return cls(
+            id=str(orm_user.id),
+            username=orm_user.username,
+            email=orm_user.email,
+            hashed_password=orm_user.hashed_password,
+            is_active=bool(orm_user.is_active) if orm_user.is_active is not None else True,
+            is_admin=bool(orm_user.is_admin) if orm_user.is_admin is not None else False,
+            created_at=_to_iso(getattr(orm_user, "created_at", None)),
+            last_login=_to_iso(getattr(orm_user, "last_login", None)),
+            api_quota=getattr(orm_user, "api_quota", None) or {
+                "requests_today": 0,
+                "daily_limit": 1000,
+                "reset_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            },
+            security_question=getattr(orm_user, "security_question", None),
+            hashed_security_answer=getattr(orm_user, "hashed_security_answer", None),
+            active_session_id=getattr(orm_user, "active_session_id", None),
+            active_session_ip=getattr(orm_user, "active_session_ip", None),
+            active_session_user_agent=getattr(orm_user, "active_session_user_agent", None),
+            active_session_started_at=_to_iso(
+                getattr(orm_user, "active_session_started_at", None)
+            ),
+            on_new_login_pref=getattr(orm_user, "on_new_login_pref", None) or "auto_kick",
+        )
+
 
 @dataclass
 class TokenData:
@@ -115,115 +167,107 @@ class TokenData:
 
 
 class UserManager:
-    """Manages user authentication and storage"""
+    """Async shim over the SQLAlchemy ``UserRepository``.
+
+    As of Fix #35, the JSON file (``data/users.json``) is no longer
+    the runtime auth store. Every method on this class delegates to
+    ``core.database.UserRepository``, which uses the SQLAlchemy
+    ``users`` table. The ``User`` dataclass remains the public DTO
+    (12+ files import it as a type annotation), and ``User.from_orm``
+    bridges the ORM row → DTO conversion.
+
+    The instance is **stateless** — there is no in-memory cache. Each
+    method opens its own DB session via ``UserRepository``. This is a
+    deliberate trade: no cache means no cache-invalidation bugs. The
+    per-request cost (one extra DB hit) is negligible on a single-
+    operator install with SQLite.
+
+    All public methods are ``async def``. The 12+ call sites that
+    previously did ``user_manager.create_user(...)`` (sync) now do
+    ``await user_manager.create_user(...)`` (async).
+    """
 
     def __init__(self):
-        self.users: Dict[str, User] = {}
-        self._load_users()
-        self._create_default_user()
-
-    def _load_users(self):
-        """Load users from disk"""
-        if USERS_FILE.exists():
-            try:
-                data = json.loads(USERS_FILE.read_text())
-                for user_data in data.get("users", []):
-                    # Migration: add security question fields if missing
-                    if "security_question" not in user_data:
-                        user_data["security_question"] = None
-                    if "hashed_security_answer" not in user_data:
-                        user_data["hashed_security_answer"] = None
-                    # Migration: add single-session fields (Fix #34) if missing.
-                    # All default to None / "auto_kick" so legacy tokens issued
-                    # before the feature shipped still work (verify_token
-                    # allows jti-less tokens when user.active_session_id is
-                    # None).
-                    if "active_session_id" not in user_data:
-                        user_data["active_session_id"] = None
-                    if "active_session_ip" not in user_data:
-                        user_data["active_session_ip"] = None
-                    if "active_session_user_agent" not in user_data:
-                        user_data["active_session_user_agent"] = None
-                    if "active_session_started_at" not in user_data:
-                        user_data["active_session_started_at"] = None
-                    if "on_new_login_pref" not in user_data:
-                        user_data["on_new_login_pref"] = "auto_kick"
-                    user = User(**user_data)
-                    self.users[user.username] = user
-            except Exception as e:
-                logging.getLogger("auth").warning(f"[WARNING] Failed to load users: {e}")
-
-    def _save_users(self):
-        """Save users to disk"""
-        try:
-            data = {
-                "users": [
-                    {
-                        "id": u.id,
-                        "username": u.username,
-                        "email": u.email,
-                        "hashed_password": u.hashed_password,
-                        "is_active": u.is_active,
-                        "is_admin": u.is_admin,
-                        "created_at": u.created_at,
-                        "last_login": u.last_login,
-                        "api_quota": u.api_quota,
-                        "security_question": u.security_question,
-                        "hashed_security_answer": u.hashed_security_answer,
-                        # Single-session enforcement (Fix #34)
-                        "active_session_id": u.active_session_id,
-                        "active_session_ip": u.active_session_ip,
-                        "active_session_user_agent": u.active_session_user_agent,
-                        "active_session_started_at": u.active_session_started_at,
-                        "on_new_login_pref": u.on_new_login_pref,
-                    }
-                    for u in self.users.values()
-                ]
-            }
-            USERS_FILE.write_text(json.dumps(data, indent=2))
-        except Exception as e:
-            logging.getLogger("auth").warning(f"[WARNING] Failed to save users: {e}")
-
-    def _create_default_user(self):
-        """No default user is created. First user must register via /auth/register."""
+        # No state. The class is a singleton facade.
         pass
 
-    def create_user(self, username: str, email: str, password: str,
-                   is_admin: bool = False,
-                   security_question: Optional[str] = None,
-                   security_answer: Optional[str] = None) -> User:
-        """Create a new user. First user automatically becomes admin."""
-        if username in self.users:
+    @staticmethod
+    def _to_iso(value):
+        """Convert a datetime (or None) to ISO 8601 string. The User
+        dataclass stores ``created_at`` / ``last_login`` / ``active_session_started_at``
+        as ISO strings, but the ORM returns them as ``datetime`` objects.
+        This helper normalises at the DTO boundary."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        try:
+            return value.isoformat()
+        except AttributeError:
+            return None
+
+    @classmethod
+    def _orm_to_dto(cls, orm_user) -> "User":
+        """Bridge an ORM ``User`` row to the public ``User`` DTO.
+
+        Thin delegate to ``User.from_orm``. Kept as a separate method
+        on ``UserManager`` so call sites that have a manager instance
+        don't need to import the classmethod separately. Single source
+        of truth for the conversion lives on ``User``.
+        """
+        return User.from_orm(orm_user)
+
+    async def create_user(self, username: str, email: str, password: str,
+                          is_admin: bool = False,
+                          security_question: Optional[str] = None,
+                          security_answer: Optional[str] = None) -> "User":
+        """Create a new user. First user automatically becomes admin.
+
+        Persists via ``UserRepository.create``. Hashing happens in the
+        repository for the password; we hash the security answer here
+        (the repository takes already-hashed values).
+        """
+        # Pre-check uniqueness by username (TOCTOU window, but the
+        # users.username unique constraint catches the race).
+        existing = await UserRepository.get_by_username(username)
+        if existing is not None:
             raise ValueError(f"User '{username}' already exists")
+        # Also check by email to give a friendlier error (the
+        # constraint is the safety net for concurrent inserts).
+        existing_email = await UserRepository.get_by_email(email)
+        if existing_email is not None:
+            raise ValueError(f"Email '{email}' is already registered")
 
         # First user is automatically admin
-        if not self.users:
+        if await UserRepository.count() == 0:
             is_admin = True
 
-        user_id = str(uuid.uuid4())
         hashed_password = self._hash_password(password) if HAS_JWT else password
-
         hashed_answer = None
         if security_question and security_answer:
             normalized_answer = security_answer.strip().lower()
-            hashed_answer = self._hash_password(normalized_answer) if HAS_JWT else f"plain:{normalized_answer}"
+            hashed_answer = (
+                self._hash_password(normalized_answer) if HAS_JWT
+                else f"plain:{normalized_answer}"
+            )
 
-        user = User(
-            id=user_id,
+        orm_user = await UserRepository.create(
             username=username,
             email=email,
             hashed_password=hashed_password,
             is_admin=is_admin,
             security_question=security_question,
-            hashed_security_answer=hashed_answer
+            hashed_security_answer=hashed_answer,
         )
-
-        self.users[username] = user
-        self._save_users()
-        return user
+        if orm_user is None:
+            raise ValueError(f"Failed to create user '{username}' (DB error)")
+        return self._orm_to_dto(orm_user)
 
     def _hash_password(self, password: str) -> str:
-        """Hash a password"""
+        """Hash a password. Stays sync — bcrypt is CPU-bound and the
+        route layer is already inside an ``async def``, so a sync call
+        is fine here. The bcrypt<4.1 pin lives in
+        ``requirements-security.txt``."""
         if pwd_context:
             return pwd_context.hash(password)
         # Fallback: store plain text with marker (not for production!)
@@ -246,86 +290,83 @@ class UserManager:
         except Exception:  # nosec B110
             return False
 
-    def authenticate_user(self, username: str, password: str,
-                          ip: str = "", user_agent: str = "") -> Optional[User]:
+    async def authenticate_user(self, username: str, password: str,
+                                 ip: str = "", user_agent: str = "") -> Optional["User"]:
         """Authenticate a user. On success, rotates the active session
-        (single-session enforcement, Fix #34): generates a new jti, stores
-        it on the user along with the IP and user agent, and saves.
+        (single-session enforcement, Fix #34) and returns the DTO.
 
         The route layer is responsible for the actual JWT minting with
         this jti (call create_access_token / create_refresh_token with the
         same jti). The session_bus publish also happens at the route layer,
-        not here, so this function stays synchronous + unit-testable.
+        not here, so this function stays async + unit-testable.
         """
-        user = self.users.get(username)
-        if not user:
+        orm_user = await UserRepository.authenticate_and_rotate_session(
+            username, password, ip=ip, user_agent=user_agent,
+        )
+        if orm_user is None:
             return None
-        if not user.is_active:
+        return self._orm_to_dto(orm_user)
+
+    async def get_user(self, username: str) -> Optional["User"]:
+        """Get user by username."""
+        orm_user = await UserRepository.get_by_username(username)
+        if orm_user is None:
             return None
-        if not self.verify_password(password, user.hashed_password):
-            return None
+        return self._orm_to_dto(orm_user)
 
-        # Rotate the active session (single-session enforcement).
-        new_jti = str(uuid.uuid4())
-        user.active_session_id = new_jti
-        user.active_session_ip = ip or user.active_session_ip
-        user.active_session_user_agent = user_agent or user.active_session_user_agent
-        user.active_session_started_at = datetime.now(timezone.utc).isoformat()
-        # Update last login
-        user.last_login = datetime.now(timezone.utc).isoformat()
-        self._save_users()
-        return user
-
-    def get_user(self, username: str) -> Optional[User]:
-        """Get user by username"""
-        return self.users.get(username)
-
-    def update_password(self, username: str, new_password: str) -> bool:
-        """Update password for an existing user"""
-        user = self.users.get(username)
-        if not user:
+    async def update_password(self, username: str, new_password: str) -> bool:
+        """Update password for an existing user."""
+        orm_user = await UserRepository.get_by_username(username)
+        if orm_user is None:
             return False
-        user.hashed_password = self._hash_password(new_password) if HAS_JWT else f"plain:{new_password}"
-        self._save_users()
-        return True
+        hashed = self._hash_password(new_password) if HAS_JWT else f"plain:{new_password}"
+        return await UserRepository.update_password(str(orm_user.id), hashed)
 
-    def set_security_question(self, username: str, question: str, answer: str) -> bool:
-        """Set or update a user's security question and answer"""
-        user = self.users.get(username)
-        if not user:
+    async def set_security_question(self, username: str, question: str, answer: str) -> bool:
+        """Set or update a user's security question and answer."""
+        orm_user = await UserRepository.get_by_username(username)
+        if orm_user is None:
             return False
-        normalized_answer = answer.strip().lower()
-        user.security_question = question
-        user.hashed_security_answer = self._hash_password(normalized_answer) if HAS_JWT else f"plain:{normalized_answer}"
-        self._save_users()
-        return True
+        normalized = answer.strip().lower()
+        hashed = (
+            self._hash_password(normalized) if HAS_JWT
+            else f"plain:{normalized}"
+        )
+        return await UserRepository.set_security_question(
+            str(orm_user.id), question, hashed
+        )
 
-    def verify_security_answer(self, username: str, answer: str) -> bool:
-        """Verify a user's security answer. Returns False if user not found or no question set."""
-        user = self.users.get(username)
-        if not user or not user.hashed_security_answer:
+    async def verify_security_answer(self, username: str, answer: str) -> bool:
+        """Verify a user's security answer. Returns False if user not
+        found or no question set."""
+        orm_user = await UserRepository.get_by_username(username)
+        if orm_user is None or not orm_user.hashed_security_answer:
             return False
-        normalized_answer = answer.strip().lower()
-        return self.verify_password(normalized_answer, user.hashed_security_answer)
+        normalized = answer.strip().lower()
+        return await UserRepository.verify_security_answer(
+            str(orm_user.id), normalized, orm_user.hashed_security_answer
+        )
 
-    def has_security_question(self, username: str) -> Optional[str]:
+    async def has_security_question(self, username: str) -> Optional[str]:
         """Return the security question text if set, or None. Does not leak user existence."""
-        user = self.users.get(username)
-        if not user or not user.security_question:
+        orm_user = await UserRepository.get_by_username(username)
+        if orm_user is None or not orm_user.security_question:
             return None
-        return user.security_question
+        return orm_user.security_question
 
-    def get_user_by_id(self, user_id: str) -> Optional[User]:
-        """Get user by id. Linear scan — the dict is keyed by username
-        (Fix #34). Centralises the lookup duplicated in
-        ``_enforce_single_session``, ``get_current_user`` and
-        ``get_current_user_with_reason``. Fine while n is small
-        (single-operator install); see TODO in ``_enforce_single_session``.
-        """
-        for u in self.users.values():
-            if u.id == user_id:
-                return u
-        return None
+    async def get_user_by_id(self, user_id: str) -> Optional["User"]:
+        """Get user by id. Hits the indexed PK on the users table —
+        no linear scan. Replaces the pre-Fix-35 O(n) scan in
+        ``_enforce_single_session`` / ``get_current_user`` etc."""
+        orm_user = await UserRepository.get_by_id(user_id)
+        if orm_user is None:
+            return None
+        return self._orm_to_dto(orm_user)
+
+    async def clear_session(self, user_id: str) -> bool:
+        """Zero out the 4 active_session_* columns on the user. Used
+        by ``routes.auth.logout_user`` (Fix #34)."""
+        return await UserRepository.clear_session(user_id)
 
 
 # Global user manager instance
@@ -437,7 +478,7 @@ def verify_refresh_token(token: str) -> Optional[TokenData]:
         return None
 
 
-def verify_token(token: str) -> Optional[TokenData]:
+async def verify_token(token: str) -> Optional[TokenData]:
     """Verify and decode a JWT token. Single-session enforcement
     (Fix #34): if the token carries a jti, the same function compares
     it to the user's active_session_id. A mismatch means the user has
@@ -449,6 +490,9 @@ def verify_token(token: str) -> Optional[TokenData]:
     active_session_id set, falls through the check (the token is
     accepted). This keeps tokens issued before Fix #34 working until
     the user next logs in, which populates active_session_id.
+
+    Async (Fix #35): the underlying user lookup now hits the
+    SQLAlchemy ``users`` table via ``user_manager.get_user_by_id``.
     """
     if not HAS_JWT:
         # Fallback: decode simple token
@@ -466,7 +510,7 @@ def verify_token(token: str) -> Optional[TokenData]:
                     iat=datetime.fromisoformat(data.get("iat")) if data.get("iat") else None,
                     jti=data.get("jti"),
                 )
-                return _enforce_single_session(token_data)
+                return await _enforce_single_session(token_data)
         except Exception:
             pass  # nosec B110
         return None
@@ -480,15 +524,15 @@ def verify_token(token: str) -> Optional[TokenData]:
             iat=datetime.fromtimestamp(payload.get("iat")) if payload.get("iat") else None,
             jti=payload.get("jti"),
         )
-        return _enforce_single_session(token_data)
+        return await _enforce_single_session(token_data)
     except JWTError:
         return None
 
 
-def _enforce_single_session(token_data: TokenData) -> Optional[TokenData]:
+async def _enforce_single_session(token_data: TokenData) -> Optional[TokenData]:
     """If the token has a jti AND the matching user has an
     active_session_id set AND they differ, return None (rejected).
-    Otherwise return token_data unchanged. Pure helper, no I/O.
+    Otherwise return token_data unchanged.
 
     Back-compat rule (Fix #34): a token with no jti claim is always
     accepted (pre-Fix-34 issuance). A token with a jti whose matching
@@ -496,22 +540,21 @@ def _enforce_single_session(token_data: TokenData) -> Optional[TokenData]:
     after the token was issued, so the token must be invalid). A
     token with a jti whose matching user has active_session_id set
     is rejected on mismatch (a 2nd-device login rotated the session).
+
+    Async (Fix #35): the user lookup is now an indexed DB hit via
+    ``user_manager.get_user_by_id(token_data.user_id)``. The pre-Fix-35
+    O(n) linear scan over ``user_manager.users.values()`` is gone —
+    that was the hidden cost of the JSON-file store.
     """
     if not token_data.jti:
         return token_data
-    # TODO(solo): O(n) over user_manager.users on every request. Fine
-    # for a single-operator install; add a username->User + id->User
-    # index in UserManager.__init__ if user count exceeds ~1000.
-    # The user may not exist (deleted), or the active_session_id may be
-    # None (user logged out, or legacy user who never logged in after
-    # the fix shipped — but a jti-bearing token implies a post-fix
-    # issuance, so a None active_session_id here means logout, not
-    # legacy).
-    user = None
-    for u in user_manager.users.values():
-        if u.username == token_data.username or u.id == token_data.user_id:
-            user = u
-            break
+    # Indexed DB hit on users.id. Replaces the O(n) scan.
+    user = await user_manager.get_user_by_id(token_data.user_id)
+    # If the user_id route misses (e.g. dev-mode tokens carry a
+    # username but no id), fall back to a username lookup. One extra
+    # DB hit, but dev-mode only.
+    if user is None and token_data.username:
+        user = await user_manager.get_user(token_data.username)
     if user is None:
         return token_data  # user not found — let get_current_user handle the "user_not_found" reason
     if user.active_session_id is None:
@@ -550,21 +593,23 @@ def _enforce_single_session(token_data: TokenData) -> Optional[TokenData]:
     return token_data
 
 
-def get_current_user(token: str) -> Optional[User]:
-    """Get current user from token"""
-    token_data = verify_token(token)
+async def get_current_user(token: str) -> Optional[User]:
+    """Get current user from token. Async (Fix #35) — delegates to
+    ``user_manager.get_user_by_id`` for the user lookup."""
+    token_data = await verify_token(token)
     if not token_data:
         return None
 
-    # Try to find by username first, then by user_id
-    for user in user_manager.users.values():
-        if user.username == token_data.username or user.id == token_data.user_id:
-            if user.is_active:
-                return user
+    # Indexed DB hit by user_id, fallback to username.
+    user = await user_manager.get_user_by_id(token_data.user_id)
+    if user is None and token_data.username:
+        user = await user_manager.get_user(token_data.username)
+    if user is not None and user.is_active:
+        return user
     return None
 
 
-def get_current_user_with_reason(token: str) -> Tuple[Optional[User], Optional[str]]:
+async def get_current_user_with_reason(token: str) -> Tuple[Optional[User], Optional[str]]:
     """Get current user from token, plus a string reason if the token
     was rejected. Returns (user, None) on success. On failure, returns
     (None, reason) where reason is one of:
@@ -580,10 +625,12 @@ def get_current_user_with_reason(token: str) -> Tuple[Optional[User], Optional[s
     The new auth routes use this to return 401 bodies with an
     ``error_code`` field, so clients can distinguish "your session was
     kicked" from "your token is bad" and react accordingly.
+
+    Async (Fix #35) — the user lookup is now an indexed DB hit.
     """
     if not token:
         return None, "no_token"
-    token_data = verify_token(token)
+    token_data = await verify_token(token)
     if not token_data:
         # Disambiguate the reason by trying to decode without the
         # jti-check. If raw_decode succeeds and has a jti but verify_token
@@ -605,11 +652,10 @@ def get_current_user_with_reason(token: str) -> Tuple[Optional[User], Optional[s
             return None, "session_invalidated"
         return None, "invalid_token"
 
-    user = None
-    for u in user_manager.users.values():
-        if u.username == token_data.username or u.id == token_data.user_id:
-            user = u
-            break
+    # Indexed DB hit on users.id, fallback to username.
+    user = await user_manager.get_user_by_id(token_data.user_id)
+    if user is None and token_data.username:
+        user = await user_manager.get_user(token_data.username)
     if user is None:
         return None, "user_not_found"
     if not user.is_active:
@@ -617,8 +663,9 @@ def get_current_user_with_reason(token: str) -> Tuple[Optional[User], Optional[s
     return user, None
 
 
-def require_auth(token: Optional[str]) -> User:
-    """Require authentication - raises exception if not authenticated"""
+async def require_auth(token: Optional[str]) -> User:
+    """Require authentication - raises exception if not authenticated.
+    Async (Fix #35) — calls ``get_current_user`` which is async."""
     from fastapi import HTTPException, status
 
     if not token:
@@ -628,7 +675,7 @@ def require_auth(token: Optional[str]) -> User:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

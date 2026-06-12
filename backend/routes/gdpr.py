@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from security import get_current_user
-from security.auth import user_manager, User
+from security.auth import User
 
 logger = logging.getLogger("routes.gdpr")
 
@@ -22,7 +22,7 @@ async def get_token(credentials: HTTPAuthorizationCredentials = Depends(security
 async def require_authentication(token: str = Depends(get_token)) -> User:
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return user
@@ -120,10 +120,16 @@ async def delete_user_data(user: User = Depends(require_authentication)):
             raise HTTPException(status_code=500, detail="Data deletion failed")
     else:
         # Fallback: remove from in-memory user store
-        if user.username in user_manager.users:
-            del user_manager.users[user.username]
-            user_manager._save_users()
-            deleted["items_removed"]["user_account"] = True
+        # REMOVED in Fix #35 Commit 3. The in-memory user store is gone;
+        # the DB path above is the only code path now. ``DB_AVAILABLE``
+        # is kept for the ``DB_AVAILABLE=False`` smoke-test environment
+        # where there is no DB at all — the route will return 500 via
+        # the except clause and the caller can treat it as a hard fail.
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable; GDPR deletion requires a database. "
+                   "Start the backend with DATABASE_URL or ANT_USE_SQLITE=true.",
+        )
 
     logger.info("[GDPR] All data deleted for user %s", user_id)
     return {"status": "success", "message": "All user data deleted", "details": deleted}

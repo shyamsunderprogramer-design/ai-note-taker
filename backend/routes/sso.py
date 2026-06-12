@@ -12,6 +12,7 @@ from routes.auth import _client_ip, _user_agent
 from routes.deps import require_authentication
 from security import create_access_token, log_audit_event, session_bus
 from security.auth import user_manager, User
+from core.database import UserRepository
 
 logger = logging.getLogger("routes.sso")
 
@@ -53,30 +54,35 @@ def _build_redirect_uri(provider: str) -> str:
     return f"{base}/sso/{provider}/callback"
 
 
-def _auto_create_or_get_user(email: str, name: str, provider: str) -> User:
+async def _auto_create_or_get_user(email: str, name: str, provider: str) -> User:
     """Return existing user by email, or auto-create one.
 
     Auto-created users get their email as username and a random password
     (since they authenticate via SSO, the password is irrelevant).
+
+    Fix #35: this is now an async function. The pre-Fix-35 version
+    iterated ``user_manager.users.values()`` (an in-memory dict).
+    The async version uses ``UserRepository.get_by_email`` (an
+    indexed DB hit) and bumps ``last_login`` via the dedicated
+    ``UserRepository.bump_last_login`` method. The uniqueness loop
+    for username derivation is best-effort: the ``users.username``
+    unique constraint is the safety net for concurrent inserts.
     """
-    # Try to find an existing user whose email matches.
-    for user in user_manager.users.values():
-        if user.email == email:
-            # Update last login
-            user.last_login = datetime.now(timezone.utc).isoformat()
-            user_manager._save_users()
-            return user
+    orm = await UserRepository.get_by_email(email)
+    if orm is not None:
+        await UserRepository.bump_last_login(str(orm.id))
+        return User.from_orm(orm)
 
     # Derive a username from the email prefix, ensuring uniqueness.
     base_username = email.split("@")[0]
     username = base_username
     suffix = 1
-    while username in user_manager.users:
+    while await user_manager.get_user(username) is not None:
         username = f"{base_username}{suffix}"
         suffix += 1
 
     random_password = secrets.token_urlsafe(32)
-    user = user_manager.create_user(
+    user = await user_manager.create_user(
         username=username,
         email=email,
         password=random_password,
@@ -85,7 +91,7 @@ def _auto_create_or_get_user(email: str, name: str, provider: str) -> User:
     return user
 
 
-def _rotate_session_for(user: User, ip: str = "", user_agent: str = "") -> str:
+async def _rotate_session_for(user: User, ip: str = "", user_agent: str = "") -> str:
     """Rotate the user's active session and return the new jti.
 
     Mirrors ``UserManager.authenticate_user`` for the password login
@@ -93,18 +99,31 @@ def _rotate_session_for(user: User, ip: str = "", user_agent: str = "") -> str:
     password to verify. Single-session enforcement (Fix #34): any
     previously-issued token for this user becomes invalid as soon as
     the new jti is persisted.
+
+    Fix #35: this is now async. The pre-Fix-35 version mutated the
+    in-memory ``User`` DTO and called ``_save_users()``. The async
+    version delegates to ``UserRepository.rotate_session`` which
+    generates a new jti, stamps the 5 fields, and commits in a single
+    UPDATE.
     """
-    import uuid as _uuid
-    user.active_session_id = str(_uuid.uuid4())
-    user.active_session_ip = ip or user.active_session_ip
-    user.active_session_user_agent = user_agent or user.active_session_user_agent
-    user.active_session_started_at = datetime.now(timezone.utc).isoformat()
-    user.last_login = datetime.now(timezone.utc).isoformat()
-    user_manager._save_users()
-    return user.active_session_id
+    orm = await UserRepository.rotate_session(user.id, ip=ip, user_agent=user_agent)
+    if orm is None:
+        raise ValueError(f"_rotate_session_for: user {user.id} not found")
+    # Refresh the DTO with the new session fields.
+    user.active_session_id = orm.active_session_id
+    user.active_session_ip = orm.active_session_ip
+    user.active_session_user_agent = orm.active_session_user_agent
+    user.active_session_started_at = (
+        orm.active_session_started_at.isoformat()
+        if orm.active_session_started_at else None
+    )
+    user.last_login = (
+        orm.last_login.isoformat() if orm.last_login else None
+    )
+    return orm.active_session_id
 
 
-def _issue_token(user: User, ip: str = "", user_agent: str = "") -> dict:
+async def _issue_token(user: User, ip: str = "", user_agent: str = "") -> dict:
     """Create a JWT and return the standard login response payload.
 
     Rotates the user's active session (single-session enforcement,
@@ -112,8 +131,11 @@ def _issue_token(user: User, ip: str = "", user_agent: str = "") -> dict:
     invalidated atomically with the new token mint, and publishes a
     ``session_kicked`` event on the session_bus so any open SSE
     stream on the old session is notified.
+
+    Async (Fix #35): ``_rotate_session_for`` is now async (it hits
+    the SQLAlchemy ``users`` table).
     """
-    jti = _rotate_session_for(user, ip=ip, user_agent=user_agent)
+    jti = await _rotate_session_for(user, ip=ip, user_agent=user_agent)
     access_token = create_access_token(
         data={"sub": user.id, "username": user.username},
         expires_delta=timedelta(hours=24),
@@ -240,7 +262,7 @@ async def google_sso_callback(
         )
 
     # Auto-create or retrieve user
-    user = _auto_create_or_get_user(email=email, name=name, provider="google")
+    user = await _auto_create_or_get_user(email=email, name=name, provider="google")
     log_audit_event("sso_login", user.username, "google_sso_login", resource=f"user:{user.id}", success=True)
     # Kick any prior local session for this user (Fix #34). SSO from
     # a new browser counts as a 2nd-device login.
@@ -249,7 +271,7 @@ async def google_sso_callback(
         "reason": "sso_login",
         "new_session_started_at": user.active_session_started_at,
     })
-    return _issue_token(user, ip=_client_ip(request), user_agent=_user_agent(request))
+    return await _issue_token(user, ip=_client_ip(request), user_agent=_user_agent(request))
 
 
 # ---------------------------------------------------------------------------
@@ -354,14 +376,14 @@ async def microsoft_sso_callback(
         )
 
     # Auto-create or retrieve user
-    user = _auto_create_or_get_user(email=email, name=name, provider="microsoft")
+    user = await _auto_create_or_get_user(email=email, name=name, provider="microsoft")
     log_audit_event("sso_login", user.username, "microsoft_sso_login", resource=f"user:{user.id}", success=True)
     session_bus.publish(user.id, {
         "type": "session_kicked",
         "reason": "sso_login",
         "new_session_started_at": user.active_session_started_at,
     })
-    return _issue_token(user, ip=_client_ip(request), user_agent=_user_agent(request))
+    return await _issue_token(user, ip=_client_ip(request), user_agent=_user_agent(request))
 
 
 # ---------------------------------------------------------------------------

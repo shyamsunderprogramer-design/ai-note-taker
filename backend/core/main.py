@@ -525,7 +525,7 @@ async def global_rate_limit_middleware(request: Request, call_next):
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if user:
             client_id = f"user:{user.username}"
             # Admins bypass rate limiting
@@ -604,7 +604,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
 async def optional_auth(request: Request, token: str = Depends(get_token_from_request)):
     """Optional authentication - adds user to request state if valid"""
     if token:
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if user:
             request.state.current_user = user
     return request
@@ -654,7 +654,7 @@ async def auth_enforcement_middleware(request: Request, call_next):
     rejected_reason = None
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
-        user, rejected_reason = get_current_user_with_reason(token)
+        user, rejected_reason = await get_current_user_with_reason(token)
 
     # Set user in request state
     if user:
@@ -701,7 +701,7 @@ async def require_authentication(token: str = Depends(get_token_from_request)):
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1818,7 +1818,7 @@ async def register_user(
             raise HTTPException(status_code=400, detail="Security answer must be 2-100 characters")
 
     try:
-        user = user_manager.create_user(
+        user = await user_manager.create_user(
             username=username, email=email, password=password,
             security_question=valid_question, security_answer=valid_answer
         )
@@ -1847,7 +1847,7 @@ async def login_user(
     enforcement (Fix #34): jti on both tokens is the freshly rotated
     user.active_session_id."""
     from routes.auth import _client_ip, _user_agent
-    user = user_manager.authenticate_user(
+    user = await user_manager.authenticate_user(
         username, password, ip=_client_ip(request), user_agent=_user_agent(request),
     )
     if not user:
@@ -1926,7 +1926,7 @@ async def refresh_token(request: Request):
             return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
 
         username = payload.get("sub")
-        user = user_manager.get_user(username)
+        user = await user_manager.get_user(username)
         if not user:
             return error_response(ErrorCode.AUTHENTICATION_ERROR, "User not found", status_code=401)
 
@@ -1974,7 +1974,7 @@ async def reset_password(
     new_password: str = Form(..., min_length=8)  # nosec B105 — form parameter
 ):
     """Step 2 of password reset: verify security answer and set new password."""
-    user = user_manager.get_user(username)
+    user = await user_manager.get_user(username)
     if not user:
         log_audit_event("auth_reset_password", username, "password_reset_failed", resource="auth", success=False)
         raise HTTPException(status_code=400, detail="Invalid request")
@@ -1985,11 +1985,11 @@ async def reset_password(
             detail="Password reset requires a security question. Please set one up after logging in."
         )
 
-    if not user_manager.verify_security_answer(username, security_answer):
+    if not await user_manager.verify_security_answer(username, security_answer):
         log_audit_event("auth_reset_password", username, "password_reset_failed", resource="auth", success=False)
         raise HTTPException(status_code=400, detail="Security answer is incorrect")
 
-    user_manager.update_password(username, new_password)
+    await user_manager.update_password(username, new_password)
     log_audit_event("auth_reset_password", username, "password_reset", resource=f"user:{user.id}", success=True)
     return {"status": "success", "message": "Password reset successfully"}
 
@@ -2925,7 +2925,7 @@ async def ws_transcribe(ws: WebSocket):
     if AUTH_REQUIRED:
         # Production: always require auth
         if token:
-            user = get_current_user(token)
+            user = await get_current_user(token)
         else:
             # Stealth: wait for auth message as first message
             try:
@@ -2935,7 +2935,7 @@ async def ws_transcribe(ws: WebSocket):
                         auth_data = json.loads(first_msg["text"])
                         if auth_data.get("type") == "auth":
                             token = auth_data.get("token", "")
-                            user = get_current_user(token)
+                            user = await get_current_user(token)
                     except (json.JSONDecodeError, KeyError):
                         pass
             except asyncio.TimeoutError:
@@ -2948,7 +2948,7 @@ async def ws_transcribe(ws: WebSocket):
     else:
         # Dev mode: auth optional — allow unauthenticated connections
         if token:
-            user = get_current_user(token)
+            user = await get_current_user(token)
 
     # Auth succeeded
     await ws.send_text(json.dumps({"type": "auth_ok"}))
@@ -3427,7 +3427,7 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
             await ws.close(code=4001)
             return
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if not user:
             await ws.accept()
             await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
