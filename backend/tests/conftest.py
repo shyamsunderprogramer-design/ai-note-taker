@@ -37,29 +37,43 @@ def test_client():
 def auth_headers(test_client):
     """Get authorization headers with a valid test token.
 
-    Bypasses the /auth/register + /auth/login HTTP flow (which is flaky
-    in CI because the bcrypt+passlib versions diverge — see
-    memory/bcrypt-passlib-incompatibility.md). Instead, mints a token
-    directly via the auth module's helpers.
+    Mints a real user in the user_manager and a real access+refresh
+    pair sharing a single jti (Fix #34 single-session enforcement).
+    The jti is also stamped on the user so the verify_token jti
+    check passes — without it, a jti-bearing token whose user has
+    no active_session_id is rejected as a post-logout token.
+
+    No try/except: if user creation or token minting fails, the
+    fixture should raise so the test fails loudly. The previous
+    version of this fixture silently swallowed the ImportError
+    for ``get_user_manager`` (which doesn't exist) and returned
+    ``{}`` for ``Authorization``, meaning every auth-touching test
+    in CI was running unauthenticated. See
+    https://.../conftest-import-bug for the post-mortem.
     """
     import uuid
-    from core.database import get_user_manager
-    from security.auth import create_access_token  # type: ignore
+    from security.auth import (
+        user_manager, create_access_token,
+    )
 
     unique_id = str(uuid.uuid4())[:8]
     username = f"test_{unique_id}"
     email = f"{username}@example.com"
     password = "TestPass123!"  # nosec B105 — test credential
 
-    try:
-        um = get_user_manager()
-        user = um.create_user(username=username, email=email, password=password)
-        token = create_access_token({"sub": str(user.id), "username": username})
-        return {"Authorization": f"Bearer {token}"}
-    except Exception:
-        # If user-mgr or token creation fails, return empty headers so the
-        # test can decide whether to skip or assert 401.
-        return {}
+    user = user_manager.create_user(username=username, email=email, password=password)
+    # The user has no active_session_id yet (we just created them
+    # and never went through /auth/login). For fixture purposes,
+    # mint a jti and stamp it so the jti check passes.
+    jti = str(uuid.uuid4())
+    user.active_session_id = jti
+    user_manager._save_users()
+
+    access = create_access_token(
+        data={"sub": str(user.id), "username": user.username},
+        jti=jti,
+    )
+    return {"Authorization": f"Bearer {access}"}
 
 
 @pytest.fixture
