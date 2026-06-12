@@ -4,6 +4,44 @@ All notable changes to ANT (AI Note Taker) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-06-11
+
+This release adds the **role-based ownership refactor**. It is split into
+5 sequential PRs (PR 1 through PR 5); this is the PR-1 entry. See
+[`OWNERS.{backend,uiux,devops,qa,devsecops}.md`](OWNERS.backend.md) for the
+per-role charters and [`.github/CODEOWNERS`](.github/CODEOWNERS) for the
+file-to-role routing.
+
+### Added (PR 1 — role charters + CODEOWNERS + agents/ scaffold, 2026-06-11)
+
+- **5 `OWNERS.*.md` charter files** at the repo root — one per role
+  (`backend`, `uiux`, `devops`, `qa`, `devsecops`). Each charter lists
+  the file/dir inventory, the cross-role dependencies, the typical PR
+  outputs, the AI-agent scope, and the "do not" list for that role.
+- **`agents/` folder** with per-role AI agent scaffolding:
+  - `agents/README.md` — explains the role-agent pattern
+  - `agents/{backend,uiux,devops,qa,devsecops}/AGENTS.md` — scoped
+    instructions for a future role-specific agent
+  - `agents/{backend,uiux,devops,qa,devsecops}/MEMORY.md` — role-scoped
+    persistent memory (empty stubs, populated as the agent accumulates
+    project knowledge)
+  - `agents/shared/mcp-servers.md` — planning stub for the future
+    MCP-server tool layer (not implemented)
+  - `agents/shared/rag-indexes.md` — planning stub for the future
+    role-scoped RAG indexes (not implemented)
+
+### Changed (PR 1)
+
+- **`.github/CODEOWNERS` rewritten** to map files to role teams
+  (`role-backend`, `role-uiux`, `role-devops`, `role-qa`, `role-devsecops`)
+  instead of a single owner. Co-owned files (runtime shell, deploy
+  manifests, test code, API contract in `apps/web/app.js`) are listed
+  at the bottom of the file with multiple owners; GitHub's
+  last-match-wins semantics route the PR to all of them. **No code or
+  content changed** — the rewrite is purely a routing update.
+
+---
+
 ## [1.0.0] - 2026-04-05
 
 ### Added - Phase 2 Features

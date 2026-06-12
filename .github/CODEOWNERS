@@ -1,4 +1,111 @@
-# ANT (AI Note Taker) — code ownership
-# Sole human contributor today. Expand into role teams as collaborators join.
+# ─────────────────────────────────────────────────────────────────────
+# ANT (AI Note Taker) — role-based CODEOWNERS
+# Reorganized 2026-06-11 as part of the role-ownership refactor.
+# See OWNERS.{backend,uiux,devops,qa,devsecops}.md for each role's charter.
+#
+# All five role teams currently have @shyamsunderprogramer-design as the
+# sole human member. As collaborators join, add them to the appropriate
+# role team. The teams are currently labels for reviewer expectations;
+# branch-protection rules should require approval from the role team(s)
+# listed in each section.
+#
+# GitHub CODEOWNERS uses last-match-wins, so co-owned entries at the
+# bottom of this file override the single-owner entries above. Files
+# that touch more than one role's domain appear twice (once for the
+# single-role assignment, once for the multi-owner requirement) — the
+# syntax is valid; GitHub picks up the last matching rule.
+# ─────────────────────────────────────────────────────────────────────
 
 *       @shyamsunderprogramer-design
+
+# ── Backend dev ───────────────────────────────────────────────────
+/backend/core/
+/backend/modules/
+/backend/routes/
+/backend/lib/
+/backend/migrations/
+/backend/data/seed*
+/backend/pytest.ini
+/backend/requirements*.txt
+/backend/start_server.py
+/backend/alembic.ini
+/backend/tests/conftest.py      @shyamsunderprogramer-design/role-backend
+
+# ── UI/UX dev ─────────────────────────────────────────────────────
+/apps/web/                       @shyamsunderprogramer-design/role-uiux
+/apps/landing/                   @shyamsunderprogramer-design/role-uiux
+/apps/ant-chrome-extension/      @shyamsunderprogramer-design/role-uiux
+/electron/features/              @shyamsunderprogramer-design/role-uiux
+/electron/assets/                @shyamsunderprogramer-design/role-uiux
+/assets/design/                  @shyamsunderprogramer-design/role-uiux
+/mobile/src/                     @shyamsunderprogramer-design/role-uiux
+/mobile/App.js                   @shyamsunderprogramer-design/role-uiux
+/mobile/index.js                 @shyamsunderprogramer-design/role-uiux
+/mobile/app.json                 @shyamsunderprogramer-design/role-uiux
+/mobile/package.json             @shyamsunderprogramer-design/role-uiux
+
+# ── Devops / release ──────────────────────────────────────────────
+/Dockerfile                      @shyamsunderprogramer-design/role-devops
+/docker/                         @shyamsunderprogramer-design/role-devops
+/k8s/                            @shyamsunderprogramer-design/role-devops
+/infrastructure/                 @shyamsunderprogramer-design/role-devops
+/render.yaml                     @shyamsunderprogramer-design/role-devops
+/vercel.json                     @shyamsunderprogramer-design/role-devops
+/Makefile                        @shyamsunderprogramer-design/role-devops
+/scripts/                        @shyamsunderprogramer-design/role-devops
+/electron/main.js                @shyamsunderprogramer-design/role-devops
+/electron/preload.js             @shyamsunderprogramer-design/role-devops
+/electron/stealth.js             @shyamsunderprogramer-design/role-devops
+/electron/build/                 @shyamsunderprogramer-design/role-devops
+/electron/scripts/               @shyamsunderprogramer-design/role-devops
+/electron/package.json           @shyamsunderprogramer-design/role-devops
+/electron/BUILD.md               @shyamsunderprogramer-design/role-devops
+/package.json                    @shyamsunderprogramer-design/role-devops
+/package-lock.json               @shyamsunderprogramer-design/role-devops
+
+# ── QA / testing ──────────────────────────────────────────────────
+/e2e/                            @shyamsunderprogramer-design/role-qa
+/qa/                             @shyamsunderprogramer-design/role-qa
+/backend/tests/                  @shyamsunderprogramer-design/role-qa
+/mobile/__tests__/               @shyamsunderprogramer-design/role-qa
+/electron/tests/                 @shyamsunderprogramer-design/role-qa
+
+# ── DevSecOps / security ──────────────────────────────────────────
+/.claude/                        @shyamsunderprogramer-design/role-devsecops
+/.pre-commit-config.yaml         @shyamsunderprogramer-design/role-devsecops
+/.github/CODEOWNERS              @shyamsunderprogramer-design/role-devsecops
+/.github/PULL_REQUEST_TEMPLATE.md @shyamsunderprogramer-design/role-devsecops
+/.github/ISSUE_TEMPLATE/         @shyamsunderprogramer-design/role-devsecops
+/.github/dependabot.yml          @shyamsunderprogramer-design/role-devsecops
+/SECURITY.md                     @shyamsunderprogramer-design/role-devsecops
+/backend/security/               @shyamsunderprogramer-design/role-devsecops
+
+# ── Co-owned (require approvals from multiple roles) ──────────────
+# Files that touch more than one role's domain. GitHub CODEOWNERS will
+# require approval from each listed owner. Until collaborators join,
+# the single human (@shyamsunderprogramer-design) can satisfy both by
+# approving twice in the PR's review panel.
+
+# Runtime shell — devops owns, backend approves IPC contract changes
+/electron/main.js                @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-backend
+/electron/preload.js             @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-backend
+/electron/stealth.js             @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+
+# Deploy manifests — devops owns, devsecops approves attack-surface changes
+/Dockerfile                      @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+/render.yaml                     @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+/vercel.json                     @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+/.dockerignore                   @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+
+# Backend security — devsecops owns policy, backend owns implementation
+/backend/security/               @shyamsunderprogramer-design/role-devsecops @shyamsunderprogramer-design/role-backend
+
+# Test code — qa owns, role-specific reviewer approves test infra
+/backend/tests/conftest.py       @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-backend
+/mobile/__tests__/               @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-uiux
+/electron/tests/                 @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-devops
+/e2e/                            @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-uiux
+
+# App-level API call contracts in UI — uiux owns, backend approves contract
+/apps/web/app.js                 @shyamsunderprogramer-design/role-uiux @shyamsunderprogramer-design/role-backend
+/apps/web/js/core/api.js         @shyamsunderprogramer-design/role-uiux @shyamsunderprogramer-design/role-backend
