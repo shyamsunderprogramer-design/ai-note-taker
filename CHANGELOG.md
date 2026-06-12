@@ -30,6 +30,27 @@ file-to-role routing.
   - `agents/shared/rag-indexes.md` — planning stub for the future
     role-scoped RAG indexes (not implemented)
 
+### Added (PR 3 — qa/ scaffold, 2026-06-11)
+
+- **`qa/` folder** at the repo root — the QA home for test-environment
+  artifacts that don't fit next to the code:
+  - `qa/README.md` — the test-environment manifest (which Python,
+    which Node, which Playwright, which Ollama, etc.); explains
+    what goes in `qa/` vs `backend/tests/`, `e2e/tests/`,
+    `mobile/__tests__/`, `electron/tests/`
+  - `qa/test-plans/README.md` — manual + exploratory test plans
+    (the QA substitute for the human's eyes on a real install;
+    catches visual / audio / multi-device / onboarding / error-
+    message issues that automated tests don't)
+  - `qa/fixtures/README.md` — synthetic test data (sample users,
+    sample conversations, sample recordings); strict rules on
+    "no real user data, no real API keys, no real PII"
+  - `qa/performance/README.md` — k6 perf scripts + perf budgets
+    (the SLO table for each endpoint; the CI gate that blocks
+    PRs that regress a budget)
+  - Three empty subfolders ready for the first scripts:
+    `qa/test-plans/`, `qa/fixtures/`, `qa/performance/`
+
 ### Added (PR 2 — role-aware templates, 2026-06-11)
 
 - **`.github/PULL_REQUEST_TEMPLATE.md` rewritten** with a "Role(s)
