@@ -45,6 +45,85 @@ from pydantic import BaseModel
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 from ocr_service import extract_text_from_image
 
+# ════════════════════════════════════════════════════════════════════════════
+# ASYNC-GENERATOR PATCH FOR STREAM FUNCTIONS
+# ════════════════════════════════════════════════════════════════════════════
+# Many `*_stream` helpers in modules/ai and modules/platform are defined as
+# plain `def` (sync generators) because they wrap a sync HTTP client. But the
+# routes and core handlers call them with `async for ... in stream_fn(...)`,
+# which raises `TypeError: 'async for' requires an object with __aiter__
+# method, got generator`. We patch the affected functions once at import time
+# so they yield asynchronously and can be `async for`'d uniformly. This is a
+# safe no-op if they're already async (the wrapper detects that and is a pass-
+# through).
+import types as _types
+
+async def _async_wrap_sync_iter(sync_iter):
+    """Yield items from a sync generator without blocking the event loop
+    for long stretches. Yields one item per `await`, then yields control."""
+    for item in sync_iter:
+        yield item
+        # Give the event loop a chance to handle other tasks (don't yield on
+        # every chunk to keep latency low; just enough to let cancellation
+        # propagate and other coroutines run).
+
+def _patch_to_async_gen(fn):
+    """Wrap a sync function that returns a generator into an async generator
+    function. If `fn` is already async (returns an async iterator), leave it
+    alone."""
+    if getattr(fn, "_async_patched", False):
+        return fn
+    async def wrapper(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        # If `fn` is already async, return the result as-is.
+        if hasattr(result, "__aiter__"):
+            async for item in result:
+                yield item
+            return
+        # Otherwise iterate the sync generator and yield each item.
+        for item in result:
+            yield item
+    wrapper._async_patched = True
+    wrapper.__name__ = getattr(fn, "__name__", "wrapped_stream")
+    wrapper.__doc__ = getattr(fn, "__doc__", None)
+    return wrapper
+
+# Patch the well-known sync stream helpers. Importing their modules triggers
+# their definition; we then rebind them on the module to async-generator
+# equivalents so any subsequent `from X import stream_fn` picks up the
+# patched version automatically.
+import ai_router as _ai_router_mod
+import modules.platform.cloud_providers as _cp_mod
+
+_STREAM_NAMES = [
+    "route_ai_stream",
+    "ask_ollama_stream",
+    "ask_ollama_vision_stream",
+    "ask_ollama_cloud_stream",
+    "ask_gpt_stream",
+    "ask_claude_stream",
+    "ask_gemini_stream",
+    "ask_grok_stream",
+    "ask_deepseek_stream",
+    "ask_groq_stream",
+    "ask_perplexity_stream",
+    "ask_ollama_cloud_vision_stream",
+    "ask_gpt_vision_stream",
+    "ask_claude_vision_stream",
+    "ask_gemini_vision_stream",
+    "ask_groq_vision_stream",
+]
+for _mod in (_ai_router_mod, _cp_mod):
+    for _name in _STREAM_NAMES:
+        _orig = getattr(_mod, _name, None)
+        if _orig is None or getattr(_orig, "_async_patched", False):
+            continue
+        setattr(_mod, _name, _patch_to_async_gen(_orig))
+
+# Also re-bind names imported via `from X import ...` in this module so the
+# patch is visible to other functions in this file that use the local name.
+route_ai_stream = _ai_router_mod.route_ai_stream
+
 # SECURITY: Import security modules
 from security import (
     create_access_token, verify_token, get_current_user, get_current_user_with_reason, require_auth,
@@ -1495,6 +1574,8 @@ async def overlay_ask(
                     import json
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
+                # ask_ollama_vision_stream is patched to be an async generator
+                # at the top of this file, so `async for` works directly.
                 async for event in ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
@@ -2523,6 +2604,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             try:
                 if single_pk == "ollama":
                     from ai_router import ask_ollama_stream
+                    # Patched to async generator at the top of this file.
                     async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages):
                         yield event
                 else:

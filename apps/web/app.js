@@ -692,6 +692,36 @@ function setListeningUI(listening) {
     listenBtn.classList.remove("listening")
     listenLabel.textContent = "Start"
   }
+  setTranscriptStripVisible(listening)
+}
+
+// Live transcript strip (Day 5) — shows the last ~80 chars of the
+// live partial transcript while listening. Hides when not listening.
+function setTranscriptStripVisible(visible) {
+  const strip = document.getElementById("transcriptStrip")
+  if (!strip) return
+  if (visible) {
+    strip.hidden = false
+  } else {
+    strip.hidden = true
+    // Clear content on hide so the next session starts clean
+    const content = document.getElementById("transcriptStripContent")
+    if (content) content.textContent = ""
+  }
+}
+
+let __transcriptStripLast = ""  // perf guard — avoid layout thrash on rapid updates
+function updateTranscriptStrip(text) {
+  if (text === __transcriptStripLast) return
+  __transcriptStripLast = text
+  const content = document.getElementById("transcriptStripContent")
+  if (!content) return
+  // Show the trailing ~80 chars so the user sees the freshest words
+  const trimmed = (text || "").replace(/\s+/g, " ").trim()
+  const tail = trimmed.length > 80 ? trimmed.slice(-80) : trimmed
+  content.textContent = tail
+  // Apply edge-fade mask only when content overflows
+  content.classList.toggle("masked", trimmed.length > 50)
 }
 
 function getSelectedContextLength() {
@@ -2856,9 +2886,17 @@ async function streamAIRace(query) {
     console.warn("Could not fetch providers from backend", e)
   }
 
-  // Fetch all provider toggles in parallel (instead of sequential await)
+  // Fetch all provider toggles in parallel (instead of sequential await).
+  // Guard each call — if window.api is unavailable (e.g. browser preview without
+  // Electron IPC), fall back to localStorage so the assistant bubble still renders
+  // and the user isn't stuck looking at "Processing…" forever.
   const storedResults = await Promise.all(
-    CLOUD_PROVIDERS.map(p => window.api.storeGet("provider_" + p))
+    CLOUD_PROVIDERS.map(async p => {
+      try {
+        if (window.api?.storeGet) return await window.api.storeGet("provider_" + p)
+      } catch {}
+      try { return JSON.parse(localStorage.getItem("provider_" + p) || "null") } catch { return null }
+    })
   )
   // Fetch local key status in parallel too
   const localKeyResults = await Promise.all(
@@ -3609,6 +3647,7 @@ function startStreamingTranscription() {
       if (data.type === "partial") {
         partialTranscriptText = data.text
         showPartialTranscript(data.text)
+        updateTranscriptStrip(data.text)
         // Pass speaker info to agent suggestion pipeline if available
         if (data.speaker || data.semantic_role) {
           lastDetectedSpeaker = data.speaker || "Speaker 1"
@@ -3618,6 +3657,7 @@ function startStreamingTranscription() {
         detectKeywords(data.text, data.speaker || lastDetectedSpeaker)
       } else if (data.type === "final") {
         confirmPartialTranscript(data.text)
+        updateTranscriptStrip(data.text)
         // Final message may include speaker list
         if (data.speakers && Array.isArray(data.speakers)) {
           console.log("[transcribeWs] Speakers detected:", data.speakers.join(", "))
@@ -4378,6 +4418,7 @@ function startAlwaysOnListen() {
   if (alwaysOnEventSource) return
   alwaysOnTranscriptionBuffer = ""
   alwaysOnLastHeardTime = Date.now()
+  setTranscriptStripVisible(true)
 
   alwaysOnEventSource = new EventSource(`${API_BASE}/transcribe-stream`)
 
@@ -4387,6 +4428,7 @@ function startAlwaysOnListen() {
       if (data.text && data.text.trim()) {
         alwaysOnTranscriptionBuffer += " " + data.text.trim()
         alwaysOnLastHeardTime = Date.now()
+        updateTranscriptStrip(alwaysOnTranscriptionBuffer)
       }
     } catch {}
   })
@@ -4413,6 +4455,7 @@ function stopAlwaysOnListen() {
     alwaysOnEventSource = null
   }
   alwaysOnTranscriptionBuffer = ""
+  setTranscriptStripVisible(false)
 
   // Auto-generate meeting notes if session was 5+ minutes
   autoGenerateMeetingNotes()
@@ -6117,7 +6160,7 @@ document.addEventListener("click", (e) => {
 
   if (clickedAppMenu) return
 
-  if (!settingsPanel?.contains(e.target) && !menuBtn?.contains(e.target)) {
+  if (!settingsPanel?.contains(e.target) && !menuBtn?.contains(e.target) && !document.getElementById("gearBtn")?.contains(e.target)) {
     // If config panel is open, just go back to provider list
     if (providerConfigPanel?.classList.contains("open")) {
       closeProviderConfig()
@@ -6247,8 +6290,8 @@ async function init() {
     // Pre-warm microphone and audio context for instant voice start
     prewarmVoiceResources()
 
-    // Run onboarding check on first launch
-    await checkOnboarding()
+    // Onboarding is fired independently below — keeping it out of init() prevents a hanging
+    // browser-preview (no window.api) from suppressing the wizard.
   } catch (e) {
     console.error(e)
   }
@@ -6294,79 +6337,249 @@ toggleScreenshot?.addEventListener("change", async () => {
 })
 
 // ==============================
-// ONBOARDING
+// ONBOARDING WIZARD (Day 1)
+// Replaces the old 3-item static checklist with a 4-step interactive
+// flow. Persists per-step results and resumes at the last completed step.
+// Only sets hasOnboarded=true on Finish (or Skip) — fixes the old bug
+// where any one passing check would dismiss the modal.
 // ==============================
-async function checkOnboarding() {
-  const hasOnboarded = await window.api.storeGet("hasOnboarded")
-  if (hasOnboarded) return
+const ONBOARD_TOTAL_STEPS = 4
+let onboardCurrentStep = 1
+let onboardCheckResults = { mic: null, backend: null, vision: null, mode: null }
 
-  const checklist = document.getElementById("onboardingChecklist")
-  const note = document.getElementById("onboardingNote")
-  const closeBtn = document.getElementById("onboardingClose")
-  const modal = document.getElementById("onboardingModal")
+function setOnboardStep(n) {
+  onboardCurrentStep = n
+  // update visible step panels
+  document.querySelectorAll(".onboard-step").forEach(el => {
+    const step = parseInt(el.dataset.step, 10)
+    el.classList.toggle("active", step === n)
+  })
+  // update indicator dots
+  document.querySelectorAll(".onboard-indicator-dot").forEach(dot => {
+    const step = parseInt(dot.dataset.step, 10)
+    dot.classList.remove("active", "done")
+    if (step === n) dot.classList.add("active")
+    else if (step < n) dot.classList.add("done")
+  })
+  // update footer buttons
+  const backBtn = document.getElementById("onboardBackBtn")
+  const nextBtn = document.getElementById("onboardNextBtn")
+  const finishBtn = document.getElementById("onboardFinishBtn")
+  const skipBtn = document.getElementById("onboardSkipBtn")
+  if (backBtn) backBtn.hidden = n === 1
+  if (nextBtn) nextBtn.hidden = n === ONBOARD_TOTAL_STEPS
+  if (finishBtn) finishBtn.hidden = n !== ONBOARD_TOTAL_STEPS
+  // Skip is only on steps 1-2 (the blockers); on 3-4 the user can just click Next/Finish
+  if (skipBtn) skipBtn.hidden = n > 2
+}
 
-  // Step 1: Microphone
+function setOnboardStatus(elementId, state, text) {
+  const el = document.getElementById(elementId)
+  if (!el) return
+  el.classList.remove("checking", "ok", "fail")
+  el.classList.add(state)
+  const textEl = el.querySelector(".onboard-status-text")
+  if (textEl && text) textEl.textContent = text
+}
+
+async function runOnboardMicCheck() {
+  setOnboardStatus("onboardMicStatus", "checking", "Requesting microphone access...")
+  const helpEl = document.getElementById("onboardMicHelp")
+  const retryBtn = document.getElementById("onboardMicRetry")
+  if (helpEl) helpEl.hidden = true
+  if (retryBtn) retryBtn.hidden = true
+  // Race getUserMedia against a 3s timeout — headless / no-permission contexts would hang forever
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
+  const getMedia = navigator.mediaDevices?.getUserMedia
+    ? navigator.mediaDevices.getUserMedia({ audio: true }).then(s => { s.getTracks().forEach(t => t.stop()); return true })
+    : Promise.reject(new Error("no api"))
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    stream.getTracks().forEach(t => t.stop())
-    const micItem = checklist.querySelector('[data-step="mic"]')
-    micItem.className = "ok"
-    micItem.textContent = "Microphone access granted"
+    await Promise.race([getMedia, timeout])
+    setOnboardStatus("onboardMicStatus", "ok", "Microphone access granted")
+    onboardCheckResults.mic = "ok"
   } catch {
-    const micItem = checklist.querySelector('[data-step="mic"]')
-    micItem.className = "fail"
-    micItem.textContent = "Microphone access denied — please allow in system settings"
+    setOnboardStatus("onboardMicStatus", "fail", "Microphone access denied")
+    if (helpEl) helpEl.hidden = false
+    if (retryBtn) retryBtn.hidden = false
+    onboardCheckResults.mic = "fail"
   }
+}
 
-  // Step 2: Ollama
+async function runOnboardBackendCheck() {
+  setOnboardStatus("onboardBackendStatus", "checking", "Checking backend...")
+  const helpEl = document.getElementById("onboardBackendHelp")
+  if (helpEl) helpEl.hidden = true
   try {
     const r = await fetch(`${API_BASE}/health`)
     if (r.ok) {
-      const ollamaItem = checklist.querySelector('[data-step="ollama"]')
-      ollamaItem.className = "ok"
-      ollamaItem.textContent = "Ollama backend running"
+      setOnboardStatus("onboardBackendStatus", "ok", "Backend is running")
+      onboardCheckResults.backend = "ok"
     } else {
       throw new Error("not ok")
     }
   } catch {
-    const ollamaItem = checklist.querySelector('[data-step="ollama"]')
-    ollamaItem.className = "fail"
-    ollamaItem.textContent = "Ollama not running — start with: python backend/main.py"
+    setOnboardStatus("onboardBackendStatus", "fail", "Backend not reachable")
+    if (helpEl) helpEl.hidden = false
+    onboardCheckResults.backend = "fail"
   }
+}
 
-  // Step 3: Vision model
+async function runOnboardVisionCheck() {
+  setOnboardStatus("onboardVisionStatus", "checking", "Checking vision model...")
+  const helpEl = document.getElementById("onboardVisionHelp")
+  if (helpEl) helpEl.hidden = true
   try {
     const r = await fetch(`${API_BASE}/providers`)
     if (r.ok) {
-      const visionItem = checklist.querySelector('[data-step="vision"]')
-      visionItem.className = "ok"
-      visionItem.textContent = "Vision model available (moondream/llava)"
+      const data = await r.json().catch(() => ({}))
+      const providers = data.providers || data || {}
+      const hasVision = Object.values(providers).some(p =>
+        p && (p.supports_vision || p.vision || /vision|llava|moondream|gpt-4o|gemini|claude.*opus|gpt-4/i.test(p.name || p.id || ""))
+      )
+      if (hasVision) {
+        setOnboardStatus("onboardVisionStatus", "ok", "Vision model available")
+        onboardCheckResults.vision = "ok"
+      } else {
+        setOnboardStatus("onboardVisionStatus", "fail", "No vision model configured (optional)")
+        if (helpEl) helpEl.hidden = false
+        onboardCheckResults.vision = "fail"
+      }
     } else {
       throw new Error()
     }
   } catch {
-    const visionItem = checklist.querySelector('[data-step="vision"]')
-    visionItem.className = "fail"
-    visionItem.textContent = "Vision model not found — optional, voice will work without it"
+    setOnboardStatus("onboardVisionStatus", "fail", "Vision not detected (optional)")
+    if (helpEl) helpEl.hidden = false
+    onboardCheckResults.vision = "fail"
   }
+}
 
-  // Check if all critical items passed
-  const micOk = checklist.querySelector('[data-step="mic"]').classList.contains("ok")
-  const ollamaOk = checklist.querySelector('[data-step="ollama"]').classList.contains("ok")
+function buildOnboardSummary() {
+  const summaryEl = document.getElementById("onboardSummary")
+  if (!summaryEl) return
+  const micLabel = onboardCheckResults.mic === "ok" ? "Granted" : "Denied"
+  const backendLabel = onboardCheckResults.backend === "ok" ? "Running" : "Not running"
+  const visionLabel = onboardCheckResults.vision === "ok" ? "Available" : "Skipped (optional)"
+  const modeLabel = ({ auto: "Voice-first", interview: "Interview", code: "Code" })[onboardCheckResults.mode] || "Voice-first"
+  const valueClass = (v) => v === "ok" ? "ok" : (v === "fail" ? "fail" : "")
+  summaryEl.innerHTML = `
+    <div class="onboard-summary-row">
+      <span class="onboard-summary-label">Mode</span>
+      <span class="onboard-summary-value">${modeLabel}</span>
+    </div>
+    <div class="onboard-summary-row">
+      <span class="onboard-summary-label">Microphone</span>
+      <span class="onboard-summary-value ${valueClass(onboardCheckResults.mic)}">${micLabel}</span>
+    </div>
+    <div class="onboard-summary-row">
+      <span class="onboard-summary-label">Backend</span>
+      <span class="onboard-summary-value ${valueClass(onboardCheckResults.backend)}">${backendLabel}</span>
+    </div>
+    <div class="onboard-summary-row">
+      <span class="onboard-summary-label">Vision</span>
+      <span class="onboard-summary-value ${valueClass(onboardCheckResults.vision)}">${visionLabel}</span>
+    </div>
+  `
+  summaryEl.hidden = false
+}
 
-  if (micOk && ollamaOk) {
-    note.textContent = "You're all set! Press Enter to start talking."
-    await window.api.storeSet("hasOnboarded", true)
-  } else if (!micOk) {
-    note.textContent = "Microphone access is required. Please restart and allow access."
-  } else {
-    note.textContent = "Start the backend with: python backend/main.py"
+async function checkOnboarding() {
+  // Browser-preview fallback: use localStorage when the Electron store isn't present
+  const hasStore = typeof window !== "undefined" && window.api && typeof window.api.storeGet === "function"
+  const storeGet = (k) => hasStore ? window.api.storeGet(k) : Promise.resolve(localStorage.getItem(k))
+  const storeSet = (k, v) => hasStore ? window.api.storeSet(k, v) : Promise.resolve(localStorage.setItem(k, v))
+
+  // URL overrides for browser-preview testing:
+  //   ?onboard=reset  → clear state and show the wizard
+  //   ?onboard=1      → force-show the wizard regardless of state
+  const params = new URLSearchParams(window.location.search)
+  if (params.get("onboard") === "reset") {
+    try { localStorage.removeItem("hasOnboarded"); localStorage.removeItem("onboarding_step") } catch {}
+    if (hasStore) { try { await window.api.storeSet("hasOnboarded", false); await window.api.storeSet("onboarding_step", "0") } catch {} }
   }
+  const forceShow = params.get("onboard") === "1" || params.get("onboard") === "reset"
 
-  modal.classList.add("open")
-  closeBtn.addEventListener("click", () => {
+  const hasOnboarded = await storeGet("hasOnboarded")
+  if (hasOnboarded && !forceShow) return
+
+  const modal = document.getElementById("onboardingModal")
+  if (!modal) return
+
+  // Run the blocking checks up-front so step 1 and 2 already have results
+  await runOnboardMicCheck()
+  await runOnboardBackendCheck()
+  await runOnboardVisionCheck()
+
+  // resume from saved step if any
+  const savedStep = await storeGet("onboarding_step")
+  const startStep = Math.max(1, Math.min(ONBOARD_TOTAL_STEPS, parseInt(savedStep, 10) || 1))
+  setOnboardStep(startStep)
+
+  // Footer wiring (one-time)
+  const backBtn = document.getElementById("onboardBackBtn")
+  const nextBtn = document.getElementById("onboardNextBtn")
+  const finishBtn = document.getElementById("onboardFinishBtn")
+  const skipBtn = document.getElementById("onboardSkipBtn")
+  const micRetryBtn = document.getElementById("onboardMicRetry")
+
+  backBtn?.addEventListener("click", () => {
+    setOnboardStep(Math.max(1, onboardCurrentStep - 1))
+    storeSet("onboarding_step", String(onboardCurrentStep))
+  })
+
+  nextBtn?.addEventListener("click", () => {
+    setOnboardStep(Math.min(ONBOARD_TOTAL_STEPS, onboardCurrentStep + 1))
+    storeSet("onboarding_step", String(onboardCurrentStep))
+  })
+
+  finishBtn?.addEventListener("click", async () => {
+    // apply the chosen mode
+    const modeSelect = document.getElementById("modeSelect")
+    if (modeSelect && onboardCheckResults.mode) {
+      modeSelect.value = onboardCheckResults.mode
+      modeSelect.dispatchEvent(new Event("change"))
+    }
+    await storeSet("hasOnboarded", true)
+    await storeSet("onboarding_step", String(ONBOARD_TOTAL_STEPS))
     modal.classList.remove("open")
   })
+
+  skipBtn?.addEventListener("click", async () => {
+    await storeSet("hasOnboarded", true)
+    await storeSet("onboarding_step", String(ONBOARD_TOTAL_STEPS))
+    modal.classList.remove("open")
+  })
+
+  micRetryBtn?.addEventListener("click", runOnboardMicCheck)
+
+  // Mode-card wiring
+  document.querySelectorAll(".onboard-mode-card").forEach(card => {
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".onboard-mode-card").forEach(c => c.classList.remove("selected"))
+      card.classList.add("selected")
+      onboardCheckResults.mode = card.dataset.mode
+      buildOnboardSummary()
+    })
+  })
+
+  // Copy buttons in the help section
+  document.querySelectorAll(".onboard-copy-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const text = btn.dataset.copy
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        const orig = btn.textContent
+        btn.textContent = "✓"
+        setTimeout(() => { btn.textContent = orig }, 1200)
+      } catch {
+        // clipboard not available — fail silently
+      }
+    })
+  })
+
+  // Show the modal
+  modal.classList.add("open")
 }
 
 // ==============================
@@ -7643,6 +7856,15 @@ init = async function() {
 }
 
 init()
+
+// Fire onboarding independently so a slow/hanging init() doesn't suppress the wizard
+;(async () => {
+  try {
+    await checkOnboarding()
+  } catch (e) {
+    console.error("[onboarding] checkOnboarding failed:", e)
+  }
+})()
 
 // ==============================
 // ANALYTICS AND CRM EXTENSIONS
@@ -9244,3 +9466,326 @@ renderSelectedFiles = function() {
 
 // Voice clone init moved to initFeatures() to wait for auth
 console.log("[Voice Clone] Module initialized (will fully init after auth)")
+
+// ==============================
+// INLINE KBD CHIPS — Input placeholder hint
+// Shows shortcut chips inside the input when empty, hides when the user
+// starts typing. Mirrors Natively's pattern so users learn the shortcuts
+// passively by seeing them where the action happens.
+// ==============================
+;(function setupPlaceholderHint() {
+  const input = document.getElementById("textInput")
+  const hint = document.getElementById("placeholderHint")
+  if (!input || !hint) return
+
+  function sync() {
+    if (!input.value || input.value.length === 0) {
+      hint.classList.remove("hidden")
+    } else {
+      hint.classList.add("hidden")
+    }
+  }
+
+  // initial state
+  sync()
+
+  // update on every input change
+  input.addEventListener("input", sync)
+
+  // re-show when the input loses focus and is empty
+  input.addEventListener("blur", () => {
+    if (!input.value) hint.classList.remove("hidden")
+  })
+})()
+
+// ==============================
+// MORE POPOVERS (Day 2-3)
+// Wires the 3 trigger buttons (AI / Display / Behavior) to open
+// their respective popover. Only one popover is open at a time.
+// Position is computed at open time so the popover sits just below
+// its trigger.
+// ==============================
+;(function setupMorePopovers() {
+  const triggers = [
+    { btnId: "moreAiBtn",      popId: "aiPopover" },
+    { btnId: "moreDisplayBtn", popId: "displayPopover" },
+    { btnId: "moreBehaviorBtn", popId: "behaviorPopover" },
+  ]
+
+  let openPopoverId = null
+  let openTrigger = null
+
+  function closeOpen() {
+    if (!openPopoverId) return
+    const pop = document.getElementById(openPopoverId)
+    const trig = openTrigger
+    if (pop) pop.hidden = true
+    if (trig) {
+      trig.setAttribute("aria-expanded", "false")
+      trig.classList.remove("active")
+    }
+    openPopoverId = null
+    openTrigger = null
+  }
+
+  function positionPopover(pop, trigger) {
+    if (!pop || !trigger) return
+    // Find the controls-strip parent — popover is positioned relative to it
+    const anchor = trigger.closest(".controls-strip") || trigger.parentElement
+    if (!anchor || anchor.getBoundingClientRect().width === 0) return
+
+    const anchorRect = anchor.getBoundingClientRect()
+    const trigRect = trigger.getBoundingClientRect()
+    const popRect = pop.getBoundingClientRect()
+
+    // Default: right-align popover to the trigger's right edge
+    let left = trigRect.right - anchorRect.left - popRect.width
+    let top = trigRect.bottom - anchorRect.top + 6
+
+    // Keep on-screen (don't go past left edge)
+    const desiredLeftInViewport = anchorRect.left + left
+    if (desiredLeftInViewport < 8) left = 8 - anchorRect.left
+
+    pop.style.left = `${Math.max(0, left)}px`
+    pop.style.top = `${top}px`
+
+    // Position arrow above the trigger
+    const arrow = pop.querySelector(".more-popover-arrow")
+    if (arrow) {
+      const arrowLeftInAnchor = trigRect.left - anchorRect.left + trigRect.width / 2 - 6
+      arrow.style.left = `${Math.max(6, Math.min(popRect.width - 18, arrowLeftInAnchor - left))}px`
+    }
+  }
+
+  function openPopover(triggerId, popId) {
+    closeOpen()
+    const trig = document.getElementById(triggerId)
+    const pop = document.getElementById(popId)
+    if (!trig || !pop) return
+
+    // Make the popover temporarily visible so we can measure it, then position
+    pop.hidden = false
+    pop.style.visibility = "hidden"
+    positionPopover(pop, trig)
+    pop.style.visibility = ""
+
+    trig.setAttribute("aria-expanded", "true")
+    trig.classList.add("active")
+    openPopoverId = popId
+    openTrigger = trig
+  }
+
+  triggers.forEach(({ btnId, popId }) => {
+    const btn = document.getElementById(btnId)
+    if (!btn) return
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      if (openPopoverId === popId) closeOpen()
+      else openPopover(btnId, popId)
+    })
+  })
+
+  // Click-outside closes
+  document.addEventListener("click", (e) => {
+    if (!openPopoverId) return
+    const pop = document.getElementById(openPopoverId)
+    const trig = openTrigger
+    if (pop && pop.contains(e.target)) return
+    if (trig && trig.contains(e.target)) return
+    closeOpen()
+  })
+
+  // Esc closes
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && openPopoverId) {
+      closeOpen()
+      if (openTrigger) openTrigger.focus()
+    }
+  })
+
+  // Reposition on window resize
+  window.addEventListener("resize", () => {
+    if (openPopoverId) {
+      const pop = document.getElementById(openPopoverId)
+      positionPopover(pop, openTrigger)
+    }
+  })
+
+  // Keep the "More / Interview context" hint visibility in sync
+  function syncInterviewHint() {
+    const hint = document.getElementById("interviewContextHint")
+    if (!hint) return
+    const modeSelect = document.getElementById("modeSelect")
+    const isInterview = modeSelect?.value === "interview"
+    const group = document.getElementById("interviewContextGroup")
+    const visible = group && group.style.display !== "none"
+    if (visible) hint.style.display = "none"
+    else hint.style.display = ""
+  }
+  document.getElementById("modeSelect")?.addEventListener("change", syncInterviewHint)
+  // Run once on startup
+  setTimeout(syncInterviewHint, 0)
+})()
+
+// Mirror active state for the toggle buttons (Auto-SS, Always-On, Suggestions)
+// so the status pill in the popover updates when the underlying service toggles.
+;(function setupMorePopoverToggleMirrors() {
+  function setMirror(btnId, statusId, on) {
+    const btn = document.getElementById(btnId)
+    const status = document.getElementById(statusId)
+    if (!btn) return
+    btn.setAttribute("aria-pressed", on ? "true" : "false")
+    if (status) status.textContent = on ? "On" : "Off"
+  }
+  // Reuse existing toggle functions if present; otherwise just observe the dot
+  function mirrorAutoSS() {
+    const dot = document.getElementById("autoSSDot")
+    const on = dot && dot.style.display !== "none"
+    setMirror("autoSSBtn", "autoSSStatus", on)
+  }
+  function mirrorAlwaysOn() {
+    const dot = document.getElementById("alwaysOnDot")
+    const on = dot && dot.style.display !== "none"
+    setMirror("alwaysOnBtn", "alwaysOnStatus", on)
+  }
+  function mirrorSuggestions() {
+    const dot = document.getElementById("suggestionsDot")
+    const on = dot && dot.style.display !== "none"
+    setMirror("suggestionsBtn", "suggestionsStatus", on)
+  }
+
+  // Observe DOM mutations on the dots so we stay in sync with any existing toggle logic
+  const observer = new MutationObserver(() => {
+    mirrorAutoSS(); mirrorAlwaysOn(); mirrorSuggestions()
+  })
+  ;["autoSSDot", "alwaysOnDot", "suggestionsDot"].forEach(id => {
+    const el = document.getElementById(id)
+    if (el) observer.observe(el, { attributes: true, attributeFilter: ["style", "class"] })
+  })
+
+  // Initial sync
+  setTimeout(() => {
+    mirrorAutoSS(); mirrorAlwaysOn(); mirrorSuggestions()
+  }, 100)
+})()
+
+// ==============================
+// SHORTCUTS POPOVER + GEAR + CTRL+, (Day 4)
+// ⓘ button shows a hover/click popover with the full shortcut list.
+// ⚙ button calls openSettings(). In-app Ctrl+, also opens settings.
+// Global Ctrl+, (registered in electron/main.js) brings the window
+// to focus and emits "open-settings" which we handle via
+// window.api.onOpenSettings (exposed in electron/preload.js).
+// ==============================
+;(function setupShortcutsPopoverAndGear() {
+  const infoBtn = document.getElementById("shortcutsInfoBtn")
+  const popover = document.getElementById("shortcutsPopover")
+  const gearBtn = document.getElementById("gearBtn")
+
+  // ============= ⓘ Popover wiring =============
+  let openTimeout = null
+  let closeTimeout = null
+
+  function showPopover() {
+    if (!popover || !infoBtn) return
+    if (closeTimeout) { clearTimeout(closeTimeout); closeTimeout = null }
+    popover.hidden = false
+    infoBtn.setAttribute("aria-expanded", "true")
+  }
+  function scheduleHide(delay) {
+    if (closeTimeout) clearTimeout(closeTimeout)
+    closeTimeout = setTimeout(() => {
+      if (!popover) return
+      popover.hidden = true
+      infoBtn?.setAttribute("aria-expanded", "false")
+    }, delay)
+  }
+
+  if (infoBtn && popover) {
+    // Click: toggle (immediate show)
+    infoBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
+      if (popover.hidden) showPopover()
+      else scheduleHide(0)
+    })
+    // Hover: 150ms show, 250ms hide (prevents flicker on accidental pass)
+    infoBtn.addEventListener("mouseenter", () => {
+      if (closeTimeout) { clearTimeout(closeTimeout); closeTimeout = null }
+      openTimeout = setTimeout(showPopover, 150)
+    })
+    infoBtn.addEventListener("mouseleave", () => {
+      if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
+      scheduleHide(250)
+    })
+    // Keep popover open while hovering it
+    popover.addEventListener("mouseenter", () => {
+      if (closeTimeout) { clearTimeout(closeTimeout); closeTimeout = null }
+    })
+    popover.addEventListener("mouseleave", () => scheduleHide(250))
+
+    // Click outside / Esc closes immediately
+    document.addEventListener("click", (e) => {
+      if (popover.hidden) return
+      if (popover.contains(e.target)) return
+      if (infoBtn.contains(e.target)) return
+      popover.hidden = true
+      infoBtn.setAttribute("aria-expanded", "false")
+    })
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !popover.hidden) {
+        popover.hidden = true
+        infoBtn.setAttribute("aria-expanded", "false")
+        infoBtn.focus()
+      }
+    })
+  }
+
+  // ============= ⚙ Gear wiring =============
+  // openSettings exists at app.js:4608 in this codebase. Call it directly
+  // via globalThis lookup so we get the right one even if module re-evaluated.
+  function callOpenSettings() {
+    const fn = typeof openSettings === "function" ? openSettings : (globalThis.openSettings)
+    if (typeof fn === "function") {
+      try { fn() } catch (e) { console.warn("[gear] openSettings threw:", e) }
+      return
+    }
+    // Fallback: simulate clicking menuBtn then the Settings item
+    const menuBtn = document.getElementById("menuBtn")
+    menuBtn?.click()
+    setTimeout(() => {
+      const items = document.querySelectorAll('[data-action="settings"], .app-menu-item')
+      for (const item of items) {
+        if (/settings/i.test(item.textContent || "")) { item.click(); break }
+      }
+    }, 50)
+  }
+
+  gearBtn?.addEventListener("click", callOpenSettings)
+
+  // In-app Ctrl+, (works inside the window without needing global registration)
+  document.addEventListener("keydown", (e) => {
+    const isCtrlComma = e.key === "," && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
+    if (!isCtrlComma) return
+    // Don't intercept when typing in the text input — let it type a comma
+    const tag = (e.target?.tagName || "").toUpperCase()
+    if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return
+    e.preventDefault()
+    callOpenSettings()
+  })
+
+  // ============= Global Ctrl+, from main process =============
+  // electron/preload.js exposes window.api.onOpenSettings which fires
+  // when the user hits the global Cmd+, while the window is unfocused.
+  if (typeof window !== "undefined" && window.api?.onOpenSettings) {
+    try {
+      window.api.onOpenSettings(() => {
+        callOpenSettings()
+        // Best-effort: bring window to front
+        window.api.focusMainWindow?.()
+      })
+    } catch (e) {
+      console.warn("[shortcuts] onOpenSettings bridge failed:", e)
+    }
+  }
+})()

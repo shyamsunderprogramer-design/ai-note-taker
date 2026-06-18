@@ -9,13 +9,22 @@
  * first paint — no FOUC.
  */
 (function () {
-  if (
-    navigator.userAgent.includes('Mac') ||
-    navigator.platform === 'MacIntel' ||
-    navigator.platform === 'MacPPC'
-  ) {
-    document.body.classList.add('platform-darwin');
-  } else {
-    document.body.classList.add('platform-other');
+  if (!document.body) {
+    // Script is in <head>, before <body> exists — defer until DOMContentLoaded.
+    document.addEventListener("DOMContentLoaded", function () { applyPlatformClass() }, { once: true })
+    return
+  }
+  applyPlatformClass()
+
+  function applyPlatformClass() {
+    if (
+      navigator.userAgent.includes('Mac') ||
+      navigator.platform === 'MacIntel' ||
+      navigator.platform === 'MacPPC'
+    ) {
+      document.body.classList.add('platform-darwin');
+    } else {
+      document.body.classList.add('platform-other');
+    }
   }
 })();

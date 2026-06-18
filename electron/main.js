@@ -1778,6 +1778,16 @@ app.whenReady().then(async () => {
     }
   })
 
+  // CommandOrControl+, — open Settings (global; works when window is unfocused)
+  registerShortcut("CommandOrControl+,", "open settings", () => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+      win.webContents.send("open-settings", {})
+    }
+  })
+
   // ═══════════════════════════════════════════════════════════════════════════════
   // CAPTION OVERLAY WINDOW
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -1985,6 +1995,14 @@ app.whenReady().then(async () => {
   ipcMain.on("interview-overlay:ready", () => {
     if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
       interviewOverlayWindow.webContents.send("interview:context", _interviewOverlayContext)
+    }
+  })
+
+  ipcMain.on("main:focus", () => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
     }
   })
 

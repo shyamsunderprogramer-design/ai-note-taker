@@ -173,6 +173,16 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("trigger-ai-screen", () => callback())
   },
 
+  // Global Ctrl/Cmd+, — open settings
+  onOpenSettings: (callback) => {
+    ipcRenderer.on("open-settings", () => callback())
+  },
+
+  // Best-effort: bring the main window to focus (used after the open-settings signal)
+  focusMainWindow: () => {
+    ipcRenderer.send("main:focus")
+  },
+
   // Backend process status and restart
   onBackendDead: (callback) => {
     ipcRenderer.on("backend:dead", (_event, data) => callback(data))

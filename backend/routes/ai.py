@@ -77,7 +77,16 @@ STATE = {"is_streaming": False}
 _race_history = []
 
 # Provider key cache (mirrors main.py)
-from typing import Dict
+from typing import Dict, AsyncIterator
+
+async def _sync_to_async_iter(sync_iter):
+    """Bridge a plain Python generator (sync `def`, not `async def`) into
+    an async iterator. Some ai_router helpers (ask_ollama_stream,
+    ask_ollama_vision_stream) are sync generators because they wrap a
+    sync HTTP client; this adapter lets us `async for` over them inside
+    async route handlers without changing the call sites everywhere."""
+    for item in sync_iter:
+        yield item
 
 _provider_key_cache: Dict[str, bool] = {}
 _provider_key_cache_time: list = [0.0]  # mutable list to avoid closure scope issue
@@ -271,6 +280,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             try:
                 if single_pk == "ollama":
                     from ai_router import ask_ollama_stream
+                    # ask_ollama_stream is patched to be an async generator at
+                    # core/main.py import time, so `async for` works directly.
                     async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature):
                         yield event
                 else:
@@ -312,6 +323,9 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                     stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)
 
                 has_error = False
+                # All stream functions are patched to async generators at
+                # core/main.py import time, so `async for` works uniformly
+                # for both ollama and cloud providers.
                 async for event in stream_iter:
                     if cancel_flags[pk].is_set():
                         logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time.time() - provider_start)
@@ -559,6 +573,7 @@ async def ask_with_image(
                 STATE["is_streaming"] = True
                 try:
                     from ai_router import ask_ollama_vision_stream
+                    # Patched to async generator at core/main.py import time.
                     async for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=ollama_vision_model, temperature=temperature):
                         yield event
                 except Exception as e:
@@ -605,6 +620,7 @@ async def ask_with_image(
                     stream_iter = stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature)
 
                 has_error = False
+                # All vision stream functions are patched to async generators.
                 async for event in stream_iter:
                     if cancel_flags[provider_name].is_set():
                         race_queue.put((provider_name, "DONE", None))

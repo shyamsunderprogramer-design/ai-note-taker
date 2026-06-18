@@ -76,9 +76,73 @@
           <svg class="opacity-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
           <input type="range" id="opacitySlider" min="10" max="150" value="55" class="opacity-slider">
         </div>
+        <button id="shortcutsInfoBtn" class="win-btn info-btn" type="button" title="Keyboard shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-expanded="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </button>
+        <button id="gearBtn" class="win-btn gear-btn" type="button" title="Settings (Ctrl+,)" aria-label="Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
         <button id="menuBtn" class="win-btn" type="button" title="Menu">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
+      </div>
+
+      <!-- Shortcuts hover/click popover (Day 4) -->
+      <div class="shortcuts-popover" id="shortcutsPopover" role="dialog" aria-label="Keyboard shortcuts" hidden>
+        <div class="shortcuts-popover-arrow"></div>
+        <div class="shortcuts-popover-body">
+          <div class="shortcuts-popover-section-title">Global</div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys">
+              <kbd class="shortcuts-popover-key">Ctrl</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">Enter</kbd>
+            </span>
+            <span class="shortcuts-popover-desc">Trigger AI</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys">
+              <kbd class="shortcuts-popover-key">Ctrl</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">Shift</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">Enter</kbd>
+            </span>
+            <span class="shortcuts-popover-desc">AI with screenshot</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Alt</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">D</kbd></span>
+            <span class="shortcuts-popover-desc">Toggle stealth</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Alt</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">Space</kbd></span>
+            <span class="shortcuts-popover-desc">Hide / show window</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Ctrl</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">←/→/↑/↓</kbd></span>
+            <span class="shortcuts-popover-desc">Move window</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">F12</kbd></span>
+            <span class="shortcuts-popover-desc">DevTools</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Ctrl</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">Shift</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">C</kbd></span>
+            <span class="shortcuts-popover-desc">Caption overlay</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Ctrl</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">Shift</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">I</kbd></span>
+            <span class="shortcuts-popover-desc">Interview overlay</span>
+          </div>
+
+          <div class="shortcuts-popover-section-title">In window</div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Enter</kbd></span>
+            <span class="shortcuts-popover-desc">Toggle voice</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">F</kbd></span>
+            <span class="shortcuts-popover-desc">Maximize</span>
+          </div>
+          <div class="shortcuts-popover-row">
+            <span class="shortcuts-popover-keys"><kbd class="shortcuts-popover-key">Ctrl</kbd><span class="shortcuts-popover-plus">+</span><kbd class="shortcuts-popover-key">,</kbd></span>
+            <span class="shortcuts-popover-desc">Open settings</span>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -103,19 +167,7 @@
         </select>
       </div>
 
-      <!-- Interview Context (shown when interview mode active) -->
-      <div class="ctrl-group interview-context-group" id="interviewContextGroup" style="display:none;">
-        <label>Company</label>
-        <input type="text" id="interviewCompanyInput" class="interview-context-input" placeholder="Google" />
-      </div>
-      <div class="ctrl-group interview-context-group" id="interviewRoleGroup" style="display:none;">
-        <label>Role</label>
-        <input type="text" id="interviewRoleInput" class="interview-context-input" placeholder="Software Engineer" />
-      </div>
-      <div class="ctrl-group interview-context-group" id="interviewOverlayGroup" style="display:none;">
-        <button id="interviewOverlayBtn" class="interview-context-input" type="button" title="Open Interview Overlay (Ctrl+Shift+I)" style="cursor:pointer; text-align:center; width:auto; padding:4px 10px;">🎯 Overlay</button>
-      </div>
-
+      <!-- Interview-context controls relocated to #displayPopover (Day 2-3) -->
       <!-- Model: dropdown -->
       <div class="ctrl-group">
         <div class="model-label-row">
@@ -183,103 +235,173 @@
         </div>
       </div>
 
-      <!-- Font: dropdown -->
-      <div class="ctrl-group">
-        <label>Font</label>
-        <select id="fontSizeSelect">
-          <option value="10">10px</option>
-          <option value="12">12px</option>
-          <option value="14" selected>14px</option>
-          <option value="16">16px</option>
-          <option value="18">18px</option>
-          <option value="20">20px</option>
-          <option value="24">24px</option>
-          <option value="28">28px</option>
-          <option value="32">32px</option>
-          <option value="40">40px</option>
-          <option value="48">48px</option>
-          <option value="64">64px</option>
-          <option value="80">80px</option>
-          <option value="96">96px</option>
-          <option value="128">128px</option>
-          <option value="160">160px</option>
-          <option value="192">192px</option>
-        </select>
-      </div>
+      <!-- Secondary controls relocated to #aiPopover / #displayPopover / #behaviorPopover (Day 2-3) -->
 
-      <!-- Response: dropdown -->
-      <div class="ctrl-group">
-        <label>Response</label>
-        <select id="responseStyleSelect">
-          <option value="concise" selected>Concise</option>
-          <option value="detailed">Detailed</option>
-          <option value="bulletpoint">Bullet</option>
-        </select>
-      </div>
-
-      <!-- Temperature: dropdown -->
-      <div class="ctrl-group">
-        <label>Creativity</label>
-        <select id="temperatureSelect">
-          <option value="0.0">Precise</option>
-          <option value="0.1">Focused</option>
-          <option value="0.3" selected>Balanced</option>
-          <option value="0.5">Creative</option>
-          <option value="0.7">Imaginative</option>
-          <option value="1.0">Max</option>
-        </select>
-      </div>
-
-      <!-- Context: dropdown -->
-      <div class="ctrl-group">
-        <label>Context</label>
-        <select id="contextLengthSelect">
-          <option value="0">Off</option>
-          <option value="1">1 msg</option>
-          <option value="3" selected>3 msg</option>
-          <option value="5">5 msg</option>
-          <option value="10">10 msg</option>
-        </select>
-      </div>
-
-      <!-- Tokens: dropdown -->
-      <div class="ctrl-group">
-        <label>Tokens</label>
-        <select id="tokenLimitSelect">
-          <option value="8000">8K</option>
-          <option value="32000">32K</option>
-          <option value="128000" selected>128K</option>
-          <option value="256000">256K</option>
-          <option value="512000">512K</option>
-          <option value="1024000">1024K</option>
-        </select>
-      </div>
-
-      <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
-
-      <!-- Smart mode — code-focused AI toggle -->
+      <!-- Smart mode (kept in strip — most-used for code) -->
       <button id="smartModeBtn" class="smart-mode-btn" type="button" title="Smart mode: enhanced code assistance">
         <svg class="smart-mode-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span class="smart-mode-label">Smart</span>
       </button>
 
-      <!-- Auto-screenshot indicator -->
-      <button id="autoSSBtn" class="auto-ss-btn" type="button" title="Auto screenshot (background)">
-        <span class="auto-ss-dot" id="autoSSDot" style="display:none"></span>
-        <svg class="auto-ss-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span id="tokenCounter" class="token-counter" style="display:none">~0 / 128K</span>
+
+      <!-- AI behavior popover trigger -->
+      <button id="moreAiBtn" class="more-trigger" type="button" title="AI behavior" aria-label="AI behavior" aria-haspopup="dialog" aria-expanded="false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        <span>AI</span>
       </button>
 
-      <!-- Always-on mic indicator -->
-      <button id="alwaysOnBtn" class="always-on-btn" type="button" title="Always-on microphone">
-        <span class="always-on-dot" id="alwaysOnDot" style="display:none"></span>
-        <svg class="always-on-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      <!-- Display popover trigger -->
+      <button id="moreDisplayBtn" class="more-trigger" type="button" title="Display &amp; interview context" aria-label="Display &amp; interview context" aria-haspopup="dialog" aria-expanded="false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span>Display</span>
       </button>
 
-      <!-- Real-time suggestions toggle (Phase 2) -->
-      <button id="suggestionsBtn" class="suggestions-btn" type="button" title="Toggle interview suggestions" style="display:none;">
-        <span class="suggestions-dot" id="suggestionsDot" style="display:none"></span>
-        <svg class="suggestions-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+      <!-- Behavior popover trigger -->
+      <button id="moreBehaviorBtn" class="more-trigger" type="button" title="Background services" aria-label="Background services" aria-haspopup="dialog" aria-expanded="false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Behavior</span>
       </button>
+
+    </div>
+
+    <!-- ===== More popovers (Day 2-3) ===== -->
+    <div class="more-popovers" id="morePopovers">
+
+      <!-- AI behavior: response style, temperature, context, tokens -->
+      <div class="more-popover" id="aiPopover" role="dialog" aria-label="AI behavior" hidden>
+        <div class="more-popover-arrow"></div>
+        <div class="more-popover-body">
+          <div class="more-popover-section-title">AI behavior</div>
+
+          <div class="ctrl-group">
+            <label>Response</label>
+            <select id="responseStyleSelect">
+              <option value="concise" selected>Concise</option>
+              <option value="detailed">Detailed</option>
+              <option value="bulletpoint">Bullet</option>
+            </select>
+          </div>
+
+          <div class="ctrl-group">
+            <label>Creativity</label>
+            <select id="temperatureSelect">
+              <option value="0.0">Precise</option>
+              <option value="0.1">Focused</option>
+              <option value="0.3" selected>Balanced</option>
+              <option value="0.5">Creative</option>
+              <option value="0.7">Imaginative</option>
+              <option value="1.0">Max</option>
+            </select>
+          </div>
+
+          <div class="ctrl-group">
+            <label>Context</label>
+            <select id="contextLengthSelect">
+              <option value="0">Off</option>
+              <option value="1">1 msg</option>
+              <option value="3" selected>3 msg</option>
+              <option value="5">5 msg</option>
+              <option value="10">10 msg</option>
+            </select>
+          </div>
+
+          <div class="ctrl-group">
+            <label>Tokens</label>
+            <select id="tokenLimitSelect">
+              <option value="8000">8K</option>
+              <option value="32000">32K</option>
+              <option value="128000" selected>128K</option>
+              <option value="256000">256K</option>
+              <option value="512000">512K</option>
+              <option value="1024000">1024K</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display: font + interview context -->
+      <div class="more-popover" id="displayPopover" role="dialog" aria-label="Display &amp; interview context" hidden>
+        <div class="more-popover-arrow"></div>
+        <div class="more-popover-body">
+          <div class="more-popover-section-title">Display</div>
+
+          <div class="ctrl-group">
+            <label>Font</label>
+            <select id="fontSizeSelect">
+              <option value="10">10px</option>
+              <option value="12">12px</option>
+              <option value="14" selected>14px</option>
+              <option value="16">16px</option>
+              <option value="18">18px</option>
+              <option value="20">20px</option>
+              <option value="24">24px</option>
+              <option value="28">28px</option>
+              <option value="32">32px</option>
+              <option value="40">40px</option>
+              <option value="48">48px</option>
+              <option value="64">64px</option>
+              <option value="80">80px</option>
+              <option value="96">96px</option>
+              <option value="128">128px</option>
+              <option value="160">160px</option>
+              <option value="192">192px</option>
+            </select>
+          </div>
+
+          <div class="more-popover-section-title more-popover-section-title--sub">Interview context</div>
+
+          <div class="ctrl-group interview-context-group" id="interviewContextGroup" style="display:none;">
+            <label>Company</label>
+            <input type="text" id="interviewCompanyInput" class="interview-context-input" placeholder="Google" />
+          </div>
+          <div class="ctrl-group interview-context-group" id="interviewRoleGroup" style="display:none;">
+            <label>Role</label>
+            <input type="text" id="interviewRoleInput" class="interview-context-input" placeholder="Software Engineer" />
+          </div>
+          <div class="ctrl-group interview-context-group" id="interviewOverlayGroup" style="display:none;">
+            <label>&nbsp;</label>
+            <button id="interviewOverlayBtn" class="interview-context-input" type="button" title="Open Interview Overlay (Ctrl+Shift+I)" style="cursor:pointer; text-align:center; width:auto; padding:4px 10px;">🎯 Open Overlay</button>
+          </div>
+
+          <p class="more-popover-hint" id="interviewContextHint">Switch to <strong>Interview</strong> mode above to set Company &amp; Role.</p>
+        </div>
+      </div>
+
+      <!-- Behavior: auto-screenshot, always-on mic, suggestions -->
+      <div class="more-popover" id="behaviorPopover" role="dialog" aria-label="Background services" hidden>
+        <div class="more-popover-arrow"></div>
+        <div class="more-popover-body">
+          <div class="more-popover-section-title">Background services</div>
+
+          <button id="autoSSBtn" class="more-popover-toggle" type="button" title="Auto screenshot">
+            <span class="more-popover-toggle-icon">
+              <span class="auto-ss-dot" id="autoSSDot" style="display:none"></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </span>
+            <span class="more-popover-toggle-label">Auto-screenshot</span>
+            <span class="more-popover-toggle-status" id="autoSSStatus">Off</span>
+          </button>
+
+          <button id="alwaysOnBtn" class="more-popover-toggle" type="button" title="Always-on microphone">
+            <span class="more-popover-toggle-icon">
+              <span class="always-on-dot" id="alwaysOnDot" style="display:none"></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </span>
+            <span class="more-popover-toggle-label">Always-on mic</span>
+            <span class="more-popover-toggle-status" id="alwaysOnStatus">Off</span>
+          </button>
+
+          <button id="suggestionsBtn" class="more-popover-toggle" type="button" title="Real-time interview suggestions" style="display:none;">
+            <span class="more-popover-toggle-icon">
+              <span class="suggestions-dot" id="suggestionsDot" style="display:none"></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            </span>
+            <span class="more-popover-toggle-label">Suggestions</span>
+            <span class="more-popover-toggle-status" id="suggestionsStatus">Off</span>
+          </button>
+        </div>
+      </div>
 
     </div>
 
@@ -287,7 +409,19 @@
     <div class="input-row">
       <div class="input-pill">
         <div class="text-input-wrap">
-          <input type="text" id="textInput" placeholder="Ask anything, capture your screen, or speak..." />
+          <input type="text" id="textInput" placeholder="" autocomplete="off" />
+          <div id="placeholderHint" class="input-placeholder-hint" aria-hidden="true">
+            <span class="placeholder-hint-lead">Ask anything</span>
+            <span class="kbd-chip-sep">·</span>
+            <kbd class="kbd-chip">Enter</kbd>
+            <span class="kbd-chip-label">speak</span>
+            <span class="kbd-chip-sep">·</span>
+            <kbd class="kbd-chip">Ctrl</kbd><span class="kbd-plus">+</span><kbd class="kbd-chip">Enter</kbd>
+            <span class="kbd-chip-label">AI</span>
+            <span class="kbd-chip-sep">·</span>
+            <kbd class="kbd-chip">Ctrl</kbd><span class="kbd-plus">+</span><kbd class="kbd-chip">⇧</kbd><span class="kbd-plus">+</span><kbd class="kbd-chip">Enter</kbd>
+            <span class="kbd-chip-label">screen&nbsp;+&nbsp;AI</span>
+          </div>
         </div>
 
         <div class="input-pill-actions">
@@ -344,6 +478,12 @@
           </div>
           <button id="clearSuggestionsBtn" class="clear-suggestions-btn">Clear History</button>
         </div>
+      </div>
+
+      <!-- Live transcript strip (Day 5): shows last ~80 chars while listening -->
+      <div class="transcript-strip" id="transcriptStrip" hidden>
+        <span class="transcript-strip-label">Transcript</span>
+        <div class="transcript-strip-content masked" id="transcriptStripContent"></div>
       </div>
 
       <div class="chat-area" id="chatArea">
@@ -1388,15 +1528,111 @@
 
   <div class="modal-overlay" id="onboardingModal">
     <div class="modal-box onboarding-box">
-      <div class="modal-title">Welcome to AI Note Taker</div>
-      <p class="onboarding-desc">Let's get you set up. We checked a few things:</p>
-      <ul class="onboarding-checklist" id="onboardingChecklist">
-        <li data-step="mic" class="checking">Checking microphone...</li>
-        <li data-step="ollama" class="checking">Checking Ollama...</li>
-        <li data-step="vision" class="checking">Checking vision model...</li>
-      </ul>
-      <p class="onboarding-note" id="onboardingNote"></p>
-      <button class="settings-btn modal-save-btn" id="onboardingClose">Get Started</button>
+      <div class="modal-title">Welcome to ANT</div>
+      <p class="onboarding-desc">Let's get you set up. A few quick checks, then you're ready.</p>
+
+      <!-- Step indicator dots -->
+      <div class="onboard-indicator">
+        <span class="onboard-indicator-dot" data-step="1"></span>
+        <span class="onboard-indicator-dot" data-step="2"></span>
+        <span class="onboard-indicator-dot" data-step="3"></span>
+        <span class="onboard-indicator-dot" data-step="4"></span>
+      </div>
+
+      <!-- Step panels -->
+      <div class="onboard-steps">
+
+        <!-- Step 1: Microphone -->
+        <section class="onboard-step active" data-step="1">
+          <div class="onboard-step-icon">🎤</div>
+          <div class="onboard-step-title">Microphone access</div>
+          <div class="onboard-step-body">
+            <p>We need your mic to capture what you're hearing and saying.</p>
+            <div id="onboardMicStatus" class="onboard-status checking">
+              <span class="onboard-status-text">Requesting microphone access...</span>
+              <button id="onboardMicRetry" class="onboard-retry-btn" type="button" hidden>Retry</button>
+            </div>
+            <div id="onboardMicHelp" class="onboard-step-help" hidden>
+              Allow ANT in <strong>System Settings → Privacy &amp; Security → Microphone</strong>, then click Retry.
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 2: Backend / Ollama -->
+        <section class="onboard-step" data-step="2">
+          <div class="onboard-step-icon">⚙️</div>
+          <div class="onboard-step-title">AI backend</div>
+          <div class="onboard-step-body">
+            <p>ANT needs a local AI backend (Ollama) to run.</p>
+            <div id="onboardBackendStatus" class="onboard-status checking">
+              <span class="onboard-status-text">Checking backend...</span>
+            </div>
+            <div id="onboardBackendHelp" class="onboard-step-help" hidden>
+              <p>Run these in a terminal:</p>
+              <div class="onboard-code-block">
+                <code>ollama serve</code>
+                <button class="onboard-copy-btn" type="button" data-copy="ollama serve" title="Copy">📋</button>
+              </div>
+              <div class="onboard-code-block">
+                <code>ollama pull qwen2.5:1.5b</code>
+                <button class="onboard-copy-btn" type="button" data-copy="ollama pull qwen2.5:1.5b" title="Copy">📋</button>
+              </div>
+              <p class="onboard-step-help-note">Don't have Ollama? <a href="https://ollama.com/download" target="_blank" rel="noopener">Install it first</a>.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 3: Vision (informational) -->
+        <section class="onboard-step" data-step="3">
+          <div class="onboard-step-icon">👁️</div>
+          <div class="onboard-step-title">Vision model</div>
+          <div class="onboard-step-body">
+            <p>For screenshot + OCR, ANT uses a vision model.</p>
+            <div id="onboardVisionStatus" class="onboard-status checking">
+              <span class="onboard-status-text">Checking vision model...</span>
+            </div>
+            <div id="onboardVisionHelp" class="onboard-step-help" hidden>
+              <p>Vision is optional. You can enable it later in <strong>Settings → Providers</strong>.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 4: Pick a mode + summary -->
+        <section class="onboard-step" data-step="4">
+          <div class="onboard-step-icon">🚀</div>
+          <div class="onboard-step-title">Pick a starting mode</div>
+          <div class="onboard-step-body">
+            <p>You can change this anytime from the top toolbar.</p>
+            <div class="onboard-mode-cards">
+              <button class="onboard-mode-card" type="button" data-mode="auto">
+                <div class="onboard-mode-card-icon">💬</div>
+                <div class="onboard-mode-card-title">Voice-first</div>
+                <div class="onboard-mode-card-desc">Default. Balanced speed and quality.</div>
+              </button>
+              <button class="onboard-mode-card" type="button" data-mode="interview">
+                <div class="onboard-mode-card-icon">🎯</div>
+                <div class="onboard-mode-card-title">Interview</div>
+                <div class="onboard-mode-card-desc">Tech interview focus with code snippets.</div>
+              </button>
+              <button class="onboard-mode-card" type="button" data-mode="code">
+                <div class="onboard-mode-card-icon">⌨️</div>
+                <div class="onboard-mode-card-title">Code</div>
+                <div class="onboard-mode-card-desc">Optimized for code completion.</div>
+              </button>
+            </div>
+            <div id="onboardSummary" class="onboard-summary" hidden></div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Footer with Back / Next / Finish / Skip -->
+      <div class="modal-actions onboard-footer">
+        <button class="settings-btn modal-cancel-btn" id="onboardBackBtn" type="button" hidden>Back</button>
+        <button class="settings-btn modal-save-btn" id="onboardNextBtn" type="button">Next</button>
+        <button class="settings-btn modal-save-btn" id="onboardFinishBtn" type="button" hidden>Get Started</button>
+        <button class="onboard-skip-link" id="onboardSkipBtn" type="button" hidden>Skip for now</button>
+      </div>
     </div>
   </div>
 
@@ -1529,6 +1765,30 @@
         <div class="shortcut-row">
           <span class="shortcut-key">F</span>
           <span class="shortcut-desc">Toggle maximize</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+Enter</span>
+          <span class="shortcut-desc">Trigger AI</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+Shift+Enter</span>
+          <span class="shortcut-desc">AI with screenshot</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+Shift+C</span>
+          <span class="shortcut-desc">Caption overlay</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+Shift+I</span>
+          <span class="shortcut-desc">Interview overlay</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">F12</span>
+          <span class="shortcut-desc">DevTools</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-key">Ctrl+,</span>
+          <span class="shortcut-desc">Open settings</span>
         </div>
         <div class="shortcut-row">
           <span class="shortcut-key">Alt+D</span>
