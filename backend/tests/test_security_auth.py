@@ -1,29 +1,30 @@
 """
 Test suite for backend/security/auth.py
-Covers User dataclass, UserManager (CRUD on a JSON file), and the
-JWT access/refresh token issue/verify functions.
+Covers User dataclass (DTO), UserManager (async shim over UserRepository),
+and the JWT access/refresh token issue/verify functions.
 
-The `USERS_FILE` and `_LEGACY_USERS_FILE` are module-level constants
-computed at import time. We monkeypatch them to point at a tmp_path
-before each test so the real production users.json is never touched.
+Fix #35: UserManager is now an async facade over core.database.UserRepository.
+The JSON file store (USERS_FILE) and its _LEGACY_USERS_FILE are gone —
+the SQLAlchemy ``users`` table is the single source of truth. Tests that
+used to monkeypatch ``USERS_FILE`` / ``_LEGACY_USERS_FILE`` to point at
+``tmp_path / "users.json"`` now use the ``tmp_db`` fixture (per-test
+SQLite DB with the SA schema applied).
 
 Run with: python -m pytest backend/tests/test_security_auth.py -v
 """
 
-import json
+import asyncio
 import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
+import pytest_asyncio
 
 # Add backend/ to sys.path so `from security.auth import ...` resolves.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-# Import the module under test first so we can monkeypatch its globals.
-from security import auth as auth_module  # noqa: E402
 from security.auth import (  # noqa: E402
     User,
     TokenData,
@@ -62,25 +63,75 @@ class _FakePwdContext:
     def hash(self, password: str) -> str:  # noqa: D401
         return f"h${password}"
 
-    def verify(self, password: str, hashed: str) -> bool:
-        if not hashed or not hashed.startswith("h$"):
+    def verify(self, password: str, hashed: str) -> bool:  # noqa: D401
+        if not hashed.startswith("h$"):
             return False
         return password == hashed[2:]
 
 
-# Install the fake pwd_context into the auth module BEFORE any test
-# that exercises UserManager runs. This is module-level (not in a
-# fixture) because the bcrypt bug crashes at import-time of
-# `auth.pwd_context`, and we want to fix it once for the whole run.
-auth_module.pwd_context = _FakePwdContext()  # type: ignore[assignment]
+@pytest.fixture(autouse=True)
+def _fake_pwd_context(monkeypatch):
+    """Patch security.auth.pwd_context to _FakePwdContext for the test."""
+    from security import auth as auth_module
+    if auth_module.pwd_context is not None:
+        monkeypatch.setattr(auth_module, "pwd_context", _FakePwdContext())
 
 
+# ---------------------------------------------------------------------------
+# Per-test SQLite DB fixture.
+#
+# Fix #35: the in-memory user dict is gone. Tests need a real DB.
+# Mirrors the fixture in tests/test_user_repository_auth.py.
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture
+async def tmp_db(monkeypatch, tmp_path):
+    """Yield a fresh per-test SQLite DB with the SA schema applied.
+
+    Re-resolves ``DATABASE_URL`` and resets the module-level
+    ``db_manager._initialized`` so ``db_manager.initialize()`` builds
+    a fresh engine against the tmp_path DB.
+    """
+    from core import database
+
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    monkeypatch.setenv("USE_SQLITE", "true")
+    monkeypatch.setenv("FORCE_SQLITE", "true")
+    monkeypatch.setenv("ANT_SKIP_ALEMBIC", "1")
+
+    database.DATABASE_URL = os.environ["DATABASE_URL"]
+    database.USE_SQLITE = True
+    database.FORCE_SQLITE = True
+    database.db_manager.engine = None
+    database.db_manager.session_maker = None
+    database.db_manager._initialized = False
+
+    await database.db_manager.initialize()
+    try:
+        yield db_path
+    finally:
+        await database.db_manager.close()
+        database.db_manager.engine = None
+        database.db_manager.session_maker = None
+        database.db_manager._initialized = False
+        if db_path.exists():
+            db_path.unlink()
+
+
+@pytest_asyncio.fixture
+async def user_manager(tmp_db):
+    """Return a fresh UserManager (stateless now; just a shim)."""
+    return UserManager()
+
+
+# ---------------------------------------------------------------------------
+# User dataclass
+# ---------------------------------------------------------------------------
 class TestUserDataclass:
-    """User dataclass: defaults, field types, custom overrides."""
-
-    def test_minimal_construction(self):
+    def test_basic_construction(self):
         u = User(id="abc", username="alice", email="alice@example.com")
         assert u.username == "alice"  # nosec B101
+        assert u.email == "alice@example.com"  # nosec B101
         assert u.is_active is True  # nosec B101
         assert u.is_admin is False  # nosec B101
         assert u.hashed_password is None  # nosec B101
@@ -96,189 +147,202 @@ class TestUserDataclass:
         datetime.fromisoformat(u.created_at)
 
 
+# ---------------------------------------------------------------------------
+# User.from_orm (Fix #35)
+# ---------------------------------------------------------------------------
+class TestUserFromOrm:
+    """User.from_orm(orm_user) bridges an ORM row to the public DTO."""
+
+    def test_id_is_stringified_uuid(self):
+        from uuid import uuid4
+        from security.auth import User
+        # Fake ORM row with id as uuid.UUID
+        class _FakeOrm:
+            pass
+        orm = _FakeOrm()
+        orm.id = uuid4()
+        orm.username = "alice"
+        orm.email = "alice@example.com"
+        orm.hashed_password = "h$pw"
+        orm.is_active = True
+        orm.is_admin = False
+        orm.api_quota = {"requests_today": 0, "daily_limit": 1000, "reset_date": "2026-06-12"}
+        orm.security_question = None
+        orm.hashed_security_answer = None
+        orm.active_session_id = None
+        orm.active_session_ip = None
+        orm.active_session_user_agent = None
+        orm.active_session_started_at = None
+        orm.on_new_login_pref = "auto_kick"
+        orm.created_at = None
+        orm.last_login = None
+
+        dto = User.from_orm(orm)
+        assert isinstance(dto.id, str)  # nosec B101
+        assert dto.id == str(orm.id)  # nosec B101
+        assert dto.username == "alice"  # nosec B101
+
+    def test_handles_datetime_orm_fields(self):
+        from datetime import datetime, timezone
+        from security.auth import User
+        class _FakeOrm:
+            pass
+        orm = _FakeOrm()
+        orm.id = "abc"
+        orm.username = "alice"
+        orm.email = "alice@example.com"
+        orm.hashed_password = "h$pw"
+        orm.is_active = True
+        orm.is_admin = False
+        orm.api_quota = None
+        orm.security_question = None
+        orm.hashed_security_answer = None
+        orm.active_session_id = None
+        orm.active_session_ip = None
+        orm.active_session_user_agent = None
+        orm.active_session_started_at = datetime(2026, 6, 12, tzinfo=timezone.utc)
+        orm.on_new_login_pref = "auto_kick"
+        orm.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        orm.last_login = None
+
+        dto = User.from_orm(orm)
+        assert dto.active_session_started_at == "2026-06-12T00:00:00+00:00"  # nosec B101
+        assert dto.created_at == "2026-01-01T00:00:00+00:00"  # nosec B101
+        assert dto.last_login is None  # nosec B101
+
+
+# ---------------------------------------------------------------------------
+# UserManager CRUD (async, Fix #35)
+# ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("user_manager")
 class TestUserManagerCRUD:
-    """UserManager: create / get / authenticate / update password.
-
-    The module-level USERS_FILE is monkeypatched per-test to point at
-    an isolated tmp_path so tests don't share state.
-    """
-
-    def test_create_user_stores_in_dict(self, tmp_path, monkeypatch):
-        # Point the module at an isolated users.json for this test
-        users_file = tmp_path / "users.json"
-        legacy_file = tmp_path / "legacy.json"  # not used but must not exist
-        monkeypatch.setattr(auth_module, "USERS_FILE", users_file)
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", legacy_file)
-
-        mgr = UserManager()
-        u = mgr.create_user("alice", "alice@example.com", "hunter2")
-
+    async def test_create_user_returns_dto(self, user_manager):
+        u = await user_manager.create_user("alice", "alice@example.com", "hunter2")
         assert u.username == "alice"  # nosec B101
         assert u.email == "alice@example.com"  # nosec B101
         assert u.hashed_password != "hunter2"  # plaintext should NOT be stored  # nosec B101
-        assert "alice" in mgr.users  # nosec B101
 
-    def test_create_user_first_user_is_admin(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        u = mgr.create_user("first", "first@example.com", "pw")
+    async def test_create_user_first_user_is_admin(self, user_manager):
+        u = await user_manager.create_user("first", "first@example.com", "pw")
         assert u.is_admin is True  # nosec B101
 
-    def test_create_user_second_user_is_not_admin(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("first", "first@example.com", "pw")
-        u2 = mgr.create_user("second", "second@example.com", "pw")
+    async def test_create_user_second_user_is_not_admin(self, user_manager):
+        await user_manager.create_user("first", "first@example.com", "pw")
+        u2 = await user_manager.create_user("second", "second@example.com", "pw")
         assert u2.is_admin is False  # nosec B101
 
-    def test_create_duplicate_user_raises(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
+    async def test_create_duplicate_user_raises(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
         with pytest.raises(ValueError, match="already exists"):
-            mgr.create_user("alice", "a2@example.com", "pw")
+            await user_manager.create_user("alice", "a2@example.com", "pw")
 
-    def test_get_user_returns_user_or_none(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        assert mgr.get_user("alice") is not None  # nosec B101
-        assert mgr.get_user("nope") is None  # nosec B101
+    async def test_get_user_returns_user_or_none(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        assert await user_manager.get_user("alice") is not None  # nosec B101
+        assert await user_manager.get_user("nope") is None  # nosec B101
 
-    def test_update_password_succeeds(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "old_password")
-        old_hash = mgr.get_user("alice").hashed_password
-        assert mgr.update_password("alice", "new_password") is True  # nosec B101
-        new_hash = mgr.get_user("alice").hashed_password
-        assert new_hash != old_hash  # nosec B101
+    async def test_update_password_succeeds(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "old_password")
+        old_user = await user_manager.get_user("alice")
+        old_hash = old_user.hashed_password
+        assert await user_manager.update_password("alice", "new_password") is True  # nosec B101
+        new_user = await user_manager.get_user("alice")
+        assert new_user.hashed_password != old_hash  # nosec B101
 
-    def test_update_password_unknown_user_returns_false(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        assert mgr.update_password("ghost", "pw") is False  # nosec B101
+    async def test_update_password_unknown_user_returns_false(self, user_manager):
+        assert await user_manager.update_password("ghost", "pw") is False  # nosec B101
 
-    def test_persistence_to_disk_and_reload(self, tmp_path, monkeypatch):
-        users_file = tmp_path / "users.json"
-        legacy_file = tmp_path / "legacy.json"
-        monkeypatch.setattr(auth_module, "USERS_FILE", users_file)
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", legacy_file)
-
-        mgr1 = UserManager()
-        mgr1.create_user("alice", "a@example.com", "pw")
-        assert users_file.exists()  # nosec B101
-
-        # New manager instance loads the same file
+    async def test_persistence_across_manager_instances(self, user_manager, tmp_db):
+        """Two UserManager instances against the same DB see the same users.
+        (Pre-Fix-35 this was tested by writing to users.json + reloading
+        with a new UserManager.)"""
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        # A second UserManager against the same DB sees alice.
         mgr2 = UserManager()
-        assert mgr2.get_user("alice") is not None  # nosec B101
+        assert await mgr2.get_user("alice") is not None  # nosec B101
 
 
+# ---------------------------------------------------------------------------
+# UserManager authenticate
+# ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("user_manager")
 class TestUserManagerAuthenticate:
-    """UserManager.authenticate_user: happy path + 3 failure modes."""
-
-    def test_authenticate_success(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "correct_pw")
-        u = mgr.authenticate_user("alice", "correct_pw")
+    async def test_authenticate_success(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "correct_pw")
+        u = await user_manager.authenticate_user("alice", "correct_pw")
         assert u is not None  # nosec B101
         assert u.last_login is not None  # nosec B101
 
-    def test_authenticate_wrong_password(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "correct_pw")
-        assert mgr.authenticate_user("alice", "wrong_pw") is None  # nosec B101
+    async def test_authenticate_wrong_password(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "correct_pw")
+        assert await user_manager.authenticate_user("alice", "wrong_pw") is None  # nosec B101
 
-    def test_authenticate_unknown_user(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        assert mgr.authenticate_user("ghost", "anything") is None  # nosec B101
+    async def test_authenticate_unknown_user(self, user_manager):
+        assert await user_manager.authenticate_user("ghost", "anything") is None  # nosec B101
 
-    def test_authenticate_inactive_user(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        mgr.get_user("alice").is_active = False
-        assert mgr.authenticate_user("alice", "pw") is None  # nosec B101
+    async def test_authenticate_inactive_user(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        # The user is active by default; mark inactive via the repo.
+        from core.database import UserRepository
+        orm = await UserRepository.get_by_username("alice")
+        from sqlalchemy import update as _u
+        from core.database import db_manager
+        from core.database import User as _UserModel
+        async with db_manager.session_maker() as db:
+            await db.execute(
+                _u(_UserModel).where(_UserModel.id == orm.id).values(is_active=False)
+            )
+            await db.commit()
+        assert await user_manager.authenticate_user("alice", "pw") is None  # nosec B101
 
 
+# ---------------------------------------------------------------------------
+# Security question
+# ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("user_manager")
 class TestUserManagerSecurityQuestion:
-    """UserManager: security question set/verify/has_security_question."""
+    async def test_set_then_has_security_question(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        assert await user_manager.set_security_question("alice", "First pet?", "rover") is True  # nosec B101
+        assert await user_manager.has_security_question("alice") == "First pet?"  # nosec B101
 
-    def test_set_then_has_security_question(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        assert mgr.set_security_question("alice", "First pet?", "rover") is True  # nosec B101
-        assert mgr.has_security_question("alice") == "First pet?"  # nosec B101
+    async def test_has_security_question_returns_none_for_no_question(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        assert await user_manager.has_security_question("alice") is None  # nosec B101
 
-    def test_has_security_question_returns_none_for_no_question(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        assert mgr.has_security_question("alice") is None  # nosec B101
-
-    def test_has_security_question_does_not_leak_existence(self, tmp_path, monkeypatch):
+    async def test_has_security_question_does_not_leak_existence(self, user_manager):
         # Unknown user and existing user with no question should both
         # return None — callers can't distinguish "user doesn't exist"
         # from "user exists but has no question" (anti-enumeration).
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        assert mgr.has_security_question("ghost") is None  # nosec B101
+        assert await user_manager.has_security_question("ghost") is None  # nosec B101
 
-    def test_verify_security_answer_correct(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        mgr.set_security_question("alice", "Pet?", "Rover")
+    async def test_verify_security_answer_correct(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        await user_manager.set_security_question("alice", "Pet?", "Rover")
         # The set path normalizes answer to lowercase, so case doesn't matter
-        assert mgr.verify_security_answer("alice", "ROVER") is True  # nosec B101
-        assert mgr.verify_security_answer("alice", "rover") is True  # nosec B101
+        assert await user_manager.verify_security_answer("alice", "ROVER") is True  # nosec B101
+        assert await user_manager.verify_security_answer("alice", "rover") is True  # nosec B101
 
-    def test_verify_security_answer_wrong(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        mgr.set_security_question("alice", "Pet?", "rover")
-        assert mgr.verify_security_answer("alice", "fido") is False  # nosec B101
+    async def test_verify_security_answer_wrong(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        await user_manager.set_security_question("alice", "Pet?", "rover")
+        assert await user_manager.verify_security_answer("alice", "fido") is False  # nosec B101
 
-    def test_verify_security_answer_no_question(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        mgr.create_user("alice", "a@example.com", "pw")
-        assert mgr.verify_security_answer("alice", "anything") is False  # nosec B101
+    async def test_verify_security_answer_no_question(self, user_manager):
+        await user_manager.create_user("alice", "a@example.com", "pw")
+        assert await user_manager.verify_security_answer("alice", "anything") is False  # nosec B101
 
-    def test_set_security_question_unknown_user(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
-        mgr = UserManager()
-        assert mgr.set_security_question("ghost", "q?", "a") is False  # nosec B101
+    async def test_set_security_question_unknown_user(self, user_manager):
+        assert await user_manager.set_security_question("ghost", "q?", "a") is False  # nosec B101
 
 
+# ---------------------------------------------------------------------------
+# Password hashing (sync, _hash_password + verify_password are sync)
+# ---------------------------------------------------------------------------
 class TestPasswordHashing:
     """UserManager._hash_password and verify_password round-trip."""
 
-    def test_hash_is_not_plaintext(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
+    def test_hash_is_not_plaintext(self):
         mgr = UserManager()
         h = mgr._hash_password("hunter2")
         # The hash must NOT be the plaintext (any real hash function
@@ -289,32 +353,24 @@ class TestPasswordHashing:
         assert h != "hunter2"  # nosec B101
         assert "hunter2" not in h or h.startswith(("h$", "plain:"))  # nosec B101
 
-    def test_verify_correct_password(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
+    def test_verify_correct_password(self):
         mgr = UserManager()
         h = mgr._hash_password("hunter2")
         assert mgr.verify_password("hunter2", h) is True  # nosec B101
 
-    def test_verify_wrong_password(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
+    def test_verify_wrong_password(self):
         mgr = UserManager()
         h = mgr._hash_password("hunter2")
         assert mgr.verify_password("wrong", h) is False  # nosec B101
 
-    def test_verify_garbage_hash_returns_false(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
+    def test_verify_garbage_hash_returns_false(self):
         mgr = UserManager()
         # Should not raise — verify_password catches exceptions
         assert mgr.verify_password("pw", "not-a-real-hash") is False  # nosec B101
 
-    def test_verify_plain_prefix_legacy_hash(self, tmp_path, monkeypatch):
+    def test_verify_plain_prefix_legacy_hash(self):
         # Older installs have "plain:pw" hashes — the verify path
         # uses hmac.compare_digest for constant-time comparison.
-        monkeypatch.setattr(auth_module, "USERS_FILE", tmp_path / "users.json")
-        monkeypatch.setattr(auth_module, "_LEGACY_USERS_FILE", tmp_path / "legacy.json")
         mgr = UserManager()
         assert mgr.verify_password("pw", "plain:pw") is True  # nosec B101
         assert mgr.verify_password("wrong", "plain:pw") is False  # nosec B101
@@ -330,55 +386,64 @@ pytestmark_jwt = pytest.mark.skipif(
 
 @pytestmark_jwt
 class TestAccessToken:
-    """create_access_token + verify_token round-trip."""
+    """create_access_token + verify_token round-trip.
 
-    def test_round_trip_preserves_claims(self):
+    Fix #35: verify_token is now async."""
+    pytestmark = pytest.mark.asyncio
+
+    async def test_round_trip_preserves_claims(self):
         token = create_access_token({"sub": "user-123", "username": "alice"})
-        data = verify_token(token)
+        data = await verify_token(token)
         assert data is not None  # nosec B101
         assert data.user_id == "user-123"  # nosec B101
         assert data.username == "alice"  # nosec B101
 
-    def test_custom_expiry_applied(self):
-        # Issue with a 1-second expiry, then sleep and verify
+    async def test_custom_expiry_applied(self):
+        # Issue with a 1-second expiry
         token = create_access_token(
             {"sub": "u", "username": "u"},
             expires_delta=timedelta(seconds=1),
         )
         # Should verify immediately
-        assert verify_token(token) is not None  # nosec B101
+        assert await verify_token(token) is not None  # nosec B101
 
-    def test_garbage_token_returns_none(self):
-        assert verify_token("not.a.jwt") is None  # nosec B101
+    async def test_garbage_token_returns_none(self):
+        assert await verify_token("not.a.jwt") is None  # nosec B101
 
-    def test_empty_token_returns_none(self):
-        assert verify_token("") is None  # nosec B101
+    async def test_empty_token_returns_none(self):
+        assert await verify_token("") is None  # nosec B101
 
-    def test_tampered_signature_returns_none(self):
+    async def test_tampered_signature_returns_none(self):
         token = create_access_token({"sub": "u", "username": "u"})
         # Flip the last character of the signature
         tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
-        assert verify_token(tampered) is None  # nosec B101
+        assert await verify_token(tampered) is None  # nosec B101
 
 
 @pytestmark_jwt
 class TestRefreshToken:
-    """create_refresh_token + verify_refresh_token round-trip."""
+    """create_refresh_token + verify_refresh_token round-trip.
 
-    def test_round_trip_preserves_claims(self):
+    Fix #35: ``verify_refresh_token`` stays sync — it does NOT do the
+    single-session jti check (the access-token side does, via
+    ``verify_token``). The refresh path applies the jti check in the
+    route layer, not here."""
+    pytestmark = pytest.mark.asyncio
+
+    async def test_round_trip_preserves_claims(self):
         token = create_refresh_token({"sub": "u-1", "username": "alice"})
         data = verify_refresh_token(token)
         assert data is not None  # nosec B101
         assert data.user_id == "u-1"  # nosec B101
         assert data.username == "alice"  # nosec B101
 
-    def test_access_token_rejected_as_refresh(self):
+    async def test_access_token_rejected_as_refresh(self):
         # An access token (no "type": "refresh" claim) must NOT
         # be accepted as a refresh token — type confusion attack.
         access = create_access_token({"sub": "u", "username": "u"})
         assert verify_refresh_token(access) is None  # nosec B101
 
-    def test_garbage_token_returns_none(self):
+    async def test_garbage_token_returns_none(self):
         assert verify_refresh_token("garbage") is None  # nosec B101
 
 

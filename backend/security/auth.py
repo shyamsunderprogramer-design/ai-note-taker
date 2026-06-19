@@ -22,19 +22,17 @@ except ImportError:
     logging.getLogger("auth").warning("[WARNING] PyJWT or passlib not installed. Authentication will be limited.")
     logging.getLogger("auth").warning("  Install: pip install python-jose[cryptography] passlib[bcrypt]")
 
-# UserRepository is the SQLAlchemy persistence layer (Fix #35). Imported
-# lazily so this module can be imported for type annotations even when
-# the database has not been initialized (e.g. in unit tests for
-# token-shape logic). The `core.database` import pulls in the engine
-# and Base, which is a heavy cost on cold paths; we only want to pay
-# it on the first call into UserManager.
-try:
-    from core.database import UserRepository as _UserRepository
-    UserRepository = _UserRepository
-    HAS_USER_REPOSITORY = True
-except Exception:  # noqa: BLE001 — see comment above
-    UserRepository = None
-    HAS_USER_REPOSITORY = False
+# UserRepository is the SQLAlchemy persistence layer (Fix #35). NOT
+# imported at module level to avoid a circular import: `core.database`
+# imports `security.encryption` (line 24) which transitively loads
+# `security.auth`, and a top-level `from core.database import
+# UserRepository` here would fire while `core.database` is still being
+# constructed. The repository's `UserRepository` class doesn't exist
+# yet at that point, so the import fails. We resolve it lazily, inside
+# the methods that actually need it via the ``UserManager._repo()``
+# helper, which caches the import here at module level so the lookup
+# is one-shot per process.
+_USER_REPO_CACHED = None
 
 # Configuration
 _is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
@@ -192,6 +190,24 @@ class UserManager:
         pass
 
     @staticmethod
+    def _repo():
+        """Lazy import of ``core.database.UserRepository``.
+
+        Avoids the circular import that fires when ``security.auth``
+        is loaded while ``core.database`` is still being constructed
+        (the ``UserRepository`` class doesn't exist yet at that point).
+        The repo is imported on the first call into UserManager and
+        cached at module level so the lookup is one-shot.
+        """
+        # Cache the import at module level to avoid a sys.modules
+        # lookup on every call.
+        global _USER_REPO_CACHED
+        if _USER_REPO_CACHED is None:
+            from core.database import UserRepository as _UR
+            _USER_REPO_CACHED = _UR
+        return _USER_REPO_CACHED
+
+    @staticmethod
     def _to_iso(value):
         """Convert a datetime (or None) to ISO 8601 string. The User
         dataclass stores ``created_at`` / ``last_login`` / ``active_session_started_at``
@@ -229,17 +245,17 @@ class UserManager:
         """
         # Pre-check uniqueness by username (TOCTOU window, but the
         # users.username unique constraint catches the race).
-        existing = await UserRepository.get_by_username(username)
+        existing = await self._repo().get_by_username(username)
         if existing is not None:
             raise ValueError(f"User '{username}' already exists")
         # Also check by email to give a friendlier error (the
         # constraint is the safety net for concurrent inserts).
-        existing_email = await UserRepository.get_by_email(email)
+        existing_email = await self._repo().get_by_email(email)
         if existing_email is not None:
             raise ValueError(f"Email '{email}' is already registered")
 
         # First user is automatically admin
-        if await UserRepository.count() == 0:
+        if await self._repo().count() == 0:
             is_admin = True
 
         hashed_password = self._hash_password(password) if HAS_JWT else password
@@ -251,7 +267,7 @@ class UserManager:
                 else f"plain:{normalized_answer}"
             )
 
-        orm_user = await UserRepository.create(
+        orm_user = await self._repo().create(
             username=username,
             email=email,
             hashed_password=hashed_password,
@@ -300,7 +316,7 @@ class UserManager:
         same jti). The session_bus publish also happens at the route layer,
         not here, so this function stays async + unit-testable.
         """
-        orm_user = await UserRepository.authenticate_and_rotate_session(
+        orm_user = await self._repo().authenticate_and_rotate_session(
             username, password, ip=ip, user_agent=user_agent,
         )
         if orm_user is None:
@@ -309,22 +325,22 @@ class UserManager:
 
     async def get_user(self, username: str) -> Optional["User"]:
         """Get user by username."""
-        orm_user = await UserRepository.get_by_username(username)
+        orm_user = await self._repo().get_by_username(username)
         if orm_user is None:
             return None
         return self._orm_to_dto(orm_user)
 
     async def update_password(self, username: str, new_password: str) -> bool:
         """Update password for an existing user."""
-        orm_user = await UserRepository.get_by_username(username)
+        orm_user = await self._repo().get_by_username(username)
         if orm_user is None:
             return False
         hashed = self._hash_password(new_password) if HAS_JWT else f"plain:{new_password}"
-        return await UserRepository.update_password(str(orm_user.id), hashed)
+        return await self._repo().update_password(str(orm_user.id), hashed)
 
     async def set_security_question(self, username: str, question: str, answer: str) -> bool:
         """Set or update a user's security question and answer."""
-        orm_user = await UserRepository.get_by_username(username)
+        orm_user = await self._repo().get_by_username(username)
         if orm_user is None:
             return False
         normalized = answer.strip().lower()
@@ -332,24 +348,24 @@ class UserManager:
             self._hash_password(normalized) if HAS_JWT
             else f"plain:{normalized}"
         )
-        return await UserRepository.set_security_question(
+        return await self._repo().set_security_question(
             str(orm_user.id), question, hashed
         )
 
     async def verify_security_answer(self, username: str, answer: str) -> bool:
         """Verify a user's security answer. Returns False if user not
         found or no question set."""
-        orm_user = await UserRepository.get_by_username(username)
+        orm_user = await self._repo().get_by_username(username)
         if orm_user is None or not orm_user.hashed_security_answer:
             return False
         normalized = answer.strip().lower()
-        return await UserRepository.verify_security_answer(
+        return await self._repo().verify_security_answer(
             str(orm_user.id), normalized, orm_user.hashed_security_answer
         )
 
     async def has_security_question(self, username: str) -> Optional[str]:
         """Return the security question text if set, or None. Does not leak user existence."""
-        orm_user = await UserRepository.get_by_username(username)
+        orm_user = await self._repo().get_by_username(username)
         if orm_user is None or not orm_user.security_question:
             return None
         return orm_user.security_question
@@ -358,7 +374,7 @@ class UserManager:
         """Get user by id. Hits the indexed PK on the users table —
         no linear scan. Replaces the pre-Fix-35 O(n) scan in
         ``_enforce_single_session`` / ``get_current_user`` etc."""
-        orm_user = await UserRepository.get_by_id(user_id)
+        orm_user = await self._repo().get_by_id(user_id)
         if orm_user is None:
             return None
         return self._orm_to_dto(orm_user)
@@ -366,7 +382,7 @@ class UserManager:
     async def clear_session(self, user_id: str) -> bool:
         """Zero out the 4 active_session_* columns on the user. Used
         by ``routes.auth.logout_user`` (Fix #34)."""
-        return await UserRepository.clear_session(user_id)
+        return await self._repo().clear_session(user_id)
 
 
 # Global user manager instance

@@ -60,7 +60,7 @@ async def require_authentication(token: str = _Depends(get_token_from_request)):
     "you've been logged out" modal instead of the generic "please log
     in again" prompt.
     """
-    user, reason = get_current_user_with_reason(token)
+    user, reason = await get_current_user_with_reason(token)
     if not user:
         # Map the reason to a 401 body. The error_code field is the
         # contract: clients branch on it to decide whether to show the

@@ -23,6 +23,7 @@ import uuid
 from unittest.mock import patch
 
 import pytest
+import pytest_asyncio
 
 # Add backend/ to sys.path so `from core.main import app` resolves.
 _BACKEND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -161,16 +162,64 @@ class TestFix34Behavior:
     real FastAPI app."""
 
     @pytest.fixture
-    def fresh_user(self):
-        """Create a fresh user in the in-memory user_manager; return
+    def _setup_db(self, tmp_path, monkeypatch):
+        """Per-test SQLite DB. The Fix #34 auth flow now hits the
+        SQLAlchemy users table (Fix #35), so the tests need a real DB.
+        Mirrors the tmp_db fixture in conftest.py.
+
+        This is a sync fixture that drives an async event loop via
+        ``asyncio.run`` (Python 3.12 deprecated
+        ``asyncio.get_event_loop()`` on the main thread). The test
+        methods themselves are async and run on pytest-asyncio's
+        own loop, so this fixture's loop is fully decoupled.
+        """
+        import asyncio
+        from core import database
+        db_path = tmp_path / "test.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+        monkeypatch.setenv("USE_SQLITE", "true")
+        monkeypatch.setenv("FORCE_SQLITE", "true")
+        monkeypatch.setenv("ANT_SKIP_ALEMBIC", "1")
+
+        database.DATABASE_URL = os.environ["DATABASE_URL"]
+        database.USE_SQLITE = True
+        database.FORCE_SQLITE = True
+        database.db_manager.engine = None
+        database.db_manager.session_maker = None
+        database.db_manager._initialized = False
+
+        asyncio.run(database.db_manager.initialize())
+        try:
+            yield
+        finally:
+            asyncio.run(database.db_manager.close())
+            database.db_manager.engine = None
+            database.db_manager.session_maker = None
+            database.db_manager._initialized = False
+            if db_path.exists():
+                db_path.unlink()
+
+    @pytest.fixture
+    def fresh_user(self, _setup_db):
+        """Create a fresh user in the SQLAlchemy users table; return
         (user, password). Uses a uuid suffix so the test is hermetic
-        against other tests that create users with the same name."""
+        against other tests that create users with the same name.
+
+        Fix #35: sync fixture wrapping an async coroutine via
+        ``asyncio.run``. See ``_setup_db`` for the rationale.
+        """
+        import asyncio
         from security.auth import user_manager
         unique = uuid.uuid4().hex[:8]
         username = f"fix34_{unique}"
         email = f"{username}@example.com"
         password = "TestPass123!"  # nosec B105
-        user = user_manager.create_user(username=username, email=email, password=password)
+
+        user = asyncio.run(
+            user_manager.create_user(
+                username=username, email=email, password=password,
+            )
+        )
         return user, password
 
     def _mint_jti_for(self, user):
@@ -226,7 +275,7 @@ class TestFix34Behavior:
             "enforcement to be meaningful"
         )
         # The jti must equal the user's currently-active session.
-        reloaded = user_manager.get_user(user.username)
+        reloaded = await user_manager.get_user(user.username)
         assert reloaded.active_session_id == access_payload["jti"]
 
     @pytest.mark.asyncio
@@ -298,7 +347,7 @@ class TestFix34Behavior:
         assert me_b.status_code == 200, "device B should still be authenticated"
 
         # Sanity: user.active_session_id is now B's jti, not A's
-        reloaded = user_manager.get_user(user.username)
+        reloaded = await user_manager.get_user(user.username)
         from jose import jwt as _jwt
         b_jti = _jwt.get_unverified_claims(token_b)["jti"]
         assert reloaded.active_session_id == b_jti
@@ -374,7 +423,7 @@ class TestFix34Behavior:
             f"post-logout /auth/me should be 401, got {me_after.status_code}"
         )
         # The server-side state is also cleared.
-        reloaded = user_manager.get_user(user.username)
+        reloaded = await user_manager.get_user(user.username)
         assert reloaded.active_session_id is None, (
             f"active_session_id should be None after logout, got "
             f"{reloaded.active_session_id!r}"
@@ -396,8 +445,11 @@ class TestFix34Behavior:
         user, password = fresh_user
         # Pre-create a session for this user so we can kick it.
         original_jti = str(uuid.uuid4())
-        user.active_session_id = original_jti
-        user_manager._save_users()
+        import asyncio
+        from core.database import UserRepository
+        asyncio.run(
+            UserRepository.auth_headers_set_jti(str(user.id), original_jti)
+        )
 
         # Subscribe BEFORE the 2nd login so we receive the event.
         q = session_bus.subscribe(user.id)
@@ -414,7 +466,7 @@ class TestFix34Behavior:
         assert isinstance(event, dict), f"expected dict event, got {type(event)}"
         assert event.get("type") == "session_kicked", f"event type wrong: {event}"
         # The new session is reflected on the user object.
-        reloaded = user_manager.get_user(user.username)
+        reloaded = await user_manager.get_user(user.username)
         assert reloaded.active_session_id is not None
         assert reloaded.active_session_id != original_jti, (
             "user.active_session_id should have been rotated by _issue_token"
@@ -438,7 +490,7 @@ class TestFix34Behavior:
             "two _issue_token calls should produce two different tokens"
         )
         assert first_jti != second_jti, "the two tokens should have different jtis"
-        reloaded = user_manager.get_user(user.username)
+        reloaded = await user_manager.get_user(user.username)
         assert reloaded.active_session_id == second_jti, (
             "user.active_session_id should match the most-recent jti"
         )
@@ -464,8 +516,9 @@ class TestFix34Behavior:
 
         user, password = fresh_user
         # Simulate the legacy state: no active session.
-        user.active_session_id = None
-        user_manager._save_users()
+        import asyncio
+        from core.database import UserRepository
+        asyncio.run(UserRepository.clear_session(str(user.id)))
         # Forge a jti-less token — same shape create_access_token
         # would have produced before the Fix #34 jti plumbing.
         now = int(time.time())
