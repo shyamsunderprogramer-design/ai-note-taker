@@ -985,6 +985,30 @@ async def start_listener():
         try:
             await init_database()
             logger.info("[Startup] Database initialized successfully")
+            # Fix #35 Commit 5: auto-migrate legacy data/users.json into
+            # the SQLAlchemy users table on first boot. Idempotent — the
+            # DataMigrator writes a marker file after a successful run
+            # and skips subsequent boots. Manual re-runs go through
+            # /admin/migrate (which passes force=True).
+            try:
+                mig_results = await DataMigrator.run_full_migration()
+                if mig_results.get("skipped"):
+                    logger.info("[Startup] Migration skipped — already migrated")
+                elif mig_results.get("users", 0) > 0:
+                    logger.info(
+                        "[Startup] Migrated %d users, %d conversations from users.json",
+                        mig_results["users"],
+                        mig_results.get("conversations", 0),
+                    )
+            except Exception as mig_err:
+                # A migration failure must not block startup — the
+                # SQL store is empty but the app is still usable (users
+                # just have to register fresh). Log loudly so the
+                # operator notices.
+                logger.warning(
+                    "[Startup] Auto-migration failed (continuing without it): %s",
+                    str(mig_err),
+                )
         except Exception as e:
             logger.warning("[Startup] Database init failed: %s", str(e))
             if CLOUD_MODE:
@@ -1845,7 +1869,10 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        results = await DataMigrator.run_full_migration()
+        # Fix #35 Commit 5: pass force=True so the admin button
+        # actually re-runs even after the idempotency marker is set.
+        # Without it, the second click is silently a no-op.
+        results = await DataMigrator.run_full_migration(force=True)
         log_audit_event("admin_migrate", user.username, "migration_run", resource=f"users:{results.get('users', 0)}", success=True)
         return {
             "status": "success",

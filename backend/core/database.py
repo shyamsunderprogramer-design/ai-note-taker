@@ -2253,15 +2253,84 @@ class TeamMemberRepository:
 # ============================================================================
 
 class DataMigrator:
-    """Migrate data from JSON files to PostgreSQL"""
+    """Migrate data from JSON files to PostgreSQL/SQLite.
+
+    Fix #35 Commit 5: full-fidelity migration. The previous version
+    dropped security_question / hashed_security_answer / active_session_*
+    / on_new_login_pref / last_login on the floor (only username,
+    email, hashed_password, is_admin, is_active, api_quota, created_at
+    were copied). That silently invalidated every migrated user's
+    security question and forced a re-login on first use. This version
+    copies every column the User ORM knows about.
+    """
+
+    # Idempotency marker. Once a successful full migration has run, this
+    # file is written next to users.json so subsequent boots skip the
+    # migration (the JSON store is stale; the SQL store is canonical).
+    MARKER_FILENAME = ".migrated_to_sql"
+
+    @staticmethod
+    def _marker_path() -> Path:
+        """Return the absolute path of the migration marker file."""
+        return Path(__file__).resolve().parent.parent / "data" / DataMigrator.MARKER_FILENAME
+
+    @classmethod
+    def already_migrated(cls) -> bool:
+        """True if a prior successful migration wrote the marker."""
+        return cls._marker_path().exists()
+
+    @classmethod
+    def mark_migrated(cls, results: Dict[str, Any]) -> None:
+        """Write the marker file with a small summary of what ran.
+
+        Touch-only: errors are logged, not raised — we don't want a
+        marker-write failure to fail the migration itself.
+        """
+        try:
+            marker = cls._marker_path()
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "users_migrated": results.get("users", 0),
+                "conversations_migrated": results.get("conversations", 0),
+                "version": "1.0",
+            }
+            marker.write_text(json.dumps(payload, indent=2))
+        except Exception as e:
+            logger.warning("[Migration] Could not write marker file: %s", str(e))
+
+    @staticmethod
+    def _parse_iso_dt(value):
+        """Parse an ISO-8601 string into a datetime, or return None.
+
+        Defensive: the JSON store may hold either naive strings
+        (pre-Fix-34 users.json) or timezone-aware strings. We don't
+        care which — the ORM accepts both — but a totally missing or
+        malformed value should yield None, not crash the migration.
+        """
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            logger.warning("[Migration] Unparseable datetime: %r", value)
+            return None
 
     @staticmethod
     async def migrate_users() -> Dict[str, str]:
-        """Migrate users from data/users.json
+        """Migrate users from data/users.json.
 
         Looks in `backend/data/users.json` (canonical) first, then falls back
         to the legacy `backend/core/data/users.json` location used by older
         installs. Both paths are kept in sync by auth.USERS_FILE on first write.
+
+        Fix #35 Commit 5: now copies every User column that exists in
+        the source record (security_question, hashed_security_answer,
+        active_session_id/ip/user_agent/started_at, on_new_login_pref,
+        last_login) so a migrated user has the same auth state they had
+        under the JSON store.
         """
         # Candidate paths, in priority order
         candidates = [
@@ -2291,19 +2360,34 @@ class DataMigrator:
                 existing = await UserRepository.get_by_username(user_data["username"])
                 if existing:
                     id_mapping[old_id] = str(existing.id)
-                else:
-                    # Create user
-                    user = await UserRepository.create(
-                        username=user_data["username"],
-                        email=user_data.get("email", f"{user_data['username']}@localhost"),
-                        hashed_password=user_data.get("hashed_password", ""),
-                        is_admin=user_data.get("is_admin", False),
-                        is_active=user_data.get("is_active", True),
-                        api_quota=user_data.get("api_quota", {}),
-                        created_at=datetime.fromisoformat(user_data["created_at"]) if user_data.get("created_at") else datetime.now(timezone.utc)
-                    )
-                    if user:
-                        id_mapping[old_id] = str(user.id)
+                    continue
+                # Create user — copy every column the ORM accepts so a
+                # migrated user keeps their auth state.
+                # `UserRepository.create` passes **kwargs through to the
+                # User(...) constructor, so we can drop new fields in
+                # without touching the repo layer.
+                user = await UserRepository.create(
+                    username=user_data["username"],
+                    email=user_data.get("email", f"{user_data['username']}@localhost"),
+                    hashed_password=user_data.get("hashed_password", ""),
+                    is_admin=user_data.get("is_admin", False),
+                    is_active=user_data.get("is_active", True),
+                    api_quota=user_data.get("api_quota", {}),
+                    created_at=DataMigrator._parse_iso_dt(user_data.get("created_at"))
+                                 or datetime.now(timezone.utc),
+                    last_login=DataMigrator._parse_iso_dt(user_data.get("last_login")),
+                    security_question=user_data.get("security_question"),
+                    hashed_security_answer=user_data.get("hashed_security_answer"),
+                    active_session_id=user_data.get("active_session_id"),
+                    active_session_ip=user_data.get("active_session_ip"),
+                    active_session_user_agent=user_data.get("active_session_user_agent"),
+                    active_session_started_at=DataMigrator._parse_iso_dt(
+                        user_data.get("active_session_started_at")
+                    ),
+                    on_new_login_pref=user_data.get("on_new_login_pref", "auto_kick"),
+                )
+                if user:
+                    id_mapping[old_id] = str(user.id)
 
             logger.info(f"[Migration] Migrated {len(id_mapping)} users")
             return id_mapping
@@ -2346,8 +2430,21 @@ class DataMigrator:
             return 0
 
     @staticmethod
-    async def run_full_migration() -> Dict[str, Any]:
-        """Run all migrations"""
+    async def run_full_migration(force: bool = False) -> Dict[str, Any]:
+        """Run all migrations.
+
+        Fix #35 Commit 5: idempotent. If a successful prior migration
+        wrote the marker file (``backend/data/.migrated_to_sql``), this
+        call is a no-op and returns ``{"skipped": true, ...}`` so the
+        boot-time hook doesn't waste time re-reading a stale JSON file
+        on every restart. Pass ``force=True`` to re-run (used by
+        ``/admin/migrate`` when an operator wants to re-import).
+        """
+        if not force and DataMigrator.already_migrated():
+            logger.info("[Migration] Skipping — marker file present at %s",
+                        DataMigrator._marker_path())
+            return {"users": 0, "conversations": 0, "errors": [],
+                    "skipped": True}
         results = {"users": 0, "conversations": 0, "errors": []}
         try:
             user_mapping = await DataMigrator.migrate_users()
@@ -2356,6 +2453,16 @@ class DataMigrator:
             if user_mapping:
                 conv_count = await DataMigrator.migrate_conversations(user_mapping)
                 results["conversations"] = conv_count
+
+            # Write the marker so subsequent boots skip this work.
+            # Only mark if at least one user migrated — a no-op run
+            # (no users.json present) leaves the marker unwritten so
+            # the next boot retries; useful if the operator drops a
+            # users.json into place between restarts.
+            if results["users"] > 0:
+                DataMigrator.mark_migrated(results)
+            else:
+                logger.info("[Migration] No users migrated; marker not written")
 
         except Exception as e:
             results["errors"].append("An internal error occurred")

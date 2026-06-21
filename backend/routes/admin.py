@@ -103,7 +103,10 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        results = await DataMigrator.run_full_migration()
+        # Fix #35 Commit 5: pass force=True so the admin button
+        # actually re-runs even after the idempotency marker is set.
+        # Without it, the second click is silently a no-op.
+        results = await DataMigrator.run_full_migration(force=True)
         log_audit_event("admin_migrate", user.username, "migration_run", resource=f"users:{results.get('users', 0)}", success=True)
         return {
             "status": "success",
