@@ -4,7 +4,6 @@ Handles token generation, validation, and user authentication
 """
 
 import hmac
-import json
 import logging
 import os
 import secrets

@@ -153,8 +153,40 @@ class TestFix31AuthBehavior:
     def fake_user_id(self):
         return str(uuid.uuid4())
 
+    @pytest.fixture
+    def _setup_db(self, tmp_path, monkeypatch):
+        """Per-test SQLite DB. Fix #35 made user_manager persist to
+        the SQLAlchemy users table; without a hermetic DB the test
+        would write to the dev DB. Mirrors the ``_setup_db`` fixture
+        in test_fix_34_single_session.py."""
+        import asyncio
+        from core import database
+        db_path = tmp_path / "test.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+        monkeypatch.setenv("USE_SQLITE", "true")
+        monkeypatch.setenv("FORCE_SQLITE", "true")
+        monkeypatch.setenv("ANT_SKIP_ALEMBIC", "1")
+
+        database.DATABASE_URL = os.environ["DATABASE_URL"]
+        database.USE_SQLITE = True
+        database.FORCE_SQLITE = True
+        database.db_manager.engine = None
+        database.db_manager.session_maker = None
+        database.db_manager._initialized = False
+
+        asyncio.run(database.db_manager.initialize())
+        try:
+            yield
+        finally:
+            asyncio.run(database.db_manager.close())
+            database.db_manager.engine = None
+            database.db_manager.session_maker = None
+            database.db_manager._initialized = False
+            if db_path.exists():
+                db_path.unlink()
+
     @pytest.mark.asyncio
-    async def test_agents_sessions_uses_authenticated_user_id(self, fake_user_id):
+    async def test_agents_sessions_uses_authenticated_user_id(self, _setup_db, fake_user_id):
         from core.main import app
         from httpx import ASGITransport, AsyncClient
         from security.auth import user_manager, create_access_token
@@ -168,20 +200,25 @@ class TestFix31AuthBehavior:
         stub_manager = MagicMock()
         stub_manager.create_session = AsyncMock(side_effect=fake_create_session)
 
-        # Create a real user in the user_manager's JSON file, then mint
-        # a JWT for that user. This is the same flow /auth/login would
-        # follow but bypasses the HTTP layer (which the conftest's
-        # `from main import app` does not resolve).
+        # Create a real user in the user_manager, then mint a JWT for
+        # that user. This is the same flow /auth/login would follow
+        # but bypasses the HTTP layer (the conftest's `from main import
+        # app` does not resolve). Fix #35 Commit 6: user_manager is now
+        # async and persists to the SQLAlchemy users table (the JSON
+        # file is the migration source, not the destination).
         unique_id = fake_user_id[:8]
         username = f"fix31_{unique_id}"
         email = f"{username}@example.com"
         password = "TestPass123!"  # nosec B105 — test credential
-        user = user_manager.create_user(username=username, email=email, password=password)
+        user = await user_manager.create_user(username=username, email=email, password=password)
         # Stamp the jti on the user so single-session enforcement
-        # (Fix #34) accepts the token. Same reason as in test_routes_deps.
+        # (Fix #34) accepts the token. The test-only repo helper
+        # writes the jti directly to the users table — replaces the
+        # pre-Fix-35 ``user_manager._save_users()`` call which no
+        # longer exists.
+        from core.database import UserRepository
         jti = str(uuid.uuid4())
-        user.active_session_id = jti
-        user_manager._save_users()
+        await UserRepository.auth_headers_set_jti(str(user.id), jti)
         token = create_access_token(
             {"sub": str(user.id), "username": user.username},
             jti=jti,

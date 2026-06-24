@@ -17,7 +17,11 @@ We test:
 We mint real tokens via user_manager.create_user() +
 create_access_token() rather than HTTP flow (the conftest's
 `from main import app` is broken per Fix #31 — documented in
-[[fix-31-user-id-auth-collision]]).
+[[fix-31-user-id-auth-collision]]). Fix #35 Commit 6: user_manager
+is now async (returns a coroutine) and persists to the SQLAlchemy
+users table; the jti stamp uses the test-only
+``UserRepository.auth_headers_set_jti`` helper, replacing the
+pre-Fix-35 ``user_manager._save_users()`` call.
 """
 
 import os
@@ -70,6 +74,39 @@ class TestGetTokenFromRequest:
 class TestRequireAuthentication:
     """401 with WWW-Authenticate: Bearer when token is missing/invalid."""
 
+    @pytest.fixture
+    def _setup_db(self, tmp_path, monkeypatch):
+        """Per-test SQLite DB. user_manager.create_user() now persists
+        to the SQLAlchemy users table (Fix #35); without a hermetic
+        DB the test that creates a user would write to the dev DB.
+        Mirrors ``_setup_db`` in test_fix_34_single_session.py and
+        test_fix_31_user_id_auth.py."""
+        import asyncio
+        from core import database
+        db_path = tmp_path / "test.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+        monkeypatch.setenv("USE_SQLITE", "true")
+        monkeypatch.setenv("FORCE_SQLITE", "true")
+        monkeypatch.setenv("ANT_SKIP_ALEMBIC", "1")
+
+        database.DATABASE_URL = os.environ["DATABASE_URL"]
+        database.USE_SQLITE = True
+        database.FORCE_SQLITE = True
+        database.db_manager.engine = None
+        database.db_manager.session_maker = None
+        database.db_manager._initialized = False
+
+        asyncio.run(database.db_manager.initialize())
+        try:
+            yield
+        finally:
+            asyncio.run(database.db_manager.close())
+            database.db_manager.engine = None
+            database.db_manager.session_maker = None
+            database.db_manager._initialized = False
+            if db_path.exists():
+                db_path.unlink()
+
     @pytest.mark.asyncio
     async def test_raises_401_when_token_missing(self):
         from fastapi import HTTPException
@@ -98,18 +135,18 @@ class TestRequireAuthentication:
         assert exc_info.value.detail == "Invalid or expired token"
 
     @pytest.mark.asyncio
-    async def test_returns_user_when_token_valid(self):
+    async def test_returns_user_when_token_valid(self, _setup_db):
         # Mint a real token via the same flow get_current_user() reads.
-        # user_manager.create_user() persists to backend/data/users.json
-        # (in .gitignore, but it exists on disk after the first
-        # backend run — if it doesn't, user_manager will create it).
+        # user_manager.create_user() persists to the SQLAlchemy users
+        # table (the JSON file is the migration SOURCE, not the
+        # destination, as of Fix #35).
         import uuid
 
         username = f"deps_test_{uuid.uuid4().hex[:8]}"
         email = f"{username}@example.com"
         password = "TestPass123!"
 
-        user = user_manager.create_user(
+        user = await user_manager.create_user(
             username=username, email=email, password=password
         )
         assert user is not None, "user_manager.create_user() returned None"
@@ -117,10 +154,12 @@ class TestRequireAuthentication:
         # Stamp the jti on the user so single-session enforcement
         # (Fix #34) accepts the token. Without this, a jti-bearing
         # token whose user has no active_session_id is rejected as a
-        # post-logout token.
+        # post-logout token. The test-only repo helper writes the
+        # jti directly to the users table — replaces the pre-Fix-35
+        # ``user_manager._save_users()`` call which no longer exists.
+        from core.database import UserRepository
         jti = str(uuid.uuid4())
-        user.active_session_id = jti
-        user_manager._save_users()
+        await UserRepository.auth_headers_set_jti(str(user.id), jti)
 
         token = create_access_token(
             data={"sub": str(user.id), "username": user.username},
