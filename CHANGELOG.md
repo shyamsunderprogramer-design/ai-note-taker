@@ -203,6 +203,106 @@ file-to-role routing.
 
 ---
 
+## [2.1.0] - 2026-06-23
+
+This release closes out the **Fix #35 series** — the move from a
+JSON-file user store (`backend/data/users.json`) to a proper SQLAlchemy-
+backed users table. For existing users, the migration is transparent: on
+the first start after upgrading, the app copies every account from the
+old file into the database automatically and writes a sticky-note file
+(`backend/data/.migrated_to_sql`) so the migration never runs again.
+The 5-day UX sprint shipped in v2.0.0 was extended with one in-place
+fix in this release: the AI response bubble now renders even if the
+Electron IPC store-bridge is unavailable (falls back to `localStorage`),
+and the AI race-stream endpoint was hardened against the sync/async
+generator mismatch that surfaced under newer FastAPI.
+
+### Added (Fix #35 — 6-commit auth refactor)
+
+- **`backend/core/database.py`** — `DataMigrator` rewritten to copy every
+  User column (`security_question`, `hashed_security_answer`,
+  `active_session_id/ip/user_agent/started_at`, `on_new_login_pref`,
+  `last_login`), not just the original 6. Pre-2.1.0 the migrator silently
+  dropped the security-question and active-session fields, which would
+  have invalidated every migrated user's security question and forced a
+  re-login on first use.
+- **`backend/core/database.py`** — `DataMigrator.run_full_migration()` is
+  now idempotent via a `backend/data/.migrated_to_sql` sticky-note file.
+  `force=True` keyword added so the admin button can re-run on demand.
+- **`backend/core/main.py`** — `start_listener()` startup hook now calls
+  `DataMigrator.run_full_migration()` after `init_database()`. Wrapped in
+  try/except so a migration failure never blocks startup. Both the
+  startup hook and the `/admin/migrate` route pass `force=True`
+  appropriately.
+- **`backend/security/auth.py`** — `UserManager` is now an async shim
+  over `core.database.UserRepository`. Module-level
+  `from core.database import UserRepository` replaced with a lazy
+  `UserManager._repo()` helper to break the circular import that
+  appeared once Commit 2's `UserRepository.auth_headers_set_jti` test
+  helper started importing back into `security.auth`.
+- **`backend/routes/auth.py`** — `await` added to the
+  `get_current_user_with_reason(token)` call in `require_authentication`
+  (the underlying function became async in Commit 3).
+- **`backend/routes/admin.py`** — `/admin/migrate` now passes
+  `force=True` so the admin button actually re-runs after the marker is
+  set.
+
+### Changed (UX sprint — AI race stream + frontend guard)
+
+- **`apps/web/app.js`** — `streamAIRace` now wraps
+  `window.api.storeGet` calls in try/catch with a `localStorage`
+  fallback, so the assistant bubble renders even when the Electron IPC
+  bridge is unavailable (fixes the "AI response failed" error in some
+  preview/dev modes).
+- **`backend/core/main.py`** — universal async-generator monkey-patch at
+  import time so `async for` over a sync generator (the SSE pattern in
+  `routes/ai.py`) works uniformly across all AI provider modules.
+- **`backend/routes/ai.py`** — `async for event in …` restored at all
+  single-provider fast paths now that the patch makes every stream
+  function async-compatible.
+
+### Tests added
+
+- **`backend/tests/test_data_migrator.py`** — 8 tests pinning the
+  full-fidelity column copy (AST-level + behavioral), the idempotency
+  marker, and the `force=True` bypass.
+- **`backend/tests/test_no_json_user_store.py`** — 8 guardrail tests
+  that pin the Fix-#35 source-of-truth contract at the AST level: no
+  `USERS_FILE`, no `_save_users`/`_load_users`, no `self.users = `
+  in-memory dict, no `open('users.json')`, no module-level
+  `import json`, and the docstring still mentions SQLAlchemy /
+  UserRepository.
+- **`backend/tests/conftest.py`** — `auth_headers` fixture converted
+  from sync `@pytest.fixture def` calling
+  `asyncio.get_event_loop().run_until_complete(...)` (deprecated on
+  Python 3.12 main thread, forbidden when pytest-asyncio has a
+  running loop) to `@pytest_asyncio.fixture async def`. Adds a
+  `tmp_db` fixture for hermetic per-test SQLite databases.
+- **`backend/tests/test_fix_34_single_session.py`**,
+  **`backend/tests/test_fix_31_user_id_auth.py`**,
+  **`backend/tests/test_routes_deps.py`** — repaired to use the async
+  `user_manager.create_user()` and the test-only
+  `UserRepository.auth_headers_set_jti` helper, with `_setup_db`
+  fixtures added so the SQLAlchemy write hits a hermetic per-test
+  SQLite DB instead of the dev DB.
+
+### Migration notes
+
+- **No operator action required.** On the first start of v2.1.0, the
+  app detects `backend/data/users.json`, copies every user (with all
+  fields) into the SQLAlchemy `users` table, and writes
+  `backend/data/.migrated_to_sql`. Subsequent starts see the marker
+  and skip the migration.
+- To re-run the migration manually (e.g. after dropping a fresh
+  `users.json` in place), use `POST /admin/migrate` — it now passes
+  `force=True`.
+- The `backend/data/users.json` file is no longer written to at
+  runtime. After confirming the migration succeeded (via
+  `/auth/login` working as expected), the file can be archived or
+  deleted; it is not read again.
+
+---
+
 ## [1.0.0] - 2026-04-05
 
 ### Added - Phase 2 Features
