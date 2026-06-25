@@ -4,6 +4,28 @@
 
 Local speech-to-text, local and cloud AI models, floating overlay UI, screen capture protection, and real-time transcription — packaged as an Electron desktop app, a web SPA, a React Native mobile app, and a Chrome extension, all backed by a FastAPI Python backend.
 
+[![Release v2.1.0](https://img.shields.io/github/v/release/shyamsunderprogramer-design/ai-note-taker?include_prereleases&sort=semver)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: macOS · Linux · Windows](https://img.shields.io/badge/Platform-macOS%20·%20Linux%20·%20Windows-lightgrey.svg)](#download)
+
+---
+
+## Download
+
+> **Latest stable: [v2.1.0](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest)** — released 2026-06-23. Closes out the Fix #35 series (full-fidelity users.json → SQL migration, AI race stream hardening).
+
+| Platform | Installer | Notes |
+|---|---|---|
+| **Windows 10/11 (x64)** | [`ANT (AI Note Taker)-Setup-2.1.0-win-x64.exe`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | NSIS installer (recommended) + portable .exe. Unsigned — SmartScreen will warn; click "More info" → "Run anyway". |
+| **macOS (Apple Silicon)** | [`ANT (AI Note Taker)-2.1.0-mac-arm64.dmg`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | Drag-to-Applications. Unsigned — first launch needs right-click → Open, or `xattr -d com.apple.quarantine /Applications/ANT.app`. |
+| **macOS (Intel)** | [`ANT (AI Note Taker)-2.1.0-mac-x64.dmg`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | Same as above for older Macs. |
+| **Linux (x64)** | [`ANT (AI Note Taker)-2.1.0-linux-x64.AppImage`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | `chmod +x *.AppImage && ./ANT*.AppImage`. No install needed. |
+| **Linux (Debian/Ubuntu)** | [`ANT (AI Note Taker)-2.1.0-linux-x64.deb`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | `sudo dpkg -i ant*.deb && sudo apt -f install` to pull any missing deps. |
+
+All installers are built by electron-builder per `electron/package.json` → `build`. On first launch the app auto-migrates any existing `data/users.json` into the SQLAlchemy users table (no operator action required).
+
+**Verify your download:** each release on GitHub includes `SHA256SUMS.txt` next to the installers — `shasum -a 256 -c SHA256SUMS.txt` (macOS/Linux) or `certutil -hashfile ANT-Setup-2.1.0-win-x64.exe SHA256` (Windows).
+
 ---
 
 ## Table of Contents

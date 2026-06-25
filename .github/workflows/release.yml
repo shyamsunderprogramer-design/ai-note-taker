@@ -1,0 +1,176 @@
+name: Release
+
+# Trigger: a tag matching `v*.*.*` (e.g. v2.1.0, v2.2.0-rc1).
+#
+# What it does:
+#   1. Builds the Electron desktop app for all 3 platforms in parallel.
+#   2. Uploads each platform's installers to the GitHub release that
+#      corresponds to the tag (creating one if `gh release create`
+#      wasn't run beforehand).
+#   3. Computes SHA256SUMS.txt and uploads it too.
+#
+# Local alternative: `scripts/release.sh` — runs the same steps on
+# the developer's machine and pushes the tag, which then triggers
+# THIS workflow for a clean CI build. The local-only path is useful
+# for testing the build before tagging.
+#
+# Why this exists: before this workflow, building installers required
+# a developer with Wine + a Mac + Linux all set up locally. Now any
+# `git tag v*.*.* && git push --tags` produces all 3 platforms.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+# Cancel in-flight re-runs of the same tag, but never cancel a
+# release that's already started uploading — that's irreversible.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Needs write to upload release assets. Scope GITHUB_TOKEN down to
+# only what's required so a compromised dep can't push to the repo.
+permissions:
+  contents: write
+
+jobs:
+  # ───────────────────────────────────────────────────────────
+  # Stage 1: matrix of platform builds. Each runner builds
+  # installers natively for its platform (no cross-compile).
+  # ───────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_glob: |
+              ANT*.AppImage
+              ANT*.deb
+          - os: macos-latest
+            artifact_glob: |
+              ANT*.dmg
+              ANT*.zip
+              ANT*-mac-*.zip
+          - os: windows-latest
+            artifact_glob: |
+              ANT*Setup*.exe
+              ANT*-portable*.exe
+              ANT*win*.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install root deps (workspace install)
+        # Electron-builder needs the dev deps in electron/node_modules.
+        # We don't run `npm install` at the monorepo root because the
+        # other workspaces (apps/web, apps/landing, mobile, e2e) pull
+        # in heavy deps that aren't needed for the desktop build.
+        working-directory: electron
+        run: npm ci
+
+      - name: Generate icons (Linux/macOS only — Windows doesn't need .ico)
+        # electron-builder will fall back to the default Electron icon
+        # if `assets/icon.ico` is missing on Windows, but `assets/icon.icns`
+        # is required for the macOS DMG. Generate both for safety.
+        working-directory: electron
+        run: |
+          if [ ! -f assets/icon.ico ] || [ ! -f assets/icon.icns ]; then
+            npm install --no-save sharp png-to-ico
+            npm run icons
+          fi
+
+      - name: Build installers
+        working-directory: electron
+        env:
+          # Disable code signing on CI — releases are unsigned.
+          # CSC_LINK / CSC_KEY_PASSWORD are empty; electron-builder
+          # skips signing when both are unset.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Skip macOS notarization (we're unsigned).
+          APPLE_ID: ''
+          APPLE_APP_SPECIFIC_PASSWORD: ''
+          APPLE_TEAM_ID: ''
+        run: npm run build
+
+      - name: List dist output (sanity check)
+        working-directory: electron
+        run: |
+          echo "==> dist/ contents:"
+          ls -lh dist/ || true
+          echo "==> matching artifacts:"
+          ls -lh ${{ matrix.artifact_glob }} 2>&1 || true
+
+      - name: Upload artifacts (for the upload job to consume)
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            electron/dist/${{ matrix.artifact_glob }}
+            electron/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  # ───────────────────────────────────────────────────────────
+  # Stage 2: take all 3 artifact bundles, attach to the release.
+  # Runs only after every matrix job succeeds.
+  # ───────────────────────────────────────────────────────────
+  publish:
+    name: Publish to release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Show what we got
+        run: |
+          echo "==> artifacts/ contents:"
+          ls -lh artifacts/ || true
+
+      - name: Generate SHA256SUMS.txt (combine with anything the build produced)
+        working-directory: artifacts
+        run: |
+          if [ -f SHA256SUMS.txt ]; then
+            echo "(build already produced SHA256SUMS.txt, regenerating to ensure completeness)"
+          fi
+          # Compute fresh SHA256 for every installer
+          sha256sum *.exe *.dmg *.zip *.AppImage *.deb 2>/dev/null > SHA256SUMS.txt || true
+          echo "==> SHA256SUMS.txt:"
+          cat SHA256SUMS.txt
+
+      - name: Create or update GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Don't overwrite an existing release body — if the tag was
+          # pushed via `gh release create` first (preferred), the body
+          # is already curated. Only attach files.
+          files: |
+            artifacts/*.exe
+            artifacts/*.dmg
+            artifacts/*.zip
+            artifacts/*.AppImage
+            artifacts/*.deb
+            artifacts/SHA256SUMS.txt
+          # generate_release_notes: true appends GitHub's auto-generated
+          # changelog (PR list + author credits) below whatever body
+          # the maintainer wrote. Helpful, low-risk.
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          # If the release doesn't exist yet, create it as a draft.
+          # Maintainer promotes it to public via the web UI.
+          draft: true

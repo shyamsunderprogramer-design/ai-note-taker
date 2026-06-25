@@ -81,6 +81,22 @@ PASTE LOGS HERE
 - [ ] Medium — workaround exists
 - [ ] Low — minor / cosmetic
 
+## Fix #35 upgrade note
+
+<!--
+If you just upgraded from a pre-2.1.0 install AND the bug is
+auth-related (login, sessions, security question, password reset,
+user account, "users.json not found" errors), please mention it.
+Fix #35 migrated user storage from `data/users.json` to a
+SQLAlchemy table, and a small number of upgrade edge cases may
+not have been covered by the auto-migration.
+-->
+
+- [ ] This bug appeared after upgrading from a pre-2.1.0 version
+- [ ] This bug is auth / user-account related
+- [ ] I've checked `backend/data/.migrated_to_sql` exists (post-upgrade only)
+- [ ] I've checked `/auth/login` works with my existing credentials
+
 ## Additional context
 
 <!-- Anything else that might help: workaround tried, related issues, etc. -->
