@@ -144,6 +144,8 @@
       "main.js",
       "preload.js",
       "stealth.js",
+      "features/**",
+      "lib/**",
       "assets/**"
     ],
     "extraResources": [

@@ -242,6 +242,31 @@ For production releases, set up code signing with a Developer ID certificate fro
 
 ---
 
+### "A JavaScript error occurred in the main process" on Windows
+
+**Symptom:** The app crashes immediately on launch with a dialog: "A JavaScript error occurred in the main process".
+
+**Cause (most common):** `electron/main.js` requires a local module (under `./features/` or `./lib/`) that isn't listed in `electron/package.json` → `build.files`. The packaged `app.asar` doesn't include the folder, so `require()` throws synchronously during module evaluation. The error is invisible in dev mode (`npm start` works because the files are right there on disk) and only surfaces in the packaged build.
+
+**Fix:**
+1. Add the missing folder to `build.files`, e.g.:
+   ```json
+   "files": [
+     "main.js",
+     "preload.js",
+     "stealth.js",
+     "features/**",
+     "lib/**",
+     "assets/**"
+   ]
+   ```
+2. Rebuild with `cd electron && npm run build:win`.
+3. Verify with `npx asar list dist/win-unpacked/resources/app.asar | grep -E "^/(features|lib)"` — the files should appear.
+
+**Rule of thumb:** any new top-level folder under `electron/` that's `require()`'d from `main.js` (or `preload.js`) must be listed in `build.files`. `extraResources` is for non-code data and is not on the require() path.
+
+---
+
 ### Backend doesn't start when Electron launches
 
 **Symptom:** Electron window opens but the AI chat says "Backend unavailable".

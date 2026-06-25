@@ -26,6 +26,30 @@ All installers are built by electron-builder per `electron/package.json` → `bu
 
 **Verify your download:** each release on GitHub includes `SHA256SUMS.txt` next to the installers — `shasum -a 256 -c SHA256SUMS.txt` (macOS/Linux) or `certutil -hashfile ANT-Setup-2.1.0-win-x64.exe SHA256` (Windows).
 
+### First-launch notes (unsigned builds)
+
+ANT's CI builds are **unsigned** to keep the project free-to-distribute. Operating systems will warn on first install — here's what to do on each platform:
+
+**Windows (SmartScreen)**
+1. Double-click `ANT (AI Note Taker)-Setup-2.1.0-win-x64.exe`.
+2. SmartScreen shows "Windows protected your PC" → click **More info**.
+3. Click **Run anyway**. The warning is permanent until the project signs with a code-signing certificate.
+
+**macOS (Gatekeeper)**
+1. Open the `.dmg` and drag `ANT.app` to `/Applications`.
+2. **Don't** double-click `ANT.app` from the DMG or Launchpad. Instead, **right-click (or Control-click) → Open** from Finder.
+3. Click **Open** in the dialog that warns "Apple could not verify...". macOS remembers your decision for this app on this machine.
+4. After the first open, double-click works normally.
+
+   **Alternative (terminal):** strip the quarantine attribute:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/ANT (AI Note Taker).app"
+   ```
+
+**Linux**
+- **AppImage:** `chmod +x ANT*.AppImage && ./ANT*.AppImage` — no install needed.
+- **Debian/Ubuntu:** `sudo dpkg -i ant*.deb && sudo apt -f install` if missing deps.
+
 ---
 
 ## Table of Contents
