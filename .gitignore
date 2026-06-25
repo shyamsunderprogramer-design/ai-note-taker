@@ -50,6 +50,10 @@ lib/
 lib64/
 parts/
 sdist/
+
+# BUT: backend/lib/ is real source code (SSE helpers + HTTP client),
+# not a Python virtualenv's site-packages. Un-ignore it.
+!backend/lib/
 var/
 wheels/
 share/python-wheels/
