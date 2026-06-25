@@ -72,13 +72,20 @@ jobs:
           cache: 'npm'
           cache-dependency-path: electron/package-lock.json
 
-      - name: Install root deps (workspace install)
+      - name: Install electron deps
         # Electron-builder needs the dev deps in electron/node_modules.
         # We don't run `npm install` at the monorepo root because the
-        # other workspaces (apps/web, apps/landing, mobile, e2e) pull
-        # in heavy deps that aren't needed for the desktop build.
+        # other workspaces (apps/web, mobile, e2e) pull in heavy deps
+        # that aren't needed for the desktop build.
+        #
+        # `--no-workspaces` is required: the monorepo root has no
+        # package-lock.json (intentionally — see .gitignore). Without
+        # this flag, npm walks up from electron/ to the root, sees the
+        # workspaces declaration in the root package.json, and refuses
+        # to install ("npm ci can only install with an existing
+        # package-lock.json"). Treat electron/ as a standalone package.
         working-directory: electron
-        run: npm ci
+        run: npm ci --no-workspaces
 
       - name: Generate icons (Linux/macOS only — Windows doesn't need .ico)
         # electron-builder will fall back to the default Electron icon
@@ -102,7 +109,19 @@ jobs:
           APPLE_ID: ''
           APPLE_APP_SPECIFIC_PASSWORD: ''
           APPLE_TEAM_ID: ''
-        run: npm run build
+          # electron-builder sees a `publish` block in electron/package.json
+          # and demands GH_TOKEN. We don't want it publishing during the
+          # build (the dedicated `publish` job below attaches assets via
+          # softprops/action-gh-release). Setting GH_TOKEN here suppresses
+          # the "Personal Access Token is not set" error that otherwise
+          # breaks macOS builds. `--publish never` on the build command
+          # (below) ensures electron-builder never tries to push even
+          # with a token set.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN || 'unused' }}
+        # `npm run build` maps to `electron-builder -mwl` (matrix: mac,
+        # win, linux). Append `--publish never` to force a pure local
+        # build regardless of GH_TOKEN.
+        run: npm run build -- --publish never
 
       - name: List dist output (sanity check)
         working-directory: electron
