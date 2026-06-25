@@ -151,11 +151,12 @@
     "extraResources": [
       {
         "from": "../apps/web",
-        "to": "apps/web",
+        "to": "renderer",
         "filter": [
           "**/*",
           "!**/node_modules/**",
           "!**/dist/**",
+          "!**/dev-dist/**",
           "!**/data/**",
           "!**/.env",
           "!**/.env.*"
