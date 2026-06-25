@@ -42,7 +42,7 @@ async def require_authentication(token: str = _Depends(get_token_from_request)):
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -106,7 +106,7 @@ async def ws_voice_agent(ws: WebSocket):
             await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
             await ws.close(code=4001)
             return
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if not user:
             await ws.accept()
             await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
