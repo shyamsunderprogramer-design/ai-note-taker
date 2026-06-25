@@ -190,12 +190,14 @@ jobs:
           ls -lh artifacts/ || true
 
       - name: Generate SHA256SUMS.txt (combine with anything the build produced)
-        working-directory: artifacts
+        # The download-artifact step (above) extracts the matrix
+        # zips under `artifacts/electron/dist/...` (merge-multiple
+        # preserves the original path). Compute SHA256 across all of
+        # them, then write SHA256SUMS.txt to that same dir so the
+        # release-uploader step can attach it.
+        working-directory: artifacts/electron/dist
         run: |
-          if [ -f SHA256SUMS.txt ]; then
-            echo "(build already produced SHA256SUMS.txt, regenerating to ensure completeness)"
-          fi
-          # Compute fresh SHA256 for every installer
+          # Recompute hashes from the files we have on disk
           sha256sum *.exe *.dmg *.zip *.AppImage *.deb 2>/dev/null > SHA256SUMS.txt || true
           echo "==> SHA256SUMS.txt:"
           cat SHA256SUMS.txt
@@ -206,13 +208,21 @@ jobs:
           # Don't overwrite an existing release body — if the tag was
           # pushed via `gh release create` first (preferred), the body
           # is already curated. Only attach files.
+          #
+          # NOTE: the artifacts were uploaded as
+          # `electron/dist/<installer>` (one nested dir), and
+          # `download-artifact@v4` with `merge-multiple: true` keeps
+          # that structure under the `artifacts/` prefix — so each
+          # installer lands at `artifacts/electron/dist/<file>`.
+          # The earlier `artifacts/*.exe` glob (top-level only) missed
+          # everything. Use the deeper glob to actually match.
           files: |
-            artifacts/*.exe
-            artifacts/*.dmg
-            artifacts/*.zip
-            artifacts/*.AppImage
-            artifacts/*.deb
-            artifacts/SHA256SUMS.txt
+            artifacts/electron/dist/*.exe
+            artifacts/electron/dist/*.dmg
+            artifacts/electron/dist/*.zip
+            artifacts/electron/dist/*.AppImage
+            artifacts/electron/dist/*.deb
+            artifacts/electron/dist/SHA256SUMS.txt
           # generate_release_notes: true appends GitHub's auto-generated
           # changelog (PR list + author credits) below whatever body
           # the maintainer wrote. Helpful, low-risk.
