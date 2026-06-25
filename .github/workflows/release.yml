@@ -94,7 +94,15 @@ jobs:
         # electron-builder will fall back to the default Electron icon
         # if `assets/icon.ico` is missing on Windows, but `assets/icon.icns`
         # is required for the macOS DMG. Generate both for safety.
+        #
+        # shell: bash — the Windows runner defaults to PowerShell, but
+        # the `if [ ! -f ... ]` test is POSIX-bash syntax. On Windows
+        # the if-guard evaluates to false anyway (icon.ico + icon.icns
+        # are both committed), so the step is a no-op there — but the
+        # parse error still aborts the step. Force bash to keep the
+        # step syntactically valid across all 3 runners.
         working-directory: electron
+        shell: bash
         run: |
           if [ ! -f assets/icon.ico ] || [ ! -f assets/icon.icns ]; then
             npm install --no-save sharp png-to-ico
@@ -139,7 +147,12 @@ jobs:
         # the shell script — splitting one bash line into four; and
         # (b) `bash -e` then exited on the first failed `ls`. We
         # sidestep both by just listing `dist/` directly.
+        #
+        # shell: bash — Windows runner defaults to PowerShell, but
+        # the find/ls idiom below is bash syntax. Same reason as the
+        # icon-gen step above.
         working-directory: electron
+        shell: bash
         run: |
           echo "==> dist/ contents:"
           ls -lh dist/ 2>&1 || true
