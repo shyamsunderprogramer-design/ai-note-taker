@@ -54,6 +54,15 @@ sdist/
 # BUT: backend/lib/ is real source code (SSE helpers + HTTP client),
 # not a Python virtualenv's site-packages. Un-ignore it.
 !backend/lib/
+
+# Root package-lock.json is NOT used by the release CI — only
+# electron/package-lock.json is. If a root lockfile exists it tends to
+# drag in @rollup/rollup-{darwin-arm64,win32-x64,...} transitive deps
+# from a single-platform `npm install`, which then fail EBADPLATFORM on
+# the other 2 matrix runners. The root package.json has no real deps
+# (only eslint in devDependencies; all installable workspaces carry
+# their own lockfile).
+package-lock.json
 var/
 wheels/
 share/python-wheels/
@@ -240,6 +249,11 @@ override.tf.json
 data/ainotetaker.db
 backend/data/ainotetaker.db
 backend/core/data/ainotetaker.db
+
+# One-shot migration markers (created by Alembic / DataMigrator runs).
+# Each machine writes one; never commit.
+*.migrated_to_sql
+backend/data/.migrated_to_sql
 
 # Test outputs
 backups/
