@@ -46,15 +46,18 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            build_target: --linux
             artifact_glob: |
               ANT*.AppImage
               ANT*.deb
           - os: macos-latest
+            build_target: --mac
             artifact_glob: |
               ANT*.dmg
               ANT*.zip
               ANT*-mac-*.zip
           - os: windows-latest
+            build_target: --win
             artifact_glob: |
               ANT*Setup*.exe
               ANT*-portable*.exe
@@ -118,18 +121,30 @@ jobs:
           # (below) ensures electron-builder never tries to push even
           # with a token set.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN || 'unused' }}
-        # `npm run build` maps to `electron-builder -mwl` (matrix: mac,
-        # win, linux). Append `--publish never` to force a pure local
-        # build regardless of GH_TOKEN.
-        run: npm run build -- --publish never
+        # Build only the platform matching this matrix runner. The
+        # earlier `electron-builder -mwl` invocation built all three
+        # platforms on every runner — wasteful (3x downloads of
+        # Electron + native deps) and caused the publish job to receive
+        # three overlapping artifact bundles, which
+        # softprops/action-gh-release@v2 then refused to attach with
+        # `fail_on_unmatched_files: true`. Per-runner targets keep the
+        # artifact sets disjoint.
+        run: npx electron-builder ${{ matrix.build_target }} --publish never
 
       - name: List dist output (sanity check)
+        # NOTE: this step is informational only. The earlier
+        # `ls -lh ${{ matrix.artifact_glob }}` approach failed in CI
+        # because (a) the YAML value for artifact_glob is multi-line,
+        # which GitHub Actions interpolated as actual newlines into
+        # the shell script — splitting one bash line into four; and
+        # (b) `bash -e` then exited on the first failed `ls`. We
+        # sidestep both by just listing `dist/` directly.
         working-directory: electron
         run: |
           echo "==> dist/ contents:"
-          ls -lh dist/ || true
-          echo "==> matching artifacts:"
-          ls -lh ${{ matrix.artifact_glob }} 2>&1 || true
+          ls -lh dist/ 2>&1 || true
+          echo "==> installer files:"
+          find dist -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.exe" \) -exec ls -lh {} \; || true
 
       - name: Upload artifacts (for the upload job to consume)
         uses: actions/upload-artifact@v4
