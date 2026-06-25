@@ -48,20 +48,19 @@ jobs:
           - os: ubuntu-latest
             build_target: --linux
             artifact_glob: |
-              ANT*.AppImage
-              ANT*.deb
+              electron/dist/ANT*.AppImage
+              electron/dist/ANT*.deb
           - os: macos-latest
             build_target: --mac
             artifact_glob: |
-              ANT*.dmg
-              ANT*.zip
-              ANT*-mac-*.zip
+              electron/dist/ANT*.dmg
+              electron/dist/ANT*.zip
+              electron/dist/ANT*-mac-*.zip
           - os: windows-latest
             build_target: --win
             artifact_glob: |
-              ANT*Setup*.exe
-              ANT*-portable*.exe
-              ANT*win*.exe
+              electron/dist/ANT*Setup*.exe
+              electron/dist/ANT*win*.exe
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -160,11 +159,24 @@ jobs:
           find dist -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.exe" \) -exec ls -lh {} \; || true
 
       - name: Upload artifacts (for the upload job to consume)
+        # NOTE: `path` accepts a YAML literal scalar — each line is
+        # a separate glob. The earlier form
+        #   path: |
+        #     electron/dist/${{ matrix.artifact_glob }}
+        #     electron/dist/SHA256SUMS.txt
+        # failed because `matrix.artifact_glob` itself is multi-line,
+        # so the interpolation only prefixed `electron/dist/` onto
+        # the FIRST glob line, leaving the rest as bare relative
+        # paths (which resolved against `electron/`, not
+        # `electron/dist/`, and matched nothing).
+        #
+        # The fix: bake `electron/dist/` into every matrix glob so
+        # the path here can be a simple list with no interpolation.
         uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
           path: |
-            electron/dist/${{ matrix.artifact_glob }}
+            ${{ matrix.artifact_glob }}
             electron/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
