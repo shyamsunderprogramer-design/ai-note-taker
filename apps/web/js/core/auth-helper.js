@@ -183,7 +183,7 @@ const AuthHelper = {
     overlay.id = 'auth-login-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;';
     overlay.innerHTML = `
-      <div style="background:#1e1e2e;border-radius:12px;padding:32px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+      <div style="background:#1e1e2e;border-radius:12px;padding:32px;width:340px;max-width:90vw;max-height:calc(100vh - 32px);overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
         <div style="text-align:center;margin-bottom:20px;">
           <img src="ant-icon-new.png" style="width:60px;height:60px;filter:drop-shadow(0 0 12px rgba(56,189,248,0.5));margin-bottom:12px;" alt="ANT">
           <h2 id="auth-form-title" style="color:#fff;margin:0 0 4px 0;font-size:20px;">Sign In</h2>
@@ -358,6 +358,21 @@ const AuthHelper = {
     const regError = document.getElementById('auth-reg-error');
     const regSuccess = document.getElementById('auth-reg-success');
 
+    // Scroll a banner (error/success) into view inside the modal box.
+    // Mirrors the helper in signin.html — the inner modal div is the
+    // scrollable ancestor (max-height:calc(100vh - 32px); overflow-y:auto).
+    const scrollBannerIntoView = (el) => {
+      if (!el) return;
+      // The scrollable ancestor is the overlay's first child div.
+      const scrollable = overlay.firstElementChild;
+      if (!scrollable) return;
+      const scrollableRect = scrollable.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const offsetInside = elRect.top - scrollableRect.top + scrollable.scrollTop;
+      const target = Math.max(0, offsetInside - 24);
+      scrollable.scrollTo({ top: target, behavior: 'smooth' });
+    };
+
     const doRegister = async () => {
       regError.style.display = 'none';
       regSuccess.style.display = 'none';
@@ -365,11 +380,13 @@ const AuthHelper = {
       if (!regUser.value.trim() || !regEmail.value.trim() || !regPass.value) {
         regError.textContent = 'All fields are required';
         regError.style.display = 'block';
+        scrollBannerIntoView(regError);
         return;
       }
       if (regPass.value.length < 8) {
         regError.textContent = 'Password must be at least 8 characters';
         regError.style.display = 'block';
+        scrollBannerIntoView(regError);
         return;
       }
 
@@ -379,6 +396,7 @@ const AuthHelper = {
         await AuthHelper.register(regUser.value.trim(), regEmail.value.trim(), regPass.value);
         regSuccess.textContent = 'Account created! Signing you in...';
         regSuccess.style.display = 'block';
+        scrollBannerIntoView(regSuccess);
         // Auto-login after registration
         try {
           await AuthHelper.login(regUser.value.trim(), regPass.value);
@@ -397,6 +415,7 @@ const AuthHelper = {
       } catch (e) {
         regError.textContent = 'Registration failed. Username may already exist.';
         regError.style.display = 'block';
+        scrollBannerIntoView(regError);
         regBtn.disabled = false;
         regBtn.textContent = 'Create Account';
       }

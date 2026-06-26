@@ -57,6 +57,10 @@
     .card {
       position: relative; z-index: 1;
       width: 400px; max-width: 90vw;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
       background: rgba(15,20,35,0.55);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 20px;
@@ -67,6 +71,14 @@
       -webkit-app-region: no-drag;
       animation: cardIn 0.5s ease;
     }
+    /* Pretty scrollbar inside the card */
+    .card::-webkit-scrollbar { width: 8px; }
+    .card::-webkit-scrollbar-track { background: transparent; }
+    .card::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 4px;
+    }
+    .card::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
     @keyframes cardIn {
       from { opacity: 0; transform: translateY(20px) scale(0.97); }
       to { opacity: 1; transform: translateY(0) scale(1); }
@@ -424,6 +436,12 @@
     function showView(viewId) {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.getElementById(viewId).classList.add('active');
+      // Scroll the card back to the top so users see the start of the new view.
+      // Without this, switching to a longer view (e.g. registration) on a
+      // shorter window leaves the scroll position from the previous view,
+      // which makes the form look empty until they scroll up manually.
+      const card = document.querySelector('.card');
+      if (card) card.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // Toggle password visibility
@@ -542,6 +560,23 @@
     document.getElementById('siUser')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('siPass')?.focus(); });
 
     // ─── Register ───
+    // Scroll an element into view inside the scrollable .card container.
+    // The default scrollIntoView() scrolls the window — but body has
+    // overflow:hidden, so it would scroll the wrong ancestor. Anchor to
+    // the card explicitly so the banner is visible.
+    function scrollBannerIntoView(el) {
+      if (!el) return;
+      const card = document.querySelector('.card');
+      if (!card) return;
+      // Compute the element's offset relative to the card, then scroll
+      // the card so the element sits comfortably below the top edge.
+      const cardRect = card.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const offsetInsideCard = elRect.top - cardRect.top + card.scrollTop;
+      const target = Math.max(0, offsetInsideCard - 24); // 24px breathing room
+      card.scrollTo({ top: target, behavior: 'smooth' });
+    }
+
     async function doRegister() {
       const btn = document.getElementById('regBtn');
       const errEl = document.getElementById('regError');
@@ -556,11 +591,11 @@
       errEl.style.display = 'none';
       sucEl.style.display = 'none';
 
-      if (!user || !email || !pass) { errEl.textContent = 'Username, email, and password are required'; errEl.style.display = 'block'; return; }
-      if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; errEl.style.display = 'block'; return; }
-      if (pass !== passConfirm) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; return; }
-      if (secQuestion && !secAnswer) { errEl.textContent = 'Please provide an answer for your security question'; errEl.style.display = 'block'; return; }
-      if (!secQuestion && secAnswer) { errEl.textContent = 'Please provide a security question'; errEl.style.display = 'block'; return; }
+      if (!user || !email || !pass) { errEl.textContent = 'Username, email, and password are required'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (pass !== passConfirm) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (secQuestion && !secAnswer) { errEl.textContent = 'Please provide an answer for your security question'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (!secQuestion && secAnswer) { errEl.textContent = 'Please provide a security question'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>Creating account...';
@@ -569,6 +604,7 @@
         await AuthHelper.register(user, email, pass, secQuestion || undefined, secAnswer || undefined);
         sucEl.textContent = 'Account created! Signing you in...';
         sucEl.style.display = 'block';
+        scrollBannerIntoView(sucEl);
         // Auto-login after registration
         try {
           await AuthHelper.login(user, pass);
@@ -582,6 +618,7 @@
         const detail = e.message || 'Registration failed. Username may already exist.';
         errEl.textContent = detail;
         errEl.style.display = 'block';
+        scrollBannerIntoView(errEl);
         btn.disabled = false;
         btn.textContent = 'Create Account';
       }
