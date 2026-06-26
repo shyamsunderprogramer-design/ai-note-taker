@@ -54,6 +54,12 @@ urllib3==2.6.3
 uvicorn[standard]==0.42.0
 neo4j==5.28.1
 spacy==3.8.4
+# Pin thinc explicitly so pip's resolver doesn't pick a version that
+# forces numpy>=2.0. thinc 8.3.6+ added the numpy>=2.0 requirement,
+# which conflicts with the numpy<2.0 pin above (ctranslate2 4.7.1 +
+# onnxruntime-directml 1.24.4 are not yet numpy-2.0-compatible).
+# 8.3.11 is the latest thinc that still works with numpy 1.x.
+thinc>=8.3.10,<8.4
 sqlalchemy[asyncio]==2.0.29
 asyncpg==0.29.0
 aiosqlite==0.20.0
