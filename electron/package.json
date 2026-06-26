@@ -59,7 +59,23 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "../AINT_Venv_windows",
+          "to": "AINT_Venv",
+          "filter": [
+            "**/*",
+            "!**/__pycache__/**",
+            "!**/*.pyc",
+            "!**/*.pyo",
+            "!**/Lib/**/test/**",
+            "!**/Lib/**/tests/**",
+            "!**/share/**",
+            "!**/Include/**"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -100,7 +116,23 @@
         "NSMicrophoneUsageDescription": "ANT needs microphone access for voice transcription.",
         "NSScreenCaptureUsageDescription": "ANT uses screen capture APIs only when you explicitly enable screenshots for AI vision features.",
         "LSApplicationCategoryType": "public.app-category.productivity"
-      }
+      },
+      "extraResources": [
+        {
+          "from": "../AINT_Venv_macos",
+          "to": "AINT_Venv",
+          "filter": [
+            "**/*",
+            "!**/__pycache__/**",
+            "!**/*.pyc",
+            "!**/*.pyo",
+            "!**/lib/**/test/**",
+            "!**/lib/**/tests/**",
+            "!**/share/**",
+            "!**/include/**"
+          ]
+        }
+      ]
     },
     "dmg": {
       "title": "${productName} ${version}",
@@ -138,7 +170,23 @@
       "category": "Utility",
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "synopsis": "Privacy-first AI note taker with voice transcription and stealth mode",
-      "description": "ANT is a privacy-first AI notepad that runs entirely on your machine. Local speech-to-text, multi-provider AI, floating overlay, and screen capture protection."
+      "description": "ANT is a privacy-first AI notepad that runs entirely on your machine. Local speech-to-text, multi-provider AI, floating overlay, and screen capture protection.",
+      "extraResources": [
+        {
+          "from": "../AINT_Venv_linux",
+          "to": "AINT_Venv",
+          "filter": [
+            "**/*",
+            "!**/__pycache__/**",
+            "!**/*.pyc",
+            "!**/*.pyo",
+            "!**/lib/**/test/**",
+            "!**/lib/**/tests/**",
+            "!**/share/**",
+            "!**/include/**"
+          ]
+        }
+      ]
     },
     "files": [
       "main.js",

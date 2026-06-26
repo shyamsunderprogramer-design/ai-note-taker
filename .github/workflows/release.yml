@@ -74,6 +74,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: electron/package-lock.json
 
+      - name: Set up Python 3.12
+        # Required for the "Build native Python venv" step below.
+        # cache: 'pip' with the production requirements.txt key reuses
+        # the wheel cache from the e2e job in ci.yml — saves ~5 min on
+        # warm runs by avoiding re-download of torch / transformers /
+        # faster-whisper wheels.
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
       - name: Install electron deps
         # Electron-builder needs the dev deps in electron/node_modules.
         # We don't run `npm install` at the monorepo root because the
@@ -88,6 +100,69 @@ jobs:
         # package-lock.json"). Treat electron/ as a standalone package.
         working-directory: electron
         run: npm ci --no-workspaces
+
+      - name: Build native Python venv
+        # The desktop app spawns `python -m uvicorn` from a venv bundled
+        # at process.resourcesPath/AINT_Venv. The venv MUST be platform-
+        # native — a macOS-built Mach-O python binary will not run on
+        # Windows, and Windows .pyd files cannot be loaded by Linux
+        # Python. So each runner builds its own venv here, named after
+        # the runner OS:
+        #   - ubuntu-latest  -> AINT_Venv_linux
+        #   - macos-latest   -> AINT_Venv_macos
+        #   - windows-latest -> AINT_Venv_windows
+        # electron-builder then bundles the right one via the per-platform
+        # extraResources entries in electron/package.json.
+        #
+        # Disk space: GitHub-hosted runners ship with ~14 GB free, and
+        # the torch / transformers / faster-whisper stack routinely
+        # pushes past that (see .github/workflows/ci.yml:189-196 for the
+        # documented ML-deps disk concern in the e2e job). The
+        # `pip cache` flag on setup-python avoids re-downloading wheels
+        # on warm runs; the cache-clear step below reclaims ~500 MB
+        # after the venv is built so electron-builder has room to work.
+        working-directory: backend
+        env:
+          # Reuse the pip cache from the e2e job in ci.yml — same cache
+          # key (backend/requirements.txt), so a dep change busts both.
+          SETUPTOOLS_USE_DISTUTILS: "stdlib"
+        run: |
+          set -e
+          case "$RUNNER_OS" in
+            macOS)   VENV_DIR="../AINT_Venv_macos"  ; PY_BIN="$VENV_DIR/bin/python"      ;;
+            Windows) VENV_DIR="..\\AINT_Venv_windows"; PY_BIN="$VENV_DIR\\Scripts\\python.exe" ;;
+            Linux)   VENV_DIR="../AINT_Venv_linux"   ; PY_BIN="$VENV_DIR/bin/python"      ;;
+          esac
+          echo "Building venv at: $VENV_DIR (RUNNER_OS=$RUNNER_OS)"
+          python -m venv "$VENV_DIR"
+          "$PY_BIN" -m pip install --upgrade pip wheel
+          "$PY_BIN" -m pip install -r requirements.txt
+          echo "==> Installed packages:"
+          "$PY_BIN" -m pip list 2>&1 | tail -n +3 | head -n 30
+          echo "==> Venv size:"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            du -sh "$VENV_DIR" 2>/dev/null || powershell -Command "Get-ChildItem -Recurse '$VENV_DIR' | Measure-Object -Property Length -Sum | Select-Object @{Name='MB';Expression={[math]::Round(\$_.Sum / 1MB, 1)}}"
+          else
+            du -sh "$VENV_DIR"
+          fi
+
+      - name: Clear caches before packaging
+        # Free disk before electron-builder downloads Electron + extracts
+        # ~1.5GB venv into the NSIS/AppImage/DMG temp dirs. Without this
+        # the Windows runner runs out of disk (the 14GB limit is tight).
+        run: |
+          python -m pip cache purge 2>&1 || true
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get clean 2>&1 || true
+            # Remove unused toolchains preinstalled on ubuntu-latest.
+            rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          fi
+          echo "==> Disk free after cleanup:"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{Name='FreeGB';Expression={[math]::Round(\$_.Free / 1GB, 2)}}"
+          else
+            df -h
+          fi
 
       - name: Generate icons (Linux/macOS only — Windows doesn't need .ico)
         # electron-builder will fall back to the default Electron icon
