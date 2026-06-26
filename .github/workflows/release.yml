@@ -121,7 +121,12 @@ jobs:
         # `pip cache` flag on setup-python avoids re-downloading wheels
         # on warm runs; the cache-clear step below reclaims ~500 MB
         # after the venv is built so electron-builder has room to work.
+        #
+        # shell: bash — the Windows runner defaults to PowerShell, but
+        # the case/esac syntax + backslash path escapes below are POSIX-
+        # bash. Force bash for cross-runner consistency.
         working-directory: backend
+        shell: bash
         env:
           # Reuse the pip cache from the e2e job in ci.yml — same cache
           # key (backend/requirements.txt), so a dep change busts both.
@@ -150,6 +155,10 @@ jobs:
         # Free disk before electron-builder downloads Electron + extracts
         # ~1.5GB venv into the NSIS/AppImage/DMG temp dirs. Without this
         # the Windows runner runs out of disk (the 14GB limit is tight).
+        #
+        # shell: bash — Windows defaults to PowerShell; the if/fi + df
+        # syntax below is POSIX. Force bash for cross-runner consistency.
+        shell: bash
         run: |
           python -m pip cache purge 2>&1 || true
           if [ "$RUNNER_OS" = "Linux" ]; then
