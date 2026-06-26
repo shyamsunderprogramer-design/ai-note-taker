@@ -306,6 +306,56 @@ jobs:
           echo "==> SHA256SUMS.txt:"
           cat SHA256SUMS.txt
 
+      - name: Delete any pre-existing release assets
+        # Race-condition guard for softprops/action-gh-release@v2.
+        #
+        # When the release already exists from a prior CI run (which
+        # is the normal case for re-tagged releases), the upload
+        # action tries to delete-then-replace each stale asset in
+        # parallel with uploading the new ones. The parallel API
+        # writes collide: GitHub returns
+        #   Validation Failed: ... code: "already_exists" ... field: "name"
+        # for one or more of the new uploads, and the step reports
+        # failure even though the mac assets usually land.
+        #
+        # Pre-deleting each existing asset sequentially (single-threaded
+        # GitHub API calls) eliminates the race so the upload step
+        # only ever sees an empty release. Each `gh api` call returns
+        # 204 on success; `|| true` makes a 404 (asset already gone)
+        # non-fatal so a first-run release also works.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "==> Removing any pre-existing assets on v${{ github.ref_name }}..."
+          # Find the release by tag via the list endpoint. The
+          # `/releases/tags/<tag>` endpoint returns 404 for force-
+          # pushed tags within a small window (GitHub's tag index
+          # lags a few seconds behind force-pushes); filtering the
+          # list endpoint is more reliable.
+          #
+          # Then iterate every asset under that release — including
+          # ones still in the `starter` state (GitHub's virus-scan
+          # queue). Hitting `/releases/{id}` only returns assets
+          # already past that scan, which would miss the 3 we most
+          # want to replace.
+          release_id=$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
+            --jq '.[] | select(.tag_name=="v${{ github.ref_name }}") | .id' \
+            2>/dev/null | head -n1)
+          if [ -z "$release_id" ]; then
+            echo "  (no existing release for v${{ github.ref_name }}; nothing to delete)"
+          else
+            echo "  release id: $release_id"
+            gh api "repos/${{ github.repository }}/releases/$release_id/assets" \
+              --jq '.[]?.id' \
+            | while read -r asset_id; do
+                [ -z "$asset_id" ] && continue
+                echo "  - deleting asset $asset_id"
+                gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id" \
+                  >/dev/null || true
+              done
+          fi
+          echo "==> Done."
+
       - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
         with:
