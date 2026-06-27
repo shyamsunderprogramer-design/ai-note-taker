@@ -55,6 +55,12 @@ sdist/
 # not a Python virtualenv's site-packages. Un-ignore it.
 !backend/lib/
 
+# Same for electron/lib/ (logger.js, paths.js, crypto.js). Without
+# this, electron-builder honors the `lib/` rule above and omits the
+# directory from the asar — main.js then throws MODULE_NOT_FOUND for
+# require("./lib/logger") and the app silently hangs on launch.
+!electron/lib/
+
 # Root package-lock.json is NOT used by the release CI — only
 # electron/package-lock.json is. If a root lockfile exists it tends to
 # drag in @rollup/rollup-{darwin-arm64,win32-x64,...} transitive deps
