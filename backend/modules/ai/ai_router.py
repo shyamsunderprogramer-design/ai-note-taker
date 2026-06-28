@@ -625,7 +625,13 @@ async def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ol
             # Fall through to local Ollama below
         else:
             try:
-                from cloud_providers import ask_ollama_cloud_stream
+                # Use absolute import (modules.platform.cloud_providers).
+                # Bare `from cloud_providers import` resolves to a SECOND
+                # module instance that's NOT patched by core/main.py:116-121
+                # — stream functions stay as sync generators, and the
+                # `async for` below crashes with "'async for' requires an
+                # object with __aiter__ method, got generator".
+                from modules.platform.cloud_providers import ask_ollama_cloud_stream
                 async for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages, temperature=temperature):
                     yield event
                 return
@@ -649,7 +655,10 @@ async def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ol
     # "auto" mode — race available cloud providers for fastest response
     if provider == "auto":
         try:
-            from cloud_providers import PROVIDER_MODEL_MAP, get_stream_fn
+            # Absolute import — see comment at line 628 above. Bare
+            # `from cloud_providers import` resolves to a second
+            # (unpatched) module instance.
+            from modules.platform.cloud_providers import PROVIDER_MODEL_MAP, get_stream_fn
             import os as _os
             # Speed priority: groq > google > openai > anthropic
             SPEED_PRIORITY = [
@@ -670,7 +679,8 @@ async def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ol
             # Try free Ollama Cloud (gemma3) as fallback
             if _has_provider_key_fast("ollama-cloud"):
                 try:
-                    from cloud_providers import ask_ollama_cloud_stream
+                    # Absolute import — see comment at line 628.
+                    from modules.platform.cloud_providers import ask_ollama_cloud_stream
                     logger.info("[route_ai_stream] auto → Ollama Cloud (gemma3:cloud)")
                     async for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages, temperature=temperature):
                         yield event
@@ -684,7 +694,10 @@ async def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ol
     # Cloud providers (OpenAI, Anthropic, Google, etc.) — use cloud_providers module
     if provider and provider != "ollama" and "-" in provider:
         try:
-            from cloud_providers import get_stream_fn, PROVIDER_MODEL_MAP
+            # Absolute import — see comment at line 628. This is the
+            # path the user hit as "Cloud AI error: 'async for' requires
+            # an object with __aiter__ method, got generator".
+            from modules.platform.cloud_providers import get_stream_fn, PROVIDER_MODEL_MAP
             stream_fn = get_stream_fn(provider)
             if stream_fn:
                 resolved = PROVIDER_MODEL_MAP.get(provider, ("openai", "gpt-4o-mini"))

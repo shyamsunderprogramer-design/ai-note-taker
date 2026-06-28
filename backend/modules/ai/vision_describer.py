@@ -72,7 +72,9 @@ async def stream_vision_description(
         mode: AI mode
         style: AI style
     """
-    from cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn, OLLAMA_CLOUD_VISION_MODELS
+    # Absolute import — bare `from cloud_providers` resolves to a
+    # second (unpatched) module instance. See modules/ai/ai_router.py:628.
+    from modules.platform.cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn, OLLAMA_CLOUD_VISION_MODELS
 
     # If no paid cloud vision keys, add free Ollama Cloud vision providers
     if not vision_providers and _has_ollama_cloud_key():
@@ -192,7 +194,8 @@ async def _ollama_description(image_b64, model_name, temperature=0.3):
 
 def _race_description(image_b64, vision_providers, ollama_vision_model, temperature=0.3):
     """Race all available vision providers — first description wins."""
-    from cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn
+    # Absolute import — see comment at line 75 above.
+    from modules.platform.cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn
 
     race_start = time.time()
 

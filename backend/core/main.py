@@ -1350,7 +1350,9 @@ async def ask_with_image(
             return StreamingResponse(text_generator(), media_type="text/event-stream")
 
         # === Screenshot provided — Two-Step Vision Pipeline ===
-        from cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
+        # Absolute import — bare `from cloud_providers` resolves to a
+        # second (unpatched) module instance.
+        from modules.platform.cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
         from modules.ai.vision_describer import stream_vision_description
 
         resolved_model = None
@@ -1476,7 +1478,8 @@ async def ask_with_image(
 
                 step2_provider = provider
                 if provider == "auto" and vision_providers:
-                    from cloud_providers import PROVIDER_MODEL_MAP
+                    # Absolute import — see comment at line 1353.
+                    from modules.platform.cloud_providers import PROVIDER_MODEL_MAP
                     SPEED_PRIORITY = ["groq-llama-3-3-70b", "google-gemini-2-0-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
                     found_paid = False
                     for fast_model in SPEED_PRIORITY:
@@ -2442,7 +2445,8 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
     # Route to cloud provider
     try:
-        from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
+        # Absolute import — see comment at line 1353.
+        from modules.platform.cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
         prompt = build_prompt(text, _state.current_mode)
 
@@ -2536,7 +2540,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     import logging
     import time as time_module
 
-    from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
+    # Absolute import — see comment at line 1353.
+    from modules.platform.cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
 
     logger = logging.getLogger(__name__)
     race_start = time_module.time()
@@ -2787,7 +2792,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 def race_stats():
     """Return race performance statistics from recent races."""
     try:
-        from cloud_providers import MODEL_DISPLAY_NAMES
+        # Absolute import — see comment at line 1353.
+        from modules.platform.cloud_providers import MODEL_DISPLAY_NAMES
     except ImportError:
         MODEL_DISPLAY_NAMES = {}
     recent = _state.race_history[-20:]

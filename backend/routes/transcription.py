@@ -157,7 +157,9 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         return {"text": text, "response": "", "error": "Not a meaningful question"}
 
     try:
-        from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
+        # Absolute import — bare `from cloud_providers` resolves to a
+        # second (unpatched) module instance. See modules/ai/ai_router.py:628.
+        from modules.platform.cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
         prompt = build_prompt(text, CURRENT_MODE)
 

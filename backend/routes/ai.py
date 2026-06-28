@@ -179,7 +179,9 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     cancelled to save API tokens. Falls back to Ollama if all clouds fail.
     Only providers specified in 'enabled' param (comma-separated) will be used.
     """
-    from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
+    # Absolute import — bare `from cloud_providers` resolves to a
+    # second (unpatched) module instance. See modules/ai/ai_router.py:628.
+    from modules.platform.cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
 
     race_start = time.time()
     logger.info("[RACE START] query='%s' mode=%s style=%s", _sanitize_for_log(q[:50]), _sanitize_for_log(mode), _sanitize_for_log(style))
@@ -425,7 +427,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 def race_stats():
     """Return race performance statistics from recent races."""
     try:
-        from cloud_providers import MODEL_DISPLAY_NAMES
+        # Absolute import — see comment at /stream-race endpoint above.
+        from modules.platform.cloud_providers import MODEL_DISPLAY_NAMES
     except ImportError:
         MODEL_DISPLAY_NAMES = {}
     recent = _race_history[-20:]
@@ -505,7 +508,8 @@ async def ask_with_image(
         return StreamingResponse(text_generator(), media_type="text/event-stream")
 
     # === Screenshot provided — use vision-capable providers ===
-    from cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn
+    # Absolute import — see comment at /stream-race endpoint above.
+    from modules.platform.cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn
 
     enabled_set = None
     if enabled:
