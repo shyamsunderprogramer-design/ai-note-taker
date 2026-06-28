@@ -139,7 +139,17 @@ from lib.http_client import sync_client
 
 # T16: Database migration - PostgreSQL with SQLAlchemy
 try:
-    from database import (
+    from core.database import (  # T16: was `from database import ...` — that
+                                # resolves to a SECOND copy of core.database
+                                # when `core/main.py` is imported as part of
+                                # the `core` package, giving `core.main` its
+                                # own `db_manager` instance distinct from the
+                                # one `UserRepository` uses. End result:
+                                # start_listener initializes the wrong
+                                # instance, UserRepository.create() reads
+                                # `session_maker = None` from the
+                                # un-initialized one, and registration fails
+                                # with the catch-all "Registration failed".
         db_manager, init_database, close_database,
         UserRepository, ConversationRepository, VoiceModelRepository,
         JobApplicationRepository, AnalyticsRepository,
