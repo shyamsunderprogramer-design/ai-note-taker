@@ -53,7 +53,7 @@ jobs:
           - os: macos-latest
             build_target: --mac
             artifact_glob: |
-              electron/dist/ANT*.dmg
+              electron/dist/ANT*.tar.gz
               electron/dist/ANT*.zip
               electron/dist/ANT*-mac-*.zip
           - os: windows-latest
@@ -240,7 +240,7 @@ jobs:
           echo "==> dist/ contents:"
           ls -lh dist/ 2>&1 || true
           echo "==> installer files:"
-          find dist -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.exe" \) -exec ls -lh {} \; || true
+          find dist -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.exe" \) -exec ls -lh {} \; || true
 
       - name: Upload artifacts (for the upload job to consume)
         # NOTE: `path` accepts a YAML literal scalar — each line is
@@ -302,7 +302,7 @@ jobs:
         working-directory: artifacts
         run: |
           # Recompute hashes from the files we have on disk
-          sha256sum *.exe *.dmg *.zip *.AppImage *.deb 2>/dev/null > SHA256SUMS.txt || true
+          sha256sum *.exe *.dmg *.tar.gz *.zip *.AppImage *.deb 2>/dev/null > SHA256SUMS.txt || true
           echo "==> SHA256SUMS.txt:"
           cat SHA256SUMS.txt
 
@@ -374,6 +374,7 @@ jobs:
           files: |
             artifacts/*.exe
             artifacts/*.dmg
+            artifacts/*.tar.gz
             artifacts/*.zip
             artifacts/*.AppImage
             artifacts/*.deb
@@ -392,15 +393,15 @@ jobs:
           # (from a prior `gh release create` with curated notes), this
           # value is ignored on update. Kept short on purpose — it
           # tells users WHICH FILE to download for their OS, since
-          # asset filenames alone (ANT.AI.Note.Taker.-2.1.8-mac-arm64.dmg)
+          # asset filenames alone (ANT.AI.Note.Taker.-2.1.8-mac-arm64.tar.gz)
           # aren't obvious to non-engineers. v2.1.8+.
           body: |
             ## ⬇️ Which file should I download?
 
             | Your system | File to download |
             |---|---|
-            | **macOS — Apple Silicon (M1/M2/M3/M4)** | `ANT (AI Note Taker)-{{ github.ref_name }}-mac-arm64.dmg` |
-            | **macOS — Intel** | `ANT (AI Note Taker)-{{ github.ref_name }}-mac-x64.dmg` |
+            | **macOS — Apple Silicon (M1/M2/M3/M4)** | `ANT (AI Note Taker)-{{ github.ref_name }}-mac-arm64.tar.gz` |
+            | **macOS — Intel** | `ANT (AI Note Taker)-{{ github.ref_name }}-mac-x64.tar.gz` |
             | **Windows 10/11 (64-bit)** | `ANT (AI Note Taker)-Setup-{{ github.ref_name }}-win-x64.exe` |
             | **Linux — Debian / Ubuntu** | `ANT (AI Note Taker)-{{ github.ref_name }}-linux-amd64.deb` |
             | **Linux — Universal (portable)** | `ANT (AI Note Taker)-{{ github.ref_name }}-linux-x86_64.AppImage` |
@@ -409,17 +410,16 @@ jobs:
 
             Verify your download with `SHA256SUMS.txt` (also attached).
 
-            ## 🍎 macOS install note (unsigned builds)
+            ## 🍎 macOS install (3 steps, no scripts)
 
-            The macOS DMG is **unsigned** until we enroll in the Apple Developer Program. macOS Gatekeeper will silently block the app on first launch (no crash log, no error dialog — the process just exits).
+            The macOS app is **unsigned** (we don't have an Apple Developer ID). The download is a `.tar.gz` archive — Safari does NOT tag archives with the Gatekeeper quarantine attribute, so the install is the same as any other Mac app:
 
-            **Recommended install:**
-            1. Double-click the DMG to mount it.
-            2. **Double-click `INSTALL.command`** in the DMG window — it copies the app to `/Applications`, strips the quarantine attribute, and launches it.
-            3. Quit the Terminal window that opens.
+            1. **Download** `ANT (AI Note Taker)-{{ github.ref_name }}-mac-arm64.tar.gz`
+            2. **Double-click** it in Finder — it extracts to `ANT (AI Note Taker).app`
+            3. **Drag** `ANT (AI Note Taker).app` to `/Applications`, then double-click to launch
 
-            **Manual alternative:** drag `ANT (AI Note Taker).app` to `/Applications`, then the FIRST time you launch it, right-click (or Control-click) the app → **Open** → confirm the Gatekeeper prompt. Subsequent launches are normal.
+            macOS may show a one-time dialog asking whether to open the app (because it's not signed). Click **Open** and you're done — it won't ask again.
 
-            Do NOT just drag-install without the right-click → Open step — the app will appear to "crash on launch" because Gatekeeper kills it before any user code runs.
+            That's it. No Terminal, no scripts, no quarantine stripping. If the dialog says "cannot be opened because the developer cannot be verified" instead of showing an Open button, right-click (or Control-click) the app in `/Applications` and choose **Open** from the menu.
 
             See the changelog below for what changed.
