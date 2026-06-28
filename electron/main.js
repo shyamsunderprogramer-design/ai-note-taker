@@ -567,6 +567,14 @@ async function captureAutoScreenshot() {
         screenshotBuffer.shift()
       }
       logger.info("[AutoScreenshot] Captured (JPEG), buffer size: %d", screenshotBuffer.length)
+    } else {
+      // Empty result on macOS = missing Screen Recording permission
+      // (getSources returns [] rather than throwing). Log once per minute.
+      const now = Date.now()
+      if (now - (captureAutoScreenshot._lastEmptyLog || 0) > 60000) {
+        logger.warn("[AutoScreenshot] getSources returned 0 sources — likely missing macOS Screen Recording permission. Grant it in System Settings → Privacy & Security → Screen Recording.")
+        captureAutoScreenshot._lastEmptyLog = now
+      }
     }
   } catch (e) {
     logger.warn("[AutoScreenshot] Capture failed:", e.message)

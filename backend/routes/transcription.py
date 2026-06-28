@@ -254,12 +254,35 @@ async def transcribe_with_speakers(
 
     wav_path = file_path.rsplit(".", 1)[0] + ".wav"
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(  # nosec B603
-        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
-        capture_output=True, text=True
-    )
+    # v2.1.7: Wrap ffmpeg call so missing-binary / timeout / non-zero exit
+    # all surface as 200 with an error body the frontend can render,
+    # instead of unhandled 500s. Speaker diarization requires the user
+    # to have ffmpeg installed (the bundled venv doesn't ship it).
+    try:
+        result = subprocess.run(  # nosec B603
+            [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
+            capture_output=True, text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return {
+            "text": "",
+            "speakers": [],
+            "error": "ffmpeg not found. Speaker diarization requires ffmpeg installed on this machine — install it via Homebrew (`brew install ffmpeg`) or disable speaker diarization in Settings.",
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "text": "",
+            "speakers": [],
+            "error": "ffmpeg conversion timed out after 30s.",
+        }
+
     if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+        return {
+            "text": "",
+            "speakers": [],
+            "error": f"ffmpeg conversion failed: {result.stderr[:500]}",
+        }
 
     try:
         # Speaker diarization using Whisper + speaker clustering

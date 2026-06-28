@@ -445,7 +445,19 @@ if (window.api && window.api.onTriggerAIScreen) {
     } catch {}
 
     if (!screenshotB64) {
-      addErrorMessage("No screenshot available. Make sure auto-screenshot is running.")
+      // Diagnose *why* the buffer is empty so we can tell the user what to fix.
+      // Empty buffer usually means: (a) auto-screenshot is toggled off in
+      // settings, or (b) macOS Screen Recording permission isn't granted.
+      let detail = ""
+      try {
+        const status = await window.api.autoScreenshotGetStatus()
+        if (!status || !status.enabled) {
+          detail = " Auto-screenshot is disabled — toggle it on in Settings."
+        } else {
+          detail = " If you're on macOS, grant Screen Recording permission in System Settings → Privacy & Security → Screen Recording."
+        }
+      } catch {}
+      addErrorMessage("No screenshot available. Make sure auto-screenshot is running." + detail)
       return
     }
 
@@ -3360,11 +3372,17 @@ async function submitAudio(blob, screenshotB64 = null) {
   formData.append("file", blob, "audio.webm")
 
   let response
-  let transcribeUrl = window.api.getTranscribeUrl()
+  // window.api is set by electron/preload.js. In a pure web-app context
+  // (no Electron), fall back to API_BASE so the call doesn't crash.
+  let transcribeUrl = (window.api && window.api.getTranscribeUrl)
+    ? window.api.getTranscribeUrl()
+    : `${API_BASE}/transcribe`
 
   // Use speaker diarization endpoint if enabled
   if (speakerDiarizationEnabled) {
-    transcribeUrl = window.api.getTranscribeWithSpeakersUrl()
+    transcribeUrl = (window.api && window.api.getTranscribeWithSpeakersUrl)
+      ? window.api.getTranscribeWithSpeakersUrl()
+      : `${API_BASE}/transcribe-with-speakers`
   }
 
   // Add auth headers explicitly (belt-and-suspenders with patchedFetch)
@@ -3400,6 +3418,11 @@ async function submitAudio(blob, screenshotB64 = null) {
   const data = await response.json()
 
   if (!data.text) {
+    // v2.1.7: When the speaker endpoint can't transcribe (e.g. ffmpeg missing),
+    // it returns 200 with {text: "", error: "..."}. Surface the error.
+    if (data.error) {
+      addErrorMessage(data.error)
+    }
     setProcessingUI(false)
     return
   }
