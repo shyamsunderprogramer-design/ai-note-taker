@@ -36,6 +36,10 @@ ANT's CI builds are **unsigned** to keep the project free-to-distribute. Operati
 3. Click **Run anyway**. The warning is permanent until the project signs with a code-signing certificate.
 
 **macOS (Gatekeeper)**
+
+Easiest path (v2.1.8+): **double-click `INSTALL.command`** in the mounted DMG window. It copies the app to `/Applications`, strips the quarantine attribute, and launches the app — all in one Terminal window.
+
+Manual path:
 1. Open the `.dmg` and drag `ANT.app` to `/Applications`.
 2. **Don't** double-click `ANT.app` from the DMG or Launchpad. Instead, **right-click (or Control-click) → Open** from Finder.
 3. Click **Open** in the dialog that warns "Apple could not verify...". macOS remembers your decision for this app on this machine.
@@ -45,6 +49,8 @@ ANT's CI builds are **unsigned** to keep the project free-to-distribute. Operati
    ```bash
    xattr -dr com.apple.quarantine "/Applications/ANT (AI Note Taker).app"
    ```
+
+> **If the app appears to "crash on launch"** (icon bounces in the Dock for a few seconds then disappears, no crash report), the cause is Gatekeeper — `syspolicyd` is silently terminating the unsigned process before any user code runs. Run `INSTALL.command` from the DMG (or use the manual right-click → Open path). This is not a real crash and is fixed by the steps above.
 
 **Linux**
 - **AppImage:** `chmod +x ANT*.AppImage && ./ANT*.AppImage` — no install needed.

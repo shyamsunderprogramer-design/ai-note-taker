@@ -1,6 +1,6 @@
 {
   "name": "ai-note-taker",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "private": true,
   "description": "AI-powered voice note taker with stealth mode",
   "main": "main.js",
@@ -137,14 +137,25 @@
     "dmg": {
       "title": "${productName} ${version}",
       "icon": "assets/icon.icns",
+      "window": {
+        "width": 660,
+        "height": 420
+      },
       "contents": [
         {
           "x": 130,
           "y": 220,
-          "type": "file"
+          "type": "file",
+          "name": "INSTALL.command",
+          "path": "./scripts/INSTALL.command"
         },
         {
           "x": 410,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 545,
           "y": 220,
           "type": "link",
           "path": "/Applications"
