@@ -68,3 +68,16 @@ redis==5.0.3
 pytesseract==0.3.13
 pdfplumber==0.11.0
 Pillow==12.2.0
+
+# Authentication (v2.1.5 hotfix).
+# These are runtime deps for the bundled installer — `security/auth.py`
+# uses python-jose to mint JWTs and passlib[bcrypt] to hash passwords,
+# and `core/database.py:authenticate_and_rotate_session` calls
+# `pwd_context.verify(...)` directly. They MUST live in the base
+# requirements.txt (the file the release workflow installs from), not
+# in a separate requirements-security.txt, otherwise `HAS_JWT` is False
+# at first boot and login silently fails (registers with plaintext
+# password + verify crashes on None.verify).
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt<4.1
