@@ -141,10 +141,10 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
             collected_parts = []
-            # route_ai_stream is a sync generator (uses sync_client under the hood).
-            # Iterating with a sync `for` inside the async generator function works
-            # because we're yielding the SSE events, not awaiting them.
-            for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
+            # route_ai_stream is now async (its inner helpers are also async
+            # generators after the core/main.py patch). Must use `async for`
+            # — sync `for` raises "'async_generator' object is not iterable".
+            async for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
                 yield event
                 # Collect text content for caching (parse SSE data)
                 if event.startswith("event: chunk"):
@@ -494,8 +494,8 @@ async def ask_with_image(
             STATE["is_streaming"] = True
             try:
                 from ai_router import route_ai_stream
-                # route_ai_stream is a sync generator — iterate with a sync `for`.
-                for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                # route_ai_stream is async — must use `async for`.
+                async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
                     yield event
             except Exception as e:
                 logger.exception("[Stream] /ask-with-image text path error: %s", e)
@@ -696,8 +696,8 @@ async def overlay_ask(
                 if not model_name:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
-                # ask_ollama_vision_stream and route_ai_stream are sync generators.
-                for event in ask_ollama_vision_stream(
+                # ask_ollama_vision_stream is async (patched in core/main.py).
+                async for event in ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
@@ -707,7 +707,7 @@ async def overlay_ask(
                 ):
                     yield event
             else:
-                for event in route_ai_stream(query, mode="fast", style="concise", temperature=temperature):
+                async for event in route_ai_stream(query, mode="fast", style="concise", temperature=temperature):
                     yield event
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"

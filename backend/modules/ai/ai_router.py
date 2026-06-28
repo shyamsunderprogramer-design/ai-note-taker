@@ -601,11 +601,18 @@ def route_ai(prompt, mode="adaptive", style="concise"):
     }
 
 
-def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None, temperature=None):
+async def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None, temperature=None):
     """
-    Yields SSE event strings (meta, content, done, error).
+    Async generator that yields SSE event strings (meta, content, done, error).
     Cloud providers yield their own SSE strings directly.
     Ollama falls through to ask_ollama_stream().
+
+    NOTE: This is `async def` because all the inner stream helpers
+    (ask_ollama_stream, ask_gpt_stream, ...) are themselves async
+    generators (patched in core/main.py:_patch_to_async_gen). Iterating
+    them with sync `for` would raise "'async_generator' object is not
+    iterable" — every inner `for event in stream_fn(...)` had to be
+    converted to `async for` when this was made async.
     """
     # Check if provider is an Ollama Cloud model (has :cloud suffix)
     # e.g. "gpt-oss:20b", "qwen3.5:397b-cloud"
@@ -619,7 +626,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
         else:
             try:
                 from cloud_providers import ask_ollama_cloud_stream
-                for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages, temperature=temperature):
+                async for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages, temperature=temperature):
                     yield event
                 return
             except Exception as e:
@@ -631,7 +638,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     if provider and ":" in provider and not is_ollama_cloud:
         # This is a local Ollama model — use Ollama streaming directly
         try:
-            for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages, temperature=temperature):
+            async for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages, temperature=temperature):
                 yield event
             return
         except Exception as e:
@@ -656,7 +663,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                     stream_fn = get_stream_fn(provider_prefix)
                     if stream_fn and _has_provider_key_fast(provider_prefix):
                         logger.info("[route_ai_stream] auto → %s (%s)", fast_model, provider_prefix)
-                        for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
+                        async for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
                             yield event
                         return
             logger.info("[route_ai_stream] auto → no paid cloud keys found, trying Ollama Cloud")
@@ -665,7 +672,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
                 try:
                     from cloud_providers import ask_ollama_cloud_stream
                     logger.info("[route_ai_stream] auto → Ollama Cloud (gemma3:cloud)")
-                    for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages, temperature=temperature):
+                    async for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages, temperature=temperature):
                         yield event
                     return
                 except Exception:
@@ -682,7 +689,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
             if stream_fn:
                 resolved = PROVIDER_MODEL_MAP.get(provider, ("openai", "gpt-4o-mini"))
                 model_name = resolved[1]
-                for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
+                async for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
                     yield event
                 return
         except Exception as e:
@@ -696,7 +703,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     for candidate_mode, model_name in candidates:
         try:
             accumulated = []
-            for event in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages, temperature=temperature):
+            async for event in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages, temperature=temperature):
                 accumulated.append(event)
                 # Check for error early
                 if event.startswith("event: error"):
