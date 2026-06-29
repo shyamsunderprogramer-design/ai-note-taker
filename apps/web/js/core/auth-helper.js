@@ -30,12 +30,40 @@ const AuthHelper = {
     return !!this.getToken();
   },
 
+  /**
+   * Wraps fetch() with two error variants so callers can distinguish
+   * "backend is offline / unreachable" (network) from "backend responded
+   * but rejected" (HTTP). Without this, `TypeError: Failed to fetch`
+   * bubbles up raw and is shown to the user as-is — a useless error.
+   *
+   * `kind` on the thrown error is `'backend_offline'` for network
+   * failures and `'http_error'` (with `.status` and `.body`) for HTTP
+   * responses with non-2xx status. Callers should branch on `kind`
+   * before deciding what copy to display.
+   */
+  async _doFetch(url, opts = {}) {
+    try {
+      return await _originalFetch(url, opts);
+    } catch (e) {
+      // Network-layer failures (DNS, refused, timeout) surface as
+      // TypeError. Convert to a typed error with a clear message.
+      const err = new Error(
+        "Can't reach the ANT backend. It may still be starting up — " +
+        "wait a few seconds and try again. If this keeps happening, " +
+        "check View → Open Logs Folder for details."
+      );
+      err.kind = 'backend_offline';
+      err.cause = e;
+      throw err;
+    }
+  },
+
   /** Check if the backend requires authentication */
   async isAuthRequired() {
     // Return cached value if known
     if (this._authRequired !== null) return this._authRequired;
     try {
-      const resp = await _originalFetch(`${API_BASE}/auth/status`, { signal: AbortSignal.timeout(3000) });
+      const resp = await this._doFetch(`${API_BASE}/auth/status`, { signal: AbortSignal.timeout(3000) });
       const data = await resp.json();
       this._authRequired = data.auth_required !== false;
       return this._authRequired;
@@ -53,7 +81,7 @@ const AuthHelper = {
     formData.append('username', username);
     formData.append('password', password);
 
-    const res = await _originalFetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Login failed');
     const data = await res.json();
     if (data.access_token) {
@@ -73,7 +101,7 @@ const AuthHelper = {
       formData.append('security_answer', securityAnswer);
     }
 
-    const res = await _originalFetch(`${API_BASE}/auth/register`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/register`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Registration failed');
     const data = await res.json();
     return data;
@@ -83,7 +111,7 @@ const AuthHelper = {
   async forgotPassword(username) {
     const formData = new FormData();
     formData.append('username', username);
-    const res = await _originalFetch(`${API_BASE}/auth/forgot-password`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/forgot-password`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Failed to process request');
     return await res.json();
   },
@@ -94,7 +122,7 @@ const AuthHelper = {
     formData.append('username', username);
     formData.append('security_answer', securityAnswer);
     formData.append('new_password', newPassword);
-    const res = await _originalFetch(`${API_BASE}/auth/reset-password`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/reset-password`, { method: 'POST', body: formData });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.detail || 'Password reset failed');
@@ -107,7 +135,7 @@ const AuthHelper = {
     const formData = new FormData();
     formData.append('security_question', securityQuestion);
     formData.append('security_answer', securityAnswer);
-    const res = await _originalFetch(`${API_BASE}/auth/set-security-question`, {
+    const res = await this._doFetch(`${API_BASE}/auth/set-security-question`, {
       method: 'POST',
       body: formData,
       headers: { 'Authorization': `Bearer ${this.getToken()}` }
@@ -154,7 +182,7 @@ const AuthHelper = {
     } else {
       console.warn('[AuthHelper] authFetch called with no token for:', url);
     }
-    const res = await _originalFetch(url, options);
+    const res = await this._doFetch(url, options);
 
     // If token expired, clear it and try re-auth
     if (res.status === 401) {
@@ -340,7 +368,11 @@ const AuthHelper = {
         window.dispatchEvent(new Event('auth-success'));
         setTimeout(() => window.location.reload(), 200);
       } catch (e) {
-        errorDiv.textContent = 'Invalid username or password';
+        if (e?.kind === 'backend_offline') {
+          errorDiv.textContent = e.message;
+        } else {
+          errorDiv.textContent = 'Invalid username or password';
+        }
         errorDiv.style.display = 'block';
         loginBtn.disabled = false;
         loginBtn.textContent = 'Sign In';
@@ -413,7 +445,11 @@ const AuthHelper = {
           userInput.focus();
         }
       } catch (e) {
-        regError.textContent = 'Registration failed. Username may already exist.';
+        if (e?.kind === 'backend_offline') {
+          regError.textContent = e.message;
+        } else {
+          regError.textContent = 'Registration failed. Username may already exist.';
+        }
         regError.style.display = 'block';
         scrollBannerIntoView(regError);
         regBtn.disabled = false;
@@ -453,7 +489,9 @@ const AuthHelper = {
           document.getElementById('auth-forgot-no-question').style.display = 'block';
         }
       } catch (e) {
-        forgotError.textContent = 'Failed to process request. Please try again.';
+        forgotError.textContent = e?.kind === 'backend_offline'
+          ? e.message
+          : 'Failed to process request. Please try again.';
         forgotError.style.display = 'block';
       } finally {
         forgotStep1Btn.disabled = false;
@@ -496,7 +534,11 @@ const AuthHelper = {
           document.getElementById('auth-login-user').focus();
         }, 1500);
       } catch (e) {
-        forgotStep2Error.textContent = e.message || 'Reset failed. Please try again.';
+        if (e?.kind === 'backend_offline') {
+          forgotStep2Error.textContent = e.message;
+        } else {
+          forgotStep2Error.textContent = e.message || 'Reset failed. Please try again.';
+        }
         forgotStep2Error.style.display = 'block';
         forgotStep2Btn.disabled = false;
         forgotStep2Btn.textContent = 'Reset Password';

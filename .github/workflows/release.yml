@@ -44,18 +44,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # v2.2.3: macOS matrix entry removed. The macOS codesign pass
+        # has been failing on v2.2.x (pytz zoneinfo → _rust.abi3.so →
+        # libnpymath.a → af.lproj/locale.pak → chrome_crashpad_handler,
+        # each new offender surfaced as the prior one was excluded).
+        # The auth-helper + crash-log fixes are platform-agnostic; they
+        # ship to Windows + Linux users in v2.2.3 and will be included
+        # in v2.2.4 alongside the macOS codesign fix. Re-enable this
+        # entry when codesign is sorted out.
         include:
           - os: ubuntu-latest
             build_target: --linux
             artifact_glob: |
               electron/dist/ANT*.AppImage
               electron/dist/ANT*.deb
-          - os: macos-latest
-            build_target: --mac
-            artifact_glob: |
-              electron/dist/ANT*.tar.gz
-              electron/dist/ANT*.zip
-              electron/dist/ANT*-mac-*.zip
           - os: windows-latest
             build_target: --win
             artifact_glob: |

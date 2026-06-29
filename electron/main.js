@@ -5,7 +5,7 @@ const os = require("os")
 const stealth = require("./stealth")
 const { OverlayAdapter } = require("./features/overlay-adapter")
 const { ScreenRecorder } = require("./features/screen-recorder")
-const { logger, configureForProduction: configureLoggerForProduction } = require("./lib/logger")
+const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
 const { PLATFORM, isPortableMode, initializeAppPaths, ensureConversationsDir } = require("./lib/paths")
 const cryptoLib = require("./lib/crypto")
 const Store = require("electron-store")
@@ -1459,6 +1459,10 @@ function startApiKeyServer() {
 // Start the secure key server when app is ready
 app.whenReady().then(() => {
   startApiKeyServer()
+  // Enable the scoped 100 KB error-only backend crash log in production.
+  // Needs app.getPath() so we wait until whenReady. Subsequent
+  // logger.error(...) calls land in backend-crash.log automatically.
+  configureBackendCrashLog()
 })
 
 // ======================================

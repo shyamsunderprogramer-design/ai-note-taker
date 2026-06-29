@@ -229,6 +229,35 @@
     .sso-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-weight: 700; font-size: 12px; }
     .sso-btn-google .sso-icon { background: #4285f4; color: #fff; }
     .sso-btn-microsoft .sso-icon { background: #00a4ef; color: #fff; }
+
+    /* Backend status indicator — mirrors overlay.html so users see at
+       a glance whether the ANT backend is reachable. Helps triage the
+       "failed to fetch" path: when the indicator is offline, the user
+       knows the issue isn't their credentials. */
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      margin-top: 4px;
+    }
+    .status-indicator .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px rgba(34,197,94,0.6);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .status-indicator.offline .dot {
+      background: #6b7280;
+      box-shadow: none;
+    }
+    .status-indicator.error .dot {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239,68,68,0.6);
+    }
   </style>
 </head>
 <body>
@@ -247,6 +276,9 @@
       <img class="logo-img" src="ant-icon-new.png" alt="ANT">
       <div class="logo-title">ANT</div>
       <div class="logo-sub">AI Note Taker</div>
+      <div class="status-indicator" id="signinBackendStatus">
+        <span class="dot"></span><span>Checking backend…</span>
+      </div>
     </div>
 
     <!-- Sign In View -->
@@ -525,6 +557,33 @@
     }
     checkAuth();
 
+    // ─── Backend Status Indicator ───
+    // Mirrors overlay.html:698 — surfaces backend reachability so users
+    // see at a glance whether "failed to fetch" is a credentials issue
+    // or a backend-down issue. Only wires when running in Electron
+    // (window.api is exposed via preload.js).
+    const signinStatus = document.getElementById('signinBackendStatus');
+    const signinStatusLabel = signinStatus?.querySelector('span:last-child');
+    function setSigninBackendStatus({ status, restartAttempts, maxAttempts } = {}) {
+      if (!signinStatus || !signinStatusLabel) return;
+      const offline = status !== 'ready' && status !== 'starting';
+      signinStatus.classList.toggle('offline', offline);
+      signinStatus.classList.toggle('error', status === 'error' || status === 'dead');
+      signinStatusLabel.textContent =
+        status === 'ready' ? 'Backend ready' :
+        status === 'starting' ? 'Backend starting…' :
+        status === 'error' ? `Backend error (attempt ${restartAttempts || '?'}/${maxAttempts || '?'})` :
+        status === 'dead' ? 'Backend offline — restart the app' :
+        'Checking backend…';
+    }
+    if (window.api?.onBackendStatus) {
+      window.api.onBackendStatus(setSigninBackendStatus);
+      // Seed initial state in case the first status event hasn't fired yet.
+      if (window.api.getBackendStatus) {
+        window.api.getBackendStatus().then(setSigninBackendStatus).catch(() => {});
+      }
+    }
+
     // ─── Sign In ───
     async function doSignIn() {
       const btn = document.getElementById('siBtn');
@@ -549,7 +608,11 @@
         await AuthHelper.login(user, pass);
         window.location.href = 'index.html';
       } catch (e) {
-        errEl.textContent = 'Invalid username or password';
+        if (e?.kind === 'backend_offline') {
+          errEl.textContent = e.message;
+        } else {
+          errEl.textContent = 'Invalid username or password';
+        }
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Sign In';
@@ -615,7 +678,9 @@
           document.getElementById('siUser').focus();
         }
       } catch (e) {
-        const detail = e.message || 'Registration failed. Username may already exist.';
+        const detail = e?.kind === 'backend_offline'
+          ? e.message
+          : (e.message || 'Registration failed. Username may already exist.');
         errEl.textContent = detail;
         errEl.style.display = 'block';
         scrollBannerIntoView(errEl);
@@ -664,7 +729,9 @@
           document.getElementById('forgotSwitchText').style.display = 'none';
         }
       } catch (e) {
-        errEl.textContent = 'Failed to process request. Please try again.';
+        errEl.textContent = e?.kind === 'backend_offline'
+          ? e.message
+          : 'Failed to process request. Please try again.';
         errEl.style.display = 'block';
       } finally {
         btn.disabled = false;
@@ -702,7 +769,11 @@
           resetForgotForm();
         }, 1500);
       } catch (e) {
-        errEl.textContent = e.message || 'Reset failed. Please try again.';
+        if (e?.kind === 'backend_offline') {
+          errEl.textContent = e.message;
+        } else {
+          errEl.textContent = e.message || 'Reset failed. Please try again.';
+        }
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Reset Password';
