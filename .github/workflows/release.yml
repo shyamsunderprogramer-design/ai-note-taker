@@ -411,14 +411,18 @@ jobs:
 
             ## 🍎 macOS install (3 steps, no scripts)
 
-            The macOS app is **unsigned** (we don't have an Apple Developer ID). The download is a `.tar.gz` archive — Safari does NOT tag archives with the Gatekeeper quarantine attribute, so the install is the same as any other Mac app:
+            The macOS app is **unsigned** (we don't have an Apple Developer ID). Install in 3 steps:
 
             1. **Download** `ANT (AI Note Taker)-{{ github.ref_name }}-mac-arm64.tar.gz`
             2. **Double-click** it in Finder — it extracts to `ANT (AI Note Taker).app`
             3. **Drag** `ANT (AI Note Taker).app` to `/Applications`, then double-click to launch
 
-            macOS may show a one-time dialog asking whether to open the app (because it's not signed). Click **Open** and you're done — it won't ask again.
+            macOS may show a one-time dialog ("ANT is from an unidentified developer") because the app is unsigned. Click **Open** — that's it, it won't ask again.
 
-            That's it. No Terminal, no scripts, no quarantine stripping. If the dialog says "cannot be opened because the developer cannot be verified" instead of showing an Open button, right-click (or Control-click) the app in `/Applications` and choose **Open** from the menu.
+            If you downloaded with Chrome (which tags archives with `com.apple.quarantine`), the extracted `.app` will carry that attribute even after you move it to `/Applications`. The Gatekeeper dialog handles this — just click Open. If you'd rather skip the dialog entirely, paste this once in Terminal:
+
+            ```
+            xattr -dr com.apple.quarantine "/Applications/ANT (AI Note Taker).app"
+            ```
 
             See the changelog below for what changed.

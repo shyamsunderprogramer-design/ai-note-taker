@@ -1,6 +1,6 @@
 {
   "name": "ai-note-taker",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "AI-powered voice note taker with stealth mode",
   "main": "main.js",
@@ -107,7 +107,6 @@
       "category": "public.app-category.productivity",
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "hardenedRuntime": false,
-      "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": false,
