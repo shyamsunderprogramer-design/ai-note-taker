@@ -373,7 +373,6 @@ jobs:
           # release-upload globs target them there.
           files: |
             artifacts/*.exe
-            artifacts/*.dmg
             artifacts/*.tar.gz
             artifacts/*.zip
             artifacts/*.AppImage
