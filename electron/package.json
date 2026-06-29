@@ -1,6 +1,6 @@
 {
   "name": "ai-note-taker",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
   "description": "AI-powered voice note taker with stealth mode",
   "main": "main.js",
@@ -110,7 +110,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": false,
-      "identity": null,
+      "identity": "-",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "ANT needs microphone access for voice transcription.",
         "NSScreenCaptureUsageDescription": "ANT uses screen capture APIs only when you explicitly enable screenshots for AI vision features.",
