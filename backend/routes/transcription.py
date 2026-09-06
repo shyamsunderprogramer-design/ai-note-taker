@@ -100,6 +100,24 @@ from security import get_current_user
 
 router = APIRouter()
 
+# Question-shape check for live suggestion triggering. whisper_handler's
+# is_question() fires on 1-2 word fragments (tiny whisper emits "project.",
+# "time." as standalone segments) which caused a suggestion per fragment;
+# this requires a substantial, question-shaped segment instead.
+_QUESTION_STARTERS = {
+    "what", "why", "how", "when", "where", "who", "which", "can", "could",
+    "would", "should", "do", "does", "did", "is", "are", "tell", "explain",
+    "describe", "walk",
+}
+
+
+def _looks_like_interview_question(text: str) -> bool:
+    words = text.strip().split()
+    if len(words) < 5:
+        return False
+    first = words[0].lower().strip(".,!?'\"")
+    return "?" in text or first in _QUESTION_STARTERS
+
 
 @router.get("/transcribe/languages")
 async def list_transcription_languages():
@@ -373,6 +391,15 @@ async def ws_transcribe(ws: WebSocket):
     ws_source = ws.query_params.get("source", "tab")
     ws_meeting_id = ws.query_params.get("meeting_id", "")
 
+    # Interview context for live suggestion generation (from interview-overlay
+    # via ?role=&company=&skills=&resume= query params)
+    ctx = {
+        "role": ws.query_params.get("role", ""),
+        "company": ws.query_params.get("company", ""),
+        "skills": ws.query_params.get("skills", ""),
+        "resume": ws.query_params.get("resume", ""),
+    }
+
     await ws.accept()
 
     # WebSocket authentication — fast path: token in query param
@@ -408,9 +435,73 @@ async def ws_transcribe(ws: WebSocket):
     await ws.send_text(json.dumps({"type": "auth_ok"}))
 
     transcriber = BrowserTranscriber()
+    transcriber.start_worker()  # was missing — queue segments were never consumed, no transcript ever fired
     partial_texts = []
     msg_queue = asyncio.Queue()
     ws_closed = False
+    loop = asyncio.get_running_loop()
+
+    # Live suggestion generation state: per-connection cooldown so one spoken
+    # question (which arrives as several 0.5s fragments) triggers one answer.
+    _sugg_state = {"last_at": 0.0, "last_text": ""}
+    _settle_state = {"timer": None}
+
+    def _fire_suggestion(tail, asked_at):
+        """Runs after 1.4s of transcript silence — the interviewer finished."""
+        if ws_closed:
+            return
+        now = time.time()
+        t = tail.lower()
+        recent = now - _sugg_state["last_at"] < 10.0
+        same_q = t in _sugg_state["last_text"] or _sugg_state["last_text"] in t
+        if recent and same_q:
+            return  # already answered this question
+        _sugg_state["last_at"] = now
+        _sugg_state["last_text"] = t
+
+        def _generate():
+            try:
+                from modules.ai.realtime_suggestions import generate_live_suggestion
+                result = generate_live_suggestion(
+                    tail, role=ctx["role"], company=ctx["company"],
+                    skills=ctx["skills"], resume=ctx["resume"],
+                )
+            except Exception as gen_exc:
+                logger.error("[ws/transcribe] suggestion generation failed: %s", gen_exc)
+                return
+            if ws_closed or not result.get("text"):
+                return
+            total_ms = int((time.time() - asked_at) * 1000)
+            logger.info(
+                "[ws/transcribe] suggestion ready: model=%s gen=%sms e2e=%sms q=%r",
+                result.get("model"), result.get("gen_ms"), total_ms, tail[:60],
+            )
+            sugg = {
+                "type": "suggestion",
+                "text": result["text"],
+                "question": tail,
+                "model": result.get("model"),
+                "gen_ms": result.get("gen_ms"),
+                "latency_ms": total_ms,
+                "category": "answer",
+                "confidence": 0.9,
+            }
+            try:
+                loop.call_soon_threadsafe(msg_queue.put_nowait, sugg)
+            except RuntimeError:
+                pass  # nosec B110 — loop shut down mid-generation
+
+        threading.Thread(target=_generate, daemon=True).start()
+
+    def _arm_suggestion(tail):
+        if _settle_state["timer"] is not None:
+            _settle_state["timer"].cancel()
+        # Re-arm on every matching segment; fires 1.0s after the LAST one,
+        # so generation starts once the question is (mostly) fully spoken.
+        timer = threading.Timer(1.0, _fire_suggestion, args=(tail, time.time()))
+        timer.daemon = True
+        _settle_state["timer"] = timer
+        timer.start()
 
     # StreamingDiarizer
     streaming_diarizer = None
@@ -435,6 +526,17 @@ async def ws_transcribe(ws: WebSocket):
         combined = " ".join(partial_texts)
 
         msg = {"type": "partial", "text": combined, "source": ws_source}
+
+        # --- Live suggestion generation -------------------------------------
+        # Fragments arrive one per 0.5s segment; when the accumulated tail
+        # looks like an interviewer question, arm a settle timer — if no new
+        # speech arrives within 1.4s, the question is done and a real answer
+        # is generated in a worker thread (never blocking transcription) and
+        # pushed as {"type": "suggestion"} over this same socket — the
+        # overlay's existing setHint() renders it unchanged.
+        tail = " ".join(combined.split()[-45:])
+        if _looks_like_interview_question(tail):
+            _arm_suggestion(tail)
 
         if streaming_diarizer is not None:
             with _audio_lock:

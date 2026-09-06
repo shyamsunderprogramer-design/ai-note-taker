@@ -81,3 +81,7 @@ Pillow==12.2.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 bcrypt<4.1
+
+# uvicorn needs websockets (or wsproto) installed to serve WebSocket
+# upgrades — /ws/transcribe and /ws silently 403/404 without it.
+websockets>=12.0

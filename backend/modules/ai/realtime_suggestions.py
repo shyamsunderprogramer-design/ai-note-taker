@@ -377,3 +377,95 @@ def process_voice_command(text: str) -> Optional[Dict]:
 def set_suggestion_confidence(confidence: float):
     """Set minimum confidence threshold"""
     realtime_engine.set_min_confidence(confidence)
+
+
+# ---------------------------------------------------------------------------
+# Live LLM generation (wired into /ws/transcribe)
+#
+# The template engine above answers every question with the same canned
+# "stalling" line. This path generates a real, context-aware answer from a
+# locally installed Ollama model — question + candidate context in, first-person
+# answer out — so the overlay shows something the candidate can actually say.
+# Blocking HTTP; callers must run it in a worker thread.
+# ---------------------------------------------------------------------------
+
+import os as _os
+import time as _time
+
+_LIVE_MODEL = _os.getenv("ANT_LIVE_MODEL", "qwen3.5:9b")
+_LIVE_TIMEOUT = float(_os.getenv("ANT_LIVE_TIMEOUT", "12"))
+
+
+def generate_live_suggestion(
+    question: str,
+    role: str = "",
+    company: str = "",
+    skills: str = "",
+    resume: str = "",
+    model: str = None,
+) -> dict:
+    """Generate a concise first-person interview answer for one question.
+
+    Returns {"text": str|None, "gen_ms": int, "model": str, "error": str|None}.
+    Falls back to the template engine's output when Ollama is unreachable.
+    """
+    from config import OLLAMA_URL  # matches sibling modules/ai/ai_router.py convention
+
+    used_model = model or _LIVE_MODEL
+    t0 = _time.perf_counter()
+    prompt = (
+        "You are a live interview assistant whispering answers to a candidate. "
+        f"The interviewer just asked: \"{question.strip()}\"\n\n"
+        f"Candidate context — role: {role or 'software engineer'}; "
+        f"company being interviewed at: {company or 'unknown'}; "
+        f"skills: {skills or 'general software engineering'}; "
+        f"resume highlights: {resume or 'experienced engineer with hands-on project leadership'}.\n\n"
+        "Reply with ONE short first-person answer the candidate can start saying "
+        "immediately: 2-3 sentences, under 50 words, concrete, confident. "
+        "No preamble, no markdown, no disclaimers — just the spoken answer."
+    )
+    try:
+        import httpx
+
+        resp = httpx.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": used_model,
+                "prompt": prompt,
+                "stream": False,
+                "think": False,  # qwen3.5:9b puts content in `thinking` otherwise
+                "options": {
+                    "temperature": 0.4,
+                    "num_predict": 80,
+                    "num_ctx": 2048,
+                },
+            },
+            timeout=_LIVE_TIMEOUT,
+        )
+        gen_ms = int((_time.perf_counter() - t0) * 1000)
+        if resp.status_code != 200:
+            return {
+                "text": None,
+                "gen_ms": gen_ms,
+                "model": used_model,
+                "error": f"ollama {resp.status_code}",
+            }
+        text = (resp.json().get("response") or "").strip()
+        if not text:
+            return {
+                "text": None,
+                "gen_ms": gen_ms,
+                "model": used_model,
+                "error": "empty response",
+            }
+        return {"text": text, "gen_ms": gen_ms, "model": used_model, "error": None}
+    except Exception as exc:  # network down / timeout — degrade to template
+        gen_ms = int((_time.perf_counter() - t0) * 1000)
+        fallback = realtime_engine.process_segment(question, "interviewer")
+        fb_text = fallback.text if fallback else None
+        return {
+            "text": fb_text,
+            "gen_ms": gen_ms,
+            "model": "template-fallback",
+            "error": str(exc)[:120],
+        }
