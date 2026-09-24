@@ -129,6 +129,7 @@ function applyBulletproofProtection() {
     logger.info("[Stealth] Content protection enabled")
   } catch (e) {
     logger.warn("[Stealth] Content protection failed:", e.message)
+    throw e
   }
 
   // Method 2: Windows native API (if available)
@@ -183,6 +184,7 @@ function removeBulletproofProtection() {
     _window.setContentProtection(false)
   } catch (e) {
     logger.warn("[Stealth] Remove content protection failed:", e.message)
+    throw e
   }
 
   // Restore native protection on Windows
@@ -323,13 +325,8 @@ function isUndetectable() {
 /**
  * Set undetectable state directly (for backward compatibility)
  */
-function setUndetectable(enable) {
-  if (enable) {
-    if (!_enabled) enable()
-  } else {
-    if (_enabled) disable()
-  }
-  return true
+function setUndetectable(enabled) {
+  return enabled ? enable() : disable()
 }
 
 /**

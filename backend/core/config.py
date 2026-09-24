@@ -58,6 +58,7 @@ MODEL_TURBO = os.getenv("OLLAMA_MODEL_TURBO", "lfm2.5:latest")  # Small fast loc
 TURBO_MAX_TOKENS = int(os.getenv("TURBO_MAX_TOKENS", "150"))  # Very short responses
 
 # Instant mode: ultra-fast for immediate responses
+MODEL_INSTANT = os.getenv("OLLAMA_MODEL_INSTANT", DEFAULT_MODEL)
 INSTANT_MAX_TOKENS = int(os.getenv("INSTANT_MAX_TOKENS", "64"))  # Ultra short
 
 
@@ -81,7 +82,7 @@ def get_ai_model(mode="adaptive"):
         return MODEL_TURBO
 
     if mode == "instant":
-        return MODEL_TURBO  # Same fast model, fewer tokens
+        return MODEL_INSTANT
 
     if mode == "code":
         return MODEL_CODE

@@ -191,6 +191,21 @@ def extract_complexity_from_text(text: str) -> Dict:
 router = APIRouter()
 
 
+@router.post('/resume/context')
+async def upload_resume_context(file: UploadFile = File(...)):
+    """Extract resume context for the current chat; do not persist the file."""
+    import asyncio
+    from lib.resume_input import MAX_BYTES, extract_resume
+    try:
+        content = await file.read(MAX_BYTES + 1)
+        text = await asyncio.to_thread(extract_resume, file.filename or '', content)
+        return {'text': text, 'filename': file.filename}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        await file.close()
+
+
 # --- Interview Simulator Endpoints ---
 
 @router.post("/interview-simulator/create")

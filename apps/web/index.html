@@ -30,8 +30,8 @@
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif !important;
     }
   </style>
-  <link rel="preload" href="style.css?v=30" as="style">
-  <link rel="stylesheet" href="style.css?v=30">
+  <link rel="preload" href="style.css?v=35" as="style">
+  <link rel="stylesheet" href="style.css?v=35">
   <link rel="stylesheet" href="hljs-github-dark.min.css" media="print" onload="this.media='all'">
   <script src="js/inline/platform-class.js"></script>
   <script src="js/core/config.js"></script>
@@ -41,7 +41,8 @@
 <body>
   <div class="shell">
 
-    <!-- ===== ROW 0: HERO BANNER ===== -->
+    <div class="compact-header">
+    <!-- Banner artwork sits behind the header controls. -->
     <div class="hero-banner">
       <img src="assets/web-top-banner.jpg" alt="ANT AI Note Taker" class="hero-banner-img">
     </div>
@@ -72,6 +73,10 @@
 
       <!-- Right: Opacity slider + Menu -->
       <div class="header-right">
+        <button id="answerContextButton" class="win-btn context-trigger" type="button" popovertarget="answerContextPopover" title="Resume and job description" aria-label="Resume and job description">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+          <span>Context</span>
+        </button>
         <div class="opacity-control" title="Background Opacity (10–150%; >100% = darker glass, CSS-only)">
           <svg class="opacity-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
           <input type="range" id="opacitySlider" min="10" max="150" value="55" class="opacity-slider">
@@ -177,14 +182,13 @@
           <option value="auto" selected>Auto (best available)</option>
 
           <optgroup label="Fast & Affordable">
+            <option value="groq-gpt-oss-20b" data-provider="groq">GPT-OSS 20B (Groq)</option>
+            <option value="groq-qwen3-8-27b" data-provider="groq">Qwen 3.8 27B (Groq)</option>
             <option value="openai-gpt-4o-mini" data-provider="openai">GPT-4o Mini</option>
             <option value="openai-gpt-3.5-turbo" data-provider="openai">GPT-3.5 Turbo</option>
             <option value="anthropic-claude-3-5-haiku" data-provider="anthropic">Claude 3.5 Haiku</option>
             <option value="google-gemini-1-5-flash" data-provider="google">Gemini 1.5 Flash</option>
             <option value="deepseek-deepseek-chat" data-provider="deepseek">DeepSeek Chat</option>
-            <option value="groq-llama-3-2-1b" data-provider="groq">Llama 3.2 1B</option>
-            <option value="groq-llama-3-2-3b" data-provider="groq">Llama 3.2 3B</option>
-            <option value="groq-llama-3-1-8b" data-provider="groq">Llama 3.1 8B</option>
             <option value="gemma3:cloud" data-provider="ollama-cloud">Gemma 3 (Vision)</option>
             <option value="gemma4:cloud" data-provider="ollama-cloud">Gemma 4 (Vision)</option>
             <option value="qwen3-vl:235b-cloud" data-provider="ollama-cloud">Qwen3-VL 235B (Vision)</option>
@@ -200,6 +204,7 @@
           </optgroup>
 
           <optgroup label="Best Quality">
+            <option value="groq-gpt-oss-120b" data-provider="groq">GPT-OSS 120B (Groq)</option>
             <option value="openai-gpt-4o" data-provider="openai">GPT-4o</option>
             <option value="openai-gpt-4-turbo" data-provider="openai">GPT-4 Turbo</option>
             <option value="openai-o1-mini" data-provider="openai">o1 Mini</option>
@@ -207,13 +212,11 @@
             <option value="anthropic-claude-3-5-sonnet" data-provider="anthropic">Claude 3.5 Sonnet</option>
             <option value="anthropic-claude-sonnet-4-20250514" data-provider="anthropic">Claude Sonnet 4</option>
             <option value="anthropic-claude-opus-4-20250514" data-provider="anthropic">Claude Opus 4</option>
+            <option value="google-gemini-3-8-flash" data-provider="google">Gemini 3.8 Flash</option>
             <option value="google-gemini-2-0-flash" data-provider="google">Gemini 2.0 Flash</option>
             <option value="google-gemini-2-0-flash-exp" data-provider="google">Gemini 2.0 Flash Exp</option>
             <option value="google-gemini-1-5-pro" data-provider="google">Gemini 1.5 Pro</option>
             <option value="google-gemini-pro" data-provider="google">Gemini Pro</option>
-            <option value="groq-llama-3-3-70b" data-provider="groq">Llama 3.3 70B</option>
-            <option value="groq-mixtral-8x7b" data-provider="groq">Mixtral 8x7B</option>
-            <option value="groq-qwen-2-5-72b" data-provider="groq">Qwen 2.5 72B</option>
           </optgroup>
 
           <optgroup label="Local & Private" id="ollamaLocalGroup">
@@ -264,6 +267,8 @@
       </button>
 
     </div>
+
+    </div><!-- /.compact-header -->
 
     <!-- ===== More popovers (Day 2-3) ===== -->
     <div class="more-popovers" id="morePopovers">
@@ -405,6 +410,23 @@
 
     </div>
 
+
+
+    <section id="answerContextPopover" class="answer-context" popover aria-label="Resume and job description">
+      <div class="answer-context-toolbar">
+        <span class="answer-context-label">Answer context</span>
+        <input id="resumeContextFile" type="file" accept=".pdf,.doc,.docx,.txt,.text,.json,.md" hidden />
+        <button id="resumeContextUpload" type="button" title="Upload a resume to personalize answers">Resume +</button>
+        <button id="jobDescriptionButton" type="button" title="Paste or edit the job description">Job description +</button>
+      </div>
+    <div id="resumeContextStatus" role="status" hidden style="margin: 6px 16px; padding: 8px 10px; border: 1px solid var(--glass-border); border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; flex-shrink: 0;">
+      <span id="resumeContextName"></span>
+      <button id="resumeContextRemove" type="button" style="margin-left: 8px; padding: 4px 10px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; cursor: pointer;" aria-label="Remove resume context">Remove</button>
+    </div>
+
+    <div id="jobDescriptionStatus" role="status" hidden style="margin: 4px 16px; font-size: 12px; flex-shrink: 0;"></div>
+    </section>
+
     <!-- ===== ROW 3: INPUT + ACTION ===== -->
     <div class="input-row">
       <div class="input-pill">
@@ -438,6 +460,19 @@
         <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
       </div>
     </div>
+
+    <dialog id="jobDescriptionDialog" aria-labelledby="jobDescriptionTitle">
+      <h2 id="jobDescriptionTitle">Job description</h2>
+      <p>Paste the role you’re applying for, then attach the matching resume using Resume +. Saved context applies to future questions until you edit or remove it.</p>
+      <label for="jobDescriptionInput">Job description (up to 12,000 characters)</label>
+      <textarea id="jobDescriptionInput" rows="12" maxlength="12000" placeholder="Paste the job title, responsibilities, and requirements here…"></textarea>
+      <p id="jobDescriptionError" role="alert"></p>
+      <div class="jd-actions">
+        <button id="jobDescriptionRemove" type="button">Remove</button>
+        <button id="jobDescriptionCancel" type="button">Cancel</button>
+        <button id="jobDescriptionSave" type="button">Save job description</button>
+      </div>
+    </dialog>
 
     <!-- OCR preview badge (shown when screenshot is captured) -->
     <div id="ocrBadge" class="ocr-badge" style="display:none">
@@ -483,7 +518,7 @@
       <!-- Live transcript strip (Day 5): shows last ~80 chars while listening -->
       <div class="transcript-strip" id="transcriptStrip" hidden>
         <span class="transcript-strip-label">Transcript</span>
-        <div class="transcript-strip-content masked" id="transcriptStripContent"></div>
+        <div class="transcript-strip-content" id="transcriptStripContent"></div>
       </div>
 
       <div class="chat-area" id="chatArea">
@@ -541,17 +576,17 @@
   <div class="panel-backdrop" id="panelBackdrop"></div>
 
   <!-- History panel -->
-  <div class="history-panel" id="historyPanel">
+  <div class="history-panel" id="historyPanel" role="region" aria-label="Saved conversations" inert>
     <div class="history-header">
       <button id="historyBackBtn" class="history-back-btn" type="button" title="Back" aria-label="Back">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       </button>
       <span>Conversations <span class="history-conversation-count" id="historyCount"></span></span>
-      <button id="newChatBtn" class="history-action-btn" type="button">+ New</button>
+      <button id="newChatBtn" class="history-action-btn" type="button">+ New chat</button>
     </div>
     <div class="history-toolbar">
-      <input type="text" id="historySearch" class="history-search" placeholder="Search conversations..." />
-      <select id="historySort" class="history-sort">
+      <input type="text" id="historySearch" class="history-search" placeholder="Search titles and messages…" aria-label="Search saved conversations" />
+      <select id="historySort" class="history-sort" aria-label="Sort conversations">
         <option value="updatedAt">Recent</option>
         <option value="createdAt">Oldest</option>
         <option value="title">A–Z</option>
@@ -572,15 +607,20 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Import
       </button>
     </div>
-    <div class="history-list" id="historyList"></div>
-    <div class="history-footer">
-      <span class="shortcut-hint">Alt+D stealth</span>
-      <span class="history-footer-divider">·</span>
-      <span class="shortcut-hint">Esc close</span>
-      <span class="history-footer-divider">·</span>
-      <span class="shortcut-hint">Enter talk</span>
-    </div>
+    <div class="history-list" id="historyList" aria-label="Saved chats"></div>
+    <div class="history-footer"><span>Open a chat to continue · Esc to close</span><button id="deleteAllChatsBtn" type="button">Delete all saved chats</button></div>
   </div>
+
+  <dialog id="deleteAllChatsDialog" aria-labelledby="deleteAllChatsTitle" aria-describedby="deleteAllChatsDescription">
+    <h2 id="deleteAllChatsTitle">Delete all saved chats?</h2>
+    <p id="deleteAllChatsDescription"></p>
+    <p>This includes pinned chats and chats outside your search results. This cannot be undone. Export your chats first if you want a backup.</p>
+    <p id="deleteAllChatsError" role="status"></p>
+    <div class="delete-chats-actions">
+      <button id="deleteAllChatsCancel" type="button" autofocus>Keep chats</button>
+      <button id="deleteAllChatsConfirm" type="button">Delete all saved chats</button>
+    </div>
+  </dialog>
 
   <!-- Settings panel -->
   <div class="settings-panel" id="settingsPanel">
@@ -1015,6 +1055,7 @@
                 <div class="custom-dropdown-item" data-value="anthropic-claude-3-5-sonnet">Claude 3.5 Sonnet</div>
                 <div class="custom-dropdown-item" data-value="anthropic-claude-sonnet-4-20250514">Claude Sonnet 4</div>
                 <div class="custom-dropdown-group">Google</div>
+                <div class="custom-dropdown-item" data-value="google-gemini-3-8-flash">Gemini 3.8 Flash</div>
                 <div class="custom-dropdown-item" data-value="google-gemini-2-0-flash">Gemini 2.0 Flash</div>
                 <div class="custom-dropdown-item" data-value="google-gemini-1-5-pro">Gemini 1.5 Pro</div>
                 <div class="custom-dropdown-group">xAI</div>
@@ -1024,8 +1065,9 @@
                 <div class="custom-dropdown-item" data-value="deepseek-deepseek-chat">DeepSeek Chat</div>
                 <div class="custom-dropdown-item" data-value="deepseek-deepseek-coder">DeepSeek Coder</div>
                 <div class="custom-dropdown-group">Groq</div>
-                <div class="custom-dropdown-item" data-value="groq-llama-3-3-70b">Llama 3.3 70B</div>
-                <div class="custom-dropdown-item" data-value="groq-llama-3-1-8b">Llama 3.1 8B</div>
+                <div class="custom-dropdown-item" data-value="groq-gpt-oss-120b">GPT-OSS 120B</div>
+                <div class="custom-dropdown-item" data-value="groq-gpt-oss-20b">GPT-OSS 20B</div>
+                <div class="custom-dropdown-item" data-value="groq-qwen3-8-27b">Qwen 3.8 27B</div>
                 <div class="custom-dropdown-group">Perplexity</div>
                 <div class="custom-dropdown-item" data-value="perplexity-sonar">Sonar</div>
                 <div class="custom-dropdown-item" data-value="perplexity-sonar-pro">Sonar Pro</div>
@@ -1968,6 +2010,6 @@
   </div>
 
   <script src="js/core/auth-helper.js?v=8" defer></script>
-  <script src="app.js?v=103" defer></script>
+  <script src="app.js?v=107" defer></script>
 </body>
 </html>

@@ -131,6 +131,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Screen capture protection
   setUndetectable: (enabled) => ipcRenderer.invoke("window:set-undetectable", enabled),
+  getStealthState: () => ipcRenderer.invoke("window:get-stealth-state"),
 
   // Open logs folder
   openLogs: () => ipcRenderer.invoke("app:open-logs"),
@@ -161,6 +162,20 @@ contextBridge.exposeInMainWorld("api", {
   // Listen for stealth state changes (triggered by shortcuts in main process)
   onStealthStateChanged: (callback) => {
     ipcRenderer.on("stealth:state-changed", (_event, state) => callback(state))
+  },
+
+  // Interviewer channel: system-audio capture lives in the main process
+  // because it spawns a native helper (see lib/system-audio.js).
+  startSystemAudio: () => ipcRenderer.invoke("system-audio:start"),
+  stopSystemAudio: () => ipcRenderer.invoke("system-audio:stop"),
+  onSystemAudioData: (callback) => {
+    ipcRenderer.on("system-audio:data", (_event, chunk) => callback(chunk))
+  },
+  onSystemAudioSilent: (callback) => {
+    ipcRenderer.on("system-audio:silent", () => callback())
+  },
+  onSystemAudioError: (callback) => {
+    ipcRenderer.on("system-audio:error", (_event, message) => callback(message))
   },
 
   // Global Ctrl+Enter — trigger AI from any app

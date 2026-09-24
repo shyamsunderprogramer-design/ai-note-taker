@@ -17,13 +17,23 @@ class StudyPlanManager {
 
   // === Completion Persistence ===
 
+  _userKey() {
+    try {
+      const token = localStorage.getItem('ainotetaker_auth_token');
+      const payload = token && JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return encodeURIComponent(payload?.sub || 'local');
+    } catch { return 'local'; }
+  }
+
+  _activePlanKey() { return `studyplan_active_${this._userKey()}`; }
+
   /** Get a localStorage key scoped to the plan's role/company/days */
   _storageKey() {
     if (!this.planData) return 'studyplan_completed_default';
     const role = (this.planData.target_role || 'default').replace(/\s+/g, '_').toLowerCase();
     const company = (this.planData.target_company || '').replace(/\s+/g, '_').toLowerCase();
     const days = this.planData.duration_days || 30;
-    return `studyplan_completed_${role}${company ? '_' + company : ''}_${days}`;
+    return `studyplan_completed_${this._userKey()}_${role}${company ? '_' + company : ''}_${days}`;
   }
 
   /** Save completed task IDs to localStorage */
@@ -171,6 +181,14 @@ class StudyPlanManager {
     this.setupEventListeners();
     this.loadSavedFormData();
     this.showState('setup');
+    try {
+      const saved = JSON.parse(localStorage.getItem(this._activePlanKey()) || 'null');
+      if (saved && typeof saved === 'object' && saved.duration_days) {
+        this.planData = saved;
+        this.renderPlan(saved);
+        this.showState('content');
+      }
+    } catch (error) { console.warn('Could not restore study plan', error); }
 
     // Retry generation if auth succeeds after login overlay
     window.addEventListener('auth-success', () => {
@@ -290,6 +308,7 @@ class StudyPlanManager {
       if (data.error) throw new Error(data.error.message || data.error);
 
       this.planData = data;
+      try { localStorage.setItem(this._activePlanKey(), JSON.stringify(data)); } catch (error) { console.warn('Could not save study plan', error); }
       this.renderPlan(data);
       this.showState('content');
     } catch (error) {
@@ -994,6 +1013,7 @@ class StudyPlanManager {
     // Clear completion state for this plan
     try { localStorage.removeItem(this._storageKey()); } catch(e) {}
     this.completedTasks = {};
+    try { localStorage.removeItem(this._activePlanKey()); } catch {}
     this.showSetup();
   }
 }

@@ -447,9 +447,7 @@ class TestFix34Behavior:
         original_jti = str(uuid.uuid4())
         import asyncio
         from core.database import UserRepository
-        asyncio.run(
-            UserRepository.auth_headers_set_jti(str(user.id), original_jti)
-        )
+        await UserRepository.auth_headers_set_jti(str(user.id), original_jti)
 
         # Subscribe BEFORE the 2nd login so we receive the event.
         q = session_bus.subscribe(user.id)
@@ -457,7 +455,7 @@ class TestFix34Behavior:
             assert session_bus.subscriber_count(user.id) == 1
             # Trigger the kick via the SSO _issue_token path (same code
             # path as a login that publishes to the bus).
-            _issue_token(user, ip="9.9.9.9", user_agent="pytest/1.0")
+            await _issue_token(user, ip="9.9.9.9", user_agent="pytest/1.0")
             # Drain the queue with a short timeout.
             event = await asyncio.wait_for(q.get(), timeout=2.0)
         finally:
@@ -481,9 +479,9 @@ class TestFix34Behavior:
         from jose import jwt as _jwt
 
         user, password = fresh_user
-        first = _issue_token(user, ip="1.1.1.1", user_agent="ua1")
+        first = await _issue_token(user, ip="1.1.1.1", user_agent="ua1")
         first_jti = _jwt.get_unverified_claims(first["access_token"])["jti"]
-        second = _issue_token(user, ip="2.2.2.2", user_agent="ua2")
+        second = await _issue_token(user, ip="2.2.2.2", user_agent="ua2")
         second_jti = _jwt.get_unverified_claims(second["access_token"])["jti"]
 
         assert first["access_token"] != second["access_token"], (
@@ -518,7 +516,7 @@ class TestFix34Behavior:
         # Simulate the legacy state: no active session.
         import asyncio
         from core.database import UserRepository
-        asyncio.run(UserRepository.clear_session(str(user.id)))
+        await UserRepository.clear_session(str(user.id))
         # Forge a jti-less token — same shape create_access_token
         # would have produced before the Fix #34 jti plumbing.
         now = int(time.time())

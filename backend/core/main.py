@@ -42,6 +42,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
+from lib.audio_upload import transcribe_saved_upload
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 from ocr_service import extract_text_from_image
 
@@ -80,8 +81,9 @@ def _patch_to_async_gen(fn):
             async for item in result:
                 yield item
             return
-        # Otherwise iterate the sync generator and yield each item.
-        for item in result:
+        # Network reads in a synchronous provider must not block other requests.
+        from lib.async_stream import iterate_sync
+        async for item in iterate_sync(result):
             yield item
     wrapper._async_patched = True
     wrapper.__name__ = getattr(fn, "__name__", "wrapped_stream")
@@ -1071,6 +1073,30 @@ async def start_listener():
     else:
         logger.info("[Startup] Whisper warmup skipped — voice packages not installed or cloud mode")
 
+    # Preload the live-assist model. Measured 2026-09-11: a cold generation
+    # took 5.4-5.7s against a 4.0s gate while a warm one took 1.8-2.2s, so the
+    # first interview question — the one that matters most — was the slowest.
+    # keep_alive holds it resident afterwards.
+    if not CLOUD_MODE:
+        def _warmup_live():
+            try:
+                from modules.ai.realtime_suggestions import warmup_live_model
+                res = warmup_live_model()
+                if res.get("ok"):
+                    logger.info(
+                        "[Startup] Live-assist model ready: %s in %sms",
+                        res.get("model"), res.get("ms"),
+                    )
+                else:
+                    logger.warning(
+                        "[Startup] Live-assist warmup failed (%s) — first hint will be slow",
+                        res.get("error"),
+                    )
+            except Exception as exc:
+                logger.warning("[Startup] Live-assist warmup unavailable: %s", exc)
+
+        threading.Thread(target=_warmup_live, daemon=True).start()
+
     # Start embedding service and classifier warmup in background
     # These are optional — if they fail, existing keyword logic is used as fallback
     if not CLOUD_MODE:
@@ -1480,7 +1506,7 @@ async def ask_with_image(
                 if provider == "auto" and vision_providers:
                     # Absolute import — see comment at line 1353.
                     from modules.platform.cloud_providers import PROVIDER_MODEL_MAP
-                    SPEED_PRIORITY = ["groq-llama-3-3-70b", "google-gemini-2-0-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
+                    SPEED_PRIORITY = ["groq-gpt-oss-120b", "google-gemini-3-8-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
                     found_paid = False
                     for fast_model in SPEED_PRIORITY:
                         if fast_model in PROVIDER_MODEL_MAP:
@@ -2412,10 +2438,7 @@ async def transcribe_api(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     # Skip redundant ffmpeg conversion — faster-whisper decodes webm directly
-    text = transcribe_audio(file_path, mode=_state.current_mode, fast=True)
-
-    try: os.remove(file_path)
-    except OSError: pass  # nosec B110
+    text = await transcribe_saved_upload(transcribe_audio, file_path, mode=_state.current_mode, fast=True)
 
     return {"text": text or ""}
 
@@ -2432,10 +2455,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         shutil.copyfileobj(file.file, buffer)
 
     # Skip redundant ffmpeg conversion — faster-whisper decodes webm directly
-    text = transcribe_audio(file_path, mode=_state.current_mode, fast=True)
-
-    try: os.remove(file_path)
-    except OSError: pass  # nosec B110
+    text = await transcribe_saved_upload(transcribe_audio, file_path, mode=_state.current_mode, fast=True)
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -7026,4 +7046,3 @@ async def generate_meeting_notes(template_id: str, body: dict):
 
 
 logger.info("[MeetingTemplates] Meeting templates endpoints loaded")
-

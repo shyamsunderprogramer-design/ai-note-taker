@@ -57,3 +57,18 @@ def make_vision(content: str, provider: str = "") -> str:
 def make_vision_done(ms: int, provider: str) -> str:
     """Marks the end of the vision step."""
     return _frame("vision_done", {"ms": ms, "provider": provider})
+
+def has_answer_content(frame: str) -> bool:
+    """True only for answer chunks, never provider metadata or whitespace."""
+    for line in frame.splitlines():
+        if not line.startswith("data:"):
+            continue
+        try:
+            payload = json.loads(line[5:].strip())
+        except (ValueError, TypeError):
+            continue
+        if isinstance(payload, dict) and payload.get("type") == "chunk":
+            content = payload.get("content")
+            if isinstance(content, str) and content.strip():
+                return True
+    return False

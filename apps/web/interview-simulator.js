@@ -106,14 +106,16 @@ class InterviewSimulator {
     try {
       // Create interview session
       const response = await fetch(
-        `${this.apiUrl}/interview-simulator/create?company=${encodeURIComponent(company)}&role=${encodeURIComponent(role)}&num_questions=${this.numQuestions}`
+        `${this.apiUrl}/interview-simulator/create?company=${encodeURIComponent(company)}&role=${encodeURIComponent(role)}&num_questions=${this.numQuestions}`, { method: 'POST' }
       );
+      if (!response.ok) throw new Error(`Request failed (${response.status}). Please try again.`);
       const data = await response.json();
 
       if (data.error) {
         throw new Error(data.error);
       }
 
+      if (!data.session_id) throw new Error('The server did not create an interview session.');
       this.sessionId = data.session_id;
       console.log('Session created:', this.sessionId);
 
@@ -135,6 +137,7 @@ class InterviewSimulator {
   async loadNextQuestion() {
     try {
       const response = await fetch(`${this.apiUrl}/interview-simulator/${this.sessionId}/question`);
+      if (!response.ok) throw new Error(`Request failed (${response.status}). Please try again.`);
       const data = await response.json();
 
       if (data.status === 'complete') {
@@ -155,7 +158,7 @@ class InterviewSimulator {
 
     } catch (error) {
       console.error('Error loading question:', error);
-      alert('Error loading question: ' + error.message);
+      throw error;
     }
   }
 
@@ -269,6 +272,7 @@ class InterviewSimulator {
         body: formData
       });
 
+      if (!response.ok) throw new Error(`Request failed (${response.status}). Please try again.`);
       const data = await response.json();
 
       if (data.text) {
@@ -305,6 +309,7 @@ class InterviewSimulator {
         { method: 'POST' }
       );
 
+      if (!response.ok) throw new Error(`Request failed (${response.status}). Please try again.`);
       const data = await response.json();
 
       if (data.error) {
@@ -388,6 +393,7 @@ class InterviewSimulator {
         { method: 'POST' }
       );
 
+      if (!response.ok) throw new Error(`Request failed (${response.status}). Please try again.`);
       const data = await response.json();
 
       if (data.error) {

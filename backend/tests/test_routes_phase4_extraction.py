@@ -91,16 +91,13 @@ class TestMainUniqueRoutes:
         assert isinstance(body["auth_required"], bool)
 
     @pytest.mark.asyncio
-    async def test_auth_debug_users_endpoint_registers(self):
+    async def test_auth_debug_users_endpoint_is_not_exposed(self):
+        """The removed debug endpoint must not enumerate users publicly."""
         app, client = self._import_app()
         async with client as c:
             response = await c.get("/auth/debug/users")
-        assert response.status_code == 200
-        body = response.json()
-        assert "user_count" in body
-        assert "usernames" in body
-        assert "has_jwt" in body
-        assert isinstance(body["user_count"], int)
+        assert response.status_code == 404
+        assert "usernames" not in response.json()
 
     @pytest.mark.asyncio
     async def test_auth_forgot_password_username_enumeration_protected(self):

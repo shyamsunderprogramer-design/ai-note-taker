@@ -87,6 +87,10 @@ class SyncHTTPClient:
 
     def post(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
+        streaming = kwargs.pop("stream", False)
+        if streaming:
+            request = self._client.build_request("POST", url, **kwargs)
+            return self._client.send(request, stream=True)
         return self._client.post(url, **kwargs)
 
     def delete(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:

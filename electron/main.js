@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell } = require("electron")
+const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell, screen } = require("electron")
 const path = require("path")
 const { spawn } = require("child_process")
 const os = require("os")
@@ -8,10 +8,15 @@ const { ScreenRecorder } = require("./features/screen-recorder")
 const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
 const { PLATFORM, isPortableMode, initializeAppPaths, ensureConversationsDir } = require("./lib/paths")
 const cryptoLib = require("./lib/crypto")
+const { SystemAudioCapture } = require("./lib/system-audio")
 const Store = require("electron-store")
 const { autoUpdater } = require("electron-updater")
 const fs = require("fs")
 const crypto = require("crypto")
+
+const captureScreenContext = require("./lib/screen-context").createScreenCapture({ BrowserWindow, desktopCapturer, screen,
+  nativeCapture: process.platform === "darwin" ? require("./lib/native-screen-capture").captureNativeScreen : null
+})
 
 // Speed optimizations below (must run before app.whenReady())
 app.commandLine.appendSwitch("disable-features",
@@ -555,13 +560,8 @@ async function createWindow() {
 // ======================================
 async function captureAutoScreenshot() {
   try {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: { width: 1280, height: 720 }  // Phase A: clamped to 720p
-    })
-    if (sources && sources.length > 0) {
-      // Phase A: JPEG at 80% quality — 60-80% smaller than PNG
-      const b64 = sources[0].thumbnail.toJPEG(80).toString("base64")
+    const b64 = await captureScreenContext()
+    if (b64) {
       screenshotBuffer.push(b64)
       if (screenshotBuffer.length > SCREENSHOT_BUFFER_MAX) {
         screenshotBuffer.shift()
@@ -604,7 +604,7 @@ async function isBackendRunning() {
   try {
     const http = require("http")
     return await new Promise((resolve) => {
-      const req = http.get("http://127.0.0.1:8000/health", (res) => resolve(res.statusCode === 200))
+      const req = http.get("http://127.0.0.1:8000/health", (res) => { res.resume(); resolve(res.statusCode === 200) })
       req.on("error", () => resolve(false))
       req.setTimeout(1000, () => { req.destroy(); resolve(false) })
     })
@@ -675,15 +675,11 @@ function getPythonExecutable() {
 
   // In dev mode, try common venv paths for current platform
   if (!isProd) {
+    const venvBin = PLATFORM === "win32" ? "Scripts" : "bin"
+    const pythonName = PLATFORM === "win32" ? "python.exe" : "python"
     const devPaths = [
-      // Windows dev
-      path.join(__dirname, "..", "AINT_Venv", "Scripts", "python.exe"),
-      // macOS/Linux dev (relative)
-      path.join(__dirname, "..", "AINT_Venv", "bin", "python"),
-      // Parent-relative Windows
-      path.join(__dirname, "..", "..", "AINT_Venv", "Scripts", "python.exe"),
-      // Parent-relative macOS/Linux
-      path.join(__dirname, "..", "..", "AINT_Venv", "bin", "python"),
+      path.join(__dirname, "..", "AINT_Venv", venvBin, pythonName),
+      path.join(__dirname, "..", "..", "AINT_Venv", venvBin, pythonName),
     ]
     for (const p of devPaths) {
       try {
@@ -727,6 +723,8 @@ async function startBackend() {
 
   if (await isBackendRunning()) {
     logger.info("[Backend] Already running on port 8000, skipping spawn")
+    notifyRendererBackendStatus("ready")
+    startHealthCheck()
     backendRestartAttempts = 0
     return
   }
@@ -899,6 +897,8 @@ ipcMain.handle("conversation:list", () => {
           pinned: data.pinned || false,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
+          preview: (data.messages?.find(m => m.role === "user")?.text || data.messages?.[0]?.text || "").slice(0, 180),
+          mode: data.mode || "adaptive",
           messageCount: data.messages ? data.messages.length : 0
         }
       } catch (e) {
@@ -1022,9 +1022,14 @@ ipcMain.handle("window:force-top", () => {
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
   if (enabled) stealth.enable()
   else stealth.disable()
+  store.set("stealthState", stealth.isEnabled())
   // Return both stealth mode AND capture protection state so renderer can sync accurately
   return { enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable() }
 })
+
+ipcMain.handle("window:get-stealth-state", () => ({
+  enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable()
+}))
 
 ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   stealth.setUndetectable(enabled)
@@ -1038,24 +1043,7 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
 
 ipcMain.handle("window:capture-screenshot", async () => {
   try {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: { width: 1280, height: 720 }  // Phase A: clamped to 720p
-    })
-    if (!sources || sources.length === 0) {
-      logger.warn("[Screenshot] No screen sources found")
-      return null
-    }
-    // Get the primary screen (first source)
-    const primarySource = sources[0]
-    if (!primarySource.thumbnail || primarySource.thumbnail.isEmpty()) {
-      logger.warn("[Screenshot] Screen capture returned empty thumbnail")
-      return null
-    }
-    // Phase A: JPEG at 80% quality — 60-80% smaller than PNG
-    const base64 = primarySource.thumbnail.toJPEG(80).toString("base64")
-    logger.info("[Screenshot] Captured screen (JPEG), size: %d bytes", base64.length)
-    return base64
+    return await captureScreenContext()
   } catch (e) {
     logger.error("[Screenshot] error:", e)
     return null
@@ -1463,6 +1451,64 @@ app.whenReady().then(() => {
   // Needs app.getPath() so we wait until whenReady. Subsequent
   // logger.error(...) calls land in backend-crash.log automatically.
   configureBackendCrashLog()
+
+  // Dual-channel live assist (2026-09-11): the renderer's getDisplayMedia()
+  // call for the interviewer (system-audio) channel must not open a picker
+  // dialog mid-interview — auto-approve and pick the primary screen. The
+  // video track is never rendered; only its audio feeds the assist.
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ["screen"] }).then((sources) => {
+      if (sources.length) callback({ source: sources[0] })
+      else callback({})
+    }).catch(() => callback({}))
+  })
+})
+
+// ======================================
+// INTERVIEWER CHANNEL (SYSTEM AUDIO)
+// ======================================
+// The interviewer's voice is whatever the meeting app plays through the
+// speakers. Capturing it as a separate stream is what lets the assist answer
+// THEIR questions without the candidate's own speech polluting the input —
+// and it is the only way to hear them at all when headphones are worn.
+let systemAudioCapture = null
+
+ipcMain.handle("system-audio:start", (event) => {
+  if (systemAudioCapture && systemAudioCapture.isActive()) {
+    return { ok: true, alreadyRunning: true }
+  }
+  const wc = event.sender
+  const send = (channel, payload) => {
+    if (!wc.isDestroyed()) wc.send(channel, payload)
+  }
+
+  systemAudioCapture = new SystemAudioCapture({ sampleRate: 16000, chunkDuration: 0.1 })
+  systemAudioCapture.on("data", (chunk) => send("system-audio:data", chunk))
+  systemAudioCapture.on("silent", () => {
+    // macOS answers an ungranted tap with silence rather than an error, so
+    // this is the only signal the user will ever get that it is not working.
+    logger.error(
+      "[SystemAudio] capturing pure silence — grant 'System Audio Recording' " +
+      "in System Settings > Privacy & Security, then restart the app"
+    )
+    send("system-audio:silent")
+  })
+  systemAudioCapture.on("error", (err) => {
+    logger.error("[SystemAudio] " + err.message)
+    send("system-audio:error", err.message)
+  })
+
+  const ok = systemAudioCapture.start()
+  logger.info("[SystemAudio] interviewer channel start requested: ok=" + ok)
+  return { ok }
+})
+
+ipcMain.handle("system-audio:stop", () => {
+  if (systemAudioCapture) {
+    systemAudioCapture.stop()
+    systemAudioCapture = null
+  }
+  return { ok: true }
 })
 
 // ======================================
@@ -1840,7 +1886,7 @@ app.whenReady().then(async () => {
       captionWindow.setAlwaysOnTop(true, "monitor", 2147483647)
     }
 
-    const captionPath = isProd
+    const captionPath = app.isPackaged
       ? path.join(process.resourcesPath, "renderer", "caption-overlay.html")
       : path.join(__dirname, "..", "apps", "web", "caption-overlay.html")
 
@@ -1928,7 +1974,7 @@ app.whenReady().then(async () => {
       interviewOverlayWindow.setAlwaysOnTop(true, "monitor", 2147483647)
     }
 
-    const ioPath = isProd
+    const ioPath = app.isPackaged
       ? path.join(process.resourcesPath, "renderer", "interview-overlay.html")
       : path.join(__dirname, "..", "apps", "web", "interview-overlay.html")
 
@@ -2049,6 +2095,8 @@ app.whenReady().then(async () => {
     }
   })
 })
+
+app.on("before-quit", () => { app.isQuitting = true })
 
 app.on("will-quit", () => {
   app.isQuitting = true

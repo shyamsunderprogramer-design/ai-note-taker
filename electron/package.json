@@ -114,9 +114,14 @@
       "extendInfo": {
         "NSMicrophoneUsageDescription": "ANT needs microphone access for voice transcription.",
         "NSScreenCaptureUsageDescription": "ANT uses screen capture APIs only when you explicitly enable screenshots for AI vision features.",
+        "NSAudioCaptureUsageDescription": "ANT captures system audio so it can hear the other side of your call. Without this permission macOS returns silence and live assist cannot work.",
         "LSApplicationCategoryType": "public.app-category.productivity"
       },
       "extraResources": [
+        {
+          "from": "../node_modules/audiotee/bin/audiotee",
+          "to": "audiotee"
+        },
         {
           "from": "../AINT_Venv_macos",
           "to": "AINT_Venv",
@@ -245,6 +250,7 @@
     ]
   },
   "dependencies": {
+    "audiotee": "^0.0.7",
     "electron-log": "^5.2.4",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.8.3"

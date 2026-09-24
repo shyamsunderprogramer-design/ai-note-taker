@@ -66,11 +66,18 @@ def select_model(mode="adaptive", streaming=False):
     import psutil
     ram_gb = psutil.virtual_memory().total / (1024 ** 3)
 
-    # Streaming: prioritize speed — tiny is 2-3x faster than small on CPU
+    # Streaming (2026-09-11 mock evidence): "base" on CPU garbled real speech
+    # ("greatest strength" → "greatest spread") and hallucinated phrases out of
+    # silence ("Thank you.", "Watch.", "See you soon."). 16GB+ machines get
+    # "small" — noticeably fewer mis-hears; with 1.5s slices the latency
+    # headroom is sufficient (warm e2e was 2.1s with base, gate is 4.0s).
+    # NOTE: DEVICE=="auto" resolves to CPU on macOS, so don't gate on it.
     if streaming:
-        if DEVICE != "cpu" and ram_gb >= 16:
-            return "base"   # good balance for streaming on high-RAM GPU systems
-        return "tiny"       # fastest, lowest latency — best for CPU streaming
+        if ram_gb >= 16:
+            return "small"
+        if ram_gb >= 8:
+            return "base"
+        return "tiny"
 
     if mode == "interview":
         return "small"   # better accuracy for important content
@@ -395,24 +402,25 @@ def is_meaningful(text):
 # FILE TO TRANSCRIBE
 # ==============================
 
+def _decode_audio_file(file_path):
+    # PyAV handles mobile AAC/M4A as well as PCM and always resamples to 16 kHz.
+    from faster_whisper.audio import decode_audio
+    return decode_audio(file_path, sampling_rate=SAMPLE_RATE)
+
+
 def transcribe_audio(file_path, mode="adaptive", fast=False):
-    """
-    Convert file to numpy to transcription.
-    Pass fast=True for greedy decoding (lowest latency, slight accuracy trade-off).
-    """
-    sf = _get_sf()
-
+    """Decode an uploaded audio file and return transcript text."""
     try:
-        audio, samplerate = sf.read(file_path)
-
-        if len(audio.shape) > 1:
-            audio = audio.mean(axis=1)
-
-        max_val = abs(audio).max() + 1e-6
-        audio = (audio / max_val).astype("float32")
-
-        return transcribe(audio, mode, streaming=fast)
-
+        audio = _decode_audio_file(file_path)
+        if audio.size == 0 or not np.isfinite(audio).all():
+            return ""
+        # Do not amplify silence into model input or ask Whisper to invent words.
+        peak = float(np.max(np.abs(audio)))
+        if peak < 1e-5:
+            return ""
+        audio = (audio / peak).astype("float32")
+        result = transcribe(audio, mode, streaming=fast)
+        return result.get("text", "") if isinstance(result, dict) else (result or "")
     except Exception as e:
         logger.error("File transcription error: %s", str(e))
         return ""
@@ -577,16 +585,15 @@ def get_streaming_transcriber():
 
 class BrowserTranscriber:
     """Receives raw PCM Float32 chunks from browser WebSocket, buffers them,
-    transcribes on ~1s segments, returns partial text via callbacks.
+    transcribes at quiet phrase boundaries, returns provisional text via callbacks.
 
     Per-session (not a singleton) — each WebSocket connection gets its own instance.
     Thread-safe: all shared state (buffer) is protected by self.lock.
 
     Optimizations for low latency:
-    - First transcription after 1s of audio (not 0.5s) — responsive but not excessive
-    - Sliding window: after first transcription, flush every 1s of accumulated audio
+    - Waits at least three seconds, then prefers a quiet boundary (eight-second cap)
     - Uses greedy decoding (beam_size=1) for real-time speed
-    - Forces tiny/base model for streaming regardless of RAM
+    - The final recording is transcribed separately using complete audio
     """
 
     def __init__(self, sample_rate=16000):
@@ -594,52 +601,93 @@ class BrowserTranscriber:
         self.buffer = np.array([], dtype=np.float32)
         self.lock = threading.Lock()
         self.callbacks = []
-        self._first_done = False
-        self.min_samples_first = int(0.5 * sample_rate)   # 0.5s before first transcribe (faster)
-        self.min_samples_next = int(0.5 * sample_rate)   # 0.5s sliding window after first
+        self.min_samples_first = int(3.0 * sample_rate)
+        self.min_samples_next = self.min_samples_first
+        self.max_samples = int(8.0 * sample_rate)
+        self._silence_rms = 0.005
         self._chunk_queue = queue.Queue(maxsize=10)
+        self._worker = None
+        self._texts = []
+        self._stopped = threading.Event()
 
     def add_callback(self, cb):
-        """Add a callback(text) called when a partial transcription is ready."""
+        """Add a callback for each provisional phrase."""
         self.callbacks.append(cb)
 
     def _queue_worker(self):
-        """Background worker that processes transcription tasks from the bounded queue."""
         while True:
             segment = self._chunk_queue.get()
-            if segment is None:  # Sentinel
-                break
-            self._transcribe(segment)
+            try:
+                if segment is None:
+                    return
+                if not self._stopped.is_set():
+                    self._transcribe(segment)
+            finally:
+                self._chunk_queue.task_done()
 
     def add_chunk(self, chunk: np.ndarray):
-        """Add a raw PCM Float32 chunk received from browser."""
+        """Wait for a quiet phrase boundary, with an eight-second upper bound."""
         if chunk is None or len(chunk) == 0:
             return
         with self.lock:
+            if self._stopped.is_set():
+                return
             self.buffer = np.concatenate([self.buffer, chunk])
-
-        threshold = self.min_samples_next if self._first_done else self.min_samples_first
-        if len(self.buffer) >= threshold:
-            segment = self.buffer[:threshold].copy()
-            with self.lock:
-                self.buffer = self.buffer[threshold:]
-            self._first_done = True
-            # Use bounded queue instead of unbounded threads — drop oldest if full
-            try:
-                self._chunk_queue.put_nowait(segment)
-            except queue.Full:
-                # Queue full — remove oldest segment, add newest
+            frame = max(1, int(0.1 * self.sample_rate))
+            while len(self.buffer) >= self.min_samples_first:
+                limit = min(len(self.buffer), self.max_samples)
+                boundary = None
+                # Two quiet frames preserve soft word endings and avoid slicing
+                # every third second through a word. Inspect all buffered audio
+                # so a large WebSocket packet cannot strand complete phrases.
+                for end in range(self.min_samples_first, limit + 1, frame):
+                    quiet = self.buffer[end - 2 * frame:end]
+                    if float(np.sqrt(np.mean(np.square(quiet)))) < self._silence_rms:
+                        boundary = end
+                        break
+                if boundary is None:
+                    if len(self.buffer) < self.max_samples:
+                        break
+                    boundary = self.max_samples
+                segment = self.buffer[:boundary].copy()
+                self.buffer = self.buffer[boundary:]
+                if float(np.sqrt(np.mean(np.square(segment)))) < self._silence_rms:
+                    continue
                 try:
-                    self._chunk_queue.get_nowait()
                     self._chunk_queue.put_nowait(segment)
-                except queue.Empty:
-                    pass
+                except queue.Full:
+                    # Previews may skip stale phrases under overload. The full
+                    # recording upload remains authoritative for the answer.
+                    try:
+                        self._chunk_queue.get_nowait()
+                        self._chunk_queue.task_done()
+                    except queue.Empty:
+                        pass
+                    self._chunk_queue.put_nowait(segment)
 
     def start_worker(self):
-        """Start the background queue worker thread."""
-        worker = threading.Thread(target=self._queue_worker, daemon=True, name="browser-transcriber")
-        worker.start()
-        return worker
+        with self.lock:
+            if self._worker is None and not self._stopped.is_set():
+                self._worker = threading.Thread(target=self._queue_worker, daemon=True,
+                                                name="browser-transcriber")
+                self._worker.start()
+            return self._worker
+
+    def stop(self, wait=True):
+        """Release the session worker and discard previews after disconnect."""
+        with self.lock:
+            self._stopped.set()
+            self.buffer = np.array([], dtype=np.float32)
+            while True:
+                try:
+                    self._chunk_queue.get_nowait()
+                    self._chunk_queue.task_done()
+                except queue.Empty:
+                    break
+            if self._worker is not None and self._worker.is_alive():
+                self._chunk_queue.put_nowait(None)
+        if wait and self._worker is not None:
+            self._worker.join(timeout=1)
 
     def _transcribe(self, segment):
         """Transcribe a segment using the shared thread pool."""
@@ -647,7 +695,8 @@ class BrowserTranscriber:
             future = _transcribe_executor.submit(transcribe, segment, "adaptive", True)
             result = future.result(timeout=30)
             text = result.get("text", "") if isinstance(result, dict) else (result or "")
-            if text and text.strip():
+            if text and text.strip() and not self._stopped.is_set():
+                self._texts.append(text.strip())
                 for cb in self.callbacks:
                     try:
                         cb(text.strip())
@@ -657,17 +706,16 @@ class BrowserTranscriber:
             logger.error("[BrowserTranscriber] Transcription error: %s", str(e))
 
     def get_final(self) -> str:
-        """Transcribe any remaining audio in the buffer. Called when session ends."""
+        """Drain queued phrases in order and include the final short tail.
+
+        Call off the event loop. The caller must stop accepting audio first.
+        """
+        self.start_worker()
+        self._chunk_queue.join()
         with self.lock:
-            if len(self.buffer) == 0:
-                return ""
             segment = self.buffer.copy()
             self.buffer = np.array([], dtype=np.float32)
-        # Only transcribe if we have at least 250ms
-        if len(segment) < self.min_samples_first // 4:
-            return ""
-        try:
-            return transcribe(segment, mode="adaptive", streaming=True).strip()
-        except Exception as e:
-            logger.error("[BrowserTranscriber] Final transcription error: %s", str(e))
-            return ""
+        if (len(segment) >= int(0.25 * self.sample_rate)
+                and float(np.sqrt(np.mean(np.square(segment)))) >= self._silence_rms):
+            self._transcribe(segment)
+        return " ".join(self._texts)

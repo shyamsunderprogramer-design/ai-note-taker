@@ -394,6 +394,10 @@ import time as _time
 
 _LIVE_MODEL = _os.getenv("ANT_LIVE_MODEL", "qwen3.5:9b")
 _LIVE_TIMEOUT = float(_os.getenv("ANT_LIVE_TIMEOUT", "12"))
+# How long Ollama holds the live model in memory after a request.
+# Interviews have long gaps between questions; the default 5m would
+# evict mid-interview and make the next question pay the cold penalty.
+_LIVE_KEEP_ALIVE = _os.getenv("ANT_LIVE_KEEP_ALIVE", "30m")
 
 
 def generate_live_suggestion(
@@ -403,6 +407,8 @@ def generate_live_suggestion(
     skills: str = "",
     resume: str = "",
     model: str = None,
+    history: list = None,
+    on_first_sentence=None,
 ) -> dict:
     """Generate a concise first-person interview answer for one question.
 
@@ -413,19 +419,70 @@ def generate_live_suggestion(
 
     used_model = model or _LIVE_MODEL
     t0 = _time.perf_counter()
+    # Prior turns make the answer part of a conversation instead of a series of
+    # unrelated statements: it stops the model re-introducing the candidate for
+    # every question and lets it build on what was already claimed.
+    recap = ""
+    if history:
+        lines = []
+        for turn in history[-3:]:
+            q = (turn.get("question") or "").strip()
+            a = (turn.get("answer") or "").strip()
+            if q and a:
+                lines.append(f"- They asked: \"{q}\" and you answered: \"{a}\"")
+        if lines:
+            recap = (
+                "Earlier AI drafts (not verified candidate facts):\n" + "\n".join(lines) +
+                "\n\nUse these only to avoid repetition. They are not evidence of "
+                "experience; discard any detail unsupported by the candidate context.\n\n"
+            )
+
     prompt = (
         "You are a live interview assistant whispering answers to a candidate. "
+        + recap +
         f"The interviewer just asked: \"{question.strip()}\"\n\n"
-        f"Candidate context — role: {role or 'software engineer'}; "
+        f"Candidate context — role: {role or 'not provided'}; "
         f"company being interviewed at: {company or 'unknown'}; "
-        f"skills: {skills or 'general software engineering'}; "
-        f"resume highlights: {resume or 'experienced engineer with hands-on project leadership'}.\n\n"
-        "Reply with ONE short first-person answer the candidate can start saying "
-        "immediately: 2-3 sentences, under 50 words, concrete, confident. "
+        f"skills: {skills or 'not provided'}; "
+        f"resume highlights: {resume or 'not provided'}.\n\n"
+        "Use only supplied candidate facts for personal experience. Never invent "
+        "employers, dates, achievements, metrics, or project details. If experience "
+        "is missing, give a short answer structure with bracketed placeholders instead. "
+        "A result does not establish how it was measured. Use [measurement method] "
+        "if the method is absent, and [project details] for absent implementation details. "
+        "Reply in 2-3 sentences, under 50 words. For personal questions, use first "
+        "person only for supplied facts and placeholders for missing facts. For "
+        "technical questions, explain the concept directly without claiming personal experience. "
+        "Answer exactly what was asked and nothing else — do not drift onto a "
+        "different topic, and do not re-introduce the candidate when the "
+        "conversation is already under way. "
         "No preamble, no markdown, no disclaimers — just the spoken answer."
     )
+    payload_stream = on_first_sentence is not None
+    if model and (model.endswith(":cloud") or ":" not in model):
+        # Explicit cloud choices use the same provider mapping as typed requests.
+        import asyncio
+        from lib.live_model_stream import collect_selected_model
+        try:
+            text = asyncio.run(collect_selected_model(prompt, model, _LIVE_TIMEOUT))
+            return {"text": text or None, "gen_ms": int((_time.perf_counter()-t0)*1000),
+                    "model": model, "error": None if text else "empty response"}
+        except Exception as exc:
+            return {"text": None, "gen_ms": int((_time.perf_counter()-t0)*1000),
+                    "model": model, "error": str(exc) or "Selected model timed out"}
     try:
+        import json as _json
+
         import httpx
+
+        if payload_stream:
+            # Stream so the candidate can START TALKING at the first sentence
+            # instead of waiting for the whole answer. The gate that matters is
+            # time-to-first-speakable-sentence, and a complete 80-token answer
+            # arrives seconds after the first sentence is already usable.
+            return _stream_generate(
+                OLLAMA_URL, used_model, prompt, t0, on_first_sentence
+            )
 
         resp = httpx.post(
             f"{OLLAMA_URL}/api/generate",
@@ -434,6 +491,11 @@ def generate_live_suggestion(
                 "prompt": prompt,
                 "stream": False,
                 "think": False,  # qwen3.5:9b puts content in `thinking` otherwise
+                # Hold the model in VRAM between questions. Measured
+                # 2026-09-11: cold generation ran 5.4-5.7s against a 4.0s
+                # gate while warm ran 1.8-2.2s — the entire failure was model
+                # load, repaid on every question after a quiet stretch.
+                "keep_alive": _LIVE_KEEP_ALIVE,
                 "options": {
                     "temperature": 0.4,
                     "num_predict": 80,
@@ -462,10 +524,185 @@ def generate_live_suggestion(
     except Exception as exc:  # network down / timeout — degrade to template
         gen_ms = int((_time.perf_counter() - t0) * 1000)
         fallback = realtime_engine.process_segment(question, "interviewer")
-        fb_text = fallback.text if fallback else None
+        fb_text = fallback.content if fallback else None
         return {
             "text": fb_text,
             "gen_ms": gen_ms,
             "model": "template-fallback",
             "error": str(exc)[:120],
         }
+
+
+def warmup_live_model(timeout: float = 60.0) -> dict:
+    """Load the live-assist model before the first question arrives.
+
+    keep_alive holds the model once it is resident, but nothing pays for the
+    FIRST load — and in an interview the first question is the one that must
+    not be slow. Called at startup, this moves that cost to boot time.
+    """
+    from config import OLLAMA_URL
+
+    t0 = _time.perf_counter()
+    try:
+        import httpx
+
+        resp = httpx.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": _LIVE_MODEL,
+                "prompt": "",          # empty prompt = load only, no generation
+                "stream": False,
+                "keep_alive": _LIVE_KEEP_ALIVE,
+                "options": {"num_ctx": 2048},
+            },
+            timeout=timeout,
+        )
+        ms = int((_time.perf_counter() - t0) * 1000)
+        ok = resp.status_code == 200
+        return {"ok": ok, "model": _LIVE_MODEL, "ms": ms,
+                "error": None if ok else f"HTTP {resp.status_code}"}
+    except Exception as exc:
+        return {"ok": False, "model": _LIVE_MODEL,
+                "ms": int((_time.perf_counter() - t0) * 1000), "error": str(exc)}
+
+
+# Rolling previews run repeatedly while the interviewer is still speaking, so
+# they use a smaller model and a tighter budget than the committed answer. The
+# 9B model is worth 2s once per question; it is not worth 2s every few seconds.
+# Same model as the committed answer, deliberately. A second model has to be
+# resident to be fast, and two of these do not fit together (gemma4:e4b 9.6GB +
+# qwen3.5:9b 6.6GB on a 24GB machine), so Ollama evicted and reloaded between
+# every preview and answer. Measured cost: first-sentence latency swinging
+# between 1.5s and 6.9s with no relation to question length. Reusing the hot
+# model makes a 40-token preview nearly free.
+_PREVIEW_MODEL = _os.getenv("ANT_PREVIEW_MODEL", "") or _LIVE_MODEL
+_PREVIEW_TIMEOUT = float(_os.getenv("ANT_PREVIEW_TIMEOUT", "6"))
+
+
+def generate_live_preview(
+    partial_question: str,
+    role: str = "",
+    company: str = "",
+    skills: str = "",
+    resume: str = "",
+    history: list = None,
+) -> dict:
+    """One short line of direction while the question is still being asked.
+
+    This is deliberately NOT a full answer. The question is incomplete, so
+    committing to an answer invites drift onto the wrong point — the thing the
+    candidate then has to talk their way back from. A single line of direction
+    is useful early and costs little to be wrong about.
+    """
+    from config import OLLAMA_URL
+
+    t0 = _time.perf_counter()
+    recap = ""
+    if history:
+        last = history[-1]
+        q = (last.get("question") or "").strip()
+        if q:
+            recap = f"The previous question was \"{q}\", already answered.\n"
+
+    prompt = (
+        "You are helping a candidate in a live interview. The interviewer is "
+        "STILL SPEAKING and has said this much so far:\n\n"
+        f"\"{partial_question.strip()}\"\n\n"
+        f"{recap}"
+        f"Candidate: {role or 'software engineer'} interviewing at "
+        f"{company or 'the company'}; background: "
+        f"{resume or 'experienced engineer'}.\n\n"
+        "In ONE short sentence (under 20 words), say what to talk about when "
+        "they finish. Stay strictly on what was actually asked — do not invent "
+        "a different question. No preamble, no markdown."
+    )
+    try:
+        import httpx
+
+        resp = httpx.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": _PREVIEW_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "think": False,
+                "keep_alive": _LIVE_KEEP_ALIVE,
+                "options": {"temperature": 0.3, "num_predict": 40, "num_ctx": 1024},
+            },
+            timeout=_PREVIEW_TIMEOUT,
+        )
+        gen_ms = int((_time.perf_counter() - t0) * 1000)
+        if resp.status_code != 200:
+            return {"text": None, "gen_ms": gen_ms, "model": _PREVIEW_MODEL,
+                    "error": f"HTTP {resp.status_code}"}
+        text = (resp.json().get("response") or "").strip()
+        # Small models like to narrate; keep the first sentence only.
+        for sep in ("\n", ". "):
+            if sep in text:
+                text = text.split(sep)[0].strip().rstrip(".") + ""
+                break
+        return {"text": text or None, "gen_ms": gen_ms,
+                "model": _PREVIEW_MODEL, "error": None}
+    except Exception as exc:
+        return {"text": None, "gen_ms": int((_time.perf_counter() - t0) * 1000),
+                "model": _PREVIEW_MODEL, "error": str(exc)}
+
+
+_SENTENCE_END = re.compile(r"[.!?](?:\s|$)")
+
+
+def _stream_generate(ollama_url, model, prompt, t0, on_first_sentence):
+    """Generate with streaming, surfacing the first sentence as soon as it lands."""
+    import json as _json
+
+    import httpx
+
+    buf = ""
+    fired = False
+    try:
+        with httpx.stream(
+            "POST",
+            f"{ollama_url}/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": True,
+                "think": False,
+                "keep_alive": _LIVE_KEEP_ALIVE,
+                "options": {"temperature": 0.4, "num_predict": 80, "num_ctx": 2048},
+            },
+            timeout=_LIVE_TIMEOUT,
+        ) as resp:
+            if resp.status_code != 200:
+                return {"text": None, "gen_ms": int((_time.perf_counter() - t0) * 1000),
+                        "model": model, "error": f"ollama {resp.status_code}"}
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                try:
+                    obj = _json.loads(line)
+                except ValueError:
+                    continue
+                buf += obj.get("response") or ""
+                if not fired:
+                    match = _SENTENCE_END.search(buf)
+                    # A fragment is not speakable; wait for a real sentence.
+                    if match and len(buf[: match.end()].split()) >= 6:
+                        fired = True
+                        try:
+                            on_first_sentence(
+                                buf[: match.end()].strip(),
+                                int((_time.perf_counter() - t0) * 1000),
+                            )
+                        except Exception:
+                            pass  # nosec B110 — delivery failure must not kill generation
+                if obj.get("done"):
+                    break
+    except Exception as exc:
+        return {"text": buf.strip() or None,
+                "gen_ms": int((_time.perf_counter() - t0) * 1000),
+                "model": model, "error": str(exc)[:120]}
+
+    text = buf.strip()
+    return {"text": text or None, "gen_ms": int((_time.perf_counter() - t0) * 1000),
+            "model": model, "error": None if text else "empty response"}

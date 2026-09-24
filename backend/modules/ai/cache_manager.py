@@ -20,6 +20,7 @@ import time
 from typing import Optional, Any, Dict, List, Callable
 from datetime import datetime, timedelta
 from functools import wraps
+from collections import OrderedDict
 
 logger = logging.getLogger("cache")
 
@@ -40,71 +41,64 @@ CACHE_TTL_ANALYTICS = int(os.getenv("CACHE_TTL_ANALYTICS", "600"))  # 10 minutes
 
 
 class MemoryCache:
-    """Simple in-memory LRU cache with TTL support"""
+    """Bounded LRU cache with monotonic TTLs and constant-time reads.
+
+    A missing or zero TTL means no expiry. Expired entries are reclaimed
+    on access, key enumeration, or before eviction at capacity.
+    """
 
     def __init__(self, max_size: int = 1000):
-        self._cache: Dict[str, Any] = {}
+        if max_size < 1:
+            raise ValueError("max_size must be positive")
+        self._cache = OrderedDict()
         self._ttl: Dict[str, float] = {}
-        self._access_time: Dict[str, float] = {}
         self._max_size = max_size
 
     def _cleanup(self):
-        """Remove expired entries"""
-        now = time.time()
-        expired = [k for k, v in self._ttl.items() if v < now]
-        for k in expired:
-            self._cache.pop(k, None)
-            self._ttl.pop(k, None)
-            self._access_time.pop(k, None)
-
-    def _evict_lru(self):
-        """Evict least recently used entries if over size limit"""
-        if len(self._cache) >= self._max_size:
-            sorted_items = sorted(self._access_time.items(), key=lambda x: x[1])
-            to_remove = sorted_items[:len(sorted_items) // 10]  # Remove 10%
-            for key, _ in to_remove:
-                self._cache.pop(key, None)
-                self._ttl.pop(key, None)
-                self._access_time.pop(key, None)
+        now = time.monotonic()
+        for key in [k for k, deadline in self._ttl.items() if deadline <= now]:
+            self.delete(key)
 
     def get(self, key: str) -> Optional[Any]:
-        """Get value from cache"""
-        self._cleanup()
-        if key in self._cache:
-            if key in self._ttl and self._ttl[key] > time.time():
-                self._access_time[key] = time.time()
-                return self._cache[key]
-            else:
-                # Expired
-                self.delete(key)
-        return None
+        if key not in self._cache:
+            return None
+        deadline = self._ttl.get(key)
+        if deadline is not None and deadline <= time.monotonic():
+            self.delete(key)
+            return None
+        self._cache.move_to_end(key)
+        return self._cache[key]
 
     def set(self, key: str, value: Any, ttl: int = None):
-        """Set value in cache with optional TTL"""
-        self._cleanup()
-        self._evict_lru()
+        if ttl is not None and ttl < 0:
+            self.delete(key)
+            return
+        if key not in self._cache and len(self._cache) >= self._max_size:
+            self._cleanup()
+            if len(self._cache) >= self._max_size:
+                oldest, _ = self._cache.popitem(last=False)
+                self._ttl.pop(oldest, None)
         self._cache[key] = value
-        self._access_time[key] = time.time()
+        self._cache.move_to_end(key)
         if ttl:
-            self._ttl[key] = time.time() + ttl
+            self._ttl[key] = time.monotonic() + ttl
+        else:
+            self._ttl.pop(key, None)
 
     def delete(self, key: str):
-        """Delete key from cache"""
         self._cache.pop(key, None)
         self._ttl.pop(key, None)
-        self._access_time.pop(key, None)
 
     def clear(self):
-        """Clear all cached data"""
         self._cache.clear()
         self._ttl.clear()
-        self._access_time.clear()
 
     def keys(self, pattern: str = "*") -> List[str]:
-        """Get keys matching pattern (simple substring match)"""
+        """Get live keys matching a simple substring pattern."""
+        self._cleanup()
         if pattern == "*":
-            return list(self._cache.keys())
-        return [k for k in self._cache.keys() if pattern in k]
+            return list(self._cache)
+        return [k for k in self._cache if pattern in k]
 
 
 class CacheManager:

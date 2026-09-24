@@ -13,9 +13,19 @@ Environment:
     HSTS_MAX_AGE    - HSTS max-age in seconds (default: 31536000)
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
+
+# Without basicConfig, the root logger has no handler and Python's last-resort
+# handler prints only WARNING+ — every app logger.info (e.g. "[ws/transcribe]
+# suggestion ready") was silently swallowed, making the live-assist path
+# invisible in the logs (found 2026-09-11 during mock debugging).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 # Add paths
 _project_root = Path(__file__).parent.parent

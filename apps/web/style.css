@@ -1876,7 +1876,7 @@ select option {
   border-color: rgba(59, 130, 246, 0.45);
 }
 .chat-message.assistant .msg-bubble {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.85));
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.45));
   border-radius: 6px 20px 20px 20px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
@@ -9178,3 +9178,142 @@ select option {
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 24px), transparent 100%);
   mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 24px), transparent 100%);
 }
+
+/* Provisional speech stays readable and separate from the typing field. */
+#transcriptStripContent {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-height: 4.5em;
+  overflow-y: auto;
+  text-overflow: clip;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* Streaming follows in one frame; explicit navigation may request smooth scroll. */
+#chatArea {
+  scroll-behavior: auto;
+  overflow-anchor: none;
+}
+
+/* Shared artwork and controls free vertical space for the conversation. */
+.compact-header {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 32px 12px 10px;
+  border: 1px solid rgba(148, 210, 235, 0.18);
+  border-radius: 12px;
+}
+.compact-header .hero-banner {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+.compact-header .hero-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7, 15, 25, .48), rgba(7, 15, 25, .88));
+}
+.compact-header .hero-banner-img { object-position: center 22%; }
+.compact-header .header-strip,
+.compact-header .controls-strip {
+  position: relative;
+  background: transparent;
+  padding: 0;
+}
+.compact-header .header-strip { min-height: 30px; }
+.compact-header .controls-strip { flex-wrap: wrap; gap: 8px; }
+.compact-header .header-right { width: auto; min-width: 0; }
+.compact-header .ctrl-group label { color: rgba(255, 255, 255, .8); }
+.compact-header .controls-strip select,
+.compact-header .more-trigger,
+.compact-header .smart-mode-btn,
+.compact-header .win-btn { background-color: rgba(9, 19, 31, .85); }
+.compact-header .traffic-corner { top: 7px; right: 10px; }
+@media (max-width: 480px) {
+  .compact-header { padding: 32px 8px 8px; gap: 8px; }
+  .compact-header .header-right { gap: 4px; }
+  .compact-header .opacity-slider { width: 48px; }
+}
+
+#jobDescriptionDialog { width: min(560px, calc(100vw - 32px)); max-height: 85vh; box-sizing: border-box; margin: auto; padding: 24px; border: 1px solid var(--glass-border); border-radius: 16px; background: #111827; color: #f3f4f6; }
+#jobDescriptionDialog::backdrop { background: rgba(0, 0, 0, .6); }
+#jobDescriptionDialog h2 { margin: 0 0 12px; }
+#jobDescriptionDialog p { font-size: 13px; line-height: 1.5; margin: 12px 0; }
+#jobDescriptionDialog label { display: block; font-size: 13px; margin-bottom: 8px; }
+#jobDescriptionInput { width: 100%; box-sizing: border-box; resize: vertical; padding: 12px; border: 1px solid #64748b; border-radius: 8px; background: #1f2937; color: inherit; font: inherit; }
+#jobDescriptionError { color: #fca5a5; }
+.jd-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.jd-actions button { padding: 8px 12px; border: 1px solid #64748b; border-radius: 8px; background: #1f2937; color: inherit; cursor: pointer; }
+#jobDescriptionSave { background: #2563eb; }
+
+.answer-context { margin: 6px 16px; padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: 10px; flex-shrink: 0; }
+.answer-context-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.answer-context-label { font-size: 12px; opacity: .75; margin-right: auto; }
+.answer-context-toolbar button { border: 1px solid var(--glass-border); border-radius: 6px; background: rgba(255,255,255,.06); color: inherit; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.answer-context button:disabled { opacity: .5; cursor: wait; }
+.answer-context #resumeContextStatus, .answer-context #jobDescriptionStatus { margin: 8px 0 0 !important; }
+
+/* Context floats over the conversation; it never consumes a layout row. */
+#answerContextPopover { position: fixed; inset: 84px 20px auto auto; width: min(360px, calc(100vw - 40px)); max-height: calc(100vh - 110px); overflow-y: auto; box-sizing: border-box; margin: 0; padding: 16px; background: #111c2c; color: #f1f5f9; border: 1px solid rgba(148,210,235,.3); box-shadow: 0 16px 48px rgba(0,0,0,.45); -webkit-app-region: no-drag; }
+#answerContextPopover .answer-context-label { flex-basis: 100%; font-weight: 600; font-size: 13px; opacity: 1; margin-bottom: 4px; }
+.compact-header .context-trigger { width: auto; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; color: inherit; -webkit-app-region: no-drag; }
+.context-trigger[data-active="true"] { color: #93c5fd; border-color: rgba(147,197,253,.5); }
+@media (max-width: 560px) { .context-trigger span { display: none; } }
+
+/* Saved conversations: a readable floating library, without taking chat space. */
+#historyPanel { top: 48px; right: 12px; bottom: 16px; width: min(460px, calc(100vw - 24px)); max-width: none; height: auto; max-height: none; border-radius: 16px; background: #111c2c; color: #e8eef7; border: 1px solid #344358; box-shadow: 0 20px 64px rgba(0,0,0,.45); transform: translateX(calc(100% + 24px)); visibility: hidden; transition: transform .2s ease, visibility .2s; }
+#historyPanel.open { right: 12px; transform: translateX(0); visibility: visible; }
+#historyPanel .history-header { padding: 16px; font-size: 16px; gap: 10px; background: transparent; color: #f1f5f9; }
+#historyPanel .history-back-btn { width: 32px; height: 32px; color: #cbd5e1; }
+#historyPanel .history-action-btn { min-height: 32px; white-space: nowrap; font-size: 12px; padding: 6px 12px; }
+#historyPanel .history-toolbar { padding: 12px 16px 8px; gap: 8px; }
+#historyPanel .history-search { min-width: 0; min-height: 38px; font-size: 13px; padding: 9px 10px; color: #f1f5f9; background: #0c1522; border-color: #344358; }
+#historyPanel .history-search::placeholder { font-size: 12px; color: #a4b3c6; }
+#historyPanel .history-sort { min-height: 38px; font-size: 12px; color: #cbd5e1; background: #172335; }
+#historyPanel .history-actions-bar { padding: 4px 16px 12px; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid #29384c; }
+#historyPanel .history-action-btn-secondary { padding: 6px 9px; min-height: 30px; font-size: 11px; }
+#historyPanel .history-list { padding: 8px 12px 16px; background: transparent; }
+#historyPanel .history-group-header { padding: 14px 4px 8px; font-size: 11px; letter-spacing: .04em; color: #a4b3c6; }
+#historyPanel .history-item { padding: 12px; gap: 8px; margin-bottom: 6px; border-radius: 10px; background: #172335; border-color: transparent; box-shadow: none; align-items: flex-start; }
+#historyPanel .history-item:hover, #historyPanel .history-item:focus-within { background: #1e2e44; transform: none; }
+#historyPanel .history-item.active { background: #1a304b; border-color: #5389c6; }
+#historyPanel .history-item-icon { display: none; }
+#historyPanel .history-item-title { color: #f1f5f9; font-size: 14px; font-weight: 600; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+#historyPanel .history-item-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; font-size: 12px; line-height: 1.5; color: #b6c3d4; opacity: 1; margin-top: 5px; }
+#historyPanel .preview-role-label { font-size: 11px; opacity: .8; }
+#historyPanel .history-item-meta { flex-wrap: wrap; margin-top: 8px; gap: 8px; }
+#historyPanel .history-item-date, #historyPanel .history-item-msg-count { font-size: 11px; color: #a4b3c6; opacity: 1; }
+#historyPanel .history-item-msg-count { background: none; padding: 0; }
+#historyPanel .history-item-mode { display: none; }
+#historyPanel .history-item-actions { opacity: 1; flex-direction: column; gap: 3px; }
+#historyPanel .history-icon-btn { width: 28px; height: 26px; color: #b6c3d4; background: transparent; border-color: transparent; font-size: 13px; }
+#historyPanel .history-icon-btn:hover { background: #314761; color: white; }
+#historyPanel :is(button, input, select, .history-item):focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+#historyPanel .history-footer { padding: 12px 16px; color: #a4b3c6; font-size: 11px; background: transparent; }
+#historyPanel .history-empty { opacity: 1; color: #b6c3d4; gap: 10px; padding: 40px 24px; font-size: 13px; line-height: 1.6; }
+#historyPanel .history-empty strong { color: #f1f5f9; font-size: 16px; }
+#historyPanel .history-empty-icon { animation: none; font-size: 28px; }
+.history-load-more { width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; border: 1px solid #344358; background: #172335; color: #cbd5e1; cursor: pointer; }
+@media (max-width: 420px) { #historyPanel .history-header { padding: 12px; font-size: 14px; } #historyPanel .history-toolbar { flex-wrap: wrap; padding: 10px 12px; } #historyPanel .history-search { flex: 1 1 180px; } }
+@media (prefers-reduced-motion: reduce) { #historyPanel { transition: none; } }
+
+#historyPanel .history-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+#deleteAllChatsBtn { border: 0; background: transparent; color: #fca5a5; padding: 5px 0; font-size: 11px; cursor: pointer; }
+#deleteAllChatsDialog { width: min(440px, calc(100vw - 32px)); box-sizing: border-box; margin: auto; padding: 24px; border: 1px solid #45556b; border-radius: 16px; background: #111c2c; color: #e8eef7; -webkit-app-region: no-drag; }
+#deleteAllChatsDialog::backdrop { background: rgba(0,0,0,.6); }
+#deleteAllChatsDialog h2 { font-size: 20px; margin: 0 0 16px; }
+#deleteAllChatsDialog p { font-size: 13px; line-height: 1.6; margin: 12px 0; }
+.delete-chats-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.delete-chats-actions button { padding: 10px 12px; border: 1px solid #45556b; border-radius: 8px; background: #1c2c42; color: white; cursor: pointer; }
+#deleteAllChatsConfirm { background: #b91c1c; border-color: #ef4444; }
+#deleteAllChatsError { color: #fca5a5; }
+.delete-chats-actions button:disabled { opacity: .5; cursor: wait; }

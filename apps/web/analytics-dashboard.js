@@ -400,7 +400,10 @@ async function loadCompanyComparison() {
     // Get companies from cognitive graph or use defaults
     const companies = ['Google', 'Meta', 'Amazon', 'Netflix', 'Microsoft'];
 
-    const response = await fetch(`${API_BASE}/analytics/company-comparison?companies=${companies.join(',')}`);
+    const params = new URLSearchParams();
+    companies.forEach(company => params.append('companies', company));
+    const response = await fetch(`${API_BASE}/analytics/company-comparison?${params}`, { method: 'POST' });
+    if (!response.ok) throw new Error(`Company comparison unavailable (${response.status})`);
     const data = await response.json();
 
     if (data.error) {

@@ -6,7 +6,7 @@
 
 class ResumeReviewV2 {
     constructor() {
-        this.apiUrl = 'http://127.0.0.1:8000';
+        this.apiUrl = window.API_BASE || 'http://127.0.0.1:8000';
         this.uploadedFile = null;
         this.currentAnalysis = null;
         this.setupDragDrop();
@@ -91,29 +91,15 @@ class ResumeReviewV2 {
         document.getElementById('resultsContent').classList.add('hidden');
 
         try {
-            let data;
-
-            if (this.uploadedFile) {
-                const formData = new FormData();
-                formData.append('file', this.uploadedFile);
-                if (jobDesc) formData.append('job_description', jobDesc);
-
-                const response = await fetch(`${this.apiUrl}/resume/analyze-v2`, {
-                    method: 'POST',
-                    body: formData
-                });
-                data = await response.json();
-            } else {
-                const response = await fetch(`${this.apiUrl}/resume/analyze-v2`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        resume_text: resumeText,
-                        job_description: jobDesc || null
-                    })
-                });
-                data = await response.json();
-            }
+            const formData = new FormData();
+            if (this.uploadedFile) formData.append('file', this.uploadedFile);
+            else formData.append('resume_text', resumeText);
+            if (jobDesc) formData.append('job_description', jobDesc);
+            const response = await fetch(`${this.apiUrl}/resume/analyze-v2`, {
+                method: 'POST', body: formData, signal: AbortSignal.timeout(60000)
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error?.message || data.detail || `Analysis failed (${response.status})`);
 
             if (data.error) {
                 throw new Error(data.error);
@@ -164,7 +150,7 @@ class ResumeReviewV2 {
                         <div class="section-score-value" style="color: ${this.getScoreColor(score)}">${score}</div>
                         <div class="section-score-label">${this.capitalize(section)}</div>
                     </div>
-                `).join('';
+                `).join('');
         }
 
         // 🔥 RECRUITER SCAN SIMULATOR (Free Feature)

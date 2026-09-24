@@ -247,3 +247,16 @@ class TestDataUrlPrefixStripping:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_native_ocr_does_not_call_a_generative_model(monkeypatch):
+    monkeypatch.setattr(ocr_service, 'extract_native_text', lambda image: 'Maya will review the budget.')
+    def unexpected():
+        raise AssertionError('A recognized screenshot must not be sent to a generative model')
+    monkeypatch.setattr(ocr_service, '_get_vision_model', unexpected)
+    assert extract_text_from_image('fixture') == {'text':'Maya will review the budget.','method':'apple-vision'}
+
+
+def test_native_blank_image_stays_blank(monkeypatch):
+    monkeypatch.setattr(ocr_service, 'extract_native_text', lambda image: '')
+    assert extract_text_from_image('fixture') == {'text':'','method':'apple-vision'}

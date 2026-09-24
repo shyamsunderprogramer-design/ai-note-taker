@@ -38,31 +38,17 @@ from modules.ai.cache_manager import (
 
 
 class TestMemoryCacheBasic:
-    """get/set/delete/clear on the in-memory LRU.
-
-    DOCUMENTED BUG: `set(k, v)` without a TTL makes the value
-    unreadable — get() returns None. Root cause is in MemoryCache.get
-    (cache_manager.py:73-80): the condition is
-        `if key in self._ttl and self._ttl[key] > time.time()`
-    which only succeeds if BOTH the key has a TTL AND it's not
-    expired. When the key has no TTL (the common case for
-    "permanent" entries), the else branch fires and self.delete()
-    wipes the value. The fix is `(key not in self._ttl) or
-    (self._ttl[key] > time.time())`. Tests below pin the broken
-    behavior — a future fix will be noticed when these flip.
-    """
+    """get/set/delete/clear on the in-memory LRU."""
 
     def test_set_and_get(self):
         c = MemoryCache()
-        c.set("k", "v", ttl=60)  # ttl=60 to dodge the no-TTL bug
+        c.set("k", "v", ttl=60)
         assert c.get("k") == "v"
 
-    def test_set_without_ttl_is_unreadable_DOCUMENTED_BUG(self):
-        # Pinning the no-TTL bug: set(k, v) without ttl makes
-        # get(k) return None. Will flip to "v" when fixed.
+    def test_set_without_ttl_persists(self):
         c = MemoryCache()
         c.set("k", "v")
-        assert c.get("k") is None  # expected to break when bug is fixed
+        assert c.get("k") == "v"
 
     def test_get_missing_returns_none(self):
         c = MemoryCache()
@@ -97,67 +83,82 @@ class TestMemoryCacheBasic:
 
 
 class TestMemoryCacheTTL:
-    """TTL semantics — expired entries must return None.
+    """Expiry and bounded least-recently-used eviction."""
 
-    All TTL tests pass ttl=60 to dodge the no-TTL bug pinned above.
-    """
-
-    def test_ttl_zero_means_no_expiry(self):
+    @pytest.mark.parametrize("ttl", [None, 0])
+    def test_no_expiry_clears_previous_deadline(self, monkeypatch, ttl):
+        monkeypatch.setattr(time, "monotonic", lambda: 100)
         c = MemoryCache()
-        c.set("k", "v", ttl=0)
-        # ttl=0 is falsy in `if ttl:` → no TTL is set → entry should
-        # persist. NOTE: currently broken by the same no-TTL bug
-        # pinned in TestMemoryCacheBasic — passes only because get()
-        # finds no TTL and goes to the delete branch, leaving None.
-        # Pinning as DOCUMENTED BUG; expected to break when fixed.
-        assert c.get("k") is None  # expected to flip to "v" on fix
+        c.set("k", "old", ttl=1)
+        c.set("k", "v", ttl=ttl)
+        monkeypatch.setattr(time, "monotonic", lambda: 200)
+        assert c.get("k") == "v"
 
-    def test_ttl_expires_value(self):
+    def test_ttl_expires_at_deadline(self, monkeypatch):
+        monkeypatch.setattr(time, "monotonic", lambda: 100)
         c = MemoryCache()
         c.set("k", "v", ttl=1)
         assert c.get("k") == "v"
-        time.sleep(1.2)
+        monkeypatch.setattr(time, "monotonic", lambda: 101)
         assert c.get("k") is None
+
+    @pytest.mark.parametrize("size", [1, 2, 9, 10])
+    def test_small_cache_stays_bounded(self, size):
+        c = MemoryCache(max_size=size)
+        for i in range(30):
+            c.set(str(i), i)
+            assert len(c.keys()) <= size
+        assert c.get("29") == 29
+
+    def test_overwrite_at_capacity_preserves_other_entries(self):
+        c = MemoryCache(max_size=2)
+        c.set("a", 1)
+        c.set("b", 2)
+        c.set("b", 3)
+        assert c.get("a") == 1
+        assert c.get("b") == 3
+
+    def test_expired_keys_reclaimed_before_live_entries(self, monkeypatch):
+        monkeypatch.setattr(time, "monotonic", lambda: 100)
+        c = MemoryCache(max_size=2)
+        c.set("live", 1)
+        c.set("expired", 2, ttl=1)
+        monkeypatch.setattr(time, "monotonic", lambda: 102)
+        c.set("new", 3)
+        assert set(c.keys()) == {"live", "new"}
+
+    def test_keys_omit_expired_entries(self, monkeypatch):
+        monkeypatch.setattr(time, "monotonic", lambda: 100)
+        c = MemoryCache()
+        c.set("expired", 1, ttl=1)
+        monkeypatch.setattr(time, "monotonic", lambda: 102)
+        assert c.keys() == []
+
+    def test_invalid_capacity(self):
+        with pytest.raises(ValueError):
+            MemoryCache(max_size=0)
 
     def test_eviction_on_overflow(self):
         """LRU eviction kicks in when we exceed max_size."""
         c = MemoryCache(max_size=10)
         # Add 15 entries — should evict 10% on the 11th insert
         for i in range(15):
-            c.set(f"k{i}", i, ttl=60)  # ttl=60 to dodge no-TTL bug
+            c.set(f"k{i}", i, ttl=60)
         # Some early keys should be gone
         all_keys = c.keys()
         assert len(all_keys) <= 10
         # Recent keys should still be there
         assert c.get("k14") == 14
 
-    def test_get_updates_access_time(self):
-        """get() on a hot key should bump its LRU rank.
-
-        DOCUMENTED BUG: the LRU semantics are broken. With max_size=10
-        and 10 inserted entries, each subsequent set() evicts 1 entry
-        (10% of 10). After 10 evictions across 10 inserts, the cache
-        holds 10 items — but the test was set up expecting "hot"
-        (touched 3 times via get()) to survive. In practice it gets
-        evicted because the 10-eviction-budget sweeps through all
-        access times including recently-touched ones. The eviction
-        policy is too aggressive. Pinning as DOCUMENTED BUG — expected
-        to flip when fixed (e.g. raise min size, or use proper LRU
-        bucket tracking).
-        """
-        c = MemoryCache(max_size=10)
-        c.set("hot", 1, ttl=60)
-        c.set("cold1", 2, ttl=60)
-        c.set("cold2", 3, ttl=60)
-        # Touch hot key
-        for _ in range(3):
-            assert c.get("hot") == 1
-        # Fill to overflow
-        for i in range(10):
-            c.set(f"new{i}", i, ttl=60)
-        # "hot" was most recently accessed but gets evicted anyway —
-        # pinning the over-aggressive eviction as a DOCUMENTED BUG.
-        assert c.get("hot") is None  # expected to flip to 1 on fix
+    def test_get_refreshes_lru_order(self):
+        c = MemoryCache(max_size=2)
+        c.set("hot", 1)
+        c.set("cold", 2)
+        assert c.get("hot") == 1
+        c.set("new", 3)
+        assert c.get("cold") is None
+        assert c.get("hot") == 1
+        assert c.get("new") == 3
 
 
 class TestMemoryCacheKeys:

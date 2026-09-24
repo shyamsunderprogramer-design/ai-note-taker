@@ -7,6 +7,7 @@ logger = logging.getLogger("cloud_providers")
 
 # Use shared httpx client instead of requests to avoid blocking the event loop
 from lib.http_client import sync_client
+from lib.provider_stream import ProviderResponseError, check_provider_status, chat_content
 
 # ==============================
 # SECURE API KEY FETCHER (P1 Privacy)
@@ -240,85 +241,48 @@ def get_perplexity_key(user_id: str = None):
 # OLLAMA CLOUD (ollama.com)
 # ==============================
 
-def ask_ollama_cloud(prompt, model="minimax-m2", stream=False, mode="adaptive", style="concise", messages=None, image_b64=None, temperature=None):
-    """Ollama Cloud - uses https://ollama.com/api/chat endpoint.
-    Supports vision models (gemma3, qwen3-vl, etc.) via image_b64 param."""
-    import time
+def ask_ollama_cloud(prompt, model="minimax-m3", stream=False, mode="adaptive", style="concise", messages=None, image_b64=None, temperature=None):
+    """Direct cloud chat with grounded prompts and verified completion."""
     start = time.time()
-
-    api_key = get_ollama_cloud_key()
-    url = "https://ollama.com/api/chat"
-
-    # Build conversation for chat endpoint
-    chat_messages = []
-    if messages:
-        for msg in messages:
-            chat_messages.append({"role": msg.get("role", "user"), "content": msg.get("text", "")})
-
-    # Build user message — with image for vision models
-    user_msg = {"role": "user", "content": prompt}
-    if image_b64:
-        user_msg["images"] = [image_b64]
-    chat_messages.append(user_msg)
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    body = {
-        "model": model,
-        "messages": chat_messages,
-        "stream": stream
-    }
-    if temperature is not None:
-        body["options"] = {"temperature": temperature}
-
     try:
-        if stream:
-            with sync_client.stream("POST", url, headers=headers, json=body, timeout=90) as response:
-                if response.status_code == 429:
-                    yield _make_error(f"Ollama Cloud rate limited (429). Try again in a moment.")
-                    return
-                if response.status_code != 200:
-                    yield _make_error(f"Ollama Cloud error: HTTP {response.status_code}")
-                    return
-                yield _make_meta(model, "ollama-cloud")
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        if "message" in data:
-                            content = data["message"].get("content", "")
-                            if content:
-                                yield _make_content(content)
-                        if data.get("done", False):
-                            break
-                    except Exception:
-                        pass  # nosec B110
-        else:
-            response = sync_client.post(url, headers=headers, json=body, timeout=90)
-            if response.status_code == 429:
-                yield _make_error(f"Ollama Cloud rate limited (429). Try again in a moment.")
-                return
-            if response.status_code != 200:
-                yield _make_error(f"Ollama Cloud error: HTTP {response.status_code}")
-                return
-            data = response.json()
+        model = model.removesuffix(":cloud").removesuffix("-cloud")
+        user_msg = {"role": "user", "content": build_prompt(prompt, mode=mode, style=style, messages=messages)}
+        if image_b64:
+            user_msg["images"] = [image_b64]
+        body = {"model": model, "messages": [user_msg], "stream": stream}
+        if temperature is not None:
+            body["options"] = {"temperature": temperature}
+        headers = {"Authorization": f"Bearer {get_ollama_cloud_key()}", "Content-Type": "application/json"}
+        completed = False
+        has_text = False
+        with sync_client.stream("POST", "https://ollama.com/api/chat", headers=headers, json=body, timeout=90) as response:
+            check_provider_status(response, "Ollama Cloud")
             yield _make_meta(model, "ollama-cloud")
-            if "message" in data:
-                yield _make_content(data["message"].get("content", ""))
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                if data.get("error"):
+                    raise ProviderResponseError("Ollama Cloud could not complete this request. Retry or select another model.")
+                content = data.get("message", {}).get("content", "")
+                if content:
+                    has_text = has_text or bool(content.strip())
+                    yield _make_content(content)
+                if data.get("done"):
+                    if data.get("done_reason") not in (None, "stop"):
+                        raise ProviderResponseError("Ollama Cloud stopped before completing the answer. Retry or select another model.")
+                    completed = True
+                    break
+        if not completed or not has_text:
+            raise ProviderResponseError("Ollama Cloud returned an incomplete or empty answer. Retry or select another model.")
+        yield _make_done(int((time.time() - start) * 1000))
+    except (ProviderResponseError, ValueError) as exc:
+        yield _make_error(str(exc) if isinstance(exc, ProviderResponseError) else "Ollama Cloud returned an invalid response.")
+    except Exception:
+        yield _make_error("Ollama Cloud could not complete the request. Check connectivity or retry.")
 
-    except Exception as e:
-        yield _make_error("Ollama Cloud error: An internal error occurred")
 
-    ms = int((time.time() - start) * 1000)
-    yield _make_done(ms)
-
-
-def ask_ollama_cloud_stream(prompt, model="qwen2.5:1.5b", mode="adaptive", style="concise", messages=None, image_b64=None, temperature=None):
-    """Streaming version of Ollama Cloud — supports vision via image_b64."""
+def ask_ollama_cloud_stream(prompt, model="minimax-m3", mode="adaptive", style="concise", messages=None, image_b64=None, temperature=None):
     yield from ask_ollama_cloud(prompt, model=model, stream=True, mode=mode, style=style, messages=messages, image_b64=image_b64, temperature=temperature)
 
 
@@ -347,8 +311,11 @@ def ask_gpt(prompt, model="gpt-4o-mini", stream=False, temperature=None):
         stream=stream,
         timeout=60
     )
-    if response.status_code != 200:
-        raise Exception(f"OpenAI error: {response.status_code} - {response.text}")
+    try:
+        check_provider_status(response, "OpenAI")
+    except ProviderResponseError:
+        response.close()
+        raise
     return response
 
 
@@ -376,7 +343,7 @@ def ask_claude(prompt, model="claude-3-5-haiku-20241002", stream=False, temperat
         timeout=60
     )
     if response.status_code != 200:
-        raise Exception(f"Anthropic error: {response.status_code} - {response.text}")
+        raise Exception(f"Anthropic error: {response.status_code} - {response.read().decode('utf-8', errors='replace')}")
     return response
 
 
@@ -392,7 +359,7 @@ def ask_gemini(prompt, model="gemini-2.0-flash", stream=False, temperature=None)
         url += "&alt=sse"
     response = sync_client.post(url, json=body, timeout=60)
     if response.status_code != 200:
-        raise Exception(f"Gemini error: {response.status_code} - {response.text}")
+        raise Exception(f"Gemini error: {response.status_code} - {response.read().decode('utf-8', errors='replace')}")
     return response
 
 
@@ -418,7 +385,7 @@ def ask_grok(prompt, model="grok-2-mini", stream=False, temperature=None):
         timeout=60
     )
     if response.status_code != 200:
-        raise Exception(f"Grok error: {response.status_code} - {response.text}")
+        raise Exception(f"Grok error: {response.status_code} - {response.read().decode('utf-8', errors='replace')}")
     return response
 
 
@@ -444,7 +411,7 @@ def ask_deepseek(prompt, model="deepseek-chat", stream=False, temperature=None):
         timeout=60
     )
     if response.status_code != 200:
-        raise Exception(f"DeepSeek error: {response.status_code} - {response.text}")
+        raise Exception(f"DeepSeek error: {response.status_code} - {response.read().decode('utf-8', errors='replace')}")
     return response
 
 
@@ -470,7 +437,7 @@ def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False, temperature=
         timeout=60
     )
     if response.status_code != 200:
-        raise Exception(f"Groq error: {response.status_code} - {response.text}")
+        raise Exception(f"Groq error: {response.status_code} - {response.read().decode('utf-8', errors='replace')}")
     return response
 
 
@@ -479,39 +446,24 @@ def ask_groq(prompt, model="llama-3.3-70b-versatile", stream=False, temperature=
 # ==============================
 
 def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise", messages=None, temperature=None):
-    """OpenAI streaming — yields SSE event strings"""
-    import time
+    """OpenAI streaming with safe, actionable provider failures."""
     start = time.time()
-    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
+    resp = None
     try:
+        final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
         resp = ask_gpt(final_prompt, model=model, stream=True, temperature=temperature)
+        check_provider_status(resp, "OpenAI")
         yield _make_meta(model, "openai")
-
-        chunk_count = 0
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data = decoded[6:]
-                if data == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data)
-                    content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if content:
-                        yield _make_content(content)
-                        chunk_count += 1
-                except json.JSONDecodeError:
-                    pass
-
-        ms = int((time.time() - start) * 1000)
-        logger.debug("OpenAI stream complete: %d chunks in %dms", chunk_count, ms)
-        yield _make_done(ms)
-
-    except Exception as e:
-        logger.error("OpenAI streaming error: %s", str(e))
-        yield _make_error("OpenAI error: An internal error occurred")
+        for content in chat_content(resp, "OpenAI"):
+            yield _make_content(content)
+        yield _make_done(int((time.time() - start) * 1000))
+    except (ProviderResponseError, ValueError) as exc:
+        yield _make_error(str(exc))
+    except Exception:
+        yield _make_error("OpenAI could not complete the request. Check connectivity or retry.")
+    finally:
+        if resp is not None:
+            resp.close()
 
 
 def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive", style="concise", messages=None, temperature=None):
@@ -536,7 +488,7 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
         with sync_client.stream("POST", "https://api.anthropic.com/v1/messages",
                                 headers=headers, json=body, timeout=60) as resp:
             if resp.status_code != 200:
-                raise Exception(f"Claude error: {resp.status_code} - {resp.text}")
+                raise Exception(f"Claude error: {resp.status_code} - {resp.read().decode('utf-8', errors='replace')}")
             yield _make_meta(model, "anthropic")
 
             chunk_count = 0
@@ -566,37 +518,49 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
 
 
 def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="concise", messages=None, temperature=None):
-    """Google Gemini streaming — yields SSE event strings"""
-    import time
+    """Google streaming; API keys stay in headers, never request URLs."""
     start = time.time()
-    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
-    api_key = get_google_key()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
-    body = {
-        "contents": [{"parts": [{"text": final_prompt}]}],
-        "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 1024}
-    }
-    with sync_client.stream("POST", url, json=body, timeout=60) as resp:
-        if resp.status_code != 200:
-            raise Exception(f"Gemini error: {resp.status_code} - {resp.text}")
-        yield _make_meta(model, "google")
-        try:
+    try:
+        final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
+        headers = {"x-goog-api-key": get_google_key()}
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
+        body = {
+            "contents": [{"parts": [{"text": final_prompt}]}],
+            "generationConfig": {"temperature": temperature if temperature is not None else 0.3,
+                                 "maxOutputTokens": 4096 if style == "detailed" else 2048},
+        }
+        completed = False
+        has_text = False
+        with sync_client.stream("POST", url, headers=headers, json=body, timeout=60) as resp:
+            check_provider_status(resp, "Google")
+            yield _make_meta(model, "google")
             for line in resp.iter_lines():
-                if not line:
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="replace")
+                if not line.startswith("data:"):
                     continue
-                decoded = line
-                if decoded.startswith("data: "):
-                    try:
-                        obj = json.loads(decoded[6:])
-                        content = obj.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
-        except Exception as e:
-            yield _make_error("An internal error occurred")
-    ms = int((time.time() - start) * 1000)
-    yield _make_done(ms)
+                event = json.loads(line[5:])
+                if event.get("error") or event.get("promptFeedback", {}).get("blockReason"):
+                    raise ProviderResponseError("Google could not complete this request. Try another question or model.")
+                for candidate in event.get("candidates", []):
+                    for part in candidate.get("content", {}).get("parts", []):
+                        text = part.get("text")
+                        if text and not part.get("thought"):
+                            has_text = has_text or bool(text.strip())
+                            yield _make_content(text)
+                    reason = candidate.get("finishReason")
+                    if reason == "STOP":
+                        completed = True
+                    elif reason:
+                        raise ProviderResponseError("Google ended the answer before completion. Ask a narrower question or choose another model.")
+        if not completed or not has_text:
+            raise ProviderResponseError("Google returned no complete answer. Please retry.")
+        yield _make_done(int((time.time() - start) * 1000))
+    except (ProviderResponseError, ValueError) as exc:
+        # JSON decoding failures contain no request URL or credential.
+        yield _make_error(str(exc) if isinstance(exc, ProviderResponseError) else "Google returned an invalid response or has no configured key.")
+    except Exception:
+        yield _make_error("Google could not complete the request. Check connectivity or retry.")
 
 
 def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise", messages=None, temperature=None):
@@ -679,44 +643,51 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
     yield _make_done(ms)
 
 
-def ask_groq_stream(prompt, model="llama-3.3-70b-versatile", mode="adaptive", style="concise", messages=None, temperature=None):
-    """Groq streaming — yields SSE event strings"""
-    import time
+def ask_groq_stream(prompt, model="openai/gpt-oss-120b", mode="adaptive", style="concise", messages=None, temperature=None):
+    """Groq streaming with explicit HTTP, completion, and output-limit errors."""
     start = time.time()
-    final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
-    api_key = get_groq_key()
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "model": model,
-        "messages": [{"role": "user", "content": final_prompt}],
-        "temperature": temperature if temperature is not None else 0.3,
-        "stream": True
-    }
-    yield _make_meta(model, "groq")
     try:
+        final_prompt = build_prompt(prompt, mode=mode, style=style, messages=messages)
+        headers = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+        body = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": (
+                    "You are ANT, a precise assistant for meeting notes and interview preparation. "
+                    "Follow the requested format and length. Answer only what was asked; avoid unrequested "
+                    "examples, configuration associations, or extra factual claims. For meeting extraction, separate "
+                    "decisions, explicit pending actions, proposals, blockers, and completed work. "
+                    "An explicit request, commitment, or task requirement is a pending action, even if nobody "
+                    "volunteered; retain unassigned tasks with owner unspecified. A need for information "
+                    "or a condition for agreement is a blocker, not an assigned action. If there are "
+                    "no explicit pending actions, report none; do not manufacture a to-do list. "
+                    "Keep each task's owner and deadline independent, unspecified when absent. "
+                    "For technical explanations, be precise about which component acts on which resource "
+                    "and which settings control its behavior. Do not conflate them. "
+                    "Avoid universal claims when behavior depends on configuration. Distinguish direct effects "
+                    "from indirect consequences; do not claim other mechanisms are unaffected. "
+                    "Check these distinctions before returning only the final answer."
+                )},
+                {"role": "user", "content": final_prompt},
+            ],
+            "temperature": temperature if temperature is not None else 0.3,
+            "max_completion_tokens": 4096 if style == "detailed" else 2048,
+            "stream": True,
+        }
+        if model.startswith("openai/gpt-oss-"):
+            body["reasoning_effort"] = "high"
+            body["max_completion_tokens"] = max(body["max_completion_tokens"], 4096)
         with sync_client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
                                 headers=headers, json=body, timeout=60) as resp:
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
-    except Exception as e:
-        yield _make_error("An internal error occurred")
-    ms = int((time.time() - start) * 1000)
-    yield _make_done(ms)
+            check_provider_status(resp, "Groq")
+            yield _make_meta(model, "groq")
+            for content in chat_content(resp, "Groq"):
+                yield _make_content(content)
+        yield _make_done(int((time.time() - start) * 1000))
+    except (ProviderResponseError, ValueError) as exc:
+        yield _make_error(str(exc))
+    except Exception:
+        yield _make_error("Groq could not complete the request. Check connectivity or retry.")
 
 
 # ==============================
@@ -744,7 +715,7 @@ def ask_perplexity(prompt, model="sonar", stream=False, temperature=None):
         timeout=60
     )
     if response.status_code != 200:
-        raise Exception(f"Perplexity error: {response.status_code} - {response.text}")
+        raise Exception(f"Perplexity error: {response.status_code} - {response.read().decode('utf-8', errors='replace')}")
     return response
 
 
@@ -805,6 +776,7 @@ PROVIDER_MODEL_MAP = {
     "anthropic-claude-sonnet-4-20250514": ("anthropic", "claude-sonnet-4-20250514"),
     "anthropic-claude-opus-4-20250514": ("anthropic", "claude-opus-4-20250514"),
     # Google
+    "google-gemini-3-8-flash": ("google", "gemini-3.8-flash"),
     "google-gemini-2-0-flash": ("google", "gemini-2.0-flash"),
     "google-gemini-2-0-flash-exp": ("google", "gemini-2.0-flash-exp"),
     "google-gemini-1-5-flash": ("google", "gemini-1.5-flash"),
@@ -818,7 +790,10 @@ PROVIDER_MODEL_MAP = {
     "deepseek-deepseek-chat": ("deepseek", "deepseek-chat"),
     "deepseek-deepseek-coder": ("deepseek", "deepseek-coder"),
     "deepseek-deepseek-math": ("deepseek", "deepseek-math"),
-    # Groq
+    # Groq: current catalog entries first; old IDs remain explicit selections.
+    "groq-gpt-oss-120b": ("groq", "openai/gpt-oss-120b"),
+    "groq-gpt-oss-20b": ("groq", "openai/gpt-oss-20b"),
+    "groq-qwen3-8-27b": ("groq", "qwen/qwen3.8-27b"),
     "groq-llama-3-3-70b": ("groq", "llama-3.3-70b-versatile"),
     "groq-llama-3-1-8b": ("groq", "llama-3.1-8b-instant"),
     "groq-llama-3-2-1b": ("groq", "llama-3.2-1b-preview"),
@@ -826,7 +801,7 @@ PROVIDER_MODEL_MAP = {
     "groq-mixtral-8x7b": ("groq", "mixtral-8x7b-32768"),
     "groq-qwen-2-5-72b": ("groq", "qwen-2.5-72b-instruct"),
     # Ollama Cloud
-    "ollama-cloud": ("ollama-cloud", "minimax-m2"),
+    "ollama-cloud": ("ollama-cloud", os.getenv("OLLAMA_MODEL_CLOUD", "minimax-m3:cloud").removesuffix(":cloud").removesuffix("-cloud")),
     # Perplexity
     "perplexity-sonar": ("perplexity", "sonar"),
     "perplexity-sonar-pro": ("perplexity", "sonar-pro"),
@@ -848,6 +823,7 @@ MODEL_DISPLAY_NAMES = {
     "anthropic-claude-sonnet-4-20250514": "Claude Sonnet 4",
     "anthropic-claude-opus-4-20250514": "Claude Opus 4",
     # Google
+    "google-gemini-3-8-flash": "Gemini 3.8 Flash",
     "google-gemini-2-0-flash": "Gemini 2.0 Flash",
     "google-gemini-2-0-flash-exp": "Gemini 2.0 Flash Exp",
     "google-gemini-1-5-flash": "Gemini 1.5 Flash",
@@ -862,6 +838,9 @@ MODEL_DISPLAY_NAMES = {
     "deepseek-deepseek-coder": "DeepSeek Coder",
     "deepseek-deepseek-math": "DeepSeek Math",
     # Groq
+    "groq-gpt-oss-120b": "GPT-OSS 120B (Groq)",
+    "groq-gpt-oss-20b": "GPT-OSS 20B (Groq)",
+    "groq-qwen3-8-27b": "Qwen 3.8 27B (Groq)",
     "groq-llama-3-3-70b": "Llama 3.3 70B",
     "groq-llama-3-1-8b": "Llama 3.1 8B",
     "groq-llama-3-2-1b": "Llama 3.2 1B",
@@ -880,8 +859,8 @@ MODEL_DISPLAY_NAMES = {
 
 def get_stream_fn(provider_key):
     """Return the appropriate stream function for a provider key"""
-    resolved = PROVIDER_MODEL_MAP.get(provider_key, ("openai", "gpt-4o-mini"))
-    provider_name = resolved[0]
+    resolved = PROVIDER_MODEL_MAP.get(provider_key)
+    provider_name = resolved[0] if resolved else provider_key
     if provider_name == "openai":
         return ask_gpt_stream
     elif provider_name == "anthropic":
@@ -946,14 +925,13 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
                 yield _make_error(f"OpenAI rate limited (429). Try again in a moment or select a different model.")
                 return
             if resp.status_code != 200:
-                err = resp.text
                 yield _make_error(f"OpenAI vision error: HTTP {resp.status_code}")
                 return
             yield _make_meta(model, "openai")
             for line in resp.iter_lines():
                 if not line:
                     continue
-                decoded = line.decode("utf-8", errors="replace")
+                decoded = line if isinstance(line, str) else line.decode("utf-8", errors="replace")
                 if decoded.startswith("data: "):
                     data = decoded[6:]
                     if data == "[DONE]":

@@ -21,10 +21,37 @@
 
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { readdirSync, readFileSync } from 'node:fs';
+
+// Classic scripts share window globals and must retain their execution order.
+// Vite leaves their URLs in HTML but does not emit the files automatically.
+function preserveRuntimeAssets() {
+  let root;
+  return {
+    name: 'preserve-runtime-assets',
+    configResolved(config) { root = config.root; },
+    generateBundle() {
+      const emitDirectory = (directory = '') => {
+        for (const entry of readdirSync(resolve(root, directory), { withFileTypes: true })) {
+          const name = directory ? `${directory}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            if (directory || ['js', 'css', 'assets'].includes(entry.name)) emitDirectory(name);
+          } else if (entry.isFile() && name !== 'vite.config.js' && (
+            /\.(js|css|png|jpg|jpeg|svg|ico|woff2?|ttf|webp)$/.test(name) || name === 'manifest.json'
+          )) {
+            this.emitFile({ type: 'asset', fileName: name, source: readFileSync(resolve(root, name)) });
+          }
+        }
+      };
+      emitDirectory();
+    },
+  };
+}
 
 export default defineConfig({
   root: '.',
   base: '/',
+  plugins: [preserveRuntimeAssets()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

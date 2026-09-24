@@ -1,0 +1,11 @@
+import {chromium} from '@playwright/test';
+import {writeFile} from 'node:fs/promises';
+const browser=await chromium.connectOverCDP('http://127.0.0.1:9223');
+const page=browser.contexts()[0].pages().find(p=>/index.html|signin.html/.test(p.url()));
+const status=await page.evaluate(async()=>{const before=await window.api.autoScreenshotGetStatus();await window.api.autoScreenshotSetEnabled(false);return before;});
+const session=await browser.newBrowserCDPSession();
+const processes=await session.send('SystemInfo.getProcessInfo');
+const pid=processes.processInfo.find(p=>p.type==='browser')?.id;
+await writeFile('/tmp/ant-visible-desktop/capture-state.json',JSON.stringify({status,pid}));
+console.log(JSON.stringify({periodicCapturePaused:true,pid}));
+await browser.close();

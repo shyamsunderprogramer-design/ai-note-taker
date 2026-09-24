@@ -141,25 +141,30 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
             collected_parts = []
+            stream_failed = False
             # route_ai_stream is now async (its inner helpers are also async
             # generators after the core/main.py patch). Must use `async for`
             # — sync `for` raises "'async_generator' object is not iterable".
             async for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
-                yield event
-                # Collect text content for caching (parse SSE data)
-                if event.startswith("event: chunk"):
-                    continue  # next line has the data
-                elif event.startswith("data:"):
-                    try:
-                        data = json.loads(event[5:].strip())
-                        if data.get("type") == "chunk":
-                            collected_parts.append(data.get("content", ""))
-                    except Exception:
-                        pass  # nosec B110
+                for line in event.splitlines():
+                    if line.startswith("data:"):
+                        try:
+                            data = json.loads(line[5:].strip())
+                        except ValueError:
+                            continue
+                        if data.get("type") == "chunk" and isinstance(data.get("content"), str):
+                            collected_parts.append(data["content"])
+                        elif data.get("type") == "error":
+                            stream_failed = True
+                if "event: done" not in event or "".join(collected_parts).strip():
+                    yield event
+            if not "".join(collected_parts).strip() and not stream_failed:
+                from lib.sse_helpers import make_error
+                yield make_error("The provider returned no answer. Please try again.")
 
             # Cache the full response for future identical queries
             full_text = "".join(collected_parts)
-            if full_text and messages is None:
+            if full_text.strip() and messages is None and not stream_failed:
                 _cache_ai_set(q, mode, style, provider, full_text)
 
         except Exception as e:
@@ -174,7 +179,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
 @router.get("/stream-race")
 def stream_race(q: str, mode: str = "race", style: str = "concise", context: str = None, enabled: str = None, temperature: float = 0.3):
     """
-    Fire all configured providers in parallel. First to emit a meta/chunk event wins.
+    Fire all configured providers in parallel. First to emit nonempty answer text wins.
     Winner's response streams in real-time (word-by-word). Losing providers are
     cancelled to save API tokens. Falls back to Ollama if all clouds fail.
     Only providers specified in 'enabled' param (comma-separated) will be used.
@@ -259,7 +264,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                 result.append(pk)
         return result
 
-    cloud_providers = deduplicate(cloud_providers)[:4]  # Limit to 4 concurrent
+    cloud_providers = deduplicate(cloud_providers)  # Limit to 4 concurrent
     local_providers = deduplicate(local_providers)
 
     # Sort for speed
@@ -270,7 +275,9 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             return SPEED_PRIORITY.get(prefix, 99)
         return sorted(provider_list, key=sort_key)
 
-    cloud_providers = sort_for_speed(cloud_providers)
+    cloud_providers = sort_for_speed(cloud_providers)[:4]
+    primary_providers = cloud_providers or local_providers
+    fallback_providers = list(local_providers) if cloud_providers else []
     all_providers = cloud_providers + local_providers
     logger.info("Race mode: clouds=%s, local=%s, combined=%s", _sanitize_for_log(str(cloud_providers)), _sanitize_for_log(str(local_providers)), _sanitize_for_log(str(all_providers)))
 
@@ -278,23 +285,28 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     if len(all_providers) <= 1:
         single_pk = all_providers[0] if all_providers else "ollama"
         async def single_generator():
+            from lib.sse_helpers import has_answer_content, make_error
             STATE["is_streaming"] = True
+            answered = False
+            failed = False
             try:
                 if single_pk == "ollama":
                     from ai_router import ask_ollama_stream
-                    # ask_ollama_stream is patched to be an async generator at
-                    # core/main.py import time, so `async for` works directly.
-                    async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature):
-                        yield event
+                    stream = ask_ollama_stream(q, mode=mode, style=style, messages=messages, temperature=temperature)
                 else:
-                    resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
-                    model_name = resolved[1]
+                    model_name = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))[1]
                     stream_fn = get_stream_fn(single_pk)
-                    if stream_fn:
-                        async for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
-                            yield event
-                    else:
-                        yield f'event: error\ndata: {{"type":"error","message":"No stream function for {single_pk}"}}\n\n'
+                    if stream_fn is None:
+                        yield make_error("The selected provider is unavailable.")
+                        return
+                    stream = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)
+                async for event in stream:
+                    answered = answered or has_answer_content(event)
+                    failed = failed or "event: error" in event
+                    if "event: done" not in event or answered:
+                        yield event
+                if not answered and not failed:
+                    yield make_error("The provider returned no answer. Please try again.")
             finally:
                 STATE["is_streaming"] = False
         return StreamingResponse(single_generator(), media_type="text/event-stream")
@@ -353,7 +365,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     # Start all provider threads
     threads = []
-    for pk in all_providers:
+    for pk in primary_providers:
         t = threading.Thread(target=stream_provider, args=(pk,), daemon=True)
         t.start()
         threads.append(t)
@@ -361,64 +373,107 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     def race_generator():
         STATE["is_streaming"] = True
         winner = None
-        active_count = len(all_providers)
+        active_count = len(primary_providers)
         done_count = 0
+        finished_providers = set()
         winner_first_chunk_time = None
         winner_done = False
+        pending_meta = {}
+        winner_failed = False
 
-        while not winner_done and done_count < active_count:
-            try:
-                pk, event_type, event_data = race_queue.get(timeout=30)
-            except queue.Empty:
-                logger.warning("[RACE] Timeout waiting for providers")
-                break
+        try:
+            while not winner_done:
+                if done_count >= active_count:
+                    if winner is None and fallback_providers:
+                        # Local is a fallback, not a cheaper/faster competitor
+                        # that can displace a configured cloud answer.
+                        for fallback_pk in fallback_providers:
+                            thread = threading.Thread(target=stream_provider, args=(fallback_pk,), daemon=True)
+                            thread.start()
+                            threads.append(thread)
+                        active_count += len(fallback_providers)
+                        fallback_providers.clear()
+                    else:
+                        break
+                try:
+                    pk, event_type, event_data = race_queue.get(timeout=30)
+                except queue.Empty:
+                    logger.warning("[RACE] Timeout waiting for providers")
+                    if winner is not None:
+                        winner_failed = True
+                        yield 'event: error\ndata: {"type":"error","message":"The response stopped before completion. Please try again."}\n\n'
+                    if winner is None and fallback_providers:
+                        for primary_pk in primary_providers:
+                            cancel_flags[primary_pk].set()
+                        finished_providers.update(primary_providers)
+                        done_count = len(finished_providers)
+                        continue
+                    break
 
-            if event_type == "DONE":
-                done_count += 1
-                if pk == winner:
-                    winner_done = True
-                continue
+                if event_type == "DONE":
+                    finished_providers.add(pk)
+                    done_count = len(finished_providers)
+                    if pk == winner:
+                        winner_done = True
+                    continue
 
-            if event_type == "ERROR":
-                logger.warning("[RACE] provider %s error: %s", pk, event_data)
-                continue
+                if pk in finished_providers and pk != winner:
+                    continue
 
-            if event_type != "EVENT":
-                continue
+                if event_type == "ERROR":
+                    logger.warning("[RACE] provider %s error: %s", pk, event_data)
+                    if pk == winner:
+                        winner_failed = True
+                        yield 'event: error\ndata: {"type":"error","message":"The selected provider could not finish its answer. Please try again."}\n\n'
+                        break
+                    continue
 
-            # First provider to emit a meta event wins the race
-            if winner is None:
-                if "event: meta" in event_data:
+                if event_type != "EVENT":
+                    continue
+
+                # Metadata is not evidence of a usable answer. Providers can emit
+                # it before authentication errors or an empty completion.
+                if winner is None:
+                    from lib.sse_helpers import has_answer_content
+                    if "event: meta" in event_data:
+                        pending_meta[pk] = event_data
+                    if not has_answer_content(event_data):
+                        continue
                     winner = pk
                     winner_first_chunk_time = time.time()
-                    logger.info("[RACE WINNER] %s (first-byte in %.1fs)", pk, time.time() - race_start)
+                    logger.info("[RACE WINNER] %s (first text in %.1fs)", pk, time.time() - race_start)
                     for other_pk in cancel_flags:
                         if other_pk != winner:
                             cancel_flags[other_pk].set()
+                    if pk in pending_meta:
+                        yield pending_meta.pop(pk)
                     yield event_data
-                continue
+                    continue
 
-            # Only stream the winner's events in real-time
-            if pk == winner:
-                yield event_data
+                # Only stream the winner's events in real-time
+                if pk == winner:
+                    yield event_data
 
-        if winner is None:
-            logger.error("[RACE] All providers failed")
-            yield f'event: error\ndata: {{"type":"error","message":"All providers failed"}}\n\n'
-        else:
-            winner_ms = int((winner_first_chunk_time - race_start) * 1000) if winner_first_chunk_time else 0
-            elapsed = time.time() - race_start
-            logger.info("[RACE COMPLETE] winner=%s first_byte=%dms total=%.1fs", winner, winner_ms, elapsed)
-            _race_history.append({
-                "winner": winner,
-                "ms": winner_ms,
-                "providers": list(all_providers),
-                "timestamp": time.time(),
-            })
-            while len(_race_history) > 100:
-                _race_history.pop(0)
+            if winner is None:
+                logger.error("[RACE] All providers failed")
+                yield f'event: error\ndata: {{"type":"error","message":"All providers failed"}}\n\n'
+            elif not winner_failed:
+                winner_ms = int((winner_first_chunk_time - race_start) * 1000) if winner_first_chunk_time else 0
+                elapsed = time.time() - race_start
+                logger.info("[RACE COMPLETE] winner=%s first_byte=%dms total=%.1fs", winner, winner_ms, elapsed)
+                _race_history.append({
+                    "winner": winner,
+                    "ms": winner_ms,
+                    "providers": list(all_providers),
+                    "timestamp": time.time(),
+                })
+                while len(_race_history) > 100:
+                    _race_history.pop(0)
 
-        STATE["is_streaming"] = False
+        finally:
+            for flag in cancel_flags.values():
+                flag.set()
+            STATE["is_streaming"] = False
 
     return StreamingResponse(race_generator(), media_type="text/event-stream")
 
@@ -510,6 +565,30 @@ async def ask_with_image(
     # === Screenshot provided — use vision-capable providers ===
     # Absolute import — see comment at /stream-race endpoint above.
     from modules.platform.cloud_providers import VISION_PROVIDER_MAP, get_vision_stream_fn
+    from modules.platform.cloud_providers import PROVIDER_MODEL_MAP
+
+    # An explicit model must not fall through into the default vision race.
+    if provider not in ("auto", "ollama"):
+        chosen = PROVIDER_MODEL_MAP.get(provider)
+        if not chosen and provider in VISION_PROVIDER_MAP:
+            chosen = (provider, VISION_PROVIDER_MAP[provider])
+        async def selected_vision_gen():
+            try:
+                if chosen:
+                    stream_fn = get_vision_stream_fn(chosen[0])
+                    if not stream_fn:
+                        raise ValueError("Selected model provider does not support screenshots")
+                    stream = stream_fn(query, image_b64=image_b64, model=chosen[1], mode=mode, style=style, messages=messages, temperature=temperature)
+                elif ":" in provider and not provider.endswith(":cloud"):
+                    from ai_router import ask_ollama_vision_stream
+                    stream = ask_ollama_vision_stream(query, image_b64=image_b64, model_name=provider, mode=mode, style=style, messages=messages, temperature=temperature)
+                else:
+                    raise ValueError("Selected model is unavailable for screenshots; choose a vision model or remove the screenshot")
+                async for event in stream:
+                    yield event
+            except Exception as exc:
+                yield f"event: error\ndata: {json.dumps({'type':'error','message':str(exc)})}\n\n"
+        return StreamingResponse(selected_vision_gen(), media_type="text/event-stream")
 
     enabled_set = None
     if enabled:

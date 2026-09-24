@@ -2,14 +2,15 @@
 OCR Service — Extract text from screenshots/images.
 
 Pipeline:
-1. Try local Ollama vision model (llava/moondream) — best quality
-2. Fall back to pytesseract — no AI model needed
-3. Return empty result if neither is available
+1. Use native Apple Vision on macOS when available.
+2. Retain Ollama vision and pytesseract fallbacks on other installations.
+3. Return an empty result if no extractor is available.
 """
 
 import base64
 import json
 import logging
+from lib.native_ocr import extract_native_text
 from io import BytesIO
 
 logger = logging.getLogger("ocr_service")
@@ -50,10 +51,12 @@ def _extract_with_vision_model(image_b64: str, model_name: str) -> str:
         "model": model_name,
         "prompt": prompt,
         "images": [raw_b64],
-        "stream": False,  # Non-streaming for simplicity
+        "stream": False,
+        "think": False,  # OCR output must not contain model deliberation
         "options": {
             "temperature": 0.1,  # Low temp for precise extraction
             "num_predict": 2048,
+            "num_ctx": 4096,
         },
     }
 
@@ -109,14 +112,19 @@ def extract_text_from_image(image_b64: str) -> dict:
     """
     Extract text from a base64-encoded image.
 
-    Tries Ollama vision model first (better quality),
-    falls back to pytesseract if no vision model is available.
+    Prefers native macOS text recognition, then tries the existing vision
+    model and pytesseract fallbacks when native OCR is unavailable.
 
     Returns:
-        dict: { "text": str, "method": "ollama"|"tesseract"|"none" }
+        dict: { "text": str, "method": "apple-vision"|"ollama"|"tesseract"|"none" }
     """
     if not image_b64:
         return {"text": "", "method": "none"}
+
+    # Native OCR returns literal text, without asking a language model to describe it.
+    native_text = extract_native_text(image_b64)
+    if native_text is not None:
+        return {"text": native_text, "method": "apple-vision"}
 
     # Step 1: Try Ollama vision model
     vision_model = _get_vision_model()
