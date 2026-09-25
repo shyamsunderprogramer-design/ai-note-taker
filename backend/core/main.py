@@ -447,6 +447,8 @@ from routes.mcp import router as mcp_router
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(ai_router)
+from routes.recovery import router as recovery_router
+app.include_router(recovery_router)
 app.include_router(transcription_router)
 app.include_router(ollama_router)
 app.include_router(conversations_router)
@@ -2993,28 +2995,11 @@ async def get_transcription_speakers(audio_id: str):
     return {"status": "not_implemented", "audio_id": audio_id}
 
 
-def shutdown_handler(*args):
-    # State is now in _state object
-    _state.use_autonomous = False
-    # T16: Close database connections on shutdown
-    if DATABASE_AVAILABLE:
-        try:
-            import asyncio
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(close_database())
-            loop.close()
-        except Exception:
-            pass
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, shutdown_handler)
-signal.signal(signal.SIGTERM, shutdown_handler)
-
-
+# Uvicorn owns SIGINT/SIGTERM and awaits the application shutdown hook.
 @app.on_event("shutdown")
 async def shutdown_event():
     """FastAPI shutdown handler - closes database connections and HTTP clients."""
+    _state.use_autonomous = False
     if DATABASE_AVAILABLE:
         try:
             await close_database()

@@ -110,3 +110,62 @@ def test_ollama_cloud_requires_completion_and_uses_grounded_prompt(monkeypatch, 
     assert ('event: done' in frames) == success
     assert ('event: error' in frames) != success
     assert 'secret-provider-detail' not in frames and 'private' not in frames
+
+
+def test_rate_limit_carries_retry_after_without_echoing_error_body():
+    resp = httpx.Response(429, headers={'Retry-After':'90'}, json={'error':'secret'})
+    with pytest.raises(ProviderResponseError) as caught:
+        check_provider_status(resp,'Groq')
+    assert caught.value.code == 'rate_limit'
+    assert caught.value.retry_after == 90
+    assert 'secret' not in str(caught.value)
+
+
+def test_context_window_is_classified_without_echoing_prompt():
+    resp = httpx.Response(400,json={'error':{'code':'context_length_exceeded','message':'secret prompt'}})
+    with pytest.raises(ProviderResponseError) as caught:
+        check_provider_status(resp,'Groq')
+    assert caught.value.code == 'context_limit'
+    assert 'secret' not in str(caught.value)
+
+
+def test_mid_stream_quota_has_machine_readable_code():
+    resp = response([{'error':{'code':'rate_limit_exceeded','message':'secret'}}])
+    with pytest.raises(ProviderResponseError) as caught:
+        list(chat_content(resp,'Groq'))
+    assert caught.value.code == 'rate_limit'
+    assert 'secret' not in str(caught.value)
+
+@pytest.mark.parametrize('adapter,key_getter,protocol', [
+    ('ask_grok_stream','get_xai_key','chat'),
+    ('ask_deepseek_stream','get_deepseek_key','chat'),
+    ('ask_perplexity_stream','get_perplexity_key','chat'),
+    ('ask_claude_stream','get_anthropic_key','anthropic'),
+    ('ask_gpt_vision_stream','get_openai_key','chat'),
+    ('ask_groq_vision_stream','get_groq_key','chat'),
+    ('ask_claude_vision_stream','get_anthropic_key','anthropic'),
+    ('ask_gemini_vision_stream','get_google_key','gemini'),
+])
+@pytest.mark.parametrize('ending', ['complete','limit','eof','quota'])
+def test_text_and_vision_adapters_report_terminal_state(monkeypatch,adapter,key_getter,protocol,ending):
+    from modules.platform import cloud_providers as cloud
+    monkeypatch.setattr(cloud,key_getter,lambda:'fake-key')
+    monkeypatch.setattr(cloud,'build_prompt',lambda *a,**k:'question')
+    if protocol=='chat':
+        events=[{'choices':[{'delta':{'content':'Answer'}}]}]
+        if ending not in ('eof','quota'): events += [{'choices':[{'delta':{},'finish_reason':'length' if ending=='limit' else 'stop'}]},'[DONE]']
+    elif protocol=='anthropic':
+        events=[{'type':'content_block_delta','delta':{'type':'text_delta','text':'Answer'}}]
+        if ending not in ('eof','quota'): events += [{'type':'message_delta','delta':{'stop_reason':'max_tokens' if ending=='limit' else 'end_turn'}},{'type':'message_stop'}]
+    else:
+        events=[{'candidates':[{'content':{'parts':[{'text':'Answer'}]}}]}]
+        if ending not in ('eof','quota'): events += [{'candidates':[{'finishReason':'MAX_TOKENS' if ending=='limit' else 'STOP'}]}]
+    @contextmanager
+    def stream(*a,**k): yield response(events,429 if ending=='quota' else 200)
+    monkeypatch.setattr(cloud.sync_client,'stream',stream)
+    frames=list(getattr(cloud,adapter)('question'))
+    data=[json.loads(line[5:]) for frame in frames for line in frame.splitlines() if line.startswith('data:')]
+    assert data[-1]['type']==('done' if ending=='complete' else 'error')
+    if ending=='limit': assert data[-1]['code']=='output_limit'
+    if ending=='quota': assert data[-1]['code']=='rate_limit'
+    if ending!='complete': assert not any(e['type']=='done' for e in data)

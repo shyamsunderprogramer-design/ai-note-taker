@@ -7,7 +7,7 @@ logger = logging.getLogger("cloud_providers")
 
 # Use shared httpx client instead of requests to avoid blocking the event loop
 from lib.http_client import sync_client
-from lib.provider_stream import ProviderResponseError, check_provider_status, chat_content
+from lib.provider_stream import ProviderResponseError, check_provider_status, chat_content, error_frame, anthropic_content, gemini_content
 
 # ==============================
 # SECURE API KEY FETCHER (P1 Privacy)
@@ -270,14 +270,14 @@ def ask_ollama_cloud(prompt, model="minimax-m3", stream=False, mode="adaptive", 
                     yield _make_content(content)
                 if data.get("done"):
                     if data.get("done_reason") not in (None, "stop"):
-                        raise ProviderResponseError("Ollama Cloud stopped before completing the answer. Retry or select another model.")
+                        raise ProviderResponseError("Ollama Cloud stopped before completing the answer. Retry or select another model.", "output_limit" if data.get("done_reason") == "length" else "transient")
                     completed = True
                     break
         if not completed or not has_text:
             raise ProviderResponseError("Ollama Cloud returned an incomplete or empty answer. Retry or select another model.")
         yield _make_done(int((time.time() - start) * 1000))
     except (ProviderResponseError, ValueError) as exc:
-        yield _make_error(str(exc) if isinstance(exc, ProviderResponseError) else "Ollama Cloud returned an invalid response.")
+        yield error_frame(exc if isinstance(exc, ProviderResponseError) else ValueError("Ollama Cloud returned an invalid response."))
     except Exception:
         yield _make_error("Ollama Cloud could not complete the request. Check connectivity or retry.")
 
@@ -458,7 +458,7 @@ def ask_gpt_stream(prompt, model="gpt-4o-mini", mode="adaptive", style="concise"
             yield _make_content(content)
         yield _make_done(int((time.time() - start) * 1000))
     except (ProviderResponseError, ValueError) as exc:
-        yield _make_error(str(exc))
+        yield error_frame(exc)
     except Exception:
         yield _make_error("OpenAI could not complete the request. Check connectivity or retry.")
     finally:
@@ -487,31 +487,16 @@ def ask_claude_stream(prompt, model="claude-3-5-haiku-20241022", mode="adaptive"
         }
         with sync_client.stream("POST", "https://api.anthropic.com/v1/messages",
                                 headers=headers, json=body, timeout=60) as resp:
-            if resp.status_code != 200:
-                raise Exception(f"Claude error: {resp.status_code} - {resp.read().decode('utf-8', errors='replace')}")
+            check_provider_status(resp, "Anthropic")
             yield _make_meta(model, "anthropic")
-
-            chunk_count = 0
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        content = obj.get("delta", {}).get("text", "")
-                        if content:
-                            yield _make_content(content)
-                            chunk_count += 1
-                    except json.JSONDecodeError:
-                        pass  # nosec B110
+            for content in anthropic_content(resp, "Anthropic"):
+                yield _make_content(content)
 
         ms = int((time.time() - start) * 1000)
-        logger.debug("Claude stream complete: %d chunks in %dms", chunk_count, ms)
         yield _make_done(ms)
 
+    except ProviderResponseError as e:
+        yield error_frame(e)
     except Exception as e:
         logger.error("Claude streaming error: %s", str(e))
         yield _make_error("Claude error: An internal error occurred")
@@ -541,7 +526,7 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
                     continue
                 event = json.loads(line[5:])
                 if event.get("error") or event.get("promptFeedback", {}).get("blockReason"):
-                    raise ProviderResponseError("Google could not complete this request. Try another question or model.")
+                    raise ProviderResponseError("Google could not complete this request. Try another question or model.", "blocked" if event.get("promptFeedback", {}).get("blockReason") else "transient")
                 for candidate in event.get("candidates", []):
                     for part in candidate.get("content", {}).get("parts", []):
                         text = part.get("text")
@@ -552,13 +537,13 @@ def ask_gemini_stream(prompt, model="gemini-2.0-flash", mode="adaptive", style="
                     if reason == "STOP":
                         completed = True
                     elif reason:
-                        raise ProviderResponseError("Google ended the answer before completion. Ask a narrower question or choose another model.")
+                        raise ProviderResponseError("Google ended the answer before completion. Ask a narrower question or choose another model.", "output_limit" if reason == "MAX_TOKENS" else "blocked")
         if not completed or not has_text:
             raise ProviderResponseError("Google returned no complete answer. Please retry.")
         yield _make_done(int((time.time() - start) * 1000))
     except (ProviderResponseError, ValueError) as exc:
         # JSON decoding failures contain no request URL or credential.
-        yield _make_error(str(exc) if isinstance(exc, ProviderResponseError) else "Google returned an invalid response or has no configured key.")
+        yield error_frame(exc if isinstance(exc, ProviderResponseError) else ValueError("Google returned an invalid response or has no configured key."))
     except Exception:
         yield _make_error("Google could not complete the request. Check connectivity or retry.")
 
@@ -583,22 +568,14 @@ def ask_grok_stream(prompt, model="grok-2-mini", mode="adaptive", style="concise
     try:
         with sync_client.stream("POST", "https://api.x.ai/v1/chat/completions",
                                 headers=headers, json=body, timeout=60) as resp:
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
-    except Exception as e:
-        yield _make_error("An internal error occurred")
+            for content in chat_content(resp, "xAI"):
+                yield _make_content(content)
+    except ProviderResponseError as e:
+        yield error_frame(e)
+        return
+    except Exception:
+        yield _make_error("Provider connection interrupted.")
+        return
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -623,22 +600,14 @@ def ask_deepseek_stream(prompt, model="deepseek-chat", mode="adaptive", style="c
     try:
         with sync_client.stream("POST", "https://api.deepseek.com/chat/completions",
                                 headers=headers, json=body, timeout=60) as resp:
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
-    except Exception as e:
-        yield _make_error("An internal error occurred")
+            for content in chat_content(resp, "DeepSeek"):
+                yield _make_content(content)
+    except ProviderResponseError as e:
+        yield error_frame(e)
+        return
+    except Exception:
+        yield _make_error("Provider connection interrupted.")
+        return
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -685,7 +654,7 @@ def ask_groq_stream(prompt, model="openai/gpt-oss-120b", mode="adaptive", style=
                 yield _make_content(content)
         yield _make_done(int((time.time() - start) * 1000))
     except (ProviderResponseError, ValueError) as exc:
-        yield _make_error(str(exc))
+        yield error_frame(exc)
     except Exception:
         yield _make_error("Groq could not complete the request. Check connectivity or retry.")
 
@@ -739,22 +708,14 @@ def ask_perplexity_stream(prompt, model="sonar", mode="adaptive", style="concise
     try:
         with sync_client.stream("POST", "https://api.perplexity.ai/chat/completions",
                                 headers=headers, json=body, timeout=60) as resp:
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
-    except Exception as e:
-        yield _make_error("An internal error occurred")
+            for content in chat_content(resp, "Perplexity"):
+                yield _make_content(content)
+    except ProviderResponseError as e:
+        yield error_frame(e)
+        return
+    except Exception:
+        yield _make_error("Provider connection interrupted.")
+        return
     ms = int((time.time() - start) * 1000)
     yield _make_done(ms)
 
@@ -921,33 +882,16 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
         }
         with sync_client.stream("POST", "https://api.openai.com/v1/chat/completions",
                                 headers=headers, json=body, timeout=30) as resp:
-            if resp.status_code == 429:
-                yield _make_error(f"OpenAI rate limited (429). Try again in a moment or select a different model.")
-                return
-            if resp.status_code != 200:
-                yield _make_error(f"OpenAI vision error: HTTP {resp.status_code}")
-                return
+            check_provider_status(resp, "OpenAI")
             yield _make_meta(model, "openai")
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                decoded = line if isinstance(line, str) else line.decode("utf-8", errors="replace")
-                if decoded.startswith("data: "):
-                    data = decoded[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        delta = obj.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    except json.JSONDecodeError:
-                        pass  # nosec B110
+            for content in chat_content(resp, "OpenAI"):
+                yield _make_content(content)
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
 
+    except ProviderResponseError as e:
+        yield error_frame(e)
     except ValueError as e:
         yield _make_error(f"OpenAI key not configured: {e}")
     except Exception as e:
@@ -984,30 +928,16 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
         }
         with sync_client.stream("POST", "https://api.anthropic.com/v1/messages",
                                 headers=headers, json=body, timeout=30) as resp:
-            if resp.status_code == 429:
-                yield _make_error(f"Claude rate limited (429). Try again in a moment or select a different model.")
-                return
-            if resp.status_code != 200:
-                yield _make_error(f"Claude vision error: HTTP {resp.status_code}")
-                return
+            check_provider_status(resp, "Anthropic")
             yield _make_meta(model, "anthropic")
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    try:
-                        obj = json.loads(data)
-                        if obj.get("type") == "content_block_delta":
-                            text = obj.get("delta", {}).get("text", "")
-                            if text:
-                                yield _make_content(text)
-                    except json.JSONDecodeError:
-                        pass  # nosec B110
+            for content in anthropic_content(resp, "Anthropic"):
+                yield _make_content(content)
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
 
+    except ProviderResponseError as e:
+        yield error_frame(e)
     except ValueError as e:
         yield _make_error(f"Anthropic key not configured: {e}")
     except Exception as e:
@@ -1021,7 +951,7 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
     start = time.time()
     try:
         api_key = get_google_key()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
         # Build parts with image
         parts = []
         if image_b64:
@@ -1032,30 +962,17 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
             "contents": [{"parts": parts}],
             "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 512}
         }
-        with sync_client.stream("POST", url, json=body, timeout=30) as resp:
-            if resp.status_code == 429:
-                yield _make_error(f"Gemini rate limited (429). Try again in a moment or select a different model.")
-                return
-            if resp.status_code != 200:
-                yield _make_error(f"Gemini vision error: HTTP {resp.status_code}")
-                return
+        with sync_client.stream("POST", url, headers={"x-goog-api-key":api_key}, json=body, timeout=30) as resp:
+            check_provider_status(resp, "Google")
             yield _make_meta(model, "google")
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                decoded = line
-                if decoded.startswith("data: "):
-                    try:
-                        obj = json.loads(decoded[6:])
-                        content = obj.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
+            for content in gemini_content(resp, "Google"):
+                yield _make_content(content)
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
 
+    except ProviderResponseError as e:
+        yield error_frame(e)
     except ValueError as e:
         yield _make_error(f"Google key not configured: {e}")
     except Exception as e:
@@ -1090,31 +1007,16 @@ def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-p
         }
         with sync_client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
                                 headers=headers, json=body, timeout=30) as resp:
-            if resp.status_code == 429:
-                yield _make_error(f"Groq rate limited (429). Try again in a moment or select a different model.")
-                return
-            if resp.status_code != 200:
-                yield _make_error(f"Groq vision error: HTTP {resp.status_code}")
-                return
+            check_provider_status(resp, "Groq")
             yield _make_meta(model, "groq")
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(data)
-                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                        if content:
-                            yield _make_content(content)
-                    except Exception:
-                        pass  # nosec B110
+            for content in chat_content(resp, "Groq"):
+                yield _make_content(content)
 
         ms = int((time.time() - start) * 1000)
         yield _make_done(ms)
 
+    except ProviderResponseError as e:
+        yield error_frame(e)
     except ValueError as e:
         yield _make_error(f"Groq key not configured: {e}")
     except Exception as e:

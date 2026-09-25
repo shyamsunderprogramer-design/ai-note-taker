@@ -22,3 +22,7 @@ test('an attached screenshot takes priority over fresh capture',async()=>{
 test('capture failure cannot silently answer without requested context',async()=>{
  const s=setup();s.scope.window.api.captureScreenshot=async()=>null;await assert.rejects(s.run('getQuestionScreenContext()'),/capture failed/);assert.equal(s.calls.length,0);
 });
+
+test('a question ticket does not turn a text-only question into a screenshot request',async()=>{
+ const s=setup(false);await s.run('answerWithScreenContext("Question",{text:null,image:null},{id:1})');assert.deepEqual(s.calls,['Question']);
+});

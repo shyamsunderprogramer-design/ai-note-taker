@@ -30,6 +30,8 @@ from routes.ai import stream_ai, stream_race
 from routes.interview import upload_resume_context
 
 app = FastAPI()
+from routes.recovery import router as recovery_router
+app.include_router(recovery_router)
 app.post('/resume/context')(upload_resume_context)
 app.get('/stream-race')(stream_race)
 
