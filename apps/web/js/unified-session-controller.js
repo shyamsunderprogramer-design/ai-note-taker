@@ -41,6 +41,10 @@
   let lastSpokenQuestion = null
   let audioActivity = {}
   let recentSpeechQuestions = []
+  let remoteHeardAt = null
+  const remoteRecentlyActive = () => remoteHeardAt !== null && Date.now()-remoteHeardAt < 5000
+  window.preferRemoteLiveQuestion = () => window.unifiedSessionActive &&
+    (remoteRecentlyActive() || audioActivity.system?.speaking || audioActivity.system?.transcribing > 0)
   const correctedQuestion = (original, interpreted) => {
     const term = interpreted.match(/CI\/CD/i) ? 'CI/CD' : interpreted
     if (original.replace(/[^a-z]/gi,'').toLowerCase() === interpreted.replace(/[^a-z]/gi,'').toLowerCase()) return original
@@ -103,10 +107,13 @@
             addMessage('assistant', interpreted.clarification)
             debouncedSave()
           } else {
+            // Keep microphone speech in history, but don't let simultaneous
+            // room speech replace a question captured from the call.
+            if (!item.data.manual && item.data.source && item.data.source !== 'system' && window.preferRemoteLiveQuestion()) continue
             const key = interpreted.replace(/[^a-z0-9]/gi,'').toLowerCase()
             // Compare when the audio questions arrived, not when a slow
             // preceding answer finished and released the queue.
-            if (item.data.source && recentSpeechQuestions.some(q => q.key===key && q.source!==item.data.source && Math.abs(item.receivedAt-q.at)<10000)) continue
+            if (recentSpeechQuestions.some(q => q.key===key && Math.abs(item.receivedAt-q.at)<10000)) continue
             recentSpeechQuestions.push({key,source:item.data.source,at:item.receivedAt})
             recentSpeechQuestions = recentSpeechQuestions.slice(-100)
             item.revision = {question:interpreted,sent:false,completed:false}
@@ -188,8 +195,12 @@
     if (speaking && typeof cutLiveQuestion === 'function' && cutLiveQuestion()) return
     if (Object.values(audioActivity).some(state => state.transcribing > 0)) return
     if (typeof activeQuestion !== 'undefined' && activeQuestion) return
-    const latest = window.liveSessionContext.turns.at(-1)
-    submitText(latest?.text || 'Help me with the current conversation and screen.')
+    const latest = window.preferRemoteLiveQuestion()
+      ? window.liveSessionContext.turns.filter(t => t.source === 'remote').at(-1)
+      : window.liveSessionContext.turns.at(-1)
+    if (latest && typeof queueInterviewQuestion === 'function') {
+      queueInterviewQuestion({question:latest.text, source:'manual', session_id:'manual-help', answer_id:latest.at, manual:true})
+    } else submitText(latest?.text || 'Help me with the current conversation and screen.')
   }
   window.observeUnifiedSessionEvent = (event, socket = null) => {
     if (!['partial', 'utterance', 'activity'].includes(event.type)) return
@@ -202,6 +213,7 @@
       audioActivity[event.source || 'mic'] = {speaking:!!event.speaking,transcribing:Number(event.transcribing)||0}
       return
     }
+    if (event.source === 'system' && event.type === 'utterance') remoteHeardAt = Date.now()
     if (window.liveSessionContext.observe(event)) {
       recordingQuestionHandled = true // completed speech is already retained; no recording replay
       render()
@@ -281,7 +293,7 @@
     pendingQuestions.forEach(item => item.resolvers.forEach(done => done()))
     pendingQuestions = []; bufferedIds.clear()
     lastSpokenQuestion = null
-    audioActivity = {}; recentSpeechQuestions = []
+    audioActivity = {}; recentSpeechQuestions = []; remoteHeardAt = null
     recordingQuestionHandled = true
     insightController?.abort()
     screenController?.abort()

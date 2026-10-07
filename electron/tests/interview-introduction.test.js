@@ -14,3 +14,13 @@ test('technical and clarification requests have adaptive structure and keep topi
  assert.match(p,/no fixed paragraph limit/);
  assert.match(p,/do not append a personal experience paragraph/);
 });
+
+test('production scenario guidance requires conditional throttling and atomic payment idempotency',()=>{
+ const rate=prompt('HTTP 429 at peak traffic: should I scale or change the rate limit?')
+ assert.match(rate,/Honor Retry-After/)
+ assert.match(rate,/never the default remedy/)
+ const payment=prompt('How do I avoid duplicate payment charges when messages arrive twice?')
+ assert.match(payment,/atomic unique event claim before the side effect/)
+ assert.match(payment,/payment-provider idempotency key/)
+ assert.doesNotMatch(prompt('Explain PostgreSQL connections'),/Honor Retry-After|atomic unique event claim/)
+})

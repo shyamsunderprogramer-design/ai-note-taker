@@ -149,3 +149,40 @@ test('stopping clears pending speech rather than dispatching it into another ses
  await s.click();await pending
  assert.equal(dispatched.length,0)
 })
+
+test('recent remote question prevents room speech from replacing it while retaining microphone history',async()=>{
+ const s=setup();await s.click();const answers=[]
+ s.scope.observeUnifiedSessionEvent({type:'utterance',source:'system',text:'How do you prevent duplicate payments?'})
+ s.scope.observeUnifiedSessionEvent({type:'utterance',source:'mic',text:'What sir? They have different flavors.'})
+ await s.scope.bufferUnifiedQuestion({question:'What sir? They have different flavors.',source:'tab',session_id:'m',answer_id:1},async data=>answers.push(data.question))
+ assert.equal(answers.length,0)
+ assert.equal(s.scope.liveSessionContext.transcript.length,2)
+ let now=Date.now()+6000;s.scope.Date=class extends Date {static now(){return now}}
+ await s.scope.bufferUnifiedQuestion({question:'Can you explain idempotency?',source:'tab',session_id:'m',answer_id:2},async data=>answers.push(data.question))
+ assert.equal(answers.length,1)
+ await s.click()
+})
+
+test('Enter and automatic question detection share deduplication even after the first answer completes',async()=>{
+ const s=setup();await s.click();const questions=[]
+ const dispatch=async data=>questions.push(data.question)
+ await Promise.all([
+  s.scope.bufferUnifiedQuestion({question:'How do you prevent duplicate payments?',source:'manual',manual:true,session_id:'manual-help',answer_id:1},dispatch),
+  s.scope.bufferUnifiedQuestion({question:'How do you prevent duplicate payments?',source:'system',session_id:'r',answer_id:1},dispatch)
+ ])
+ await s.scope.bufferUnifiedQuestion({question:'How do you prevent duplicate payments?',source:'system',session_id:'r',answer_id:2},dispatch)
+ assert.equal(questions.length,1)
+ await s.click()
+})
+
+test('empty Enter routes retained speech through the shared question queue',async()=>{
+ const s=setup();await s.click();const queued=[]
+ s.scope.queueInterviewQuestion=data=>queued.push(data)
+ s.scope.submitText=()=>{throw Error('Must not bypass deduplication')}
+ s.scope.observeUnifiedSessionEvent({type:'utterance',source:'system',text:'How do you prevent duplicate charges?'})
+ s.scope.requestUnifiedHelp()
+ assert.equal(queued.length,1)
+ assert.equal(queued[0].manual,true)
+ assert.equal(queued[0].question,'How do you prevent duplicate charges?')
+ await s.click()
+})

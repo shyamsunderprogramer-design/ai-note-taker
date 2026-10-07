@@ -151,3 +151,12 @@ def test_completed_statement_is_retained_without_triggering_an_answer(monkeypatc
                     assert event['session_id'] and event['utterance_id']
                     break
             ws.send_json({'type': 'stop'})
+
+@pytest.mark.parametrize('text', [
+    'A service starts returning HTTP 429 during peak traffic. Would you scale the pods, retry the requests, or change the rate limit, explain your decision.',
+    'Our deploy failed. Can you investigate the logs.',
+    'The queue has duplicate messages, explain how to prevent duplicate payments.',
+])
+def test_mid_scenario_requests_survive_missing_question_marks(text):
+    from routes.transcription import _should_answer
+    assert _should_answer(text)

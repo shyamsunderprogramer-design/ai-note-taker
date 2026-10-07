@@ -1,0 +1,22 @@
+[
+  {
+    "question": "Your application cannot connect to PostgreSQL after a deployment, but the database is healthy. How would you investigate without making the incident worse?",
+    "topic": "postgres|database|connect"
+  },
+  {
+    "question": "A service starts returning HTTP 429 during peak traffic. Would you scale the pods, retry the requests, or change the rate limit? Explain your decision.",
+    "topic": "429|rate.?limit|retry|retries"
+  },
+  {
+    "question": "A production API key was accidentally committed to GitHub. What would you do first, and how would you prevent this from happening again?",
+    "topic": "key|secret|credential"
+  },
+  {
+    "question": "Your message consumer processed the same payment event twice. How would you prevent duplicate charges when messages can be delivered more than once?",
+    "topic": "payment|duplicate|idempoten"
+  },
+  {
+    "question": "During an incident, one teammate wants an immediate rollback and another wants to keep investigating. How would you lead the discussion and make a decision?",
+    "topic": "rollback|roll.back|incident|decision"
+  }
+]

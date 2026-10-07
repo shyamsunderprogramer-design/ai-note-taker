@@ -23,3 +23,13 @@ test('typed Enter sends text while continuous listening remains active',()=>{
 test('Enter after clicking Live helper cannot activate the focused stop button',()=>{
  const s=setup({focusButton:true});s.press();assert.equal(s.scope.isListening,true);assert.deepEqual(s.calls,['prevented','help'])
 })
+
+test('Enter cuts only the active remote question when microphone has simultaneous room speech',()=>{
+ const sent=[];const scope=vm.createContext({window:{preferRemoteLiveQuestion:()=>true},WebSocket:{OPEN:1},console:{log(){}},
+ transcribeWs:{readyState:1,send:()=>sent.push('mic')},systemAudioWs:{readyState:1,send:()=>sent.push('remote')}})
+ vm.runInContext(source.slice(source.indexOf('function cutLiveQuestion()'),source.indexOf('/** Render a live-assist message')),scope)
+ assert.equal(scope.cutLiveQuestion(),true)
+ assert.deepEqual(sent,['remote'])
+ scope.window.preferRemoteLiveQuestion=()=>false
+ scope.cutLiveQuestion();assert.deepEqual(sent,['remote','mic','remote'])
+})

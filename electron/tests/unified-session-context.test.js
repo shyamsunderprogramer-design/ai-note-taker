@@ -118,3 +118,14 @@ test('saved participant transcript outlives working context and excludes assista
  assert.equal(restored.transcript[0].text,'Participant line 0')
  assert.ok(!restored.transcript.some(t=>t.text.includes('AI answer')))
 })
+
+test('standalone incident questions do not inherit an earlier database scenario',()=>{
+ const context=new UnifiedSessionContext()
+ context.observe({source:'system',text:'PostgreSQL cannot connect after a deployment, but the database is healthy.'})
+ context.observe({source:'mic',text:'I would inspect the connection string and firewall.'})
+ const question='During an incident, one teammate wants a rollback and another wants to investigate. How would you lead the discussion?'
+ const prompt=context.prompt(question,question,{standalone:true})
+ assert.doesNotMatch(prompt,/PostgreSQL|database is healthy|connection string/)
+ assert.match(context.prompt('What if the migration cannot be reversed?'),/PostgreSQL/)
+ assert.equal(context.transcript.length,2)
+})

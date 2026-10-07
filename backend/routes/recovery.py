@@ -61,7 +61,11 @@ def stream_recover(body: RecoveryRequest):
         return provider_stream(model, prompt, history, mode=body.mode, style=body.style,
                                temperature=body.temperature, image_b64=body.image_b64)
     first_budget = 12 if body.style == 'detailed' or body.mode in ('code', 'reasoning') else 4
+    live_fast = body.race_first_response and body.mode == 'instant'
+    if live_fast:
+        first_budget = 2
     stream = race_recover_stream if body.race_first_response else recover_stream
     return StreamingResponse(stream(body.query, body.candidates, factory, body.messages,
-                                           first_content_seconds=first_budget),
+                                           first_content_seconds=first_budget,
+                                           **({'deadline_seconds':25, 'idle_seconds':8, 'recovery_seconds':12} if live_fast else {})),
                              media_type='text/event-stream', headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no'})

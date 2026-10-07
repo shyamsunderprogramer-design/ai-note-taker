@@ -53,3 +53,24 @@ Start the desktop with remote debugging on port 9223 using `node qa/performance/
 Sub-second responses are observed, not guaranteed: network, provider quotas, cold model startup and question complexity still vary. Finish a real multi-participant call validation, test interruptions during a still-generating answer in addition to the existing cancellation unit test, and review technical answer quality on held-out scenarios. Named speaker recognition from calendar invitations is not implemented; microphone/remote labels do not establish a person's identity.
 
 There was substantial unrelated work already uncommitted before this task. Only the live assistant and its required source/test dependencies are staged; unrelated documentation removals, security/mobile/job changes and local artifacts remain in the working tree. Preserve them when resuming; do not reset the repository.
+
+
+## Follow-up fixes after the new-question replay (latest)
+
+The first new-question run failed: HTTP 429 was transcribed without a question mark and rejected, concurrent room speech displaced a payment question, and an incident answer inherited the earlier PostgreSQL scenario. A later replay also exposed an Enter/automatic submission race producing exact duplicate cards.
+
+Fixed mid-utterance request recognition (including “Would you…”), a five-second remote-source priority window for simultaneous microphone speech, remote-aware Enter cuts, shared Enter/automatic question deduplication, relevant standalone prompt context, and repeated provider timeout attempts. Microphone speech remains in the participant transcript; microphone questions work after remote priority expires. This is source arbitration, not a guarantee of named speaker recognition or elimination of all background speech.
+
+Added scoped production guidance for safe rate-limit changes and crash-safe payment idempotency; do not omit prerequisites just to meet a short answer length. QA now rejects stopped listening and incorrect message counts, records stop traces, and supports a supplied scenario JSON file.
+
+Final clean replay: exactly five questions and five completed answers, no errors or duplicate cards, continuous listening active throughout. First-visible response times were 0.970, 1.257, 0.922, 0.927 and 1.247 seconds; completions were 1.124, 1.258, 1.077, 1.079 and 1.248 seconds. The payment answer included pending/completed states, provider idempotency, crash reconciliation, and acknowledgement after confirmation. This is a bounded review of observed answers, not an expert correctness grade for arbitrary future responses.
+
+Panel regression passed: original question plus provisional candidate speech included while candidate was speaking; follow-up completed 827 ms after speech ended, two questions/two answers. Same synthetic microphone PCM/native remote-capture limitations as the earlier panel test apply.
+
+Artifacts: `artifacts/new-scenarios-dedup-final-2026-10-07/` and `artifacts/panel-regression-after-scenario-fixes-2026-10-07/`. Desktop video: `~/Desktop/ANT New Interview Questions Fixed.mp4`. Sanitized results: `qa/performance/results/2026-10-07-scenario-fixes.json`. Reproduce with `node qa/performance/live/record-interview.mjs artifacts/new-scenario-replay qa/performance/live/scenarios/interview-scenarios-2026-10-07.json`.
+
+Some intermediate quality runs failed message-count or live-listening gates; their local artifacts are retained for diagnosis and must not be presented as passing recordings.
+
+Recording clarification: QA uses Electron's internal CDP `Page.startScreencast`, not an external desktop recorder, and did not disable protection. The runtime reported stealth/protection enabled. This does not verify exclusion from all external capture applications: Electron documents macOS ScreenCaptureKit limitations at https://www.electronjs.org/docs/latest/api/browser-window/#winsetcontentprotectionenable. An actual external meeting-capture test remains outstanding. Remote debugging is supplied explicitly by the test launcher, not enabled by the normal launch command.
+
+Final follow-up validation: 186 targeted backend tests, 113 desktop tests, and the production web build passed in an isolated snapshot of the exact staged source with installed Node dependencies linked. Credential-pattern scan passed; the final video decoded without errors. Unrelated pre-existing working-tree changes remain untouched.

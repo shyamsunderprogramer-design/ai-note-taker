@@ -107,7 +107,7 @@ async def race_recover_stream(question, candidates, factory, messages=None, **op
         async for frame in recover_stream(question, candidates, factory, messages, **options):
             yield frame
         return
-    streams, prefixes = {}, {}
+    streams, prefixes, failed = {}, {}, set()
     history = compact_history(messages)
     budget = options.get('first_content_seconds', 4)
 
@@ -139,10 +139,14 @@ async def race_recover_stream(question, candidates, factory, messages=None, **op
                     if event.get('type') in ('chunk', 'content') and event.get('content', '').strip():
                         keep = True
                         return model
-        except (Exception, asyncio.CancelledError):
+        except asyncio.CancelledError:
+            return None
+        except Exception:
             return None
         finally:
             if not keep:
+                if not asyncio.current_task().cancelling():
+                    failed.add(model)
                 await stream.aclose()
         return None
 
@@ -175,7 +179,8 @@ async def race_recover_stream(question, candidates, factory, messages=None, **op
                     async for frame in source:
                         yield frame
 
-        ordered = [winner] + [model for model in candidates if model != winner] if winner else candidates
+        remaining = [model for model in candidates if model != winner and model not in failed]
+        ordered = [winner] + remaining if winner else remaining
         options['deadline_seconds'] = max(.001, options.get('deadline_seconds', 60) - (time.monotonic() - started))
         async for frame in recover_stream(question, ordered, prefetched_factory, messages, **options):
             yield frame

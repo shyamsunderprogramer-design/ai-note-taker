@@ -1,0 +1,77 @@
+{
+  "passed": true,
+  "messageCounts": {
+    "questions": 5,
+    "answers": 5
+  },
+  "errors": [],
+  "results": [
+    {
+      "question": "Your application cannot connect to PostgreSQL after a deployment, but the database is healthy. How would you investigate without making the incident worse?",
+      "firstVisibleAfterSpeechSeconds": 0.97,
+      "completedAfterSpeechSeconds": 1.124,
+      "passed": true,
+      "listeningStayedActive": true
+    },
+    {
+      "question": "A service starts returning HTTP 429 during peak traffic. Would you scale the pods, retry the requests, or change the rate limit? Explain your decision.",
+      "firstVisibleAfterSpeechSeconds": 1.257,
+      "completedAfterSpeechSeconds": 1.258,
+      "passed": true,
+      "listeningStayedActive": true
+    },
+    {
+      "question": "A production API key was accidentally committed to GitHub. What would you do first, and how would you prevent this from happening again?",
+      "firstVisibleAfterSpeechSeconds": 0.922,
+      "completedAfterSpeechSeconds": 1.077,
+      "passed": true,
+      "listeningStayedActive": true
+    },
+    {
+      "question": "Your message consumer processed the same payment event twice. How would you prevent duplicate charges when messages can be delivered more than once?",
+      "firstVisibleAfterSpeechSeconds": 0.927,
+      "completedAfterSpeechSeconds": 1.079,
+      "passed": true,
+      "listeningStayedActive": true
+    },
+    {
+      "question": "During an incident, one teammate wants an immediate rollback and another wants to keep investigating. How would you lead the discussion and make a decision?",
+      "firstVisibleAfterSpeechSeconds": 1.247,
+      "completedAfterSpeechSeconds": 1.248,
+      "passed": true,
+      "listeningStayedActive": true
+    }
+  ],
+  "limits": "Simulated spoken interview in real Electron app. Video records app compositor frames with real timestamps; question audio is aligned from the same files played live. No AI responses/transcripts mocked. Audio source labels are not verified people. Timing starts when spoken playback ends, includes transcription, queueing, Enter and generation. Pass checks topic relevance, completion and absence of duplicate messages; it is not a technical correctness grade. Not a Zoom/Meet remote-call test.",
+  "qualityReview": "Payment answer distinguishes pending/completed claims, reuses a provider idempotency key, reconciles crashes, and acknowledges after confirmed completion. HTTP 429 answer identifies the throttling boundary and conditions limit changes on controlled policy and safe capacity. Review covers these observed points, not general expert correctness across all questions.",
+  "panelRegression": {
+    "passed": true,
+    "followupCompleteAfterSpeechMs": 827,
+    "requests": [
+      {
+        "at": 1791413262875,
+        "carriedOriginal": true,
+        "panelFollowup": false,
+        "provisionalCandidate": false,
+        "candidateSpeaking": false,
+        "mode": "instant",
+        "style": "spoken"
+      },
+      {
+        "at": 1791413271079,
+        "carriedOriginal": true,
+        "panelFollowup": true,
+        "provisionalCandidate": true,
+        "candidateSpeaking": true,
+        "mode": "instant",
+        "style": "spoken"
+      }
+    ],
+    "limits": "Real Electron app, native remote capture and real ASR/LLM. Synthetic candidate PCM injected on existing microphone WebSocket; no ASR or AI response mocked. Distinct sources are not named/verified people. Not a Zoom/Meet call. Timing includes generation completion, not first token."
+  },
+  "pythonTestsPassed": 186,
+  "nodeTestsPassed": 113,
+  "webBuildPassed": true,
+  "isolatedStagedSourceVerified": true,
+  "videoDecodePassed": true
+}

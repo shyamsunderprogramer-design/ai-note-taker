@@ -283,3 +283,19 @@ async def test_metadata_cannot_extend_cloud_first_answer_deadline():
     assert closed == ['google-slow']
     assert 'Useful answer.' in ''.join(frames)
     assert 'event: done' in frames[-1]
+
+@pytest.mark.asyncio
+async def test_live_race_does_not_retry_clouds_that_already_timed_out():
+    from lib.stream_recovery import race_recover_stream
+    calls=[]
+    async def factory(model,prompt,history):
+        calls.append(model)
+        if model in ('google-slow','groq-slow'):
+            await asyncio.sleep(1)
+        yield make_content('Useful fallback answer.')
+        yield make_done(1)
+    events=await collect(race_recover_stream('q',['google-slow','groq-slow','local:small'],factory,first_content_seconds=.02))
+    assert calls.count('google-slow')==1
+    assert calls.count('groq-slow')==1
+    assert calls[-1]=='local:small'
+    assert events[-1]['type']=='done'

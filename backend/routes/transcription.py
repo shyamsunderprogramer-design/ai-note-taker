@@ -133,7 +133,7 @@ def _should_answer(text: str) -> bool:
     # unrelated remarks. Scenario questions can contain the request mid-turn.
     return ('?' in text or bool(re.search(
         r'(?:^|[.!?,;]\s+)(?:what|why|how|when|where|who|which)\b|'
-        r'^(?:please\s+)?(?:can|could|would|should|do|does|did|is|are|tell|explain|describe|walk|write|fix|complete|implement|debug|help|summarize)\b',
+        r'(?:^|[.!?,;]\s+)(?:please\s+)?(?:can|could|would|should|do|does|did|is|are|tell|explain|describe|walk|write|fix|complete|implement|debug|help|summarize)\b',
         stripped)))
 
 
