@@ -73,6 +73,7 @@
 
       <!-- Right: Opacity slider + Menu -->
       <div class="header-right">
+        <button id="unifiedSessionInfo" class="win-btn live-session-info" type="button" aria-label="Live helper information" aria-expanded="false" aria-controls="unifiedSessionPanel" title="Live helper status and information">ⓘ</button>
         <button id="answerContextButton" class="win-btn context-trigger" type="button" popovertarget="answerContextPopover" title="Resume and job description" aria-label="Resume and job description">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
           <span>Context</span>
@@ -219,7 +220,7 @@
             <option value="google-gemini-pro" data-provider="google">Gemini Pro</option>
           </optgroup>
 
-          <optgroup label="Local & Private" id="ollamaLocalGroup">
+          <optgroup label="Installed in Ollama" id="ollamaLocalGroup">
             <!-- Populated dynamically by loadLocalOllamaModels() -->
           </optgroup>
 
@@ -282,7 +283,8 @@
           <div class="ctrl-group">
             <label>Response</label>
             <select id="responseStyleSelect">
-              <option value="concise" selected>Concise</option>
+              <option value="spoken" selected>Natural interview answer</option>
+              <option value="concise">Concise</option>
               <option value="detailed">Detailed</option>
               <option value="bulletpoint">Bullet</option>
             </select>
@@ -312,8 +314,8 @@
           </div>
 
           <div class="ctrl-group">
-            <label>Tokens</label>
-            <select id="tokenLimitSelect">
+            <label for="tokenLimitSelect">History budget</label>
+            <select id="tokenLimitSelect" title="Estimated saved-chat history budget, not model capacity or response length. The model may use less.">
               <option value="8000">8K</option>
               <option value="32000">32K</option>
               <option value="128000" selected>128K</option>
@@ -451,6 +453,7 @@
             <svg class="capture-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
 
+          <button id="unifiedSessionBtn" class="action-btn" type="button" aria-pressed="false" title="Listen, see the screen, and follow the conversation together">Live helper</button>
           <button id="listenBtn" class="action-btn" type="button" title="Toggle voice recording">
             <svg class="mic-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             <span id="listenLabel">Start</span>
@@ -460,6 +463,15 @@
         <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
       </div>
     </div>
+
+    <section id="unifiedSessionPanel" class="unified-session-panel" hidden aria-label="Live helper context">
+      <div id="unifiedSessionStatus" role="status">Stopped</div>
+      <button id="unifiedSessionAction" class="live-session-action" type="button">Start Live helper</button>
+      <div id="unifiedSessionTranscript" hidden></div>
+      <details><summary>Decisions and commitments mentioned</summary><div id="unifiedSessionLedger"></div></details>
+      <details><summary>Current screen</summary><div id="unifiedSessionScreen"></div></details>
+      <details><summary>Code and error guidance</summary><div id="unifiedSessionInsight">Guidance appears when an error is visible.</div></details>
+    </section>
 
     <dialog id="jobDescriptionDialog" aria-labelledby="jobDescriptionTitle">
       <h2 id="jobDescriptionTitle">Job description</h2>
@@ -483,9 +495,14 @@
       </span>
     </div>
 
+    <button id="conversationToggle" type="button" aria-expanded="true" aria-controls="conversationPanel">Hide conversation</button>
     <!-- ===== ROW 4: AI RESPONSE ===== -->
-    <div class="response-area">
+    <div class="response-area" id="conversationPanel">
       <div class="response-area-header">
+        <div id="historyConversationViews" class="history-conversation-views" hidden>
+          <button id="historyTranscriptButton" type="button" aria-pressed="true">Transcript</button>
+          <button id="historyAnswersButton" type="button" aria-pressed="false">AI answers</button>
+        </div>
         <button id="summarizeBtn" class="summarize-btn" type="button" title="Generate structured summary">
           <svg class="summarize-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M13 2v7h7"/></svg>
           <span class="summarize-btn-label">Summarize</span>
@@ -521,6 +538,7 @@
         <div class="transcript-strip-content" id="transcriptStripContent"></div>
       </div>
 
+      <div id="historyParticipantTranscript" class="history-participant-transcript" hidden></div>
       <div class="chat-area" id="chatArea">
         <div class="chat-welcome" id="chatWelcome">
           <div class="welcome-brand">
@@ -660,7 +678,7 @@
             <span class="config-status-badge" id="configStatusBadge">Not configured</span>
           </div>
           <div class="config-inline-body">
-            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" maxlength="256" />
+            <input type="password" id="configApiKeyInput" class="config-inline-input" placeholder="Enter API key" autocomplete="off" spellcheck="false" maxlength="4096" />
             <button id="configSaveBtn" class="config-inline-save" type="button">Save</button>
           </div>
           <label class="config-inline-checkbox-row">
@@ -1264,11 +1282,16 @@
             <span class="settings-card-title">AI Voice Cloning</span>
           </div>
           <div class="settings-card-body">
-            <p class="clone-description">Clone your voice for interview practice. Upload audio samples to create a personalized AI voice model.</p>
+            <p class="clone-description">Clone your voice for interview practice. Record or upload a short sample, add its transcript, and generate speech locally.</p>
 
             <div class="clone-create-section">
+              <p class="clone-description">Local voice cloning runs inside this app. Install the engine once (several GB); saved voices and speech stay on your device.</p>
+              <button id="cloneEngineSetupBtn" type="button" class="clone-test-btn">Install local voice engine</button>
+              <div id="cloneEngineStatus" class="clone-status" role="status"></div>
+            </div>
+            <div class="clone-create-section">
               <div class="clone-workflow-hint">
-                <span class="workflow-step">1</span> Record audio → <span class="workflow-step">2</span> Enter name & click Create → <span class="workflow-step">3</span> Test
+                <span class="workflow-step">1</span> Record audio → <span class="workflow-step">2</span> Add name & transcript → <span class="workflow-step">3</span> Test
               </div>
 
               <div class="clone-input-row">
@@ -1277,11 +1300,11 @@
               </div>
 
               <div class="clone-upload-area" id="cloneUploadArea">
-                <input type="file" id="cloneAudioFiles" accept="audio/*" multiple style="display:none">
+                <input type="file" id="cloneAudioFiles" accept="audio/*" style="display:none">
                 <div class="clone-upload-content">
                   <span class="clone-upload-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span>
                   <span class="clone-upload-text">Drop audio files here or click to browse</span>
-                  <span class="clone-upload-hint">MP3, WAV, or M4A files (10-60 seconds each)</span>
+                  <span class="clone-upload-hint">One clean recording, 3–10 seconds recommended (20 seconds maximum)</span>
                 </div>
               </div>
 
@@ -1306,6 +1329,8 @@
               </div>
 
               <div class="clone-selected-files" id="cloneSelectedFiles"></div>
+              <label class="clone-label" for="cloneReferenceText">Words spoken in your recording</label>
+              <textarea id="cloneReferenceText" class="clone-input" rows="3" maxlength="2000" placeholder="Type the exact words from your reference recording."></textarea>
 
               <button id="cloneCreateBtn" class="clone-create-btn" disabled>
                 <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Create Voice Model
@@ -1339,7 +1364,7 @@
                   <option value="">No voice models available - create one first</option>
                 </select>
               </div>
-              <textarea id="cloneTestText" class="clone-textarea" rows="3" placeholder="Enter text to synthesize with your cloned voice..." disabled></textarea>
+              <textarea id="cloneTestText" class="clone-textarea" rows="3" maxlength="2000" placeholder="Enter text to synthesize with your cloned voice..." disabled></textarea>
               <button id="cloneTestBtn" class="clone-test-btn" disabled>
                 <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></span> Synthesize Speech
               </button>
@@ -1688,7 +1713,7 @@
         <div class="modal-title">Configure API Key</div>
       </div>
       <div class="modal-provider-name" id="modalProviderName"></div>
-      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." maxlength="256" />
+      <input type="password" id="apiKeyInput" class="modal-input" placeholder="sk-..." maxlength="4096" />
       <div class="modal-actions">
         <button class="settings-btn modal-cancel-btn" id="modalCancel">Cancel</button>
         <button class="settings-btn modal-save-btn" id="modalSave">Save</button>
@@ -2010,6 +2035,10 @@
   </div>
 
   <script src="js/core/auth-helper.js?v=8" defer></script>
-  <script src="app.js?v=108" defer></script>
+  <script src="js/unified-session.js" defer></script>
+  <script src="app.js?v=109" defer></script>
+  <script src="js/unified-session-controller.js" defer></script>
+  <script src="js/history-transcript.js" defer></script>
+<script src="js/conversation-panel.js"></script>
 </body>
 </html>

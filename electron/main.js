@@ -111,7 +111,12 @@ function getAppDataPath() {
 // IMPORTANT: Set userData BEFORE creating Store instances so they read/write
 // from the correct location.
 const { appDataDir } = initializeAppPaths()
-const conversationsDir = ensureConversationsDir(appDataDir)
+const { initializeConversationStorage } = require("./lib/conversation-storage")
+const conversationStorage = initializeConversationStorage(app.getPath("appData"), appDataDir)
+const conversationsDir = conversationStorage.conversationsDir
+for (const failure of conversationStorage.errors) {
+  logger.warn("[Conversation migration] %s: %s", failure.file, failure.message)
+}
 
 const store = new Store()
 
@@ -136,7 +141,7 @@ try {
 }
 
 // T4: AES-256 encryption for conversation files at rest
-const _convoKey = cryptoLib.deriveConversationKey()
+const _convoKey = require("./lib/conversation-storage").conversationKey(conversationStorage.dataDir)
 
 function _encryptConversation(plainText) {
   return cryptoLib.encryptConversation(plainText, _convoKey)
@@ -154,6 +159,9 @@ let backendProcess = null
 let backendStopped = false  // true if user/App Quit initiated the stop — don't restart
 let backendRestartAttempts = 0
 let backendHealthCheckInterval = null
+let backendHealthCheckInFlight = false
+let backendHealthFailures = 0
+let backendHealthGeneration = 0
 let backendStatus = "unknown" // "unknown" | "starting" | "ready" | "error" | "dead"
 const MAX_BACKEND_RESTART_ATTEMPTS = 5
 const BACKEND_RESTART_BASE_DELAY_MS = 1000
@@ -273,7 +281,9 @@ function validateBounds(bounds) {
   return bounds
 }
 
+let conversationExpandedBounds = null
 function saveBounds() {
+  if (conversationExpandedBounds) return
   if (win && !win.isMaximized() && !win.isMinimized()) {
     store.set("windowBounds", win.getBounds())
   }
@@ -625,9 +635,19 @@ function notifyRendererBackendStatus(status, data = {}) {
 function startHealthCheck() {
   if (backendHealthCheckInterval) return
   backendHealthCheckInterval = setInterval(async () => {
-    if (backendStopped) return
-    const isHealthy = await isBackendRunning()
-    if (!isHealthy && backendStatus === "ready") {
+    if (backendStopped || backendHealthCheckInFlight) return
+    const generation = backendHealthGeneration
+    backendHealthCheckInFlight = true
+    let isHealthy
+    try { isHealthy = await isBackendRunning() }
+    finally { if (generation === backendHealthGeneration) backendHealthCheckInFlight = false }
+    if (backendStopped || !backendHealthCheckInterval || generation !== backendHealthGeneration) return
+    backendHealthFailures = isHealthy ? 0 : backendHealthFailures + 1
+    if (!isHealthy && backendHealthFailures < 2) {
+      if (backendStatus === "ready") notifyRendererBackendStatus("checking")
+      return
+    }
+    if (!isHealthy && (backendStatus === "ready" || backendStatus === "checking")) {
       logger.warn("[Backend] Health check failed - backend appears down")
       notifyRendererBackendStatus("error", { reason: "health_check_failed" })
       // Trigger restart
@@ -652,6 +672,9 @@ function startHealthCheck() {
 }
 
 function stopHealthCheck() {
+  backendHealthGeneration++
+  backendHealthCheckInFlight = false
+  backendHealthFailures = 0
   if (backendHealthCheckInterval) {
     clearInterval(backendHealthCheckInterval)
     backendHealthCheckInterval = null
@@ -850,7 +873,7 @@ ipcMain.handle("store:get", (_event, key) => store.get(key))
 ipcMain.handle("store:set", (_event, key, value) => { store.set(key, value) })
 
 ipcMain.handle("conversation:save", (_event, conversation) => {
-  ensureConversationsDir(appDataDir)
+  fs.mkdirSync(conversationsDir, { recursive: true })
   const id = conversation.id || crypto.randomUUID()
   const now = Date.now()
   const record = {
@@ -883,7 +906,7 @@ ipcMain.handle("conversation:load", (_event, id) => {
 })
 
 ipcMain.handle("conversation:list", () => {
-  ensureConversationsDir(appDataDir)
+  fs.mkdirSync(conversationsDir, { recursive: true })
   return fs.readdirSync(conversationsDir)
     .filter(f => f.endsWith(".json"))
     .map(f => {
@@ -964,6 +987,23 @@ ipcMain.handle("window:close", () => {
   app.quit()
 })
 
+ipcMain.handle("window:conversation-collapsed", (event, collapsed, height) => {
+  if (!win || event.sender !== win.webContents) return
+  if (collapsed) {
+    if (!conversationExpandedBounds) conversationExpandedBounds = {...win.getBounds(), wasMaximized: win.isMaximized()}
+    if (win.isMaximized()) win.unmaximize()
+    win.setMinimumSize(MIN_WIDTH, 240)
+    const target = Math.max(240, Math.min(560, Number(height) || 400))
+    win.setSize(win.getBounds().width, Math.round(target))
+  } else if (conversationExpandedBounds) {
+    const bounds = conversationExpandedBounds
+    win.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
+    win.setSize(bounds.width, Math.max(MIN_HEIGHT, bounds.height))
+    conversationExpandedBounds = null
+    if (bounds.wasMaximized) win.maximize()
+  }
+})
+
 ipcMain.handle("window:resize", (_event, width, height) => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (w) {
@@ -1039,6 +1079,14 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
     logger.info("[Stealth] Screenshot buffer cleared for privacy")
   }
   return { undetectable: stealth.isUndetectable() }
+})
+
+ipcMain.handle("window:capture-screenshot-context", async () => {
+  try { return await captureScreenContext({ includeMetadata: true }) }
+  catch (error) {
+    logger.error("[Screenshot] context capture failed:", error)
+    return { image: null, status: "failed", capturedAt: Date.now() }
+  }
 })
 
 ipcMain.handle("window:capture-screenshot", async () => {
@@ -1290,8 +1338,10 @@ function _updateBackendEnv(key, value) {
 // SECURE API KEY STORAGE (P1 Privacy)
 // ======================================
 // Store API keys encrypted. Optionally sync to backend/.env for standalone usage.
-ipcMain.handle("apiKey:save", (_event, { provider, apiKey, syncToEnv }) => {
+ipcMain.handle("apiKey:save", async (_event, { provider, apiKey, syncToEnv }) => {
   try {
+    const validation = await require("./lib/provider-key-validation").validateProviderKey(provider, apiKey)
+    if (!validation.success) return validation
     apiKeyStore.set(`apiKey.${provider}`, apiKey)
     logger.info(`[API Key] Saved encrypted key for provider: ${provider}`)
     if (syncToEnv) {
@@ -1477,21 +1527,34 @@ ipcMain.handle("system-audio:start", (event) => {
   if (systemAudioCapture && systemAudioCapture.isActive()) {
     return { ok: true, alreadyRunning: true }
   }
+  systemAudioCapture?.stop()
   const wc = event.sender
+  const capture = new SystemAudioCapture({ sampleRate: 16000, chunkDuration: 0.1 })
+  const stopOwnerCapture = () => {
+    capture.stop()
+    if (systemAudioCapture === capture) systemAudioCapture = null
+  }
+  wc.once("did-start-loading", stopOwnerCapture)
+  wc.once("destroyed", stopOwnerCapture)
+  capture.once("stop", () => {
+    wc.removeListener("did-start-loading", stopOwnerCapture)
+    wc.removeListener("destroyed", stopOwnerCapture)
+  })
   const send = (channel, payload) => {
-    if (!wc.isDestroyed()) wc.send(channel, payload)
+    if (systemAudioCapture === capture && !wc.isDestroyed()) wc.send(channel, payload)
   }
 
-  systemAudioCapture = new SystemAudioCapture({ sampleRate: 16000, chunkDuration: 0.1 })
+  systemAudioCapture = capture
   systemAudioCapture.on("data", (chunk) => send("system-audio:data", chunk))
   systemAudioCapture.on("silent", () => {
-    // macOS answers an ungranted tap with silence rather than an error, so
-    // this is the only signal the user will ever get that it is not working.
-    logger.error(
-      "[SystemAudio] capturing pure silence — grant 'System Audio Recording' " +
-      "in System Settings > Privacy & Security, then restart the app"
+    logger.warn(
+      "[SystemAudio] no audio detected in the first four seconds. Play audio to test capture; " +
+      "if it remains silent during playback, check Screen & System Audio Recording permission."
     )
     send("system-audio:silent")
+  })
+  systemAudioCapture.on("signal", () => {
+    logger.info("[SystemAudio] audio signal detected — capture is receiving audio")
   })
   systemAudioCapture.on("error", (err) => {
     logger.error("[SystemAudio] " + err.message)
@@ -2099,6 +2162,8 @@ app.whenReady().then(async () => {
 app.on("before-quit", () => { app.isQuitting = true })
 
 app.on("will-quit", () => {
+  systemAudioCapture?.stop()
+  systemAudioCapture = null
   app.isQuitting = true
   logger.info("[Main] will-quit event triggered")
   globalShortcut.unregisterAll()

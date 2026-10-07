@@ -36,6 +36,12 @@ def ms_of(audio):
 
 
 class TestUtteranceBoundaries:
+    def test_fast_live_boundary_preserves_a_breath_and_commits_at_600ms(self):
+        seg = VadSegmenter(silence_frames_required=6)
+        assert feed(seg, np.concatenate([silence(300), tone(700), silence(500), tone(700)])) == []
+        assert feed(seg, silence(500)) == []
+        assert len(feed(seg, silence(100))) == 1
+
     def test_speech_at_connection_start_does_not_become_its_own_noise_floor(self):
         seg = VadSegmenter()
         assert feed(seg, tone(6000)) == []

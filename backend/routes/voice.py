@@ -24,13 +24,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 logger = logging.getLogger("routes.voice")
@@ -58,11 +52,29 @@ except ImportError as e:
 router = APIRouter()
 
 
+@router.get("/voice-clone/local-engine")
+async def local_voice_status(user: User = Depends(require_authentication)):
+    if not VOICE_CLONE_AVAILABLE:
+        raise HTTPException(503, "Voice clone not available")
+    from modules.voice.local_clone_engine import get_local_clone_engine
+    return get_local_clone_engine(voice_manager.storage_dir).status()
+
+
+@router.post("/voice-clone/local-engine/setup")
+async def setup_local_voice(user: User = Depends(require_authentication)):
+    if not VOICE_CLONE_AVAILABLE:
+        raise HTTPException(503, "Voice clone not available")
+    from modules.voice.local_clone_engine import get_local_clone_engine
+    return get_local_clone_engine(voice_manager.storage_dir).start_setup()
+
+
 @router.post("/voice-clone/create")
 @rate_limit(requests_per_minute=10)
 async def create_voice_clone(
     name: str = Form(..., description="Name for this voice model"),
     audio_files: List[UploadFile] = File(default=[]),
+    engine: str = Form("qwen_local"),
+    ref_text: str = Form(""),
     user: User = Depends(require_authentication)
 ):
     """Create a new voice clone model from audio files."""
@@ -71,6 +83,79 @@ async def create_voice_clone(
 
     try:
         from voice_clone_agent import voice_manager
+
+        if engine not in ("edge_tts", "qwen_local"):
+            raise HTTPException(422, "Unknown voice engine")
+        if engine == "qwen_local":
+            if len(audio_files) != 1 or not ref_text.strip():
+                raise HTTPException(422, "Add one clean recording and type the words spoken in it")
+            sample = audio_files[0]
+            audio = await sample.read(20 * 1024 * 1024 + 1)
+            if not audio or len(audio) > 20 * 1024 * 1024:
+                raise HTTPException(422, "Reference audio must be between 1 byte and 20 MB")
+            from voice_clone_agent import VoiceModel
+            import uuid
+            import asyncio
+            from pathlib import Path
+            model_id = f"voice_{uuid.uuid4().hex}"
+            model_path = Path(voice_manager.storage_dir) / model_id
+            model_path.mkdir(parents=True)
+            extension = Path(sample.filename or "reference.wav").suffix.lower()
+            if extension not in (".wav", ".mp3", ".m4a", ".webm", ".ogg", ".flac", ".mp4"):
+                shutil.rmtree(model_path)
+                raise HTTPException(422, "Unsupported reference audio format")
+            reference = model_path / "reference.wav"
+            uploaded = model_path / ("upload" + extension)
+            try:
+                uploaded.write_bytes(audio)
+                # Decode recordings and uploads into the same mono WAV format.
+                ffmpeg = shutil.which("ffmpeg")
+                if ffmpeg:
+                    process = await asyncio.create_subprocess_exec(
+                        ffmpeg, "-nostdin", "-v", "error", "-y", "-i", str(uploaded),
+                        "-t", "21", "-ac", "1", "-ar", "24000", str(reference),
+                        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+                    )
+                    try:
+                        _, errors = await asyncio.wait_for(process.communicate(), 30)
+                    except BaseException:
+                        if process.returncode is None:
+                            process.kill()
+                            await process.wait()
+                        raise
+                    if process.returncode:
+                        raise HTTPException(422, "Could not decode the reference recording")
+                else:
+                    import soundfile as sf
+                    import numpy as np
+                    try:
+                        def decode():
+                            waveform, sample_rate = sf.read(uploaded, dtype="float32", always_2d=True)
+                            if len(waveform) > sample_rate * 20:
+                                raise ValueError("Reference must be at most 20 seconds")
+                            sf.write(reference, np.mean(waveform, axis=1), sample_rate)
+                        await asyncio.to_thread(decode)
+                    except Exception as exc:
+                        raise HTTPException(422, "Use a WAV recording, or install ffmpeg for other formats") from exc
+                import soundfile as sf
+                info = sf.info(reference)
+                if not 3 <= info.duration <= 20:
+                    raise HTTPException(422, "Use a recording between 3 and 20 seconds; 3–10 seconds works best")
+                if len(ref_text.strip()) > 2000:
+                    raise HTTPException(422, "Reference transcript is too long")
+                uploaded.unlink(missing_ok=True)
+                voice_manager.models[model_id] = VoiceModel(
+                    id=model_id, name=name, sample_count=1, created_at=time.time(),
+                    model_path=str(model_path), quality_score=0.0, status="ready",
+                    source="qwen_local", reference_audio=str(reference), reference_text=ref_text.strip(),
+                )
+                voice_manager._save_models()
+            except BaseException:
+                shutil.rmtree(model_path, ignore_errors=True)
+                voice_manager.models.pop(model_id, None)
+                raise
+            return {"model_id": model_id, "status": "ready", "source": "qwen_local",
+                    "message": "Reference voice saved. Generate speech below."}
 
         audio_paths = []
         for audio_file in audio_files:
@@ -97,6 +182,8 @@ async def create_voice_clone(
 
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[VoiceClone] Create error: %s", str(e))
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
@@ -207,7 +294,7 @@ async def get_voice_audio(filename: str):
         return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
 
     # SECURITY: Resolve absolute paths and ensure the file is within the audio directory
-    audio_dir = os.path.abspath(os.path.join("data", "voice_models", "audio"))
+    audio_dir = os.path.abspath(os.path.join(voice_manager.storage_dir, "audio"))
     file_path = os.path.abspath(os.path.join(audio_dir, safe_filename))
 
     # Ensure the resolved path is still within the audio directory
@@ -216,7 +303,7 @@ async def get_voice_audio(filename: str):
 
     if not os.path.exists(file_path):
         return error_response(ErrorCode.NOT_FOUND, "Audio file not found", status_code=404)
-    return FileResponse(file_path, media_type="audio/mpeg", filename=safe_filename)
+    return FileResponse(file_path, media_type="audio/wav" if safe_filename.endswith(".wav") else "audio/mpeg", filename=safe_filename)
 
 
 @router.get("/voice-clone/gallery")

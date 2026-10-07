@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from lib.async_stream import iterate_sync
-from lib.stream_recovery import recover_stream, provider_family
+from lib.stream_recovery import recover_stream, race_recover_stream, provider_family
 from lib.sse_helpers import make_error
 
 router = APIRouter()
@@ -19,6 +19,7 @@ class RecoveryRequest(BaseModel):
     temperature: float = Field(default=0.3, ge=0, le=2)
     messages: list[dict] = Field(default_factory=list, max_length=30)
     image_b64: str | None = Field(default=None, max_length=10000000)
+    race_first_response: bool = False
 
 
 async def provider_stream(model, prompt, history, *, mode='instant', style='concise', temperature=0.3, image_b64=None):
@@ -43,7 +44,7 @@ async def provider_stream(model, prompt, history, *, mode='instant', style='conc
     elif resolved:
         fn = cloud.get_stream_fn(model)
         stream = fn(prompt, model=resolved[1], **kwargs)
-    elif model.endswith(':cloud'):
+    elif model.endswith((':cloud', '-cloud')):
         stream = cloud.ask_ollama_cloud_stream(prompt, model=model, **kwargs)
     else:
         yield make_error('Selected model is unavailable.')
@@ -59,5 +60,8 @@ def stream_recover(body: RecoveryRequest):
     def factory(model, prompt, history):
         return provider_stream(model, prompt, history, mode=body.mode, style=body.style,
                                temperature=body.temperature, image_b64=body.image_b64)
-    return StreamingResponse(recover_stream(body.query, body.candidates, factory, body.messages),
+    first_budget = 12 if body.style == 'detailed' or body.mode in ('code', 'reasoning') else 4
+    stream = race_recover_stream if body.race_first_response else recover_stream
+    return StreamingResponse(stream(body.query, body.candidates, factory, body.messages,
+                                           first_content_seconds=first_budget),
                              media_type='text/event-stream', headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no'})

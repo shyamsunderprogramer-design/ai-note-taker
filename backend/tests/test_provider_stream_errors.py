@@ -34,6 +34,28 @@ def test_reasoning_and_usage_do_not_become_answers():
     assert ''.join(chat_content(resp, 'Groq')) == 'Visible answer'
 
 
+@pytest.mark.parametrize('mode,style,effort', [
+    ('instant', 'spoken', 'low'), ('adaptive', 'spoken', 'low'),
+    ('adaptive', 'concise', 'medium'), ('code', 'spoken', 'high'),
+    ('instant', 'detailed', 'high'),
+])
+def test_groq_keeps_selected_model_and_adjusts_reasoning(monkeypatch, mode, style, effort):
+    from modules.platform import cloud_providers as cloud
+    bodies = []
+    monkeypatch.setattr(cloud, 'build_prompt', lambda *a, **k: 'question')
+    monkeypatch.setattr(cloud, 'get_groq_key', lambda: 'fake-key')
+    @contextmanager
+    def stream(*a, **kwargs):
+        bodies.append(kwargs['json'])
+        yield response([{'choices': [{'delta': {'content': 'Answer.'}}]},
+                        {'choices': [{'delta': {}, 'finish_reason': 'stop'}]}, '[DONE]'])
+    monkeypatch.setattr(cloud.sync_client, 'stream', stream)
+    list(cloud.ask_groq_stream('question', mode=mode, style=style))
+    assert bodies[0]['model'] == 'openai/gpt-oss-120b'
+    assert bodies[0]['reasoning_effort'] == effort
+    assert bodies[0]['max_completion_tokens'] == (1536 if mode=='instant' and style=='spoken' else 4096)
+
+
 @pytest.mark.parametrize('events', [
     [{'choices': [{'delta': {'content': 'Partial'}}]}],
     [{'choices': [{'delta': {'content': 'Partial'}, 'finish_reason': 'length'}]}, '[DONE]'],
@@ -169,3 +191,25 @@ def test_text_and_vision_adapters_report_terminal_state(monkeypatch,adapter,key_
     if ending=='limit': assert data[-1]['code']=='output_limit'
     if ending=='quota': assert data[-1]['code']=='rate_limit'
     if ending!='complete': assert not any(e['type']=='done' for e in data)
+
+@pytest.mark.parametrize('name,key_name', [
+    ('ask_gpt_vision_stream','get_openai_key'),
+    ('ask_claude_vision_stream','get_anthropic_key'),
+    ('ask_gemini_vision_stream','get_google_key'),
+    ('ask_groq_vision_stream','get_groq_key'),
+])
+def test_vision_routes_include_followup_history_and_detail(monkeypatch, name, key_name):
+    from modules.platform import cloud_providers as cloud
+    captured = []
+    monkeypatch.setattr(cloud, key_name, lambda: 'synthetic')
+    @contextmanager
+    def stream(*args, **kwargs):
+        captured.append(kwargs['json'])
+        yield response([], status=401)
+    monkeypatch.setattr(cloud.sync_client, 'stream', stream)
+    list(getattr(cloud, name)('clear explanation please', image_b64='synthetic-image', style='detailed',
+         messages=[{'role':'user','text':'How do you manage on-call rotations?'}]))
+    body = captured[0]
+    assert 'on-call rotations' in json.dumps(body)
+    assert 'clear explanation please' in json.dumps(body)
+    assert body.get('max_tokens', body.get('generationConfig', {}).get('maxOutputTokens')) == 4096

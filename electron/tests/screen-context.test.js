@@ -19,3 +19,9 @@ test('native failure does not fall back to blinking hide/show capture',async()=>
  const capture=createScreenCapture({BrowserWindow:{getAllWindows:()=>{throw Error('Must not hide windows')}},screen:{getCursorScreenPoint:()=>({x:0,y:0}),getDisplayNearestPoint:()=>({id:7})},nativeCapture:async()=>{throw Error('Screen permission unavailable')}});
  await assert.rejects(capture(),/Screen permission unavailable/);
 });
+test('capture metadata identifies the selected display without changing legacy image return', async () => {
+ const capture=createScreenCapture({BrowserWindow:{}, screen:{getCursorScreenPoint:()=>({x:0,y:0}),getDisplayNearestPoint:()=>({id:9})},nativeCapture:async()=> 'frame'});
+ const result=await capture({includeMetadata:true});
+ assert.equal(result.image,'frame');assert.equal(result.displayId,'9');assert.equal(result.source,'fresh');assert.ok(result.capturedAt <= Date.now());
+ assert.equal(await capture(),'frame');
+});

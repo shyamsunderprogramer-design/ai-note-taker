@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Screenshot capture + multimodal AI
   captureScreenshot: () => ipcRenderer.invoke("window:capture-screenshot"),
+  captureScreenshotContext: () => ipcRenderer.invoke("window:capture-screenshot-context"),
   getAskWithImageUrl: () => `${BASE_URL}/ask-with-image`,
   getOcrUrl: () => `${BASE_URL}/ocr`,
 
@@ -120,6 +121,7 @@ contextBridge.exposeInMainWorld("api", {
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggle-maximize"),
   isWindowMaximized: () => ipcRenderer.invoke("window:is-maximized"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
+  setConversationCollapsed: (collapsed, height) => ipcRenderer.invoke("window:conversation-collapsed", collapsed, height),
   resizeWindow: (width, height) => ipcRenderer.invoke("window:resize", width, height),
   forceTop: () => ipcRenderer.invoke("window:force-top"),
   onMaximizeChanged: (callback) => {
@@ -169,12 +171,15 @@ contextBridge.exposeInMainWorld("api", {
   startSystemAudio: () => ipcRenderer.invoke("system-audio:start"),
   stopSystemAudio: () => ipcRenderer.invoke("system-audio:stop"),
   onSystemAudioData: (callback) => {
+    ipcRenderer.removeAllListeners("system-audio:data")
     ipcRenderer.on("system-audio:data", (_event, chunk) => callback(chunk))
   },
   onSystemAudioSilent: (callback) => {
+    ipcRenderer.removeAllListeners("system-audio:silent")
     ipcRenderer.on("system-audio:silent", () => callback())
   },
   onSystemAudioError: (callback) => {
+    ipcRenderer.removeAllListeners("system-audio:error")
     ipcRenderer.on("system-audio:error", (_event, message) => callback(message))
   },
 

@@ -14,6 +14,38 @@
 const test = require("node:test")
 const assert = require("node:assert")
 const { SystemAudioCapture, SilenceProbe, resolveBinary } = require("../lib/system-audio")
+const { EventEmitter } = require("node:events")
+const vm = require("node:vm")
+const fs = require("node:fs")
+const path = require("node:path")
+
+test("late close and PCM from a stopped helper cannot overwrite its replacement", () => {
+  const children = []
+  const spawn = () => {
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter(); child.stderr = new EventEmitter()
+    child.killed = false; child.kill = () => { child.killed = true }
+    children.push(child)
+    return child
+  }
+  const module = {exports:{}}
+  const filename = path.join(__dirname, "../lib/system-audio.js")
+  vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
+    module, Buffer, __dirname:path.dirname(filename), process:{platform:"darwin"},
+    require: name => name === "child_process" ? {spawn} : require(name),
+  })
+  const capture = new module.exports.SystemAudioCapture()
+  const received = []
+  capture.on("data", b => received.push(b))
+  capture.start(); capture.stop(); capture.start()
+  children[0].stdout.emit("data", Buffer.from([1,0]))
+  children[0].emit("close")
+  assert.equal(capture.proc, children[1])
+  children[1].stdout.emit("data", Buffer.from([2,0]))
+  assert.equal(received.length, 1)
+  capture.stop()
+  assert.ok(children.every(child => child.killed))
+})
 
 test("process capture rejects invalid filters before starting audio", () => {
   for (const includeProcesses of [null, "123", [0], [-1], [1.5], [NaN], ["123"]]) {
@@ -59,10 +91,11 @@ test("a late arriving signal still beats the silence verdict", () => {
   assert.strictEqual(probe.push(signal(400)), "ok")
 })
 
-test("settles exactly once so the user is not warned repeatedly", () => {
+test("warns once for silence and recognizes later audio without restarting", () => {
   const probe = new SilenceProbe({ sampleRate: 16000, probeMs: 100 })
   assert.strictEqual(probe.push(silence(3200)), "silent")
   assert.strictEqual(probe.push(silence(3200)), null)
+  assert.strictEqual(probe.push(signal(3200)), "ok")
   assert.strictEqual(probe.push(signal(3200)), null)
 })
 

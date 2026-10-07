@@ -7,6 +7,7 @@ import re
 import threading
 import time
 import queue
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -107,6 +108,7 @@ def warmup():
     """Load the default model at startup so first transcription is instant."""
     global _warmup_done
     try:
+        _accelerated_transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32))
         logger.info("[Warmup] Loading Whisper model...")
         model = get_model("adaptive")
         logger.info("[Warmup] Whisper ready: %s", model)
@@ -146,7 +148,10 @@ def get_model(mode="adaptive", streaming=False):
         with _model_lock:
             if selected not in models:
                 logger.info("Loading Whisper model: %s", selected)
-                models[selected] = _get_WhisperModel()(selected, device=DEVICE)
+                cpu = DEVICE == "cpu" or (DEVICE == "auto" and sys.platform == "darwin")
+                models[selected] = _get_WhisperModel()(selected, device=DEVICE,
+                    compute_type="int8" if cpu else "default", cpu_threads=4, num_workers=2)
+                model_ready.set()
 
     return models[selected]
 
@@ -214,12 +219,32 @@ def get_supported_languages():
     }
 
 
+def normalize_technical_homophones(text):
+    """Resolve only phrases with an unambiguous computing meaning.
+
+    Plain cash, cash flow/balance and ambiguous cash changes stay untouched.
+    """
+    return re.sub(r"\bcash(?=\s+(?:invalidation|hit\s+rate|miss\s+rate|coherence)\b)",
+                  lambda match: "Cache" if match.group()[0].isupper() else "cache",
+                  text, flags=re.IGNORECASE)
+
+
+def _accelerated_transcribe(audio, language='en'):
+    from modules.voice.apple_speech import transcribe_cached
+    return transcribe_cached(audio, language)
+
+
 def transcribe(audio, mode="adaptive", streaming=False, language="en", auto_detect=False):
     """
     Convert audio to text using Whisper.
     T22: Multi-language support with auto-detection.
     """
 
+    if streaming:
+        accelerated = _accelerated_transcribe(audio, None if auto_detect else language)
+        if accelerated is not None:
+            accelerated['text'] = normalize_technical_homophones(accelerated['text'])
+            return accelerated
     # Wait for warmup to complete (max 5s — return error if not ready)
     if not wait_for_model(timeout=5):
         logger.warning("Whisper model not ready after 5s")
@@ -244,6 +269,7 @@ def transcribe(audio, mode="adaptive", streaming=False, language="en", auto_dete
                 language=lang,
                 best_of=1,
                 without_timestamps=True,  # skip timestamp prediction = faster
+                temperature=0.0,  # no six-temperature fallback loop on noisy audio
             )
         else:
             segments, info = model.transcribe(
@@ -256,9 +282,16 @@ def transcribe(audio, mode="adaptive", streaming=False, language="en", auto_dete
                 patience=0.3           # less patience = faster
             )
 
+        segments = list(segments)
+        if streaming:
+            segments = [seg for seg in segments
+                        if getattr(seg, 'avg_logprob', 0) >= -1.0
+                        and getattr(seg, 'compression_ratio', 0) <= 2.8
+                        and not (getattr(seg, 'no_speech_prob', 0) > .8
+                                 and getattr(seg, 'avg_logprob', 0) < -.3)]
         text = " ".join(seg.text for seg in segments)
         detected = info.language if info else language
-        return {"text": text.strip(), "language": detected}
+        return {"text": normalize_technical_homophones(text.strip()), "raw_text": text.strip(), "language": detected}
 
     except Exception as e:
         logger.error("Transcription error: %s", str(e))

@@ -23,6 +23,8 @@ _KEY_SERVER_SECRET = os.getenv("KEY_SERVER_SECRET", "")
 def fetch_key_from_secure_server(provider):
     """Fetch API key from Electron's secure key server (localhost:18000)
     Requires shared secret for authentication."""
+    if os.getenv("ANT_DISABLE_KEY_SERVER") == "1":
+        return None
     now = time.time()
     if provider in _key_cache:
         cached_key, cached_time = _key_cache[provider]
@@ -74,9 +76,9 @@ except ImportError:
         if style == "concise":
             style_instruction = "2 sentences max."
         elif style == "detailed":
-            style_instruction = "2-3 paragraphs. Code if relevant."
+            style_instruction = "Explain at the requested depth with steps and examples; no fixed paragraph limit."
         elif style == "bulletpoint":
-            style_instruction = "4 bullets max."
+            style_instruction = "Use enough bullets to cover the request."
         else:
             style_instruction = "Short."
 
@@ -89,23 +91,31 @@ except ImportError:
                 history_lines.append(f"{role_label}: {msg.get('text', '')}")
             history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
 
+        if style == "spoken" and mode not in ("summary", "followup"):
+            return f"""Give a natural spoken answer suited to the latest request.
+Use everyday language in 2–3 short paragraphs, usually 60–110 words.
+No headings, tables, numbered sections, TL;DR, or code unless explicitly requested.
+Explain the idea first, then one practical example. Never invent résumé details,
+personal tools, past work, schedules, or achievement percentages. Use I would for
+an approach when past experience is not supported by the supplied résumé.
+The spoken or typed question takes priority over unrelated screen content.
+For technical knowledge questions, explain the technology without claiming personal experience.
+Never invent expansions for unfamiliar or garbled acronyms; use recent explicit corrections,
+state an assumption, or ask one brief clarification. A screenshot is reference context.
+
+{history_block}Question: {user_input}
+Answer:"""
+
         if mode == "race":
             # Minimal prompt for sub-second first-byte
             return f"""{history_block}Q: {user_input}
 A:"""
 
-        return f"""Slack message between two senior engineers.
-
-FORBIDDEN:
-- No headers/titles (=== or #)
-- No tables
-- No bullet lists
-- No numbered lists
-- No emojis
-- No code blocks unless asked
-- No "Here's" or "Sure" intros
-
-Write like a text message. Plain paragraphs only.
+        return f"""You are ANT, a helpful technical and interview assistant.
+Follow the requested task, depth, and format. Default style: {style_instruction}
+Use history to resolve follow-ups such as explain clearly or give more detail.
+Keep the latest topic; do not invent a new one. Use headings, steps, examples,
+and code where useful. Technical explanations need not include resume claims.
 
 {history_block}Question: {user_input}
 Answer:"""
@@ -644,8 +654,14 @@ def ask_groq_stream(prompt, model="openai/gpt-oss-120b", mode="adaptive", style=
             "stream": True,
         }
         if model.startswith("openai/gpt-oss-"):
-            body["reasoning_effort"] = "high"
-            body["max_completion_tokens"] = max(body["max_completion_tokens"], 4096)
+            body["reasoning_effort"] = ("high" if mode in ("code", "reasoning") or style == "detailed"
+                                        else "low" if mode in ("instant", "fast") or style == "spoken"
+                                        else "medium")
+            # Live spoken guidance needs a short answer with low reasoning.
+            # Reserving 4096 tokens per turn can exhaust a small TPM quota
+            # after two questions, even when each answer is only 100 words.
+            body["max_completion_tokens"] = (1536 if mode == "instant" and style == "spoken"
+                                             else max(body["max_completion_tokens"], 4096))
         with sync_client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
                                 headers=headers, json=body, timeout=60) as resp:
             check_provider_status(resp, "Groq")
@@ -860,6 +876,7 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
     import time
     start = time.time()
     try:
+        prompt = build_prompt(prompt, mode=mode, style=style, messages=messages, include_rag=False)
         api_key = get_openai_key()
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -877,7 +894,7 @@ def ask_gpt_vision_stream(prompt, image_b64=None, model="gpt-4o", mode="race", s
             "model": model,
             "messages": [{"role": "user", "content": content_parts}],
             "temperature": temperature if temperature is not None else 0.3,
-            "max_tokens": 512,
+            "max_tokens": 4096 if style == "detailed" else 2048,
             "stream": True
         }
         with sync_client.stream("POST", "https://api.openai.com/v1/chat/completions",
@@ -904,6 +921,7 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
     import time
     start = time.time()
     try:
+        prompt = build_prompt(prompt, mode=mode, style=style, messages=messages, include_rag=False)
         api_key = get_anthropic_key()
         headers = {
             "x-api-key": api_key,
@@ -923,7 +941,7 @@ def ask_claude_vision_stream(prompt, image_b64=None, model="claude-3-5-haiku-202
             "model": model,
             "messages": [{"role": "user", "content": content_parts}],
             "temperature": temperature if temperature is not None else 0.3,
-            "max_tokens": 512,
+            "max_tokens": 4096 if style == "detailed" else 2048,
             "stream": True
         }
         with sync_client.stream("POST", "https://api.anthropic.com/v1/messages",
@@ -950,6 +968,7 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
     import time
     start = time.time()
     try:
+        prompt = build_prompt(prompt, mode=mode, style=style, messages=messages, include_rag=False)
         api_key = get_google_key()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
         # Build parts with image
@@ -960,7 +979,7 @@ def ask_gemini_vision_stream(prompt, image_b64=None, model="gemini-2.0-flash", m
 
         body = {
             "contents": [{"parts": parts}],
-            "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 512}
+            "generationConfig": {"temperature": temperature if temperature is not None else 0.3, "maxOutputTokens": 4096 if style == "detailed" else 2048}
         }
         with sync_client.stream("POST", url, headers={"x-goog-api-key":api_key}, json=body, timeout=30) as resp:
             check_provider_status(resp, "Google")
@@ -985,6 +1004,7 @@ def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-p
     import time
     start = time.time()
     try:
+        prompt = build_prompt(prompt, mode=mode, style=style, messages=messages, include_rag=False)
         api_key = get_groq_key()
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -1002,7 +1022,7 @@ def ask_groq_vision_stream(prompt, image_b64=None, model="llama-3.2-90b-vision-p
             "model": model,
             "messages": [{"role": "user", "content": content_parts}],
             "temperature": temperature if temperature is not None else 0.3,
-            "max_tokens": 512,
+            "max_tokens": 4096 if style == "detailed" else 2048,
             "stream": True
         }
         with sync_client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
@@ -1053,6 +1073,7 @@ def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud",
     import time
     start = time.time()
     try:
+        prompt = build_prompt(prompt, mode=mode, style=style, messages=messages, include_rag=False)
         api_key = get_ollama_cloud_key()
         if not api_key:
             yield _make_error("Ollama Cloud key not configured")
@@ -1070,9 +1091,6 @@ def ask_ollama_cloud_vision_stream(prompt, image_b64=None, model="gemma3:cloud",
             user_msg["images"] = [image_b64]
 
         chat_messages = []
-        if messages:
-            for msg in messages:
-                chat_messages.append({"role": msg.get("role", "user"), "content": msg.get("text", "")})
         chat_messages.append(user_msg)
 
         body = {

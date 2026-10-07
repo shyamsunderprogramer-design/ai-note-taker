@@ -30,6 +30,7 @@ class SilenceProbe {
     this.bytesSeen = 0
     this.peak = 0
     this.settled = false
+    this.silenceReported = false
   }
 
   /**
@@ -47,8 +48,8 @@ class SilenceProbe {
       this.settled = true
       return "ok"
     }
-    if (this.bytesSeen >= this.bytesNeeded) {
-      this.settled = true
+    if (this.bytesSeen >= this.bytesNeeded && !this.silenceReported) {
+      this.silenceReported = true
       return "silent"
     }
     return null
@@ -120,13 +121,16 @@ class SystemAudioCapture extends EventEmitter {
     ]
     if (this.includeProcesses.length) args.push("--include-processes", ...this.includeProcesses.map(String))
     this.proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] })
+    const processForSession = this.proc
 
     this.proc.stdout.on("data", (chunk) => {
+      if (this.proc !== processForSession) return
       const verdict = this.probe && this.probe.push(chunk)
       if (verdict === "silent") {
-        // Not an error state to the OS, but always an error state to the user.
+        // A quiet source and a denied tap both produce zero-valued samples.
         this.emit("silent")
       }
+      if (verdict === "ok") this.emit("signal")
       this.emit("data", chunk)
     })
 
@@ -145,12 +149,14 @@ class SystemAudioCapture extends EventEmitter {
     })
 
     this.proc.on("error", (err) => {
-      this.proc = null
+      if (this.proc === processForSession) this.proc = null
       this.emit("error", err)
     })
     this.proc.on("close", () => {
-      this.proc = null
-      this.emit("stop")
+      if (this.proc === processForSession) {
+        this.proc = null
+        this.emit("stop")
+      }
     })
     return true
   }
@@ -164,6 +170,7 @@ class SystemAudioCapture extends EventEmitter {
     }
     this.proc = null
     this.probe = null
+    this.emit("stop")
   }
 }
 

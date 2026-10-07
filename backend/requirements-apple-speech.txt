@@ -1,0 +1,3 @@
+# Optional Apple Silicon acceleration. Model setup is explicit; live calls
+# only use already cached weights and otherwise retain faster-whisper.
+mlx-whisper==0.4.3; platform_system == "Darwin" and platform_machine == "arm64"

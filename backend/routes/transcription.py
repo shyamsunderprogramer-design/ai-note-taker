@@ -119,18 +119,22 @@ _ACKNOWLEDGEMENTS = {
 def _should_answer(text: str) -> bool:
     """Is this complete utterance worth answering?
 
-    Utterance segmentation makes this simple. We are handed one whole thing
-    the interviewer said, so the starter-word detection this replaced — plus
-    its backwards fallback scan and competing word-count floors, all of which
-    existed only to find a question hiding inside a stream of fragments — is
-    unnecessary. Anything substantial gets answered; short acknowledgements
-    ("okay", "got it") do not. The 4-word floor keeps the most common real
-    question in the corpus, "Tell me about yourself", answerable.
+    Keep completed participant statements in session memory without answering
+    every remark. Explicit questions and requests trigger guidance; manual
+    cuts can still request help with a meaningful statement.
     """
     stripped = text.strip().strip(".?!,").lower()
     if not stripped or stripped in _ACKNOWLEDGEMENTS:
         return False
-    return len(stripped.split()) >= 4
+    words = stripped.split()
+    if len(words) < 2:
+        return False
+    # Retain statements in the transcript, but don't spend answer slots on
+    # unrelated remarks. Scenario questions can contain the request mid-turn.
+    return ('?' in text or bool(re.search(
+        r'(?:^|[.!?,;]\s+)(?:what|why|how|when|where|who|which)\b|'
+        r'^(?:please\s+)?(?:can|could|would|should|do|does|did|is|are|tell|explain|describe|walk|write|fix|complete|implement|debug|help|summarize)\b',
+        stripped)))
 
 
 # Legacy question-shape check. The live assist no longer uses it — utterance
@@ -476,6 +480,7 @@ async def ws_transcribe(ws: WebSocket):
     ws_source = ws.query_params.get("source", "tab")
     ws_meeting_id = ws.query_params.get("meeting_id", "")
     live_assistance = ws.query_params.get("assist", "true").lower() != "false"
+    questions_only = ws.query_params.get("questions_only", "false").lower() == "true"
 
     # Interview context for live suggestion generation (from interview-overlay
     # via ?role=&company=&skills=&resume= query params)
@@ -521,9 +526,15 @@ async def ws_transcribe(ws: WebSocket):
 
     await ws.send_text(json.dumps({"type": "auth_ok"}))
 
+    if questions_only:
+        from modules.voice.apple_speech import start_warmup
+        start_warmup()
+
     transcriber = BrowserTranscriber()
     # Utterance boundaries come from the audio itself (see VadSegmenter).
-    segmenter = VadSegmenter()
+    # A half-second breath remains inside the question; live guidance needn't
+    # wait the legacy full second before beginning whole-utterance decoding.
+    segmenter = VadSegmenter(silence_frames_required=6 if questions_only else 10)
     transcriber.start_worker()  # was missing — queue segments were never consumed, no transcript ever fired
     partial_texts = []
     msg_queue = asyncio.Queue()
@@ -544,11 +555,46 @@ async def ws_transcribe(ws: WebSocket):
     _history = []
     _preview_state = {"at": 0.0, "busy": False, "last_text": "", "epoch": 0}
     _cut_state = {"at": 0.0}
+    _decode_pending = {"count": 0}
+    _decode_lock = threading.Lock()
+    _activity_state = {"speaking": False}
+    _draft_state = {"busy": False, "at": 0, "epoch": 0}
 
-    def _fire_suggestion(question, asked_at, seq):
+    def _on_draft(audio, epoch):
+        """Hidden, provisional candidate speech for panel interruptions."""
+        try:
+            from modules.voice.apple_speech import transcribe_cached
+            result = transcribe_cached(audio)
+            if (not ws_closed and epoch == _draft_state["epoch"]
+                    and result and result.get("text", "").strip()):
+                loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                    "type": "partial", "text": result["text"], "source": ws_source,
+                    "provisional": True,
+                })
+        finally:
+            _draft_state["busy"] = False
+
+    def _emit_activity():
+        if not ws_closed:
+            loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                "type": "activity", "source": ws_source,
+                "speaking": segmenter.is_speaking,
+                "transcribing": _decode_pending["count"],
+            })
+
+    def _fire_suggestion(question, asked_at, seq, timing=None):
         requested_model = ctx["model"]
         if ws_closed:
             logger.info("[ws/transcribe] suggestion skipped: socket already closed")
+            return
+
+        if questions_only:
+            # The desktop captures current screen context and owns generation.
+            loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                "type": "question", "question": question, "source": ws_source,
+                "session_id": answer_session_id, "answer_id": seq,
+                "timing": timing,
+            })
             return
 
         def _generate():
@@ -708,7 +754,7 @@ async def ws_transcribe(ws: WebSocket):
         finally:
             _preview_state["busy"] = False
 
-    def _on_utterance(audio, captured_at, manual=False):
+    def _process_utterance(audio, captured_at, manual=False):
         """One complete spoken utterance: transcribe it whole, then answer.
 
         This is the design change (2026-09-11). The boundary comes from
@@ -721,6 +767,7 @@ async def ws_transcribe(ws: WebSocket):
         """
         if not live_assistance:
             return
+        decode_started = time.perf_counter()
         try:
             result = transcribe(audio, mode="adaptive", streaming=True)
         except Exception as exc:
@@ -735,18 +782,25 @@ async def ws_transcribe(ws: WebSocket):
         )
         if not text:
             return
-        if manual and _is_noise_text(text):
+        if _is_noise_text(text):
             # An explicit request is honoured for any real question, however
             # short — but not for a hallucination.
             logger.info("[ws/transcribe] cut ignored, not speech: %r", text[:40])
             return
+        # Every completed utterance belongs to shared session memory, even
+        # when it is a statement rather than an answerable question.
+        loop.call_soon_threadsafe(msg_queue.put_nowait, {
+            "type": "utterance", "text": text, "source": ws_source,
+            "session_id": answer_session_id, "utterance_id": uuid.uuid4().hex,
+            "captured_at": captured_at,
+        })
         if not manual and not _should_answer(text):
             logger.info("[ws/transcribe] not answerable, no hint: %r", text[:60])
             return
         if ws_source == "system":
             # Proof this channel works — it just produced speech.
             _DUAL_CHANNEL["last_system_speech"] = time.time()
-        elif _system_channel_is_live():
+        elif _system_channel_is_live() and not questions_only and not manual:
             # A working interviewer channel owns assist, so the candidate's own
             # voice cannot trigger hints. A merely-connected-but-silent one
             # does not: that would strand the user with no hints at all.
@@ -755,7 +809,22 @@ async def ws_transcribe(ws: WebSocket):
             )
             return
         _utt_state["seq"] += 1
-        _fire_suggestion(text, captured_at, _utt_state["seq"])
+        _fire_suggestion(text, captured_at, _utt_state["seq"], {
+            "asr_ms": round((time.perf_counter() - decode_started) * 1000),
+            "engine": result.get("engine", "faster-whisper-cpu") if isinstance(result, dict) else "unknown",
+        })
+
+    def _on_utterance(audio, captured_at, manual=False):
+        _draft_state["epoch"] += 1
+        with _decode_lock:
+            _decode_pending["count"] += 1
+        _emit_activity()
+        try:
+            _process_utterance(audio, captured_at, manual)
+        finally:
+            with _decode_lock:
+                _decode_pending["count"] -= 1
+            _emit_activity()
 
     # StreamingDiarizer
     streaming_diarizer = None
@@ -922,17 +991,33 @@ async def ws_transcribe(ws: WebSocket):
 
             chunk = np.frombuffer(data, dtype=np.float32)
             if chunk is not None and len(chunk) > 0:
-                transcriber.add_chunk(chunk)
+                # Hidden live transcripts use complete utterances. Running a
+                # second ASR pass over provisional slices competes with both
+                # channels' final questions and is unnecessary here.
+                if not questions_only:
+                    transcriber.add_chunk(chunk)
                 for _utt in segmenter.add_chunk(chunk):
                     threading.Thread(
                         target=_on_utterance,
                         args=(_utt, time.time()),
                         daemon=True,
                     ).start()
+                if segmenter.is_speaking != _activity_state["speaking"]:
+                    _activity_state["speaking"] = segmenter.is_speaking
+                    _emit_activity()
                 _now = time.time()
+                if (questions_only and ws_source != "system" and segmenter.is_speaking
+                        and not _draft_state["busy"] and _now - _draft_state["at"] >= 1.5):
+                    _draft = segmenter.peek()
+                    if _draft is not None and len(_draft) >= 16000:
+                        _draft_state["busy"] = True
+                        _draft_state["at"] = _now
+                        threading.Thread(target=_on_draft,
+                                         args=(_draft, _draft_state["epoch"]), daemon=True).start()
                 if (
                     segmenter.is_speaking
                     and live_assistance
+                    and not questions_only
                     and ctx["model"] == "auto"
                     and not _preview_state["busy"]
                     and _now - _preview_state["at"] >= _PREVIEW_INTERVAL_S

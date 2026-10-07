@@ -31,3 +31,22 @@ async def iterate_sync(source):
             pending.add_done_callback(close)
         else:
             close()
+
+
+async def iterate_stream(source):
+    """Accept either provider protocol without mutating its module globally."""
+    if hasattr(source, '__aiter__'):
+        try:
+            async for item in source:
+                yield item
+        finally:
+            closer = getattr(source, 'aclose', None)
+            if closer:
+                await closer()
+    else:
+        stream = iterate_sync(source)
+        try:
+            async for item in stream:
+                yield item
+        finally:
+            await stream.aclose()

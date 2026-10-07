@@ -1876,7 +1876,7 @@ select option {
   border-color: rgba(59, 130, 246, 0.45);
 }
 .chat-message.assistant .msg-bubble {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.45));
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.28), rgba(15, 23, 42, 0.22));
   border-radius: 6px 20px 20px 20px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
@@ -9319,3 +9319,63 @@ select option {
 .delete-chats-actions button:disabled { opacity: .5; cursor: wait; }
 
 .recovery-status { font-size: 11px; color: #b6c3d4; line-height: 1.5; padding: 3px 6px; }
+
+/* Hiding the answer panel must release its layout space, not erase messages. */
+#conversationPanel[hidden] { display: none !important; }
+#conversationToggle { align-self: flex-end; margin: 4px 12px; padding: 5px 10px; border-radius: 8px; cursor: pointer; -webkit-app-region: no-drag; }
+body.conversation-collapsed .shell { min-height: 0; }
+body.conversation-collapsed { min-height: 0; }
+#conversationToggle { background: var(--glass-bg, #202633); color: var(--text, #eee); border: 1px solid var(--line, #555); font: inherit; font-size: 12px; }
+#conversationToggle:hover { background: rgba(128,128,128,.2); }
+#conversationToggle:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+/* Header decoration follows the opacity slider; text and controls stay legible. */
+.compact-header .hero-banner::after { opacity: var(--hero-opacity, .55); }
+.compact-header .controls-strip select,
+.compact-header .more-trigger,
+.compact-header .smart-mode-btn,
+.compact-header .win-btn { background-color: var(--glass-bg); }
+
+/* Keep saved conversations scrollable within the expanded history drawer. */
+#historyPanel .history-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* Readable answer blocks, including saved answers from older prompts. */
+.msg-bubble { min-width: 0; overflow-wrap: anywhere; }
+.msg-bubble p { line-height: 1.65; margin: 0 0 14px; }
+.msg-bubble p:last-child { margin-bottom: 0; }
+.msg-bubble .answer-table-scroll { width: 100%; max-width: 100%; overflow-x: auto; margin: 16px 0; border: 1px solid rgba(110, 130, 160, .25); border-radius: 8px; }
+.msg-bubble .answer-table { border-collapse: collapse; width: 100%; min-width: 320px; font-size: .92em; line-height: 1.5; }
+.msg-bubble .answer-table th, .msg-bubble .answer-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid rgba(110, 130, 160, .25); border-right: 1px solid rgba(110, 130, 160, .25); min-width: 110px; }
+.msg-bubble .answer-table th { background: rgba(35, 49, 73, .28); color: #f1f5f9; font-weight: 600; }
+.msg-bubble .answer-table td { background: rgba(20, 33, 54, .12); color: #e2e8f0; }
+.msg-bubble .answer-table tr:last-child td { border-bottom: 0; }
+.msg-bubble .answer-table :is(th, td):last-child { border-right: 0; }
+.msg-bubble .code-block, .msg-bubble .code-block code.hljs { white-space: pre; overflow-wrap: normal; word-break: normal; }
+.msg-bubble .code-block { background: rgba(16, 26, 42, .28); color: #e2e8f0; border-color: rgba(110, 130, 160, .25); border-radius: 8px; line-height: 1.6; overflow-x: auto; }
+
+.unified-session-panel { position: fixed; z-index: 1000; top: 100px; right: 18px; width: min(320px, calc(100vw - 36px)); max-height: 60vh; overflow: auto; margin: 0; padding: 14px; border: 1px solid rgba(120,145,175,.3); border-radius: 12px; background: rgba(20,32,49,.94); box-shadow: 0 8px 28px rgba(0,0,0,.25); font-size: 12px; }
+.header-right .live-session-info { flex: 0 0 22px; width: 22px; min-width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; box-shadow: none; color: var(--text-secondary, #a8b7cc); font-size: 14px; line-height: 1; cursor: pointer; }
+.live-session-info[aria-expanded="true"], .live-session-info:hover { color: var(--text-primary, #fff); }
+.header-right .live-session-info { position: relative; transition: color .18s ease, background-color .18s ease; }
+.header-right .live-session-info::after { content: ''; position: absolute; right: 0; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0; }
+.header-right .live-session-info[data-state="live"] { color: #4ade80; background-color: rgba(74,222,128,.18); box-shadow: inset 0 0 0 1px rgba(74,222,128,.65); }
+.header-right .live-session-info[data-state="live"]::after { opacity: 1; }
+.header-right .live-session-info[data-state="starting"], .header-right .live-session-info[data-state="warning"] { color: #fbbf24; }
+.header-right .live-session-info:is([data-state="starting"], [data-state="warning"])::after { opacity: 1; }
+.header-right .live-session-info:hover { background-color: rgba(120,145,175,.15); }
+.live-session-action { margin-top: 10px; padding: 6px 10px; border: 1px solid rgba(120,145,175,.35); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.live-session-action:disabled { opacity: .5; cursor: wait; }
+@media (max-width: 480px) { .header-right .live-session-info { flex-basis: 20px; width: 20px; min-width: 20px; height: 20px; font-size: 13px; } }
+#transcriptStrip, #unifiedSessionTranscript { display: none !important; }
+#chatArea[hidden], #historyParticipantTranscript[hidden], #historyConversationViews[hidden] { display: none; }
+.history-conversation-views { display: flex; gap: 6px; margin-right: auto; }
+.history-conversation-views button { padding: 5px 9px; border: 1px solid rgba(120,145,175,.3); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.history-conversation-views button[aria-pressed="true"] { background: rgba(75,130,180,.24); }
+.history-participant-transcript { overflow: auto; min-height: 0; padding: 14px; color: var(--text-primary, #e2e8f0); }
+.history-participant-transcript article { margin-bottom: 18px; }
+.history-participant-transcript p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin-top: 6px; }
+.history-transcript-note { font-size: .85em; color: var(--text-secondary, #a8b7cc); }
+.unified-session-panel[hidden] { display: none; }
+.unified-session-panel details { margin-top: 8px; }
+.unified-session-panel summary { cursor: pointer; color: var(--text-secondary, #a8b7cc); }
+.unified-session-panel details > div { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; padding-top: 8px; line-height: 1.5; }
+#unifiedSessionBtn[aria-pressed="true"] { background: rgba(75,130,180,.24); }
