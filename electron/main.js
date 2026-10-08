@@ -1,11 +1,14 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell, screen } = require("electron")
+const {configureRuntimePrivacy} = require("./lib/runtime-privacy")
+const runtimePrivacy = configureRuntimePrivacy({app, inspector:require("node:inspector")})
+const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
 const path = require("path")
 const { spawn } = require("child_process")
 const os = require("os")
 const stealth = require("./stealth")
+app.on("browser-window-created", (_event, window) => stealth.registerWindow(window))
 const { OverlayAdapter } = require("./features/overlay-adapter")
 const { ScreenRecorder } = require("./features/screen-recorder")
-const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
 const { PLATFORM, isPortableMode, initializeAppPaths, ensureConversationsDir } = require("./lib/paths")
 const cryptoLib = require("./lib/crypto")
 const { SystemAudioCapture } = require("./lib/system-audio")
@@ -216,7 +219,7 @@ function ensureTopmost(w) {
 // ======================================
 let screenshotBuffer = []        // ring buffer of base64 PNGs
 const SCREENSHOT_BUFFER_MAX = 5
-let autoScreenshotEnabled = true
+let autoScreenshotEnabled = false
 let autoScreenshotInterval = null
 
 process.on("uncaughtException", (err) => {
@@ -306,6 +309,7 @@ function createSplashScreen() {
     center: true,
     show: true,
     webPreferences: {
+      devTools: runtimePrivacy.localQA,
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js")
@@ -377,6 +381,7 @@ async function createWindow() {
     skipTaskbar: true,
     resizable: true,
     webPreferences: {
+      devTools: runtimePrivacy.localQA,
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
@@ -464,7 +469,7 @@ async function createWindow() {
   // (Global shortcut conflicts on Windows, so we use in-app listener)
   win.webContents.on("before-input-event", (event, input) => {
     const isCtrl = input.control || input.meta
-    if (isCtrl && input.shift && input.key.toLowerCase() === "i") {
+    if (runtimePrivacy.localQA && isCtrl && input.shift && input.key.toLowerCase() === "i") {
       event.preventDefault()
       if (win.webContents.isDevToolsOpened()) {
         win.webContents.closeDevTools()
@@ -795,7 +800,8 @@ async function startBackend() {
     "-m", "uvicorn", uvicornModule,
     "--host", "127.0.0.1",
     "--port", "8000",
-    "--log-level", "info"
+    "--log-level", process.env.ANT_DIAGNOSTICS === "1" ? "info" : "warning",
+    "--no-access-log"
   ], {
     ...spawnOpts,
     env: {
@@ -1044,7 +1050,7 @@ ipcMain.handle("window:restore", () => {
   w.focus()
   ensureTopmost(w)
   // Restart auto-screenshot if it was enabled
-  const savedAutoSS = store.get("autoScreenshotEnabled", true)
+  const savedAutoSS = store.get("autoScreenshotEnabled", false)
   if (savedAutoSS && !autoScreenshotInterval) {
     const interval = store.get("autoScreenshotInterval", 3000)
     startAutoScreenshot(interval)
@@ -1064,12 +1070,10 @@ ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
   else stealth.disable()
   store.set("stealthState", stealth.isEnabled())
   // Return both stealth mode AND capture protection state so renderer can sync accurately
-  return { enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable() }
+  return stealth.getProtectionState()
 })
 
-ipcMain.handle("window:get-stealth-state", () => ({
-  enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable()
-}))
+ipcMain.handle("window:get-stealth-state", () => stealth.getProtectionState())
 
 ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   stealth.setUndetectable(enabled)
@@ -1497,7 +1501,7 @@ function startApiKeyServer() {
 // Start the secure key server when app is ready
 app.whenReady().then(() => {
   startApiKeyServer()
-  // Enable the scoped 100 KB error-only backend crash log in production.
+  // Only explicitly opted-in diagnostics write the bounded crash log.
   // Needs app.getPath() so we wait until whenReady. Subsequent
   // logger.error(...) calls land in backend-crash.log automatically.
   configureBackendCrashLog()
@@ -1792,7 +1796,7 @@ app.whenReady().then(async () => {
   if (savedStealthState) stealth.enable()
 
   // Restore auto-screenshot setting
-  const savedAutoSS = store.get("autoScreenshotEnabled", true)
+  const savedAutoSS = store.get("autoScreenshotEnabled", false)
   if (savedAutoSS) {
     const interval = store.get("autoScreenshotInterval", 3000)
     startAutoScreenshot(interval)
@@ -1825,10 +1829,7 @@ app.whenReady().then(async () => {
         ensureTopmost(win)
       }
     }
-    if (win?.webContents) win.webContents.send("stealth:state-changed", {
-      enabled: stealth.isEnabled(),
-      undetectable: stealth.isUndetectable()
-    })
+    if (win?.webContents) win.webContents.send("stealth:state-changed", stealth.getProtectionState())
   })
 
   // Alt+Space — hide/show (stealth toggle)
@@ -1854,7 +1855,7 @@ app.whenReady().then(async () => {
       win.focus()
       ensureTopmost(win)
       // Restart auto-screenshot if enabled
-      const savedAutoSS = store.get("autoScreenshotEnabled", true)
+      const savedAutoSS = store.get("autoScreenshotEnabled", false)
       if (savedAutoSS && !autoScreenshotInterval) {
         const interval = store.get("autoScreenshotInterval", 3000)
         startAutoScreenshot(interval)
@@ -1889,7 +1890,7 @@ app.whenReady().then(async () => {
   })
 
   // F12 — toggle Developer Tools (Ctrl+Shift+I conflicts on some platforms)
-  registerShortcut("F12", "toggle devtools", () => {
+  if (runtimePrivacy.localQA) registerShortcut("F12", "toggle devtools", () => {
     if (win?.webContents) {
       if (win.webContents.isDevToolsOpened()) {
         win.webContents.closeDevTools()
@@ -1933,6 +1934,7 @@ app.whenReady().then(async () => {
       resizable: true,
       hasShadow: false,
       webPreferences: {
+      devTools: runtimePrivacy.localQA,
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, "preload.js"),
@@ -2021,6 +2023,7 @@ app.whenReady().then(async () => {
       hasShadow: false,
       backgroundColor: "#00000000",
       webPreferences: {
+      devTools: runtimePrivacy.localQA,
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, "preload.js"),

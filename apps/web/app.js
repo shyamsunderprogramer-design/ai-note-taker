@@ -313,7 +313,7 @@ let interviewContext = {
 function setInterviewContext(company, role) {
   interviewContext.company = company || ""
   interviewContext.role = role || ""
-  console.log("[InterviewContext] Set:", interviewContext.company, interviewContext.role)
+  console.log("[InterviewContext] updated")
   // Sync to interview overlay window
   try {
     window.api.setInterviewOverlayContext({ company: interviewContext.company, role: interviewContext.role })
@@ -610,7 +610,7 @@ if (window.api && window.api.onStealthStateChanged) {
   window.api.onStealthStateChanged((state) => {
     isUndetectable = state.undetectable
     stealthBtn.classList.toggle("undetectable", state.undetectable)
-    updateStealthUI(state.enabled, state.undetectable)
+    updateStealthUI(state.enabled, state.undetectable, state)
   })
 }
 
@@ -1027,6 +1027,7 @@ function formatDate(timestamp) {
 }
 
 async function saveCurrentConversation() {
+  if (window.privateHistorySession) return
   if (currentMessages.length === 0 && !window.liveSessionContext?.turns.length) return
   const firstUserMsg = currentMessages.find(m => m.role === "user")
   const title = firstUserMsg ? generateTitle(firstUserMsg.text) : generateTitle(window.liveSessionContext?.turns[0]?.text || "Live session")
@@ -1040,6 +1041,7 @@ async function saveCurrentConversation() {
     } catch {}
   }
 
+  if (window.privateHistorySession) return
   const conversation = {
     id: currentConversationId,
     title,
@@ -1128,15 +1130,9 @@ function loadConversationIntoUI(conversation) {
     if (modeTag) modeTag.textContent = conversation.mode
   }
 
-  // Restore auto-screenshot state
-  if (conversation.isAutoScreenshot) {
-    autoSSBtn?.classList.add("active")
-    if (autoSSDot) autoSSDot.style.display = "block"
-    window.api.autoScreenshotSetEnabled(true, 5000)
-  } else {
-    autoSSBtn?.classList.remove("active")
-    if (autoSSDot) autoSSDot.style.display = "none"
-  }
+  // Opening saved history never starts screen capture.
+  syncScreenshotState()
+
 
   // Restore always-on mic state
   if (conversation.isAlwaysOnMic) {
@@ -3884,7 +3880,7 @@ function showLiveHint(data) {
     renderPreviewHint(data.text)
     return
   }
-  console.log("[liveAssist] answer:", (data.text || "").slice(0, 80))
+  console.log("[liveAssist] answer received")
   clearPreviewHint()
   if (data.answer_id != null) {
     renderStreamedAnswer(data)
@@ -4529,14 +4525,14 @@ document.addEventListener("click", (e) => {
 async function syncStealthState() {
   try {
     const result = await window.api?.getStealthState?.()
-    updateStealthUI(result?.enabled === true, result?.undetectable === true)
+    updateStealthUI(result?.enabled === true, result?.undetectable === true, result)
   } catch {}
 }
 
-function updateStealthUI(enabled, undetectable) {
+function updateStealthUI(enabled, undetectable, capability = {}) {
   isUndetectable = undetectable
   if (stealthBtn) stealthBtn.classList.toggle("undetectable", undetectable)
-  if (stealthLabel) stealthLabel.textContent = undetectable ? "Protection on" : "Protection off"
+  if (stealthLabel) stealthLabel.textContent = capability.supported === false ? "Protection unavailable" : capability.partial ? "Protection incomplete" : undetectable ? "Protection requested" : "Protection off"
   if (stealthBtn) stealthBtn.title = "Requests capture protection. Some screen-sharing methods can still capture this window."
 }
 
@@ -4548,7 +4544,7 @@ if (stealthBtn) stealthBtn.addEventListener("click", async () => {
     // Toggle stealth mode (tray + capture protection together)
     if (!window.api?.setStealthMode) throw new Error("Capture protection requires the ANT desktop app.")
     const state = await window.api.setStealthMode(newState)
-    updateStealthUI(state.enabled, state.undetectable)
+    updateStealthUI(state.enabled, state.undetectable, state)
     if (state.undetectable !== newState) throw new Error("Capture protection could not be changed. Please try again.")
     // Sync state from main process response
     await appSettings.set("stealthState", newState)
@@ -6677,6 +6673,15 @@ async function syncAllProviderRows() {
   }
 }
 
+// Private chat retention is session-scoped; it does not change provider retention.
+const privateHistoryToggle = document.getElementById("private-history-session")
+window.privateHistorySession = false
+privateHistoryToggle?.addEventListener("change", () => {
+  window.privateHistorySession = privateHistoryToggle.checked
+  // Start fresh in both directions so private content cannot be saved later.
+  startNewConversation()
+})
+
 // Screenshot capture toggle — privacy control
 const toggleScreenshot = document.getElementById("toggle-screenshot")
 const screenshotStatusText = document.getElementById("screenshotStatusText")
@@ -6684,8 +6689,11 @@ const screenshotStatusText = document.getElementById("screenshotStatusText")
 async function syncScreenshotState() {
   if (!toggleScreenshot) return
   const stored = await appSettings.get("screenshotEnabled")
-  const enabled = stored !== false // default true
+  const runtime = await window.api?.autoScreenshotGetStatus?.()
+  const enabled = runtime ? runtime.enabled === true : stored === true
   toggleScreenshot.checked = enabled
+  autoSSBtn?.classList.toggle("active", enabled)
+  if (autoSSDot) autoSSDot.style.display = enabled ? "block" : "none"
   if (screenshotStatusText) {
     screenshotStatusText.textContent = enabled ? "Screenshots enabled" : "Screenshots disabled"
   }

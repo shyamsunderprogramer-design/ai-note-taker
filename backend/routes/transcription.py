@@ -102,6 +102,8 @@ def get_ffmpeg_path():
 from security import get_current_user
 
 router = APIRouter()
+from lib.log_redaction import CredentialFilter
+logging.getLogger('uvicorn.access').addFilter(CredentialFilter())
 
 try:
     from modules.voice.vad_segmenter import VadSegmenter
@@ -664,8 +666,8 @@ async def ws_transcribe(ws: WebSocket):
             # transcribed perfectly, only one hint delivered).
             if seq <= _utt_state["delivered"]:
                 logger.info(
-                    "[ws/transcribe] stale suggestion dropped (seq=%s, delivered=%s) for %r",
-                    seq, _utt_state["delivered"], question[:60],
+                    "[ws/transcribe] stale suggestion dropped (seq=%s, delivered=%s)",
+                    seq, _utt_state["delivered"],
                 )
                 return
             _utt_state["delivered"] = seq
@@ -674,8 +676,8 @@ async def ws_transcribe(ws: WebSocket):
             del _history[:-6]
             total_ms = int((time.time() - asked_at) * 1000)
             logger.info(
-                "[ws/transcribe] suggestion ready: model=%s gen=%sms e2e=%sms q=%r",
-                result.get("model"), result.get("gen_ms"), total_ms, question[:60],
+                "[ws/transcribe] suggestion ready: model=%s gen=%sms e2e=%sms",
+                result.get("model"), result.get("gen_ms"), total_ms,
             )
             sugg = {
                 "type": "suggestion",
@@ -736,8 +738,8 @@ async def ws_transcribe(ws: WebSocket):
                 logger.info("[ws/transcribe] stale preview dropped")
                 return
             logger.info(
-                "[ws/transcribe] preview %r -> %r",
-                text[:45], hint["text"][:55],
+                "[ws/transcribe] preview ready (%s characters)",
+                len(hint["text"]),
             )
             loop.call_soon_threadsafe(msg_queue.put_nowait, {
                 "type": "suggestion",
@@ -777,15 +779,15 @@ async def ws_transcribe(ws: WebSocket):
             result.get("text", "") if isinstance(result, dict) else str(result or "")
         ).strip()
         logger.info(
-            "[ws/transcribe] utterance %.1fs -> %r",
-            len(audio) / 16000.0, text[:90],
+            "[ws/transcribe] utterance %.1fs decoded (%s characters)",
+            len(audio) / 16000.0, len(text),
         )
         if not text:
             return
         if _is_noise_text(text):
             # An explicit request is honoured for any real question, however
             # short — but not for a hallucination.
-            logger.info("[ws/transcribe] cut ignored, not speech: %r", text[:40])
+            logger.info("[ws/transcribe] cut ignored, not speech")
             return
         # Every completed utterance belongs to shared session memory, even
         # when it is a statement rather than an answerable question.
@@ -795,7 +797,7 @@ async def ws_transcribe(ws: WebSocket):
             "captured_at": captured_at,
         })
         if not manual and not _should_answer(text):
-            logger.info("[ws/transcribe] not answerable, no hint: %r", text[:60])
+            logger.info("[ws/transcribe] not answerable, no hint")
             return
         if ws_source == "system":
             # Proof this channel works — it just produced speech.

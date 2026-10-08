@@ -3,7 +3,7 @@ import { _electron as electron } from '@playwright/test';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 await mkdir('/tmp/ant-visible-desktop', { recursive: true });
-const app = await electron.launch({ args: ['--remote-debugging-port=9223', resolve('electron/main.js')], timeout: 60000 });
+const app = await electron.launch({ env:{...process.env, ANT_ENABLE_LOCAL_QA:'1'}, args: ['--remote-debugging-port=9223', resolve('electron/main.js')], timeout: 60000 });
 let page;
 for (let attempt = 0; attempt < 120; attempt++) {
   page = app.windows().find(p => /signin.html|index.html/.test(p.url()));

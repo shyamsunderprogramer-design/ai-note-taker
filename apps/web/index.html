@@ -756,16 +756,26 @@
           </div>
           <div class="settings-card-body" id="privacy">
             <div class="provider-row compact">
+              <div class="provider-info">
+                <span class="provider-name">Private conversation</span>
+                <span class="provider-status dimmed">Starts a fresh chat without saving history. Cloud AI still receives requests.</span>
+              </div>
+              <label class="provider-toggle">
+                <input type="checkbox" id="private-history-session" aria-label="Start a private conversation without saving history" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div class="provider-row compact">
               <span class="provider-logo">&#128275;</span>
               <div class="provider-info">
                 <span class="provider-name">Screen Capture</span>
                 <span class="provider-status dimmed">Auto-screenshots</span>
               </div>
               <label class="provider-toggle">
-                <input type="checkbox" id="toggle-screenshot" checked />
+                <input type="checkbox" id="toggle-screenshot" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
-              <span id="screenshotStatusText" class="provider-status dimmed" style="font-size:11px;margin-left:4px;">Screenshots enabled</span>
+              <span id="screenshotStatusText" class="provider-status dimmed" style="font-size:11px;margin-left:4px;">Screenshots off until enabled</span>
             </div>
           </div>
         </div>

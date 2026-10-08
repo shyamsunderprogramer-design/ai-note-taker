@@ -3,10 +3,10 @@
  * mode suppression + scoped backend-crash log.
  *
  * Behavior:
- *   - Dev (non-packaged): full file log at info level (5MB rotation).
+ *   - File diagnostics are disabled unless ANT_DIAGNOSTICS=1 is explicitly set.
  *   - Prod (packaged): main file transport DISABLED for stealth mode
  *     (logs only go to console / memory).
- *   - Prod (packaged): a SEPARATE small error-only log is configured
+ *   - Opted-in packaged builds: a small error-only log is configured
  *     at userData/logs/backend-crash.log so backend spawn failures
  *     leave an on-disk artifact users/support can inspect. 100 KB cap,
  *     rotates to .old.log. Toggled via configureBackendCrashLog()
@@ -21,15 +21,18 @@
 const log = require("electron-log/main")
 
 log.initialize()
-log.transports.file.level = "info"
-log.transports.console.level = "debug"
+const diagnostics = process.env.ANT_DIAGNOSTICS === "1"
+const {redact} = require("./log-redaction")
+log.hooks.push(message => ({...message, data:message.data.map(redact)}))
+log.transports.file.level = diagnostics ? "info" : false
+log.transports.console.level = diagnostics ? "debug" : "warn"
 log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB rotation
 
 // Disable file logging in production for stealth mode
 // Logs only go to console (memory), not to disk
 try {
   const { app } = require("electron")
-  if (app.isPackaged) {
+  if (app.isPackaged && !diagnostics) {
     log.transports.file.level = false
   }
 } catch (e) {
@@ -43,7 +46,7 @@ try {
 // the general log. Configured lazily because we need app.getPath.
 let crashLogConfigured = false
 function configureBackendCrashLog() {
-  if (crashLogConfigured) return
+  if (!diagnostics || crashLogConfigured) return
   crashLogConfigured = true
   try {
     const { app } = require("electron")
@@ -68,7 +71,7 @@ module.exports = {
    * Idempotent — safe to call multiple times.
    */
   configureForProduction() {
-    log.transports.file.level = false
+    if (!diagnostics) log.transports.file.level = false
   },
   /**
    * Call once `app.whenReady()` has fired. Enables the scoped
