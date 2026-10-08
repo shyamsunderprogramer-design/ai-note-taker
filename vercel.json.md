@@ -5,11 +5,13 @@ web app at `apps/web/`. The FastAPI backend is **not** deployed by
 Vercel — it runs on Render (see `render.yaml` at the repo root).
 
 ## Build pipeline (Vite, configured in `apps/web/vite.config.js`)
-- Vite reads `apps/web/package.json` and runs `vite build`
+- Vercel uses the repository root and runs `npm run web:build`, which
+  invokes `vite build` in the `ant-web` workspace.
 - `vite.config.js`'s `rollupOptions.input` lists 14 HTML entries
 - Vite outputs to `apps/web/dist/` with hashed asset filenames
-- Vercel then serves `apps/web/` (Vite overwrites `index.html` in
-  place during build, so the dev source IS the served output)
+- Vercel serves `apps/web/dist/`. Vite preserves the source files.
+- The root `npm run build` also packages Electron desktop installers;
+  it must not be used for Vercel's web deployment.
 
 ## File structure (this file is JSON, not JSONC)
 **`vercel.json` is strict JSON** (no comments, no trailing commas).
@@ -20,10 +22,11 @@ JSON and moved all comments to this sidecar file.
 
 ## Sections
 
+### `buildCommand`
+- `npm run web:build` explicitly overrides the default root build.
+
 ### `outputDirectory`
-- `apps/web` — Vercel serves the source tree directly. Vite's
-  `dist/` output is ignored (Vite overwrites the dev source in
-  place during build).
+- `apps/web/dist` — Vercel serves Vite's generated web output.
 
 ### `rewrites`
 Vercel serves the 14 static HTML pages directly. The rewrites
@@ -59,8 +62,8 @@ and users will get stuck on stale caches.
 
 ### `headers.source: /assets/(.*)`
 `Cache-Control: public, max-age=31536000, immutable` — Vite's
-hashed assets can be cached forever. **Dormant** until the deployment
-switches to serving `dist/` instead of the dev source.
+hashed assets can be cached forever. Runtime assets copied without hashes
+also use this existing cache rule; they should be versioned when changed.
 
 ### `trailingSlash: false`
 Vercel does not redirect `/foo/` to `/foo`. The static-pages setup

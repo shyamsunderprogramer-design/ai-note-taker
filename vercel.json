@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "outputDirectory": "apps/web",
+  "buildCommand": "npm run web:build",
+  "outputDirectory": "apps/web/dist",
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
     { "source": "/caption-overlay", "destination": "/caption-overlay.html" },
