@@ -11,9 +11,7 @@ This is Phase 1 of the Predictive Interview Intelligence feature.
 """
 
 import logging
-from typing import List, Dict, Optional
-from datetime import datetime
-from collections import Counter
+from typing import Dict, Optional
 
 logger = logging.getLogger("predictive_interview")
 

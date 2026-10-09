@@ -10,7 +10,7 @@ import time
 import hashlib
 import logging
 import threading
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("agents.cache")

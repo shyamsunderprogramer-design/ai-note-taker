@@ -13,7 +13,7 @@ Each category README has 60 questions (20 beginner + 20 intermediate + 20 advanc
 import re
 import os
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("agents.ingestion.markdown_parser")

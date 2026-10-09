@@ -17,9 +17,8 @@ Usage:
 
 import logging
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass
-from collections import Counter
 
 logger = logging.getLogger("performance_analyzer")
 

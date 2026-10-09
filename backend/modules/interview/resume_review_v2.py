@@ -13,7 +13,7 @@ Features:
 import json
 import logging
 import re
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum

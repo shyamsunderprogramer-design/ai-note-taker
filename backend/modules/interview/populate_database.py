@@ -5,7 +5,6 @@ This script generates high-quality, realistic interview questions with proper me
 
 import json
 import random
-from datetime import datetime
 from typing import List, Dict
 from question_database_v2 import (
     InterviewQuestion, ExpectedAnswer, QuestionCategory,

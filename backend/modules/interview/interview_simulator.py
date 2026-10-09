@@ -13,7 +13,7 @@ This is Phase 3: Interview Simulator feature.
 
 import json
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from datetime import datetime
 from dataclasses import dataclass, asdict
 from enum import Enum

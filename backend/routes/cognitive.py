@@ -7,7 +7,6 @@ import logging
 import re
 import sys
 import subprocess  # nosec B404
-from datetime import datetime
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Query

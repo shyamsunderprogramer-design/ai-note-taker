@@ -9,8 +9,8 @@ Uses a 3-tier fallback for maximum compatibility:
 
 import os
 import logging
-from typing import List, Optional
-from dataclasses import dataclass, field
+from typing import List
+from dataclasses import dataclass
 
 logger = logging.getLogger("agents.ingestion.pdf_processor")
 

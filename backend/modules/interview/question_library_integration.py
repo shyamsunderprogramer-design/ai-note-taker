@@ -3,7 +3,7 @@ question_library_integration.py - Integration between new and old question syste
 Provides backward compatibility while exposing new rich question database
 """
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 import random
 
 # Import both systems

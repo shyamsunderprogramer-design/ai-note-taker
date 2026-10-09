@@ -6364,7 +6364,7 @@ async function renderRaceToggles() {
         const isDisabled = disabledModels.includes(opt.value)
         html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${escapeHtml(opt.value)}">`
         html += `<div class="model-card-info">`
-        html += `<span class="model-card-name">${opt.textContent}</span>`
+        html += `<span class="model-card-name">${escapeHtml(opt.textContent)}</span>`
         html += `<span class="model-card-value">${escapeHtml(opt.value)}</span>`
         html += `</div>`
         html += `<label class="model-card-toggle">`

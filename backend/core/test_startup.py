@@ -4,7 +4,6 @@ Tests all imports and key functionality
 """
 
 import sys
-import os
 
 def check_imports():
     """Test all critical imports"""

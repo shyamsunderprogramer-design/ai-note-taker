@@ -12,10 +12,8 @@ Features:
 """
 
 import os
-import json
 import asyncio
 import logging
-import base64
 import tempfile
 import wave
 from typing import Optional, Dict, Any, Callable, List

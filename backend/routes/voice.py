@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 import time
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 

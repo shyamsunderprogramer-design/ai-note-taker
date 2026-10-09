@@ -2,7 +2,7 @@
 import os
 import logging
 import secrets
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from urllib.parse import urlencode
 
 import httpx

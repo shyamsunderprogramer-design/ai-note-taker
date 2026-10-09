@@ -19,7 +19,6 @@ from security.auth import User
 from security import get_current_user
 
 # Local require_authentication (mirrors routes/auth.py pattern)
-import os
 from fastapi import status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends as _Depends

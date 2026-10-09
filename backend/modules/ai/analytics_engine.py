@@ -16,7 +16,7 @@ Usage:
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict
 from datetime import datetime, timedelta
 from collections import defaultdict
 

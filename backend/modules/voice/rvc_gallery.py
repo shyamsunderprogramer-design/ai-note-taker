@@ -3,7 +3,6 @@ Pre-trained RVC Voice Model Gallery.
 Provides metadata for curated voice models users can install.
 """
 
-import os
 import logging
 from typing import Dict, List, Optional
 from dataclasses import dataclass

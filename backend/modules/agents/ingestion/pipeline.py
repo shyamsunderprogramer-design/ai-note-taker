@@ -15,7 +15,7 @@ import shutil
 import subprocess  # nosec B404
 import tempfile
 import time
-from typing import List, Optional
+from typing import List
 from dataclasses import dataclass, field
 
 from modules.agents.ingestion.markdown_parser import MarkdownQAParser

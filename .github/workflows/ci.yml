@@ -220,6 +220,9 @@ jobs:
     needs: [backend-tests]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Preserve real historical diffs for reviewed secret fingerprints.
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5

@@ -12,7 +12,6 @@ Features:
 MCP Spec: https://spec.modelcontextprotocol.io/
 """
 
-import os
 import re
 import sys
 import json

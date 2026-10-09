@@ -6,7 +6,6 @@ Uses lazy imports to reduce startup time
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 # Configure logging immediately
 logging.basicConfig(

@@ -12,10 +12,9 @@ Phase 2 Task #28
 
 import logging
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 from datetime import datetime
-import asyncio
 from collections import deque
 
 logger = logging.getLogger("realtime_suggestions")
@@ -471,7 +470,6 @@ def generate_live_suggestion(
             return {"text": None, "gen_ms": int((_time.perf_counter()-t0)*1000),
                     "model": model, "error": str(exc) or "Selected model timed out"}
     try:
-        import json as _json
 
         import httpx
 

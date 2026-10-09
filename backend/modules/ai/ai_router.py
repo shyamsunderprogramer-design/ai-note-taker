@@ -2,7 +2,6 @@ from lib.async_stream import iterate_stream
 import json
 import logging
 import os
-import re
 import threading
 import time
 
@@ -385,7 +384,7 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
         if style == "spoken":
             num_predict = max(num_predict, 768)
 
-        import os as _os, psutil
+        import psutil
         cpu_count = psutil.cpu_count(logical=True) or 4
         ram_gb = psutil.virtual_memory().total / (1024 ** 3)
         # Low-end systems: small context window + all CPU threads for speed

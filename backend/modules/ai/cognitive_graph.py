@@ -7,11 +7,9 @@ Relationships: CONTAINS, ASKED_BY, ANSWERED_WITH, RELATED_TO, FOR_ROLE
 """
 
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 from datetime import datetime
-import json
-import uuid
 
 logger = logging.getLogger("cognitive_graph")
 
@@ -661,7 +659,6 @@ def ingest_conversation(conversation_id: str, conversation_data: Dict) -> bool:
     """Ingest a conversation into the graph with full Q&A parsing"""
     try:
         from entity_extraction import entity_extractor
-        import uuid
 
         # Create interview node
         interview = InterviewNode(

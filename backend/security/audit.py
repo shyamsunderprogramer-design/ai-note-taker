@@ -6,12 +6,10 @@ T7: Now writes to database first, JSONL file as fallback
 
 import os
 import json
-import time
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict, field
-from pathlib import Path
 
 logger = logging.getLogger("audit")
 

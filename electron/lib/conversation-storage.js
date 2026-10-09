@@ -12,6 +12,17 @@ function readRecord(filename, dataDir) {
   }
 }
 
+function migrationRecorded(filename) {
+  try {
+    const fd = fs.openSync(filename, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0))
+    fs.closeSync(fd)
+    return true
+  } catch (error) {
+    if (error.code === 'ENOENT') return false
+    throw error
+  }
+}
+
 function conversationKey(dataDir) {
   return crypto.scryptSync(dataDir + ':ant-conversations', 'ai-note-taker-convo-salt-v1', 32)
 }
@@ -61,11 +72,7 @@ function initializeConversationStorage(appDataRoot, currentDataDir) {
         // newer records while keeping intentional shared deletions deleted.
         const markerDir = path.join(dataDir, 'conversation-migrations')
         const marker = path.join(markerDir, crypto.createHash('sha256').update(path.join(dir, name)).digest('hex'))
-        if (fs.existsSync(marker) && !fs.existsSync(target)) continue
-        if (!fs.existsSync(target)) {
-          fs.writeFileSync(target, encode(record, dataDir), { flag: 'wx', mode: 0o600 })
-          migrated++
-        } else {
+        try {
           const existing = readRecord(target, dataDir)
           if ((record.updatedAt || 0) > (existing.updatedAt || 0)) {
             const temporary = target + '.' + crypto.randomUUID() + '.tmp'
@@ -73,10 +80,22 @@ function initializeConversationStorage(appDataRoot, currentDataDir) {
             fs.renameSync(temporary, target)
             migrated++
           }
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error
+          if (migrationRecorded(marker)) continue
+          try {
+            fs.writeFileSync(target, encode(record, dataDir), { flag: 'wx', mode: 0o600 })
+            migrated++
+          } catch (writeError) {
+            if (writeError.code !== 'EEXIST') throw writeError
+          }
         }
         fs.mkdirSync(markerDir, { recursive: true, mode: 0o700 })
-        const markerFd = fs.openSync(marker, fs.constants.O_WRONLY | fs.constants.O_CREAT | (fs.constants.O_NOFOLLOW || 0), 0o600)
-        fs.closeSync(markerFd)
+        try {
+          fs.writeFileSync(marker, '', { flag: 'wx', mode: 0o600 })
+        } catch (error) {
+          if (error.code !== 'EEXIST') throw error
+        }
       } catch (error) {
         errors.push({ file: path.join(dir, name), message: error.message })
       }

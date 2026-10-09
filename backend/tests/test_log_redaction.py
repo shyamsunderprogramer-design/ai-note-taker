@@ -9,6 +9,10 @@ def test_access_log_formats_arguments_before_redacting_websocket_credentials():
     assert 'private-token' not in record.getMessage()
     assert 'source=system' in record.getMessage()
     assert '101' in record.getMessage()
+    from uvicorn.logging import AccessFormatter
+    formatted = AccessFormatter('%(request_line)s %(status_code)s', use_colors=False).format(record)
+    assert 'private-token' not in formatted
+    assert 'source=system' in formatted
 
 
 def test_access_log_redacts_bearer_and_jwt_and_preserves_operational_error():

@@ -26,3 +26,11 @@ GitHub CodeQL successfully scanned Python, JavaScript/TypeScript and Actions at 
 Infrastructure fixes remain separate and under review: Checkov is down from 72 to 36 failed checks, without parsing errors. AWS/GCP validate without warnings; Azure validates with one retired log-profile warning. Remaining private-network, image-trust and authentication changes must preserve the deployed access model. No cloud deployment or resource destruction was performed.
 
 Unrelated existing workspace edits remain unstaged.
+
+## Third application batch
+
+Removed unused standard-library imports from 58 backend files after verifying each removal against the clean committed source. Existing feature edits that use those imports were preserved in the working tree. The fresh CI environment still passes 1,317 backend tests, with 59 skipped and six existing deprecation warnings. Clean desktop tests pass all 174 cases; dependency attack tests and the production web build pass.
+
+The remaining model-label HTML insertion is escaped. Conversation migration uses exclusive writes and opened-file reads without existence-check/write races. Credential redaction preserves structured Uvicorn access-log arguments, with a formatter regression test.
+
+The latest hosted run passed backend tests and web build. Its secret scan used a shallow snapshot, producing new fingerprints for old documentation placeholders; the security checkout now fetches full history so reviewed historical fingerprints remain accurate. Hosted browser tests exposed obsolete server routing; that correction remains in progress. The latest complete CodeQL scan reports 424 open branch findings, down from 494. No claim of a clean whole-repository scan is made.

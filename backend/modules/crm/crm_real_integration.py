@@ -11,13 +11,10 @@ Features:
 - Real-time sync and conflict resolution
 """
 
-import os
-import json
 import logging
-import asyncio
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 logger = logging.getLogger("crm_integration")
 

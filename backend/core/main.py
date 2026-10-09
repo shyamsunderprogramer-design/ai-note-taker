@@ -1,6 +1,5 @@
 from lib.async_stream import iterate_stream
 import asyncio
-import base64
 import json
 import logging
 import os

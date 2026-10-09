@@ -3,7 +3,6 @@ SSL Certificate Generator
 Generates self-signed certificates for development and provides setup for production
 """
 
-import os
 import subprocess  # nosec B404
 from pathlib import Path
 

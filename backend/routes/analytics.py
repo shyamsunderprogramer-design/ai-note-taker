@@ -1,7 +1,7 @@
 """Route module for analytics, conversation analysis, and performance insights."""
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fastapi import APIRouter, Body, Depends, Query
 

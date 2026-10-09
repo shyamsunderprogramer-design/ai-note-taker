@@ -77,7 +77,7 @@ STATE = {"is_streaming": False}
 _race_history = []
 
 # Provider key cache (mirrors main.py)
-from typing import Dict, AsyncIterator
+from typing import Dict
 
 async def _sync_to_async_iter(sync_iter):
     """Bridge a plain Python generator (sync `def`, not `async def`) into

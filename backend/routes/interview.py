@@ -2,7 +2,7 @@
 import io
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
 from fastapi.responses import JSONResponse

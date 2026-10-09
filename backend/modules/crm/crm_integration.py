@@ -14,7 +14,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 from dataclasses import dataclass, asdict
 import requests
 

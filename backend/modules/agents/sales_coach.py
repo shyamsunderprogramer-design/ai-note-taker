@@ -6,9 +6,8 @@ during live sales calls. Inspired by Cluely (300ms latency), Fireflies Live Assi
 and Fathom AI Scorecards.
 """
 
-import re
 import logging
-from typing import List, Dict, Any
+from typing import List, Any
 
 from modules.agents.base import (
     BaseAgent, AgentType, AgentSuggestion, AgentContext,

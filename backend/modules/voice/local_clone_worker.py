@@ -1,6 +1,5 @@
 """App-owned local inference process; no server or cloud speech API."""
 import json
-import os
 import sys
 
 

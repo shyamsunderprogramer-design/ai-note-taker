@@ -6,9 +6,8 @@ Runs on every transcript segment (not just questions), with accumulated notes
 to prevent duplicate extraction.
 """
 
-import re
 import logging
-from typing import List, Dict, Any
+from typing import List, Any
 
 from modules.agents.base import (
     BaseAgent, AgentType, AgentSuggestion, AgentContext,

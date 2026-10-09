@@ -5,7 +5,6 @@ Screen recording alongside audio, camera overlay, save/search/export.
 import os
 import json
 import uuid
-import time
 import logging
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field, asdict

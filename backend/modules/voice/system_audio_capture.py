@@ -3,14 +3,12 @@ system_audio_capture.py - Native system audio capture
 Optimized low-latency audio capture for Windows/macOS/Linux
 """
 
-import asyncio
 import numpy as np
 import platform
 import subprocess
 import tempfile
 import os
-from pathlib import Path
-from typing import Optional, Callable, BinaryIO
+from typing import Optional, Callable
 from dataclasses import dataclass
 import threading
 import queue

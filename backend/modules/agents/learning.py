@@ -16,7 +16,7 @@ This data is used to:
 import time
 import logging
 import threading
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from collections import defaultdict
 

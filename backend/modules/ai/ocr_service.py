@@ -8,7 +8,6 @@ Pipeline:
 """
 
 import base64
-import json
 import logging
 from lib.native_ocr import extract_native_text
 from io import BytesIO

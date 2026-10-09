@@ -13,7 +13,7 @@ import json
 import hashlib
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import numpy as np
 
 logger = logging.getLogger("document_store")

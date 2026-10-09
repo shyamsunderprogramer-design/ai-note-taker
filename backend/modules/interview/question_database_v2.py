@@ -11,7 +11,7 @@ Structure:
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict
 from enum import Enum
 import json
 from datetime import datetime

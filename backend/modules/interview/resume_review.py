@@ -6,9 +6,8 @@ Analyzes resume against job descriptions and provides feedback.
 
 import json
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
 
 logger = logging.getLogger("resume_review")
 
