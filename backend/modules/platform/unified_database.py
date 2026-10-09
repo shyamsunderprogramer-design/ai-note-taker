@@ -636,8 +636,8 @@ class UnifiedDatabase:
             if field in result and result[field]:
                 try:
                     result[field] = json.loads(result[field])
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    continue
         return result
 
     def _cast_value(self, value: str, value_type: str) -> Any:
@@ -651,7 +651,7 @@ class UnifiedDatabase:
         elif value_type in ('dict', 'list'):
             try:
                 return json.loads(value)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 return value
         return value
 
@@ -678,7 +678,7 @@ class UnifiedDatabase:
                     try:
                         cursor.execute(query)
                         stats[table] = cursor.fetchone()[0]
-                    except:
+                    except sqlite3.Error:
                         stats[table] = 0
 
                 # Database file size

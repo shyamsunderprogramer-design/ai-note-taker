@@ -413,6 +413,10 @@ class AnalyticsEngine:
 
         Combines key metrics from all analytics.
         """
+        if not self.graph or not self.graph.driver:
+            return {"available": False, "reason": "graph_unavailable",
+                    "message": "Analytics is unavailable until the knowledge graph is connected."}
+
         trends = self.get_performance_trends(user_id)
         calendar = self.get_interview_calendar(user_id, months=3)
 

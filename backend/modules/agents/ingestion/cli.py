@@ -134,7 +134,7 @@ def main():
         )
 
     else:
-        parser.error("Provide at least one local path or GitHub repository")
+        return parser.error("Provide at least one local path or GitHub repository")
 
     # Output results
     result = stats.to_dict()

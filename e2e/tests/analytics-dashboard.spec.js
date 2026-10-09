@@ -13,11 +13,16 @@ test.describe('Analytics Dashboard page', () => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await page.goto('/analytics-dashboard');
+    const response = await page.goto('/analytics-dashboard');
+    expect(response.status()).toBe(200);
+    await expect(page).not.toHaveTitle(/Error response/i);
     const heading = await page.locator('h1, h2').first();
     await expect(heading).toBeVisible();
     const bodyText = await page.textContent('body');
     expect(bodyText.length).toBeGreaterThan(50);
+    await expect(page.locator('#loadingState')).toContainText('Analytics is unavailable');
+    await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
+    await expect(page.locator('#dashboardContent')).toBeHidden();
     expect(consoleErrors).toEqual([]);
   });
 

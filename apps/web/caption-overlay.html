@@ -204,8 +204,9 @@
     }
 
     function connect() {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${location.hostname}:8000/ws/transcribe`;
+      const url = new URL((window.API_BASE || 'http://127.0.0.1:8000') + '/ws/transcribe');
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = url.toString();
       setStatus('connecting');
 
       ws = new WebSocket(wsUrl);

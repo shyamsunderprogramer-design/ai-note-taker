@@ -354,8 +354,8 @@ Return ONLY JSON:
                         if 'YES' in res:
                             found.append(kw)
                             continue
-                    except:
-                        pass  # nosec B110
+                    except Exception:
+                        logger.debug("Semantic skill matching unavailable; using text matching")
 
                 # Final fallback: partial word match
                 if any(kw in word for word in text_lower.split()):

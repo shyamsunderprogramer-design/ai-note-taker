@@ -168,7 +168,7 @@ class CacheManager:
                 if value:
                     try:
                         return json.loads(value)
-                    except:
+                    except (json.JSONDecodeError, TypeError):
                         return value
 
             # Fallback to memory
@@ -252,8 +252,8 @@ class CacheManager:
                 stats["redis_used_memory"] = info.get("used_memory_human", "N/A")
                 stats["redis_connected_clients"] = info.get("connected_clients", 0)
                 stats["redis_uptime"] = info.get("uptime_in_seconds", 0)
-            except:
-                pass  # nosec B110
+            except Exception:
+                stats["redis_stats_available"] = False
 
         return stats
 

@@ -30,6 +30,20 @@ async function loadDashboardData() {
     const summaryResponse = await fetch(`${API_BASE}/analytics/dashboard/${DEFAULT_USER_ID}`);
     const summary = await summaryResponse.json();
 
+    if (summary.available === false) {
+      const state = document.getElementById('loadingState');
+      state.replaceChildren();
+      const message = document.createElement('p');
+      message.textContent = summary.message || 'Analytics is currently unavailable.';
+      const retry = document.createElement('button');
+      retry.textContent = 'Check again';
+      retry.addEventListener('click', loadDashboardData);
+      state.append(message, retry);
+      state.style.display = 'block';
+      document.getElementById('dashboardContent').style.display = 'none';
+      return;
+    }
+
     if (summary.error) {
       throw new Error(summary.error);
     }

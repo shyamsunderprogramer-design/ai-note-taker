@@ -34,3 +34,11 @@ Removed unused standard-library imports from 58 backend files after verifying ea
 The remaining model-label HTML insertion is escaped. Conversation migration uses exclusive writes and opened-file reads without existence-check/write races. Credential redaction preserves structured Uvicorn access-log arguments, with a formatter regression test.
 
 The latest hosted run passed backend tests and web build. Its secret scan used a shallow snapshot, producing new fingerprints for old documentation placeholders; the security checkout now fetches full history so reviewed historical fingerprints remain accurate. Hosted browser tests exposed obsolete server routing; that correction remains in progress. The latest complete CodeQL scan reports 424 open branch findings, down from 494. No claim of a clean whole-repository scan is made.
+
+## Browser and exception-handling batch
+
+Both Chromium and Firefox pass all 44 browser tests against an isolated real backend. The tracker and overlays use the configured API address. The test server reproduces extensionless page routes and injects an explicit isolated API URL, and test runs use disposable backend data without inheriting credentials. Analytics displays an unavailable state when its graph is disconnected instead of fabricating empty metrics or issuing subsequent failing requests.
+
+JSON and SQLite fallbacks catch their expected exception types, Redis statistics explicitly report unavailable state, and semantic matching falls back to text matching without catching process-exit exceptions. All 1,317 backend tests still pass (59 skipped).
+
+Hosted run 37996787493 passes backend, web, and security jobs, including full-history gitleaks. Its browser job still uses the prior server configuration and requires a rerun after this batch. CodeQL run 37996677528 succeeded at e1cc368 and reports 340 open branch findings. Remaining SSRF transport-model warnings, temporary-file findings and code-quality findings are still under review.
