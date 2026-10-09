@@ -57,8 +57,8 @@ describe("StudyPlanScreen", () => {
   })
 
   test("Generate button is disabled with empty input", () => {
-    const { getByText } = render(<StudyPlanScreen />)
-    const button = getByText("Generate")
-    expect(button.parent.props.disabled).toBe(true)
+    const { getByRole } = render(<StudyPlanScreen />)
+    const button = getByRole("button", { name: "Generate" })
+    expect(button.props.accessibilityState.disabled).toBe(true)
   })
 })

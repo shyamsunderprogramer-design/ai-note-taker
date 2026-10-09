@@ -14,10 +14,12 @@ from modules.agents.base import (
     TranscriptSegment, is_question,
 )
 from modules.agents.context_builder import (
-    query_cognitive_graph, query_document_rag, extract_entities,
+    query_cognitive_graph, query_document_rag, extract_entities, get_company_insights,
     format_graph_results, format_rag_results, format_company_insights,
 )
 from modules.agents.prompts import INTERVIEW_COACH_PROMPT, INTERVIEW_COACH_PROMPT_MINIMAL
+
+from modules.agents.cache import get_cache
 
 logger = logging.getLogger("agents.interview_coach")
 

@@ -1,3 +1,4 @@
+from lib.async_stream import iterate_stream
 import asyncio
 import base64
 import json
@@ -45,86 +46,6 @@ from pydantic import BaseModel
 from lib.audio_upload import transcribe_saved_upload
 from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
 from ocr_service import extract_text_from_image
-
-# ════════════════════════════════════════════════════════════════════════════
-# ASYNC-GENERATOR PATCH FOR STREAM FUNCTIONS
-# ════════════════════════════════════════════════════════════════════════════
-# Many `*_stream` helpers in modules/ai and modules/platform are defined as
-# plain `def` (sync generators) because they wrap a sync HTTP client. But the
-# routes and core handlers call them with `async for ... in stream_fn(...)`,
-# which raises `TypeError: 'async for' requires an object with __aiter__
-# method, got generator`. We patch the affected functions once at import time
-# so they yield asynchronously and can be `async for`'d uniformly. This is a
-# safe no-op if they're already async (the wrapper detects that and is a pass-
-# through).
-import types as _types
-
-async def _async_wrap_sync_iter(sync_iter):
-    """Yield items from a sync generator without blocking the event loop
-    for long stretches. Yields one item per `await`, then yields control."""
-    for item in sync_iter:
-        yield item
-        # Give the event loop a chance to handle other tasks (don't yield on
-        # every chunk to keep latency low; just enough to let cancellation
-        # propagate and other coroutines run).
-
-def _patch_to_async_gen(fn):
-    """Wrap a sync function that returns a generator into an async generator
-    function. If `fn` is already async (returns an async iterator), leave it
-    alone."""
-    if getattr(fn, "_async_patched", False):
-        return fn
-    async def wrapper(*args, **kwargs):
-        result = fn(*args, **kwargs)
-        # If `fn` is already async, return the result as-is.
-        if hasattr(result, "__aiter__"):
-            async for item in result:
-                yield item
-            return
-        # Network reads in a synchronous provider must not block other requests.
-        from lib.async_stream import iterate_sync
-        async for item in iterate_sync(result):
-            yield item
-    wrapper._async_patched = True
-    wrapper.__name__ = getattr(fn, "__name__", "wrapped_stream")
-    wrapper.__doc__ = getattr(fn, "__doc__", None)
-    return wrapper
-
-# Patch the well-known sync stream helpers. Importing their modules triggers
-# their definition; we then rebind them on the module to async-generator
-# equivalents so any subsequent `from X import stream_fn` picks up the
-# patched version automatically.
-import ai_router as _ai_router_mod
-import modules.platform.cloud_providers as _cp_mod
-
-_STREAM_NAMES = [
-    "route_ai_stream",
-    "ask_ollama_stream",
-    "ask_ollama_vision_stream",
-    "ask_ollama_cloud_stream",
-    "ask_gpt_stream",
-    "ask_claude_stream",
-    "ask_gemini_stream",
-    "ask_grok_stream",
-    "ask_deepseek_stream",
-    "ask_groq_stream",
-    "ask_perplexity_stream",
-    "ask_ollama_cloud_vision_stream",
-    "ask_gpt_vision_stream",
-    "ask_claude_vision_stream",
-    "ask_gemini_vision_stream",
-    "ask_groq_vision_stream",
-]
-for _mod in (_ai_router_mod, _cp_mod):
-    for _name in _STREAM_NAMES:
-        _orig = getattr(_mod, _name, None)
-        if _orig is None or getattr(_orig, "_async_patched", False):
-            continue
-        setattr(_mod, _name, _patch_to_async_gen(_orig))
-
-# Also re-bind names imported via `from X import ...` in this module so the
-# patch is visible to other functions in this file that use the local name.
-route_ai_stream = _ai_router_mod.route_ai_stream
 
 # SECURITY: Import security modules
 from security import (
@@ -979,7 +900,7 @@ def autonomous_listener():
 
                 import asyncio
                 async def _warmup():
-                    async for _ in route_ai_stream(final_text, mode=_state.current_mode):
+                    async for _ in iterate_stream(route_ai_stream(final_text, mode=_state.current_mode)):
                         pass
                 asyncio.run(_warmup())
 
@@ -1368,7 +1289,7 @@ async def ask_with_image(
                 _state.is_streaming = True
                 try:
                     from ai_router import route_ai_stream
-                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1439,7 +1360,7 @@ async def ask_with_image(
                 _state.is_streaming = True
                 try:
                     from ai_router import route_ai_stream
-                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1454,7 +1375,7 @@ async def ask_with_image(
                 _state.is_streaming = True
                 try:
                     from ai_router import route_ai_stream
-                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1468,7 +1389,7 @@ async def ask_with_image(
             full_description = ""
 
             try:
-                async for event in stream_vision_description(
+                async for event in iterate_stream(stream_vision_description(
                     image_b64=image_b64,
                     vision_providers=vision_providers,
                     ollama_vision_model=ollama_vision_model if has_ollama_vision else None,
@@ -1477,7 +1398,7 @@ async def ask_with_image(
                     mode=mode,
                     style=style,
                     temperature=temperature,
-                ):
+                )):
                     if '"type":"vision"' in event or '"type": "vision"' in event:
                         try:
                             data_line = [l for l in event.split("\n") if l.startswith("data:")][0]
@@ -1522,14 +1443,14 @@ async def ask_with_image(
                         logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
 
                 from ai_router import route_ai_stream
-                async for event in route_ai_stream(
+                async for event in iterate_stream(route_ai_stream(
                     combined_prompt,
                     mode=mode,
                     style=style,
                     provider=step2_provider,
                     messages=messages,
                     temperature=temperature,
-                ):
+                )):
                     yield event
 
             except Exception as e:
@@ -1641,16 +1562,16 @@ async def overlay_ask(
                     return
                 # ask_ollama_vision_stream is patched to be an async generator
                 # at the top of this file, so `async for` works directly.
-                async for event in ask_ollama_vision_stream(
+                async for event in iterate_stream(ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
                     style="concise",
                     model_name=model_name
-                ):
+                )):
                     yield event
             else:
-                async for event in route_ai_stream(query, mode="fast", style="concise"):
+                async for event in iterate_stream(route_ai_stream(query, mode="fast", style="concise")):
                     yield event
         except Exception as e:
             import json
@@ -1704,6 +1625,7 @@ async def configure_provider(body: dict):
 
 @app.get("/health")
 def health():
+    from routes.health import health_check
     return health_check()
 
 
@@ -1979,9 +1901,9 @@ async def register_user(
             "username": user.username
         }
     except ValueError as e:
-        logger.error("[Auth] Registration failed for '%s': %s", username, str(e))
+        logger.error("[Auth] Registration failed")
         log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
-        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
+        raise HTTPException(status_code=400, detail="Registration failed; check your account details")
 
 
 @app.post("/auth/login")
@@ -2536,7 +2458,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             # Yield provider/mode info as first event
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
-            async for event in route_ai_stream(q, mode, style, provider, messages):
+            async for event in iterate_stream(route_ai_stream(q, mode, style, provider, messages)):
                 yield event
 
         except Exception as e:
@@ -2669,14 +2591,14 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                 if single_pk == "ollama":
                     from ai_router import ask_ollama_stream
                     # Patched to async generator at the top of this file.
-                    async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages):
+                    async for event in iterate_stream(ask_ollama_stream(q, mode=mode, style=style, messages=messages)):
                         yield event
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
                     model_name = resolved[1]
                     stream_fn = get_stream_fn(single_pk)
                     if stream_fn:
-                        async for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages):
+                        async for event in iterate_stream(stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)):
                             yield event
                     else:
                         yield f'event: error\ndata: {{"type":"error","message":"No stream function for {single_pk}"}}\n\n'
@@ -2710,7 +2632,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                     stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)
 
                 has_error = False
-                async for event in stream_iter:
+                async for event in iterate_stream(stream_iter):
                     if cancel_flags[pk].is_set():
                         logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time_module.time() - provider_start)
                         race_queue.put((pk, "DONE", None))
@@ -6323,7 +6245,7 @@ async def stream_agent_suggestions(
     from starlette.responses import StreamingResponse
 
     async def event_generator():
-        async for event in orchestrator.process_segment_stream(session_id, text, speaker):
+        async for event in iterate_stream(orchestrator.process_segment_stream(session_id, text, speaker)):
             yield event
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

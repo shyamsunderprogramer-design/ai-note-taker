@@ -395,15 +395,15 @@ class SalesforceIntegration(BaseCRMIntegration):
 
         try:
             # SECURITY: Escape email to prevent SOQL injection
-            safe_email = email.replace("'", "\\'").replace("\\", "\\\\") if email else ""
+            from simple_salesforce.format import format_soql
 
             # Query Contacts
-            result = self._sf.query(f"SELECT Id, Name, Email FROM Contact WHERE Email = '{safe_email}'")
+            result = self._sf.query(format_soql("SELECT Id, Name, Email FROM Contact WHERE Email = {}", email or ""))
             if result.get("totalSize", 0) > 0:
                 return result["records"][0]
 
             # Query Leads if not found in Contacts
-            result = self._sf.query(f"SELECT Id, Name, Email FROM Lead WHERE Email = '{safe_email}'")
+            result = self._sf.query(format_soql("SELECT Id, Name, Email FROM Lead WHERE Email = {}", email or ""))
             if result.get("totalSize", 0) > 0:
                 return result["records"][0]
 

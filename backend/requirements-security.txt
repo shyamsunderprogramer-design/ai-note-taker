@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements-security.txt
 
 # JWT Authentication
-python-jose[cryptography]>=3.3.0
+PyJWT[crypto]==2.15.1
 passlib[bcrypt]>=1.7.4
 bcrypt<4.1
 

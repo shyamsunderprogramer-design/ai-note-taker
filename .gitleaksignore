@@ -1,0 +1,9 @@
+
+# Historical documentation placeholders and encrypted OS state, reviewed 2026-10-08.
+# Exact fingerprints only; future edits and real credentials remain scanned.
+605b3b4f418ba42d0d95032167aac986b7a41fb5:docs/BYOK_MODEL_GUIDE.md:curl-auth-header:102
+605b3b4f418ba42d0d95032167aac986b7a41fb5:docs/BYOK_MODEL_GUIDE.md:curl-auth-header:110
+d829d315854c6dbdb81f909b60721e9367ad5ce1:backend/.env.example:generic-api-key:16
+0b18b4c2ab9fb34e77876d38ffba923348291075:docs/BYOK_MODEL_GUIDE.md:curl-auth-header:102
+0b18b4c2ab9fb34e77876d38ffba923348291075:docs/BYOK_MODEL_GUIDE.md:curl-auth-header:110
+bbf3c55aaf047db49b319bc50c70696d33c9fa10:electron-data/Local State:generic-api-key:1

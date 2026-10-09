@@ -45,6 +45,7 @@ class RecordingManager:
     """Manages video recording sessions."""
 
     def __init__(self):
+        os.makedirs(RECORDINGS_DIR, exist_ok=True)
         self._sessions: Dict[str, RecordingSession] = {}
         self._load_existing()
 

@@ -86,7 +86,7 @@ jobs:
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           # Root package.json declares engines.node ">=20.0.0";
           # no .nvmrc in the repo, so 20 is the lowest LTS that
           # satisfies the floor. Vite 6 requires Node 18+; 20
@@ -104,6 +104,9 @@ jobs:
         # matching package.json — it will fail loudly if the
         # lockfile is out of date, which is what we want for CI.
         run: npm ci
+
+      - name: Verify dependency security regressions
+        run: npm run test:security
 
       - name: Build apps/web SPA
         working-directory: apps/web
@@ -148,13 +151,13 @@ jobs:
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: 'npm'
           # The e2e workspace does not currently ship a
           # package-lock.json (verified 2026-06-05). We fall
           # back to `npm install` in that case — see the
           # install step below.
-          cache-dependency-path: e2e/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install Playwright deps
         working-directory: e2e

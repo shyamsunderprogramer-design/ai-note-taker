@@ -415,8 +415,10 @@ class TestAccessToken:
 
     async def test_tampered_signature_returns_none(self):
         token = create_access_token({"sub": "u", "username": "u"})
-        # Flip the last character of the signature
-        tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+        # Flip a significant signature character; final base64url padding bits
+        # can change without changing the decoded signature bytes.
+        prefix, signature = token.rsplit(".", 1)
+        tampered = prefix + "." + ("A" if signature[0] != "A" else "B") + signature[1:]
         assert await verify_token(tampered) is None  # nosec B101
 
 

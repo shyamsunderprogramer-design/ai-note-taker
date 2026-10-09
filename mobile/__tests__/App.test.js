@@ -12,16 +12,16 @@
 
 import "react-native"
 import React from "react"
-import { render } from "@testing-library/react-native"
+import { render, waitFor } from "@testing-library/react-native"
 
 import App from "../src/App"
 
 describe("App", () => {
-  test("renders without crashing", () => {
+  test("renders without crashing", async () => {
     // The App component is async-aware (it calls apiService.init() and
     // notificationService.requestPermissions() in effects). We just need
-    // the initial render to succeed and the navigator to mount.
-    const { UNSAFE_root } = render(<App />)
-    expect(UNSAFE_root).toBeTruthy()
+    // the async initialization and login navigator to finish mounting.
+    const screen = render(<App />)
+    await waitFor(() => expect(screen.getByPlaceholderText("Username")).toBeTruthy())
   })
 })

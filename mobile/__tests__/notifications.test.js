@@ -7,7 +7,7 @@
  * ensures the public API surface stays stable.
  */
 
-import NotificationService from "../src/services/notifications"
+import { NotificationService } from "../src/services/notifications"
 
 describe("NotificationService", () => {
   let svc

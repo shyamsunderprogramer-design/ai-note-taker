@@ -128,9 +128,10 @@ class VibeVoiceDiarizer:
             model_name = "microsoft/VibeVoice-ASR"
             logger.info(f"[VibeVoice] Attempting to load {model_name}...")
 
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name, revision="d0c9efdb8d614685062c04425d91e01b6f37d944", trust_remote_code=True)
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
+                revision="d0c9efdb8d614685062c04425d91e01b6f37d944",
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 device_map="auto" if torch.cuda.is_available() else None,
                 trust_remote_code=True,

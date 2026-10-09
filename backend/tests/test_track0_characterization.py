@@ -358,7 +358,7 @@ class TestWsLiveAssistSourceFingerprints:
         "What?" + "is your greatest strength.", emit "Tell me." before "Tell
         me about yourself.", and lose a third question outright.
         """
-        assert "VadSegmenter()" in source
+        assert "segmenter = VadSegmenter(" in source
         assert "segmenter.add_chunk(chunk)" in source
         assert "target=_on_utterance" in source
 

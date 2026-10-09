@@ -182,11 +182,12 @@ class TestVoiceAgentRoutes:
     def test_ws_voice_agent_path_registered(self):
         """WS /ws/voice-agent must be registered as a WebSocket route."""
         app, _ = self._import_app()
-        ws_paths = [
-            r.path for r in app.routes
-            if getattr(r, "path", "") == "/ws/voice-agent"
-        ]
-        assert "/ws/voice-agent" in ws_paths
+        from starlette.routing import Match
+        scope = {"type": "websocket", "path": "/ws/voice-agent", "root_path": "",
+                 "scheme": "ws", "headers": [], "query_string": b""}
+        # Included routers can remain nested in newer FastAPI versions.
+        # Verify actual ASGI route matching rather than a flattened route list.
+        assert any(route.matches(scope)[0] == Match.FULL for route in app.routes)
 
 
 # ─────────────────────────────────────────────────────────────────

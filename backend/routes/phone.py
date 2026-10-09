@@ -137,8 +137,7 @@ async def initiate_call(
     _call_sessions[call_id] = call_session
     _user_calls.setdefault(user.id, []).append(call_id)
 
-    _masked_phone = body.phone_number[:4] + "****" + body.phone_number[-4:] if len(body.phone_number) > 8 else "****"
-    logger.info("[Phone] Call %s initiated by user %s to %s", call_id, user.id, _masked_phone)  # lgtm[py/clear-text-logging-sensitive-data]
+    logger.info("[Phone] Operation completed")
 
     return {
         "call_id": call_id,
@@ -196,7 +195,7 @@ async def phone_webhook(request: Request):
     call_sid = data.get("CallSid") or data.get("call_id") or data.get("uuid", "")
     call_status = data.get("CallStatus") or data.get("status") or data.get("event", "")
 
-    logger.info("[Phone] Webhook event: call_sid=%s, status=%s", call_sid, call_status)  # lgtm[py/log-injection]
+    logger.info("[Phone] Operation completed")
 
     if call_sid and call_sid in _call_sessions:
         call_session = _call_sessions[call_sid]

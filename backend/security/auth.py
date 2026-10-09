@@ -13,13 +13,13 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
 try:
-    from jose import JWTError, jwt
+    from security.jwt_compat import JWTError, jwt
     from passlib.context import CryptContext
     HAS_JWT = True
 except ImportError:
     HAS_JWT = False
     logging.getLogger("auth").warning("[WARNING] PyJWT or passlib not installed. Authentication will be limited.")
-    logging.getLogger("auth").warning("  Install: pip install python-jose[cryptography] passlib[bcrypt]")
+    logging.getLogger("auth").warning("  Install: pip install PyJWT[crypto] passlib[bcrypt]")
 
 # UserRepository is the SQLAlchemy persistence layer (Fix #35). NOT
 # imported at module level to avoid a circular import: `core.database`
@@ -657,6 +657,7 @@ async def get_current_user_with_reason(token: str) -> Tuple[Optional[User], Opti
                 raw = jwt.get_unverified_claims(token)
             else:
                 import base64 as _b64
+                import json
                 if token.startswith("dev_"):
                     raw = json.loads(_b64.urlsafe_b64decode(token[4:]))
                 else:

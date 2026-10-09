@@ -1,8 +1,9 @@
 """Jira integration — create issues from action items and sync meeting outcomes to Jira."""
 import base64
-import httpx
 import logging
 import re
+from urllib.parse import urlsplit
+from lib.public_network import check_public_url, public_async_client
 from typing import Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -32,6 +33,13 @@ def _jira_headers(email: str, api_token: str) -> dict:
 
 def _jira_api_url(base_url: str, path: str) -> str:
     """Build a full Jira API URL from base URL and path."""
+    try:
+        check_public_url(base_url)
+        parsed = urlsplit(base_url)
+        if parsed.scheme != "https" or parsed.port not in (None, 443) or parsed.query or parsed.fragment:
+            raise ValueError("Jira requires an HTTPS origin")
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="A public HTTPS Jira URL is required")
     base = base_url.rstrip("/")
     return f"{base}/rest/api/3{path}"
 
@@ -78,8 +86,8 @@ async def connect_jira(
 
     # Validate credentials by fetching server info
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(  # nosec B611; lgtm[py/request-forgery] — user-configured Jira instance
+        async with public_async_client() as client:
+            resp = await client.get(
                 _jira_api_url(base_url, "/serverInfo"),
                 headers=_jira_headers(email, api_token),
                 timeout=10.0,
@@ -89,8 +97,8 @@ async def connect_jira(
                 raise HTTPException(status_code=400, detail="Invalid Jira credentials or base URL")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("[Jira] Connection check error: %s", str(exc))
+    except Exception:
+        logger.error("[Jira] Operation failed")
         raise HTTPException(status_code=502, detail="Could not reach Jira API")
 
     await save_integration_config(
@@ -101,7 +109,7 @@ async def connect_jira(
     )
 
     log_audit_event("jira_connect", user.username, "jira_connected", success=True)
-    logger.info("[Jira] Workspace %s connected for user %s", base_url, user.username)  # lgtm[py/log-injection]
+    logger.info("[Jira] Operation completed")
 
     return {"status": "connected", "base_url": base_url}
 
@@ -171,8 +179,8 @@ async def create_jira_issue(
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(  # nosec B611 — user-configured Jira instance
+        async with public_async_client() as client:
+            resp = await client.post(
                 _jira_api_url(base_url, "/issue"),
                 headers=_jira_headers(email, api_token),
                 json=jira_payload,
@@ -181,7 +189,7 @@ async def create_jira_issue(
             if resp.status_code in (200, 201):
                 data = resp.json()
                 log_audit_event("jira_create_issue", user.username, "jira_issue_created", success=True)
-                logger.info("[Jira] Created issue %s in %s", data.get("key"), project_key)  # lgtm[py/log-injection]
+                logger.info("[Jira] Operation completed")
                 return {
                     "status": "created",
                     "issue_key": data.get("key"),
@@ -189,15 +197,12 @@ async def create_jira_issue(
                     "self": data.get("self"),
                 }
             else:
-                detail = resp.json().get("errorMessages", [resp.text]) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
-                if isinstance(detail, list):
-                    detail = "; ".join(detail)
-                logger.error("[Jira] Create issue failed (%s): %s", resp.status_code, detail)
-                raise HTTPException(status_code=502, detail=f"Jira API error: {detail}")
+                logger.error("[Jira] Create issue failed (%s)", resp.status_code)
+                raise HTTPException(status_code=502, detail="Jira could not create the issue")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("[Jira] Create issue error: %s", str(exc))
+    except Exception:
+        logger.error("[Jira] Operation failed")
         raise HTTPException(status_code=502, detail="Failed to create Jira issue")
 
 
@@ -220,8 +225,8 @@ async def list_jira_projects(user: User = Depends(require_authentication)):
     email = config.get("email")
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(  # nosec B611 — user-configured Jira instance
+        async with public_async_client() as client:
+            resp = await client.get(
                 _jira_api_url(base_url, "/project"),
                 headers=_jira_headers(email, api_token),
                 timeout=10.0,
@@ -243,8 +248,8 @@ async def list_jira_projects(user: User = Depends(require_authentication)):
                 raise HTTPException(status_code=502, detail="Failed to list Jira projects")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("[Jira] List projects error: %s", str(exc))
+    except Exception:
+        logger.error("[Jira] Operation failed")
         raise HTTPException(status_code=502, detail="Failed to list Jira projects")
 
 
@@ -280,7 +285,7 @@ async def sync_action_items(
     # Retrieve conversation and extract action items
     conversation = _conversations.get(conversation_id)
     if not conversation:
-        logger.warning("[Jira] Conversation %s not found in local store", conversation_id)  # lgtm[py/log-injection]
+        logger.warning("[Jira] Conversation not found in local store")
         return {
             "status": "no_conversation",
             "detail": f"Conversation {conversation_id} not found. Action items could not be extracted.",
@@ -298,7 +303,7 @@ async def sync_action_items(
     created_issues: List[dict] = []
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with public_async_client() as client:
             for item in action_items:
                 jira_payload = {
                     "fields": {
@@ -323,7 +328,7 @@ async def sync_action_items(
                     },
                 }
 
-                resp = await client.post(  # nosec B611 — user-configured Jira instance
+                resp = await client.post(
                     _jira_api_url(base_url, "/issue"),
                     headers=_jira_headers(email, api_token),
                     json=jira_payload,
@@ -337,16 +342,16 @@ async def sync_action_items(
                         "summary": item[:255],
                     })
                 else:
-                    logger.error("[Jira] Sub-task creation failed (%s) for: %s", resp.status_code, item[:80])
+                    logger.error("[Jira] Sub-task creation failed (%s)", resp.status_code)
 
-    except Exception as exc:
-        logger.error("[Jira] Sync action items error: %s", str(exc))
+    except Exception:
+        logger.error("[Jira] Operation failed")
         raise HTTPException(status_code=502, detail="Failed to sync action items to Jira")
 
     log_audit_event("jira_sync_action_items", user.username, "jira_action_items_synced", success=True)
-    logger.info(  # lgtm[py/log-injection]
-        "[Jira] Synced %d action items from conversation %s to %s",
-        len(created_issues), conversation_id, project_key,
+    logger.info(
+        "[Jira] Synced %d action items",
+        len(created_issues),
     )
 
     return {
@@ -366,7 +371,7 @@ async def disconnect_jira(user: User = Depends(require_authentication)):
     """Disconnect Jira integration."""
     await delete_integration_config(user.id, "jira")
     log_audit_event("jira_disconnect", user.username, "jira_disconnected", success=True)
-    logger.info("[Jira] Disconnected for user %s", user.username)
+    logger.info("[Jira] Disconnected")
     return {"status": "disconnected"}
 
 

@@ -23,10 +23,8 @@ This test:
 - Also asserts the directory exists (it's created on import but a
   delete-all scenario is still useful to detect)
 
-We compute RECORDINGS_DIR directly (same as `recording_manager.py:16`)
-to avoid the modules/ path dance — the module is self-contained stdlib
-imports so a load via importlib would also work, but the constant
-duplication is simpler and the test is more readable.
+Import the storage module so clean-checkout initialization runs and the
+checks use its actual configured directory (isolated by the test harness).
 """
 
 import json
@@ -39,14 +37,14 @@ import pytest
 _BACKEND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, _BACKEND)
 
-# Same value as backend/modules/video/recording_manager.py:16
-RECORDINGS_DIR = os.path.join(_BACKEND, "data", "recordings")
+from modules.video.recording_manager import RECORDINGS_DIR, RecordingManager
 
 
 class TestFix33NoStubRecordings:
     """Catches debug leftover files in the recordings directory."""
 
     def test_recordings_dir_exists(self):
+        RecordingManager()
         # The directory is created by `os.makedirs(..., exist_ok=True)` at
         # import time in `modules/video/recording_manager.py:17`. If this
         # fails, that call has been removed and the dir is at risk of

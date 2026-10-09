@@ -248,7 +248,7 @@ class TestFix34Behavior:
         from core.main import app
         from security.auth import user_manager
         # Import jose at module level to ensure HAS_JWT
-        from jose import jwt as _jwt  # noqa: F401
+        from security.jwt_compat import jwt as _jwt  # noqa: F401
 
         user, password = fresh_user
 
@@ -348,7 +348,7 @@ class TestFix34Behavior:
 
         # Sanity: user.active_session_id is now B's jti, not A's
         reloaded = await user_manager.get_user(user.username)
-        from jose import jwt as _jwt
+        from security.jwt_compat import jwt as _jwt
         b_jti = _jwt.get_unverified_claims(token_b)["jti"]
         assert reloaded.active_session_id == b_jti
 
@@ -476,7 +476,7 @@ class TestFix34Behavior:
         different jti and user.active_session_id is rotated."""
         from security.auth import user_manager
         from routes.sso import _issue_token
-        from jose import jwt as _jwt
+        from security.jwt_compat import jwt as _jwt
 
         user, password = fresh_user
         first = await _issue_token(user, ip="1.1.1.1", user_agent="ua1")
@@ -509,7 +509,7 @@ class TestFix34Behavior:
         import time
         from httpx import ASGITransport, AsyncClient
         from core.main import app
-        from jose import jwt as _jwt
+        from security.jwt_compat import jwt as _jwt
         from security.auth import user_manager, SECRET_KEY, ALGORITHM
 
         user, password = fresh_user
@@ -548,7 +548,7 @@ class TestFix34Behavior:
         from httpx import ASGITransport, AsyncClient
         from core.main import app
         from security.auth import user_manager
-        from jose import jwt as _jwt
+        from security.jwt_compat import jwt as _jwt
 
         user, password = fresh_user
         transport = ASGITransport(app=app)

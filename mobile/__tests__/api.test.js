@@ -19,7 +19,7 @@
  *   - Mock AsyncStorage (the RN jest preset handles that globally)
  */
 
-import ApiService from "../src/services/api"
+import { ApiService } from "../src/services/api"
 
 describe("ApiService", () => {
   let svc

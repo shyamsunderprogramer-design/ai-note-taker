@@ -61,7 +61,7 @@ test('saved screen context preserves metadata without saving image bytes',()=>{
  const restored=[];
  const scope=vm.createContext({window:{},Event,document:{dispatchEvent(){}},interviewQueueEpoch:0,activeQuestion:null,chatArea:{innerHTML:''},currentMessages:[],currentConversationId:null,suppressAutoSave:false,
  autoSSBtn:null,autoSSDot:null,alwaysOnBtn:null,alwaysOnDot:null,alwaysOnActive:false,
- addMessage:(...args)=>restored.push(args),hideSummarizeButton(){},renderHistoryList(){},scrollChat(){}});
+ syncScreenshotState(){},addMessage:(...args)=>restored.push(args),hideSummarizeButton(){},renderHistoryList(){},scrollChat(){}});
  vm.runInContext(source.slice(source.indexOf('function loadConversationIntoUI('),source.indexOf('function clearConversation(')),scope);
  vm.runInContext('loadConversationIntoUI({id:"qa",messages:[{role:"user",text:"Question",timestamp:123,captureMetadata:{status:"captured",capturedAt:100,displayId:2}}]})',scope);
  assert.equal(restored[0][2].captureMetadata.displayId,2);

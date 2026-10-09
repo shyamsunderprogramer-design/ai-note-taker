@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import zipfile
 from pathlib import Path
-from xml.etree import ElementTree
+from defusedxml import ElementTree
 
 MAX_BYTES = 5 * 1024 * 1024
 MAX_TEXT = MAX_BYTES

@@ -21,26 +21,11 @@ local Ollama endpoint, which is by design on 127.0.0.1).
 """
 
 import logging
-from urllib.parse import urlparse
 
 import httpx
-from ipaddress import ip_address, ip_network
+from lib.public_network import check_public_url, PublicTransport
 
 logger = logging.getLogger("lib.http_client")
-
-# CIDR blocks we refuse to talk to by default. Loopback is the local Ollama
-# endpoint and is allowed only when explicitly opted in.
-_PRIVATE_RANGES = [
-    ip_network("127.0.0.0/8"),
-    ip_network("169.254.0.0/16"),
-    ip_network("10.0.0.0/8"),
-    ip_network("172.16.0.0/12"),
-    ip_network("192.168.0.0/16"),
-    ip_network("0.0.0.0/8"),
-    ip_network("::1/128"),
-    ip_network("fe80::/10"),
-]
-
 
 def validate_url(url: str, skip_ssrf_check: bool = False) -> None:
     """Raise ValueError if ``url`` points at a private IP range.
@@ -48,24 +33,9 @@ def validate_url(url: str, skip_ssrf_check: bool = False) -> None:
     Used by ``SyncHTTPClient`` to block SSRF attempts unless the caller
     explicitly opts out (local Ollama).
     """
-    if skip_ssrf_check:
-        return
-    parsed = urlparse(url)
-    host = parsed.hostname or ""
-    try:
-        addr = ip_address(host)
-    except ValueError:
-        # Not an IP literal — could be a DNS name. We don't resolve here;
-        # the underlying httpx call would resolve and connect. For our
-        # purposes (config-supplied endpoints), hostname-based URLs are
-        # treated as safe and only IP literals get the strict check.
-        return
-    for net in _PRIVATE_RANGES:
-        if addr in net:
-            raise ValueError(
-                f"Refusing to call private/loopback URL: {url} "
-                f"(matches {net}). Pass skip_ssrf_check=True to override."
-            )
+    if not skip_ssrf_check:
+        check_public_url(url)
+
 
 
 class SyncHTTPClient:
@@ -76,33 +46,47 @@ class SyncHTTPClient:
     """
 
     def __init__(self):
-        self._client = httpx.Client(timeout=httpx.Timeout(30.0))
+        self._client = httpx.Client(timeout=httpx.Timeout(30.0), transport=PublicTransport(), trust_env=False)
+        self._local_client = httpx.Client(timeout=httpx.Timeout(30.0), trust_env=False)
 
     def _check(self, url: str, skip_ssrf_check: bool) -> None:
         validate_url(url, skip_ssrf_check=skip_ssrf_check)
 
     def get(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
-        return self._client.get(url, **kwargs)
+        client = self._local_client if skip_ssrf_check else self._client
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        return client.get(url, **kwargs)
 
     def post(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
+        client = self._local_client if skip_ssrf_check else self._client
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
         streaming = kwargs.pop("stream", False)
         if streaming:
-            request = self._client.build_request("POST", url, **kwargs)
-            return self._client.send(request, stream=True)
-        return self._client.post(url, **kwargs)
+            request = client.build_request("POST", url, **kwargs)
+            return client.send(request, stream=True)
+        return client.post(url, **kwargs)
 
     def delete(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
-        return self._client.delete(url, **kwargs)
+        client = self._local_client if skip_ssrf_check else self._client
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        return client.delete(url, **kwargs)
 
     def stream(self, method: str, url: str, *, skip_ssrf_check: bool = False, **kwargs):
         self._check(url, skip_ssrf_check)
-        return self._client.stream(method, url, **kwargs)
+        client = self._local_client if skip_ssrf_check else self._client
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        return client.stream(method, url, **kwargs)
 
     def close(self) -> None:
         self._client.close()
+        self._local_client.close()
 
 
 # Process-wide synchronous client. Instantiated at module import — call sites

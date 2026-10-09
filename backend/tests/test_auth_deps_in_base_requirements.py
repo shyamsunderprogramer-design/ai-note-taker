@@ -36,7 +36,7 @@ REQUIREMENTS_TXT = os.path.join(BACKEND_DIR, "requirements.txt")
 # separate file (e.g. requirements-security.txt, requirements-dev.txt),
 # this test fails and surfaces the bug at PR time, not at first boot.
 REQUIRED_AUTH_PACKAGES = [
-    "python-jose",
+    "pyjwt",
     "passlib",
     "bcrypt",
 ]
@@ -49,7 +49,7 @@ REQUIRED_TRANSITIVE = ["cryptography"]
 
 def _read_requirements() -> str:
     with open(REQUIREMENTS_TXT, encoding="utf-8") as f:
-        return f.read()
+        return f.read().lower()
 
 
 def test_auth_deps_in_base_requirements():

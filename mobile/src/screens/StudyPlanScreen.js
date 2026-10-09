@@ -49,6 +49,7 @@ export default function StudyPlanScreen() {
           onSubmitEditing={generate}
         />
         <TouchableOpacity
+          accessibilityRole="button"
           style={styles.button}
           onPress={generate}
           disabled={loading || !topic.trim()}

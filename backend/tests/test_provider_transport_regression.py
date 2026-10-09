@@ -9,10 +9,10 @@ def test_legacy_stream_flag_uses_real_httpx_streaming():
     client._client = httpx.Client(transport=httpx.MockTransport(
         lambda request: httpx.Response(200, content=b'data: {"ok":true}\n\n')))
     try:
-        response = client.post('http://localhost/test', stream=True, skip_ssrf_check=True)
+        response = client.post('https://example.com/test', stream=True)
         assert list(response.iter_lines())[0] == 'data: {"ok":true}'
         response.close()
-        assert client.post('http://localhost/test', stream=False, skip_ssrf_check=True).status_code == 200
+        assert client.post('https://example.com/test', stream=False).status_code == 200
     finally:
         client.close()
 

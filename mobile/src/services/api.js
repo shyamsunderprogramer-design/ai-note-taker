@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const DEFAULT_BASE_URL = "http://10.0.2.2:8000" // Android emulator localhost
 
-class ApiService {
+export class ApiService {
   constructor() {
     this.baseUrl = DEFAULT_BASE_URL
     this.token = null

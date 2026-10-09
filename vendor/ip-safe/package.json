@@ -1,0 +1,16 @@
+{
+  "name": "@ant/ip-safe",
+  "version": "1.0.0",
+  "author": "Fedor Indutny <fedor@indutny.com>",
+  "homepage": "https://github.com/indutny/node-ip",
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "main": "lib/ip",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "ipaddr.js": "2.4.0"
+  }
+}

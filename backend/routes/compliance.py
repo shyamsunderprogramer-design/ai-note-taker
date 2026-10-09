@@ -613,10 +613,8 @@ async def record_ai_consent(
     )
 
     logger.info(  # lgtm[py/log-injection]
-        "[COMPLIANCE] AI consent %s for user %s: %s",
+        "[COMPLIANCE] AI consent %s",
         "granted" if body.granted else "revoked",
-        user.id,
-        body.consent_type,
     )
 
     return {

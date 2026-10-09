@@ -172,7 +172,7 @@ def _alembi_env(db_path: Path) -> dict:
 
 def _run_alembi(*args: str, env: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [str(BACKEND_DIR / "venv" / "bin" / "alembic"), *args],
+        [sys.executable, "-m", "alembic", *args],
         cwd=str(BACKEND_DIR),
         env=env,
         capture_output=True,

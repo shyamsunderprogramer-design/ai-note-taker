@@ -462,9 +462,9 @@ class UnifiedDatabase:
                 cursor.execute("""
                     SELECT event_type, COUNT(*) as count
                     FROM analytics
-                    WHERE timestamp > datetime('now', '-{} days')
+                    WHERE timestamp > datetime('now', ?)
                     GROUP BY event_type
-                """.format(days))
+                """, (f"-{int(days)} days",))
                 rows = cursor.fetchall()
 
                 summary = {row['event_type']: row['count'] for row in rows}
