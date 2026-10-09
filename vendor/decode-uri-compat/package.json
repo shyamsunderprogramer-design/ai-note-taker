@@ -1,0 +1,12 @@
+{
+  "name": "@ant/decode-uri-compat",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "LICENSE",
+    "SECURITY-NOTES.md"
+  ]
+}

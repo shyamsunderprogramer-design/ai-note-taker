@@ -58,10 +58,10 @@
     "brace-expansion@>=3.0.0": "5.0.12",
     "extract-zip": "npm:@electron-internal/extract-zip@1.0.5",
     "@electron/get": "5.1.0",
-    "decode-uri-component": "0.5.0",
-    "image-size": "file:vendor/image-size-compat",
-    "braces": "file:vendor/braces-safe",
-    "ip": "file:vendor/ip-safe",
+    "decode-uri-component": "file:vendor/ant-decode-uri-compat-1.0.0.tgz",
+    "image-size": "file:vendor/ant-image-size-compat-1.0.0.tgz",
+    "braces": "file:vendor/ant-braces-safe-1.0.0.tgz",
+    "ip": "file:vendor/ant-ip-safe-1.0.0.tgz",
     "fast-xml-parser": "5.11.2",
     "argparse": "2.0.1"
   }

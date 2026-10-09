@@ -109,6 +109,14 @@ jobs:
       - name: Verify dependency security regressions
         run: npm run test:security
 
+      - name: Audit JavaScript dependencies
+        run: npm audit --audit-level=low
+
+      - name: Verify desktop and mobile unit tests
+        run: |
+          npm --workspace ai-note-taker test
+          npm --workspace ant-mobile test -- --runInBand --watchman=false
+
       - name: Build apps/web SPA
         working-directory: apps/web
         # apps/web/package.json (Fix #18) ships only "dev", "build",

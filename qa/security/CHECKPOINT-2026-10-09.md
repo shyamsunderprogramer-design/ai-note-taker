@@ -46,3 +46,11 @@ Hosted run 37996787493 passes backend, web, and security jobs, including full-hi
 ## QA artifact isolation
 
 QA capture/audit scripts now write into unpredictable private per-run directories instead of shared fixed temporary paths. Shared runs explicitly pass ANT_AUDIT_DIR or ANT_QA_OUTPUT_DIR; existing directories must be owned by the user and private, and symlinks are rejected. Account launch reads ANT_QA_CREDENTIALS_FILE through a single non-following file descriptor, checks ownership, size and private permissions, and removes the consumed input file. Output logs are created exclusively with mode 0600. Two regression tests verify directory and credential-file protections; all five dependency/artifact security tests pass in the clean dependency environment. QA scripts were syntax-checked without activating capture or logging into the app.
+
+## Dependency lockfile correction
+
+A fresh root installation revealed that the prior lockfile still resolved vulnerable transitive dependencies despite manifest overrides. Earlier temporary-graph audit results did not prove the committed lockfile or installed consumer graph was clean. Folder-based npm overrides also produced invalid nested symlinks on regeneration. The corrected overrides use integrity-checked local package archives with private package names, preserved licenses and source in vendor/.
+
+The revised dependency regression tests resolve braces through micromatch, IP classification through the React Native CLI, image sizing through Metro, and URI decoding through query-string. This verifies the actual consumer graph. The patched decoder preserves upstream 0.5.0 behavior with a CommonJS export for legacy navigation consumers. A clean install now audits 1,194 packages with zero known vulnerabilities, passes all six security tests, 26 mobile tests, 174 desktop tests and the web production build. CI now includes a failing npm audit gate plus desktop/mobile tests.
+
+GitHub run 38000603562 passes all four CI jobs, including end-to-end browsers, on 4dd91d4. The latest CodeQL scan on 275d351 reports 311 remaining findings; all 22 QA temporary-file findings are cleared. Infrastructure and remaining code-quality/SSRF model review are unfinished.
