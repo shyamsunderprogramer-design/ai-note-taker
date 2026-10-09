@@ -352,7 +352,6 @@ class VoiceCloneManager:
             seen = set()
             voices_to_try = [v for v in voices_to_try if v not in seen and not seen.add(v)]
 
-            last_error = None
             for try_voice in voices_to_try:
                 try:
                     communicate = edge_tts.Communicate(text, try_voice)
@@ -376,7 +375,6 @@ class VoiceCloneManager:
                             "status": "completed",
                         }
                     else:
-                        last_error = f"Voice {try_voice} produced no output"  # lgtm[py/multiple-definition]
                         if logger:
                             logger.warning("[VoiceClone] Voice %s produced no output, trying next", try_voice)
                         # Clean up empty file
@@ -386,7 +384,6 @@ class VoiceCloneManager:
                             except OSError:
                                 pass  # nosec B110
                 except Exception as e:
-                    last_error = str(e)  # lgtm[py/multiple-definition]
                     if logger:
                         logger.warning("[VoiceClone] Voice %s failed: %s, trying next", try_voice, str(e))
                     # Clean up partial file
@@ -396,6 +393,8 @@ class VoiceCloneManager:
                         except OSError:
                             pass  # nosec B110
                     continue
+
+            return {"error": "Speech generation failed for the available voices"}
 
         except ImportError:
             return {

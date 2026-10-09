@@ -210,7 +210,8 @@
     } else if (socket && socket !== (typeof transcribeWs === 'undefined' ? null : transcribeWs)
         && socket !== (typeof systemAudioWs === 'undefined' ? null : systemAudioWs)) return
     if (event.type === 'activity') {
-      audioActivity[event.source || 'mic'] = {speaking:!!event.speaking,transcribing:Number(event.transcribing)||0}
+      if (event.source && !['mic', 'system'].includes(event.source)) return
+      audioActivity[event.source === 'system' ? 'system' : 'mic'] = {speaking:!!event.speaking,transcribing:Number(event.transcribing)||0}
       return
     }
     if (event.source === 'system' && event.type === 'utterance') remoteHeardAt = Date.now()

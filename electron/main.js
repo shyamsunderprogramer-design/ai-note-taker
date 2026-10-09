@@ -1251,19 +1251,18 @@ ipcMain.handle("file:drop", async (_event, filePath) => {
 
 // Read file contents for the renderer
 ipcMain.handle("file:read", async (_event, filePath) => {
+  const fs = require("fs")
+  let fd
   try {
-    const fs = require("fs")
-    if (!fs.existsSync(filePath)) {
-      return { error: "File not found" }
-    }
-
-    const stats = fs.statSync(filePath)
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0))
+    const stats = fs.fstatSync(fd)
+    if (!stats.isFile()) return { error: "Not a regular file" }
     const ext = path.extname(filePath).toLowerCase()
 
     // For text/code files, read contents
     const textExts = [".txt", ".md", ".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml"]
     if (textExts.includes(ext) && stats.size < 1024 * 1024) { // Max 1MB
-      const content = fs.readFileSync(filePath, "utf-8")
+      const content = fs.readFileSync(fd, "utf-8")
       return {
         name: path.basename(filePath),
         content,
@@ -1275,7 +1274,8 @@ ipcMain.handle("file:read", async (_event, filePath) => {
     // For images, return base64
     const imageExts = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]
     if (imageExts.includes(ext)) {
-      const buffer = fs.readFileSync(filePath)
+      if (stats.size > 10 * 1024 * 1024) return { error: "Image exceeds 10 MB limit" }
+      const buffer = fs.readFileSync(fd)
       const base64 = buffer.toString("base64")
       const mimeType = ext === ".png" ? "image/png" :
                        ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
@@ -1298,7 +1298,9 @@ ipcMain.handle("file:read", async (_event, filePath) => {
     }
   } catch (err) {
     logger.error("[File] Read error:", err.message)
-    return { error: err.message }
+    return { error: "Could not read the selected file" }
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd)
   }
 })
 
@@ -1392,12 +1394,12 @@ const http = require("http")
 const API_KEY_SERVER_PORT = 18000 // Separate port for secure key exchange
 
 // Throttle key server logging — only log once per provider per minute
-const _keyLogTimestamps = {}
+const _keyLogTimestamps = new Map()
 function _shouldLogKeyRequest(provider) {
   const now = Date.now()
-  const lastLog = _keyLogTimestamps[provider] || 0
+  const lastLog = _keyLogTimestamps.get(provider) || 0
   if (now - lastLog > 60000) { // 1 minute throttle
-    _keyLogTimestamps[provider] = now
+    _keyLogTimestamps.set(provider, now)
     return true
   }
   return false

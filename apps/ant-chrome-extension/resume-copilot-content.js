@@ -43,15 +43,15 @@ class ResumeCopilot {
   detectJobPlatform() {
     const url = window.location.href;
 
-    if (url.includes('greenhouse.io')) return 'greenhouse';
-    if (url.includes('lever.co')) return 'lever';
-    if (url.includes('myworkdayjobs.com')) return 'workday';
-    if (url.includes('icims.com')) return 'icims';
-    if (url.includes('smartrecruiters.com')) return 'smartrecruiters';
-    if (url.includes('linkedin.com/jobs')) return 'linkedin';
-    if (url.includes('indeed.com')) return 'indeed';
-    if (url.includes('glassdoor.com')) return 'glassdoor';
-    if (url.includes('jobs.')) return 'generic-careers';
+    if (ANTPlatformUrls.matches(url, 'greenhouse.io')) return 'greenhouse';
+    if (ANTPlatformUrls.matches(url, 'lever.co')) return 'lever';
+    if (ANTPlatformUrls.matches(url, 'myworkdayjobs.com')) return 'workday';
+    if (ANTPlatformUrls.matches(url, 'icims.com')) return 'icims';
+    if (ANTPlatformUrls.matches(url, 'smartrecruiters.com')) return 'smartrecruiters';
+    if (ANTPlatformUrls.matches(url, 'linkedin.com/jobs')) return 'linkedin';
+    if (ANTPlatformUrls.matches(url, 'indeed.com')) return 'indeed';
+    if (ANTPlatformUrls.matches(url, 'glassdoor.com')) return 'glassdoor';
+    if (new URL(url).hostname.startsWith('jobs.')) return 'generic-careers';
 
     // Check for application forms
     const forms = document.querySelectorAll('form');

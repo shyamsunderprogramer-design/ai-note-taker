@@ -168,8 +168,8 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
                 _cache_ai_set(q, mode, style, provider, full_text)
 
         except Exception as e:
-            logger.exception("[Stream] /stream error for q=%r mode=%s: %s", q[:80], mode, e)
-            yield f"event: error\ndata: {json.dumps({'type':'error','message':f'An internal error occurred: {e!s}'})}\n\n"
+            logger.error("[Stream] Request failed")
+            yield f"event: error\ndata: {json.dumps({'type':'error','message':'The provider could not complete the answer. Please try again.'})}\n\n"
 
         finally:
             STATE["is_streaming"] = False
@@ -556,8 +556,8 @@ async def ask_with_image(
                 async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
                     yield event
             except Exception as e:
-                logger.exception("[Stream] /ask-with-image text path error: %s", e)
-                yield f"event: error\ndata: {json.dumps({'type':'error','message':f'An internal error occurred: {e!s}'})}\n\n"
+                logger.error("[Stream] Image request failed")
+                yield f"event: error\ndata: {json.dumps({'type':'error','message':'The provider could not complete the answer. Please try again.'})}\n\n"
             finally:
                 STATE["is_streaming"] = False
         return StreamingResponse(text_generator(), media_type="text/event-stream")
@@ -587,7 +587,7 @@ async def ask_with_image(
                 async for event in stream:
                     yield event
             except Exception as exc:
-                yield f"event: error\ndata: {json.dumps({'type':'error','message':str(exc)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'type':'error','message':'The selected model could not process the screenshot. Check its availability and vision support.'})}\n\n"
         return StreamingResponse(selected_vision_gen(), media_type="text/event-stream")
 
     enabled_set = None

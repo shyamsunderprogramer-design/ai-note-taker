@@ -106,25 +106,25 @@ class BaseAgent(ABC):
     @abstractmethod
     def agent_type(self) -> AgentType:
         """The type of this agent."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @property
     @abstractmethod
     def display_name(self) -> str:
         """Human-readable name shown in UI."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @property
     @abstractmethod
     def description(self) -> str:
         """Short description of what this agent does."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @property
     @abstractmethod
     def cooldown_seconds(self) -> float:
         """Minimum seconds between activations."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @property
     @abstractmethod
@@ -133,23 +133,23 @@ class BaseAgent(ABC):
         Options: 'cognitive_graph', 'document_rag', 'entity_extraction',
                  'user_profile', 'company_insights', 'skill_progression'
         """
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @abstractmethod
     def build_context(self, session: Any) -> AgentContext:
         """Assemble the rich context object from available data sources.
         Must degrade gracefully if any source is unavailable."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @abstractmethod
     def build_prompt(self, context: AgentContext) -> str:
         """Build the full LLM prompt from the assembled context."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     @abstractmethod
     def parse_suggestions(self, raw_response: str, context: AgentContext) -> List[AgentSuggestion]:
         """Parse the LLM's raw text output into structured AgentSuggestion objects."""
-        ...
+        raise NotImplementedError("Agent subclasses must implement this method")
 
     def should_activate(self, session: Any, segment: TranscriptSegment) -> bool:
         """Decide if this agent should run for the given segment.

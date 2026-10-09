@@ -1,3 +1,4 @@
+importScripts('url-safety.js');
 // Background Service Worker — Central orchestration for tab capture, offscreen doc, and message routing
 
 const API_BASE = 'http://localhost:8000';
@@ -157,10 +158,10 @@ async function startRecording(tabId, source, meetingId) {
     try {
       const tab = await chrome.tabs.get(tabId);
       const url = tab.url || '';
-      if (url.includes('zoom.us')) recordingState.meetingPlatform = 'zoom';
-      else if (url.includes('meet.google.com')) recordingState.meetingPlatform = 'google-meet';
-      else if (url.includes('teams.microsoft.com')) recordingState.meetingPlatform = 'teams';
-      else if (url.includes('webex.com')) recordingState.meetingPlatform = 'webex';
+      if (ANTPlatformUrls.matches(url, 'zoom.us')) recordingState.meetingPlatform = 'zoom';
+      else if (ANTPlatformUrls.matches(url, 'meet.google.com')) recordingState.meetingPlatform = 'google-meet';
+      else if (ANTPlatformUrls.matches(url, 'teams.microsoft.com')) recordingState.meetingPlatform = 'teams';
+      else if (ANTPlatformUrls.matches(url, 'webex.com')) recordingState.meetingPlatform = 'webex';
     } catch (e) {}
 
     // Persist state
@@ -336,11 +337,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;
 
   const url = tab.url || '';
-  const isMeetingUrl = url.includes('zoom.us/j') ||
-                       url.includes('zoom.us/meeting') ||
-                       url.includes('meet.google.com') ||
-                       url.includes('teams.microsoft.com/l/meeting') ||
-                       url.includes('webex.com');
+  const isMeetingUrl = ANTPlatformUrls.matches(url, 'zoom.us/j') ||
+                       ANTPlatformUrls.matches(url, 'zoom.us/meeting') ||
+                       ANTPlatformUrls.matches(url, 'meet.google.com') ||
+                       ANTPlatformUrls.matches(url, 'teams.microsoft.com/l/meeting') ||
+                       ANTPlatformUrls.matches(url, 'webex.com');
 
   if (!isMeetingUrl) return;
 

@@ -99,6 +99,7 @@ async def ws_voice_agent(ws: WebSocket):
     T17: Real-time voice agent WebSocket.
     Receives audio chunks, returns VAD + AI response actions.
     """
+    user = None
     token = ws.query_params.get("token")
     if _AUTH_REQUIRED:
         if not token:
@@ -121,7 +122,7 @@ async def ws_voice_agent(ws: WebSocket):
         return
 
     agent = VoiceAgent()
-    await agent.start_session(user.id if 'user' in dir() else "anonymous")
+    await agent.start_session(user.id if user else "anonymous")
 
     try:
         while True:

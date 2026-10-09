@@ -133,6 +133,9 @@ def main():
             dry_run=args.dry_run,
         )
 
+    else:
+        parser.error("Provide at least one local path or GitHub repository")
+
     # Output results
     result = stats.to_dict()
     if args.json:

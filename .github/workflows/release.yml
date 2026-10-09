@@ -219,7 +219,7 @@ jobs:
         # platforms on every runner — wasteful (3x downloads of
         # Electron + native deps) and caused the publish job to receive
         # three overlapping artifact bundles, which
-        # softprops/action-gh-release@v2 then refused to attach with
+        # softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2 then refused to attach with
         # `fail_on_unmatched_files: true`. Per-runner targets keep the
         # artifact sets disjoint.
         run: npx electron-builder ${{ matrix.build_target }} --publish never
@@ -309,7 +309,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Delete any pre-existing release assets
-        # Race-condition guard for softprops/action-gh-release@v2.
+        # Race-condition guard for softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.
         #
         # When the release already exists from a prior CI run (which
         # is the normal case for re-tagged releases), the upload
@@ -359,7 +359,7 @@ jobs:
           echo "==> Done."
 
       - name: Create or update GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           # Don't overwrite an existing release body — if the tag was
           # pushed via `gh release create` first (preferred), the body
@@ -393,7 +393,7 @@ jobs:
           # If the release doesn't exist yet, create it as a draft.
           # Maintainer promotes it to public via the web UI.
           draft: true
-          # Auto-generated body. softprops/action-gh-release@v2 treats
+          # Auto-generated body. softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2 treats
           # `body:` as the literal release notes when the release is
           # created by the action — if the release already exists
           # (from a prior `gh release create` with curated notes), this

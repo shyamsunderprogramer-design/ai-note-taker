@@ -662,12 +662,21 @@ class UnifiedDatabase:
                 cursor = conn.cursor()
                 stats = {}
 
-                tables = ['conversations', 'settings', 'api_keys', 'analytics',
-                         'documents', 'voice_models', 'jobs', 'interview_sessions', 'cache']
+                queries = {
+                    "conversations": "SELECT COUNT(*) FROM conversations",
+                    "settings": "SELECT COUNT(*) FROM settings",
+                    "api_keys": "SELECT COUNT(*) FROM api_keys",
+                    "analytics": "SELECT COUNT(*) FROM analytics",
+                    "documents": "SELECT COUNT(*) FROM documents",
+                    "voice_models": "SELECT COUNT(*) FROM voice_models",
+                    "jobs": "SELECT COUNT(*) FROM jobs",
+                    "interview_sessions": "SELECT COUNT(*) FROM interview_sessions",
+                    "cache": "SELECT COUNT(*) FROM cache",
+                }
 
-                for table in tables:
+                for table, query in queries.items():
                     try:
-                        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                        cursor.execute(query)
                         stats[table] = cursor.fetchone()[0]
                     except:
                         stats[table] = 0

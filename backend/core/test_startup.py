@@ -6,57 +6,57 @@ Tests all imports and key functionality
 import sys
 import os
 
-def test_imports():
+def check_imports():
     """Test all critical imports"""
     print("Testing imports...")
     errors = []
 
     try:
-        from main import app
+        from core.main import app
         print("✓ main.py imports OK")
     except Exception as e:
         errors.append(f"✗ main.py: {e}")
 
     try:
-        from realtime_suggestions import RealtimeSuggestionEngine
+        from modules.ai.realtime_suggestions import RealtimeSuggestionEngine
         print("✓ realtime_suggestions.py imports OK")
     except Exception as e:
         errors.append(f"✗ realtime_suggestions.py: {e}")
 
     try:
-        from performance_analyzer import PerformanceAnalyzer
+        from modules.ai.performance_analyzer import PerformanceAnalyzer
         print("✓ performance_analyzer.py imports OK")
     except Exception as e:
         errors.append(f"✗ performance_analyzer.py: {e}")
 
     try:
-        from study_plan_generator import StudyPlanGenerator
+        from modules.ai.study_plan_generator import StudyPlanGenerator
         print("✓ study_plan_generator.py imports OK")
     except Exception as e:
         errors.append(f"✗ study_plan_generator.py: {e}")
 
     try:
-        from analytics_engine import AnalyticsEngine
+        from modules.ai.analytics_engine import AnalyticsEngine
         print("✓ analytics_engine.py imports OK")
     except Exception as e:
         errors.append(f"✗ analytics_engine.py: {e}")
 
     try:
-        from conversation_analyzer import ConversationAnalyzer
+        from modules.ai.conversation_analyzer import ConversationAnalyzer
         print("✓ conversation_analyzer.py imports OK")
     except Exception as e:
         errors.append(f"✗ conversation_analyzer.py: {e}")
 
     return errors
 
-def test_functionality():
+def check_functionality():
     """Test basic functionality"""
     print("\nTesting functionality...")
     errors = []
 
     # Test performance analyzer
     try:
-        from performance_analyzer import PerformanceAnalyzer
+        from modules.ai.performance_analyzer import PerformanceAnalyzer
         analyzer = PerformanceAnalyzer()
         result = analyzer.analyze_answer("I worked on React for 3 years.", "behavioral")
         assert "overall_score" in result  # nosec B101
@@ -66,7 +66,7 @@ def test_functionality():
 
     # Test study plan generator
     try:
-        from study_plan_generator import StudyPlanGenerator
+        from modules.ai.study_plan_generator import StudyPlanGenerator
         planner = StudyPlanGenerator()
         plan = planner.generate_plan("test_user", days=7)
         assert plan.user_id == "test_user"  # nosec B101
@@ -76,7 +76,7 @@ def test_functionality():
 
     # Test realtime suggestions
     try:
-        from realtime_suggestions import RealtimeSuggestionEngine
+        from modules.ai.realtime_suggestions import RealtimeSuggestionEngine
         engine = RealtimeSuggestionEngine()
         result = engine.process_segment("What is your experience?", "interviewer")
         print("✓ RealtimeSuggestionEngine works")
@@ -85,13 +85,19 @@ def test_functionality():
 
     return errors
 
+def test_imports():
+    assert not check_imports(), "Startup imports failed"
+
+def test_functionality():
+    assert not check_functionality(), "Startup functionality failed"
+
 def main():
     print("="*60)
     print("AI Note Taker Backend Verification")
     print("="*60)
 
-    import_errors = test_imports()
-    func_errors = test_functionality()
+    import_errors = check_imports()
+    func_errors = check_functionality()
 
     all_errors = import_errors + func_errors
 

@@ -521,7 +521,8 @@
       els.hintEmpty.style.display = 'none';
       els.hintLabel.style.display = 'flex';
       els.hintText.style.display = 'block';
-      els.hintText.innerHTML = html;
+      els.hintText.textContent = String(html);
+      els.hintText.style.whiteSpace = 'pre-wrap';
       els.hintBox.scrollTop = 0;
     }
 

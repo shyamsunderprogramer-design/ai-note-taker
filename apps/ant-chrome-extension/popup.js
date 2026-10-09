@@ -64,16 +64,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const url = tab.url;
       for (const pattern of MEETING_PATTERNS) {
-        if (url.includes(pattern.match)) {
+        if (ANTPlatformUrls.matches(url, pattern.match)) {
           let meetingId = '';
-          if (url.includes('zoom.us')) {
+          if (ANTPlatformUrls.matches(url, 'zoom.us')) {
             const m = url.match(/zoom\.us\/j\/(\d+)/);
             if (m) meetingId = m[1];
-          } else if (url.includes('meet.google.com')) {
+          } else if (ANTPlatformUrls.matches(url, 'meet.google.com')) {
             const m = url.match(/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/) ||
                        url.match(/meet\.google\.com\/([a-z0-9-]+)/);
             if (m) meetingId = m[1];
-          } else if (url.includes('teams.microsoft.com')) {
+          } else if (ANTPlatformUrls.matches(url, 'teams.microsoft.com')) {
             const m = url.match(/teams\.microsoft\.com\/l\/meeting\/([\w-]+)/);
             if (m) meetingId = m[1];
           }

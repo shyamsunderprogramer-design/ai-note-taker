@@ -128,13 +128,13 @@
 
     function detectJobPage() {
         const url = window.location.href;
-        if (url.includes('linkedin.com/jobs')) return 'linkedin';
-        if (url.includes('indeed.com')) return 'indeed';
-        if (url.includes('glassdoor.com')) return 'glassdoor';
-        if (url.includes('greenhouse.io')) return 'greenhouse';
-        if (url.includes('lever.co')) return 'lever';
-        if (url.includes('workday.com')) return 'workday';
-        if (url.includes('icims.com')) return 'icims';
+        if (ANTPlatformUrls.matches(url, 'linkedin.com/jobs')) return 'linkedin';
+        if (ANTPlatformUrls.matches(url, 'indeed.com')) return 'indeed';
+        if (ANTPlatformUrls.matches(url, 'glassdoor.com')) return 'glassdoor';
+        if (ANTPlatformUrls.matches(url, 'greenhouse.io')) return 'greenhouse';
+        if (ANTPlatformUrls.matches(url, 'lever.co')) return 'lever';
+        if (ANTPlatformUrls.matches(url, 'workday.com')) return 'workday';
+        if (ANTPlatformUrls.matches(url, 'icims.com')) return 'icims';
         return null;
     }
 
@@ -142,18 +142,17 @@
 
     function detectMeetingPlatform() {
         const url = window.location.href;
-        const title = document.title.toLowerCase();
 
-        if (url.includes('zoom.us/j') || url.includes('zoom.us/meeting') || title.includes('zoom')) {
+        if (ANTPlatformUrls.matches(url, 'zoom.us/j') || ANTPlatformUrls.matches(url, 'zoom.us/meeting')) {
             return 'zoom';
         }
-        if (url.includes('meet.google.com') || title.includes('google meet')) {
+        if (ANTPlatformUrls.matches(url, 'meet.google.com')) {
             return 'google-meet';
         }
-        if (url.includes('teams.microsoft.com') || title.includes('microsoft teams')) {
+        if (ANTPlatformUrls.matches(url, 'teams.microsoft.com')) {
             return 'teams';
         }
-        if (url.includes('webex.com')) {
+        if (ANTPlatformUrls.matches(url, 'webex.com')) {
             return 'webex';
         }
         return null;

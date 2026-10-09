@@ -498,6 +498,8 @@ Return the response ONLY as a JSON object with this structure:
                 "rewrites": []
             }
 
+        return None
+
 
 # Global instance
 resume_reviewer = ResumeReviewer()

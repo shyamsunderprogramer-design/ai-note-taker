@@ -48,7 +48,7 @@
         "*://*.teams.microsoft.com/l/meeting/*",
         "*://*.webex.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["url-safety.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     },
@@ -63,7 +63,7 @@
         "*://*.indeed.com/jobs*",
         "*://*.glassdoor.com/job-listing/*"
       ],
-      "js": ["resume-copilot-content.js"],
+      "js": ["url-safety.js", "resume-copilot-content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }

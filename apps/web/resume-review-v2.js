@@ -59,10 +59,11 @@ class ResumeReviewV2 {
 
         const fileInfo = document.getElementById('fileInfo');
         fileInfo.innerHTML = `
-            <span class="file-info-name">📄 ${file.name}</span>
+            <span class="file-info-name"></span>
             <span class="file-info-size">${(file.size / 1024).toFixed(1)} KB</span>
             <button class="file-remove-btn" onclick="resumeReviewV2.removeFile()">Remove</button>
         `;
+        fileInfo.querySelector('.file-info-name').textContent = `📄 ${file.name}`;
         fileInfo.classList.remove('hidden');
         document.getElementById('resumeInput').placeholder = 'File uploaded. Resume text will be extracted automatically.';
     }

@@ -1788,12 +1788,12 @@ document.addEventListener("click", (e) => {
     dropdown.className = "history-dropdown history-dropdown-portal"
     dropdown.dataset.convId = convId
     dropdown.innerHTML = `
-      <button class="history-dropdown-item" data-action="resume" data-id="${convId}"><span class="history-dropdown-icon">&#9654;</span>Resume</button>
-      <button class="history-dropdown-item" data-action="rename" data-id="${convId}"><span class="history-dropdown-icon">&#9998;</span>Rename</button>
-      <button class="history-dropdown-item" data-action="export" data-id="${convId}"><span class="history-dropdown-icon">&#9142;</span>Export</button>
-      <button class="history-dropdown-item" data-action="copy" data-id="${convId}"><span class="history-dropdown-icon">&#9094;</span>Copy</button>
+      <button class="history-dropdown-item" data-action="resume" data-id="${escapeHtml(convId)}"><span class="history-dropdown-icon">&#9654;</span>Resume</button>
+      <button class="history-dropdown-item" data-action="rename" data-id="${escapeHtml(convId)}"><span class="history-dropdown-icon">&#9998;</span>Rename</button>
+      <button class="history-dropdown-item" data-action="export" data-id="${escapeHtml(convId)}"><span class="history-dropdown-icon">&#9142;</span>Export</button>
+      <button class="history-dropdown-item" data-action="copy" data-id="${escapeHtml(convId)}"><span class="history-dropdown-icon">&#9094;</span>Copy</button>
       <div class="app-menu-separator"></div>
-      <button class="history-dropdown-item danger" data-action="delete" data-id="${convId}"><span class="history-dropdown-icon">&#128465;</span>Delete</button>
+      <button class="history-dropdown-item danger" data-action="delete" data-id="${escapeHtml(convId)}"><span class="history-dropdown-icon">&#128465;</span>Delete</button>
     `
 
     // Smart position dropdown to stay within viewport
@@ -2308,8 +2308,11 @@ function formatMessage(rawText) {
     return `§K8CODE${codeBlocks.length - 1}K8§`
   })
 
+  // Treat source text as text before adding our own Markdown markup.
+  text = escapeHtml(text).replace(/&#x60;/g, "`")
+
   // Step 2: Process inline code (must be before other replacements)
-  text = text.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escapeHtml(code)}</code>`)
+  text = text.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${code}</code>`)
 
   // Step 3: Bold, italic, strikethrough
   text = text.replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong>$1</strong>")
@@ -2334,11 +2337,11 @@ function formatMessage(rawText) {
 
   // Step 7: Inline links [text](url) - with URL sanitization
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
-    const safeUrl = sanitizeUrl(url)
+    const safeUrl = sanitizeUrl(url.replace(/&amp;/g, "&"))
     if (!safeUrl) {
-      return escapeHtml(text) // Return plain text if URL is unsafe
+      return text // Already HTML-escaped source text
     }
-    return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+    return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${text}</a>`
   })
 
   // Step 8: Parse lists (bullet and numbered)
@@ -3608,7 +3611,7 @@ function startStreamingTranscription() {
         updateTranscriptStrip(data.text)
         // Final message may include speaker list
         if (data.speakers && Array.isArray(data.speakers)) {
-          console.log("[transcribeWs] Speakers detected:", data.speakers.join(", "))
+          console.log("[transcribeWs] Speaker metadata received")
         }
       }
     } catch {}
@@ -5902,9 +5905,9 @@ function addCustomModelToDropdowns(name, value) {
       item.className = "custom-model-entry"
       item.dataset.value = value
       item.innerHTML = `
-        <span class="custom-model-name">${name}</span>
+        <span class="custom-model-name">${escapeHtml(name)}</span>
         <span class="custom-model-badge">custom</span>
-        <span class="remove-custom-model" data-value="${value}" title="Remove">×</span>
+        <span class="remove-custom-model" data-value="${escapeHtml(value)}" title="Remove">×</span>
       `
       container.appendChild(item)
 
@@ -6359,13 +6362,13 @@ async function renderRaceToggles() {
       html += `<div class="model-grid">`
       for (const opt of localOptions) {
         const isDisabled = disabledModels.includes(opt.value)
-        html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${opt.value}">`
+        html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${escapeHtml(opt.value)}">`
         html += `<div class="model-card-info">`
         html += `<span class="model-card-name">${opt.textContent}</span>`
-        html += `<span class="model-card-value">${opt.value}</span>`
+        html += `<span class="model-card-value">${escapeHtml(opt.value)}</span>`
         html += `</div>`
         html += `<label class="model-card-toggle">`
-        html += `<input type="checkbox" data-model-value="${opt.value}" ${isDisabled ? '' : 'checked'} />`
+        html += `<input type="checkbox" data-model-value="${escapeHtml(opt.value)}" ${isDisabled ? '' : 'checked'} />`
         html += `<span class="toggle-track"></span>`
         html += `</label>`
         html += `</div>`
@@ -6390,13 +6393,13 @@ async function renderRaceToggles() {
     html += `<div class="model-grid">`
     for (const cm of customModels) {
       const isDisabled = disabledModels.includes(cm.value)
-      html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${cm.value}">`
+      html += `<div class="model-card ${isDisabled ? 'disabled' : ''}" data-model-value="${escapeHtml(cm.value)}">`
       html += `<div class="model-card-info">`
-      html += `<span class="model-card-name">${cm.name}</span>`
-      html += `<span class="model-card-value">${cm.value}</span>`
+      html += `<span class="model-card-name">${escapeHtml(cm.name)}</span>`
+      html += `<span class="model-card-value">${escapeHtml(cm.value)}</span>`
       html += `</div>`
       html += `<label class="model-card-toggle">`
-      html += `<input type="checkbox" data-model-value="${cm.value}" ${isDisabled ? '' : 'checked'} />`
+      html += `<input type="checkbox" data-model-value="${escapeHtml(cm.value)}" ${isDisabled ? '' : 'checked'} />`
       html += `<span class="toggle-track"></span>`
       html += `</label>`
       html += `</div>`
@@ -7112,7 +7115,7 @@ function renderIngestionTags() {
   ingestionRepoTags.innerHTML = ingestionRepos
     .map(
       (repo) =>
-        `<span class="ingestion-tag">${repo}<span class="ingestion-tag-remove" data-repo="${repo}">&times;</span></span>`
+        `<span class="ingestion-tag">${escapeHtml(repo)}<span class="ingestion-tag-remove" data-repo="${escapeHtml(repo)}">&times;</span></span>`
     )
     .join("")
   ingestionRepoTags.querySelectorAll(".ingestion-tag-remove").forEach((btn) => {
@@ -8705,7 +8708,7 @@ async function setActiveAgents(agents) {
 // Format suggestion content for display
 function formatSuggestionContent(content) {
   // Convert markdown-style bold to HTML
-  return content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+  return escapeHtml(content).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
 }
 
 // Display a suggestion card (old format, for /realtime/process fallback)
@@ -8716,14 +8719,14 @@ function displaySuggestion(suggestion) {
   card.className = `suggestion-card ${suggestion.confidence >= 0.8 ? 'high-confidence' : ''}`
   card.innerHTML = `
     <div class="suggestion-header">
-      <span class="suggestion-type">${(suggestion.type || 'general').replace('_', ' ')}</span>
+      <span class="suggestion-type">${escapeHtml((suggestion.type || 'general').replace('_', ' '))}</span>
       <span class="suggestion-confidence">${Math.round((suggestion.confidence || 0) * 100)}%</span>
     </div>
     <div class="suggestion-content">${formatSuggestionContent(suggestion.content)}</div>
     ${suggestion.context?.company ? `
       <div class="suggestion-meta">
-        From: ${suggestion.context.company} interview
-        ${suggestion.context.topics ? `• Topics: ${suggestion.context.topics.slice(0, 3).join(', ')}` : ''}
+        From: ${escapeHtml(suggestion.context.company)} interview
+        ${suggestion.context.topics ? `• Topics: ${escapeHtml(suggestion.context.topics.slice(0, 3).join(', '))}` : ''}
       </div>
     ` : ''}
   `
@@ -9351,9 +9354,10 @@ function renderSelectedFiles() {
 }
 
 function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + " B"
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+  const size = Math.max(0, Number(bytes) || 0)
+  if (size < 1024) return size + " B"
+  if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB"
+  return (size / (1024 * 1024)).toFixed(1) + " MB"
 }
 
 function updateCreateButton() {

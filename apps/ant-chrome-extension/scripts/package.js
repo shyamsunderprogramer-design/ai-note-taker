@@ -13,7 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const PKG = JSON.parse(
@@ -39,16 +39,16 @@ const OUT = path.resolve(
 const cmd = [
   'zip',
   '-r',
-  JSON.stringify(OUT),
+  OUT,
   '.',
   ...EXCLUDE.flatMap((p) => ['-x', p]),
-].join(' ');
+];
 
 console.log(`[ant-chrome-extension] packaging v${PKG.version}...`);
 console.log(`[ant-chrome-extension] cmd: ${cmd}`);
 
 try {
-  execSync(cmd, { cwd: ROOT, stdio: 'inherit' });
+  execFileSync(cmd[0], cmd.slice(1), { cwd: ROOT, stdio: 'inherit' });
   console.log(`[ant-chrome-extension] OK -> ${OUT}`);
 } catch (e) {
   console.error(`[ant-chrome-extension] FAILED: ${e.message}`);

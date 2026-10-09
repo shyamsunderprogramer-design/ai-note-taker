@@ -198,8 +198,8 @@ function displayChecklist(checklist) {
       const textClass = savedProgress[item] ? 'completed' : '';
       html += `
         <li class="prep-checklist-item">
-          <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-          <span class="prep-checklist-text ${textClass}">${item}</span>
+          <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+          <span class="prep-checklist-text ${textClass}">${escapePrepText(item)}</span>
         </li>
       `;
     });
@@ -213,8 +213,8 @@ function displayChecklist(checklist) {
       const textClass = savedProgress[item] ? 'completed' : '';
       html += `
         <li class="prep-checklist-item">
-          <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-          <span class="prep-checklist-text ${textClass}">${item}</span>
+          <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+          <span class="prep-checklist-text ${textClass}">${escapePrepText(item)}</span>
         </li>
       `;
     });
@@ -228,8 +228,8 @@ function displayChecklist(checklist) {
       const textClass = savedProgress[item] ? 'completed' : '';
       html += `
         <li class="prep-checklist-item">
-          <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-          <span class="prep-checklist-text ${textClass}">${item}</span>
+          <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+          <span class="prep-checklist-text ${textClass}">${escapePrepText(item)}</span>
         </li>
       `;
     });
@@ -243,8 +243,8 @@ function displayChecklist(checklist) {
       const textClass = savedProgress[item] ? 'completed' : '';
       html += `
         <li class="prep-checklist-item">
-          <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-          <span class="prep-checklist-text ${textClass}">${item}</span>
+          <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+          <span class="prep-checklist-text ${textClass}">${escapePrepText(item)}</span>
         </li>
       `;
     });
@@ -260,8 +260,8 @@ function displayChecklist(checklist) {
         const textClass = savedProgress[item] ? 'completed' : '';
         html += `
           <li class="prep-checklist-item">
-            <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-            <span class="prep-checklist-text ${textClass}" style="color: #60a5fa;">${item}</span>
+            <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+            <span class="prep-checklist-text ${textClass}" style="color: #60a5fa;">${escapePrepText(item)}</span>
           </li>
         `;
       });
@@ -273,8 +273,8 @@ function displayChecklist(checklist) {
         const textClass = savedProgress[item] ? 'completed' : '';
         html += `
           <li class="prep-checklist-item">
-            <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-            <span class="prep-checklist-text ${textClass}" style="color: #a78bfa;">${item}</span>
+            <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+            <span class="prep-checklist-text ${textClass}" style="color: #a78bfa;">${escapePrepText(item)}</span>
           </li>
         `;
       });
@@ -286,8 +286,8 @@ function displayChecklist(checklist) {
         const textClass = savedProgress[item] ? 'completed' : '';
         html += `
           <li class="prep-checklist-item">
-            <div class="prep-checklist-checkbox ${checked}" onclick="toggleChecklistItem(this, '${escapeString(item)}')"></div>
-            <span class="prep-checklist-text ${textClass}" style="color: #34d399;">${item}</span>
+            <div class="prep-checklist-checkbox ${checked}" data-checklist-item="${escapePrepText(item)}"></div>
+            <span class="prep-checklist-text ${textClass}" style="color: #34d399;">${escapePrepText(item)}</span>
           </li>
         `;
       });
@@ -296,6 +296,9 @@ function displayChecklist(checklist) {
 
   html += '</ul>';
   container.innerHTML = html;
+  container.querySelectorAll('[data-checklist-item]').forEach(checkbox => {
+    checkbox.addEventListener('click', () => toggleChecklistItem(checkbox, checkbox.dataset.checklistItem));
+  });
 }
 
 function toggleChecklistItem(checkbox, item) {
@@ -313,8 +316,9 @@ function toggleChecklistItem(checkbox, item) {
   localStorage.setItem('preinterview_checklist', JSON.stringify(progress));
 }
 
-function escapeString(str) {
-  return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
+function escapePrepText(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Expose functions to window

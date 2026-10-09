@@ -196,7 +196,7 @@ function setupWebSocketHandlers(ws, source, token) {
 
         // Error from server
         if (data.error) {
-          console.error(`WS ${source} error:`, data.error);
+          console.error('Transcription connection reported an error');
           chrome.runtime.sendMessage({
             action: 'transcription-error',
             source: source,

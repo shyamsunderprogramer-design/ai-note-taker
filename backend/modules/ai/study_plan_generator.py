@@ -117,9 +117,8 @@ class SpacedRepetitionScheduler:
             schedule.append((current_date, task))
             review_date = current_date
             interval = 1
-            ef = 2.5
             for review_num in range(1, 6):
-                interval, ef = self.calculate_next_review(
+                interval, _ = self.calculate_next_review(
                     current_confidence=0.7,
                     review_count=review_num,
                     last_interval=interval
@@ -308,10 +307,9 @@ class SpacedRepetitionPlanner:
             # Review schedule
             review_date = current_date
             interval = 1
-            ef = 2.5  # lgtm[py/multiple-definition] — initial value before loop reassigns it
 
             for review_num in range(1, 6):  # 5 reviews over the period
-                interval, ef = self.calculate_next_review(
+                interval, _ = self.calculate_next_review(
                     current_confidence=0.7,  # Assume decent initial recall
                     review_count=review_num,
                     last_interval=interval

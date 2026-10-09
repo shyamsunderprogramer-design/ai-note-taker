@@ -176,7 +176,7 @@ async def db_debug():
     except Exception as e:
         return {
             "status": "failed",
-            "error": str(e),
+            "error": "Database connection failed",
             "error_type": type(e).__name__,
             "url": re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)",
         }

@@ -3,6 +3,7 @@ name: CI
 # Trigger on PRs (every push to a PR branch) and on pushes to main.
 # Per project scope, e2e runs on every PR — no manual/nightly split.
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -83,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -148,7 +149,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -297,7 +298,7 @@ jobs:
         # Uses the official gitleaks-action. Config-free mode scans
         # the entire git history. Public repos get the free
         # GitHub-hosted version; private repos need GH_PAT.
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # No `with:` block — uses defaults. The action exits
