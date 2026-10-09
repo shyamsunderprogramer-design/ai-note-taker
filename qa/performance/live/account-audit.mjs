@@ -1,7 +1,9 @@
+import { artifactDirectory } from '../../security/private-artifacts.cjs';
 import { chromium } from '@playwright/test';
 import { writeFile, access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-const out='/tmp/ant-account-audit';
+const out = artifactDirectory('ant-account-audit-', process.env.ANT_AUDIT_DIR);
+console.log('Private audit artifacts:', out);
 for (const target of await (await fetch('http://127.0.0.1:9223/json/list')).json()) {
   if(target.type==='page' && !target.url) await fetch(`http://127.0.0.1:9223/json/close/${target.id}`);
 }

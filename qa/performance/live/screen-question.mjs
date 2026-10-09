@@ -1,9 +1,12 @@
+import { artifactDirectory } from '../../security/private-artifacts.cjs';
 import {chromium} from '@playwright/test';
 import {readFile,writeFile,access,unlink} from 'node:fs/promises';
 const fixtureBrowser=await chromium.launch({headless:false,args:['--start-maximized']});
 const fixture=await fixtureBrowser.newPage({viewport:null});
 await fixture.setContent('<html><body style="background:white;color:black;font:32px Arial;padding:60px"><h1>SCREEN CONTEXT PROBE 7341</h1><h2>Project budget review</h2><p>Cedar: budget $4,800; spent $6,200.</p><p>Maple: budget $3,000; spent $2,700.</p><p>Use this table to answer the spoken or typed question.</p></body></html>');
 await fixture.bringToFront();
+const out = artifactDirectory('ant-visible-', process.env.ANT_QA_OUTPUT_DIR);
+console.log('Private visible artifacts:', out);
 const browser=await chromium.connectOverCDP('http://127.0.0.1:9223');
 const page=browser.contexts()[0].pages().find(p=>/index.html|signin.html/.test(p.url()));
 if(!page)throw Error('Sign in to the visible app is required');
@@ -20,7 +23,7 @@ if(process.argv.includes('--no-blink')) {
 }
 await page.evaluate(interval=>window.api.autoScreenshotSetEnabled(true,interval),process.argv.includes('--no-blink') ? 3000 : 60000);
 const context=await page.evaluate(async()=>{const image=await window.api.captureScreenshot();const response=await fetch('http://127.0.0.1:8000/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_b64:image})}); if(!response.ok)throw Error('OCR returned '+response.status);const ocr=await response.json();return {image,text:ocr.text||''}});
-await writeFile('/tmp/ant-visible-desktop/excluded-app-screen.jpg',Buffer.from(context.image,'base64'));
+await writeFile(`${out}/excluded-app-screen.jpg`,Buffer.from(context.image,'base64'));
 const capture={fixtureRead:/Cedar/.test(context.text)&&/6,200|6200/.test(context.text),appExcluded:!/AI Note Taker|Protection off|Summarize|Ask anything|ANT SELF CAPTURE|9274/.test(context.text)};
 console.log(JSON.stringify({capture}));
 if(!capture.fixtureRead||!capture.appExcluded)throw Error('Screen exclusion or OCR did not pass');
@@ -45,7 +48,7 @@ for(const mode of modes){
  }else if(mode==='typed'){
   await page.locator('#textInput').fill('Which project is above budget, and by how much?');await page.locator('#textInput').press('Enter');
  }else if(mode==='live-microphone'){
-  const stopFile='/tmp/ant-visible-desktop/stop-live-mic';
+  const stopFile=`${out}/stop-live-mic`;
   await unlink(stopFile).catch(()=>{});
   await page.locator('#textInput').fill('');
   await page.locator('#listenBtn').click();
@@ -67,7 +70,7 @@ for(const mode of modes){
  const passed=mode==='replayed-microphone-question' ? /\?/.test(answer) && !/can.t help with that/i.test(answer) : /Cedar/i.test(answer)&&/1,400|1400/.test(answer);
  const transcript=await page.locator('.chat-message.user').last().innerText();
  results.push({mode,seconds:(Date.now()-start)/1000,transcript,answer,passed});console.log(JSON.stringify(results.at(-1)));
- await page.screenshot({path:`/tmp/ant-visible-desktop/screen-${mode}.png`});
+ await page.screenshot({path:`${out}/screen-${mode}.png`});
  await page.waitForTimeout(2500);
 }
 await writeFile(process.argv.includes('--replay-question') ? 'qa/performance/results/2026-09-23-voice-question-replay.json' : process.argv.includes('--live-mic') ? 'qa/performance/results/2026-09-23-live-screen-microphone.json' : 'qa/performance/results/2026-09-23-screen-question.json',JSON.stringify({capture,results,limits:process.argv.includes('--replay-question') ? 'Exact transcript from the earlier physical microphone run resubmitted through visible UI after prompt fix; this is not another microphone recording.' : process.argv.includes('--live-mic') ? 'Actual desktop capture, native microphone MediaRecorder, production transcription, real cloud inference and visible rendered answers. Controlled reference page on the physical display.' : 'Actual desktop capture and OCR; real cloud inference; synthetic speech file through production transcription, not physical microphone.'},null,2));

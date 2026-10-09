@@ -4,6 +4,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { SystemAudioCapture } = require('../../../electron/lib/system-audio')
 
+const { artifactDirectory } = require('../../security/private-artifacts.cjs')
+const output = artifactDirectory('ant-system-audio-', process.env.ANT_QA_OUTPUT_DIR)
+console.log('Private system-audio artifacts:', output)
 const directory = process.argv[2] || '/tmp/ant-product-benchmark'
 const playback = path.join(directory, 'playback.wav')
 if (!fs.existsSync(playback)) throw new Error(`Missing fixture: ${playback}`)
@@ -53,7 +56,7 @@ async function main() {
     peak = Math.max(peak, value)
     if (value) nonzero++
   }
-  if (pcm.length) fs.writeFileSync(path.join(directory, 'captured-system-audio.wav'), wav(pcm))
+  if (pcm.length) fs.writeFileSync(path.join(output, 'captured-system-audio.wav'), wav(pcm))
   const report = {
     test: 'ANT system-audio capture of isolated synthetic afplay process',
     elapsedSeconds: (Date.now() - started) / 1000,
@@ -62,7 +65,7 @@ async function main() {
     passed: playerCode === 0 && peak > 0 && pcm.length >= 32000 * 5 && errors.length === 0,
     limits: 'OS loopback test, not a Meet/Zoom call. No microphone or unrelated processes captured.',
   }
-  fs.writeFileSync(path.join(directory, 'system-audio-report.json'), JSON.stringify(report, null, 2) + '\n')
+  fs.writeFileSync(path.join(output, 'system-audio-report.json'), JSON.stringify(report, null, 2) + '\n')
   console.log(JSON.stringify(report, null, 2))
   if (!report.passed) process.exitCode = 1
 }

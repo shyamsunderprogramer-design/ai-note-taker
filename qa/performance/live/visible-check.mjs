@@ -1,5 +1,8 @@
+import { artifactDirectory } from '../../security/private-artifacts.cjs';
 import { chromium } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+const out = artifactDirectory('ant-visible-', process.env.ANT_QA_OUTPUT_DIR);
+console.log('Private visible artifacts:', out);
 const browser = await chromium.connectOverCDP('http://127.0.0.1:9223');
 const page = browser.contexts()[0].pages().find(p => /index.html/.test(p.url()));
 if (!page) throw new Error('Sign in is required in the visible app');
@@ -16,7 +19,7 @@ for (const item of [
   await page.waitForFunction(() => !isProcessing);
   await page.locator('#modelSelect').selectOption(item.model);
   await page.locator('#textInput').fill(item.question);
-  await page.screenshot({path:`/tmp/ant-visible-desktop/${item.name}-question.png`});
+  await page.screenshot({path:`${out}/${item.name}-question.png`});
   const before=await page.locator('.chat-message.assistant').count();
   const start=Date.now();
   await page.locator('#textInput').press('Enter');
@@ -28,8 +31,8 @@ for (const item of [
   const result={name:item.name,selected:item.model,seconds:(Date.now()-start)/1000,answer,scroll};
   if (scroll.distanceFromBottom > 40) throw new Error("Newest answer is not visible: " + JSON.stringify(scroll));
   results.push(result);
-  await page.screenshot({path:`/tmp/ant-visible-desktop/${item.name}-answer.png`});
-  await writeFile('/tmp/ant-visible-desktop/results.json',JSON.stringify({results,errors},null,2));
+  await page.screenshot({path:`${out}/${item.name}-answer.png`});
+  await writeFile(`${out}/results.json`,JSON.stringify({results,errors},null,2));
   console.log(JSON.stringify(result));
   await page.waitForTimeout(4000);
 }

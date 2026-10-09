@@ -1,12 +1,17 @@
+import { artifactDirectory, readPrivateJson } from '../../security/private-artifacts.cjs';
 // Real Electron, real backend, test-account login. Never record credentials.
 import { _electron as electron } from '@playwright/test';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
+import { unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-const out = '/tmp/ant-account-audit';
-const credentials = JSON.parse(await readFile(`${out}/credentials.json`, 'utf8'));
-await unlink(`${out}/credentials.json`);
+const out = artifactDirectory('ant-account-audit-', process.env.ANT_AUDIT_DIR);
+console.log('Private audit artifacts:', out);
+process.env.ANT_AUDIT_DIR = out;
+const credentialFile = process.env.ANT_QA_CREDENTIALS_FILE;
+if (!credentialFile) throw new Error('Set ANT_QA_CREDENTIALS_FILE to a private test-account JSON file');
+const credentials = readPrivateJson(credentialFile);
+await unlink(credentialFile);
 const app = await electron.launch({
   args: ['--remote-debugging-port=9223', `--user-data-dir=${out}/profile`, resolve('electron/main.js')],
   timeout: 60000,
@@ -43,7 +48,7 @@ console.log('Audit desktop available on local CDP port 9223');
 if (process.argv.includes('--verify') || process.argv.includes('--ocr-only')) {
   await page.waitForURL('**/index.html', {timeout:60000});
   for (const mode of (process.argv.includes('--ocr-only') ? ['ocr-check'] : ['core','desktop'])) {
-    const output=createWriteStream(`/tmp/ant-final-${mode}.log`);
+    const output=createWriteStream(`${out}/final-${mode}.log`, { flags: 'wx', mode: 0o600 });
     const child=spawn(process.execPath,['qa/performance/live/account-audit.mjs',mode],{stdio:['ignore','pipe','pipe']});
     child.stdout.pipe(output);child.stderr.pipe(output);
     const code=await new Promise(resolve=>child.on('close',resolve));

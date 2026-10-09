@@ -1,6 +1,9 @@
+import { artifactDirectory } from '../../security/private-artifacts.cjs';
 // Built renderer -> production routes -> configured Groq (or --local Qwen).
 import { chromium } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+const out = artifactDirectory('ant-model-browser-', process.env.ANT_QA_OUTPUT_DIR);
+console.log('Private browser artifacts:', out);
 const origin = 'http://127.0.0.1:8041';
 const local = process.argv.includes('--local');
 const selectedModel = local ? 'qwen3.5:9b' : 'groq-gpt-oss-120b';
@@ -53,7 +56,7 @@ try {
   }
   const report = {passed:results.every(result=>result.passed), results,
     limits:'Isolated loopback server; actual provider keys stay on backend. Synthetic resume. No user database, microphone or desktop capture.'};
-  await writeFile(local ? '/tmp/ant-local-browser.json' : '/tmp/ant-cloud-browser.json', JSON.stringify(report,null,2));
+  await writeFile(`${out}/${local ? 'local' : 'cloud'}-browser.json`, JSON.stringify(report,null,2));
   console.log(JSON.stringify(report,null,2));
   if (!report.passed) process.exitCode = 1;
 } finally { await browser.close(); }

@@ -42,3 +42,7 @@ Both Chromium and Firefox pass all 44 browser tests against an isolated real bac
 JSON and SQLite fallbacks catch their expected exception types, Redis statistics explicitly report unavailable state, and semantic matching falls back to text matching without catching process-exit exceptions. All 1,317 backend tests still pass (59 skipped).
 
 Hosted run 37996787493 passes backend, web, and security jobs, including full-history gitleaks. Its browser job still uses the prior server configuration and requires a rerun after this batch. CodeQL run 37996677528 succeeded at e1cc368 and reports 340 open branch findings. Remaining SSRF transport-model warnings, temporary-file findings and code-quality findings are still under review.
+
+## QA artifact isolation
+
+QA capture/audit scripts now write into unpredictable private per-run directories instead of shared fixed temporary paths. Shared runs explicitly pass ANT_AUDIT_DIR or ANT_QA_OUTPUT_DIR; existing directories must be owned by the user and private, and symlinks are rejected. Account launch reads ANT_QA_CREDENTIALS_FILE through a single non-following file descriptor, checks ownership, size and private permissions, and removes the consumed input file. Output logs are created exclusively with mode 0600. Two regression tests verify directory and credential-file protections; all five dependency/artifact security tests pass in the clean dependency environment. QA scripts were syntax-checked without activating capture or logging into the app.
