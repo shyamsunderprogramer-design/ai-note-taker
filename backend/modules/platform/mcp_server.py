@@ -342,7 +342,7 @@ async def search_transcripts_handler(arguments: Dict) -> Dict:
     try:
         # Try to use database if available
         try:
-            from database import ConversationRepository
+            from core.database import ConversationRepository
             if user_id:
                 conversations = await ConversationRepository.get_by_user(user_id, limit=limit)
             else:
@@ -405,7 +405,7 @@ async def get_summary_handler(arguments: Dict) -> Dict:
     try:
         # Try to get from database
         try:
-            from database import ConversationRepository
+            from core.database import ConversationRepository
             conv = await ConversationRepository.get_by_id(conversation_id)
             if conv:
                 # Generate summary from messages
@@ -436,7 +436,7 @@ async def list_action_items_handler(arguments: Dict) -> Dict:
         return {"error": "conversation_id required", "action_items": []}
 
     try:
-        from database import ConversationRepository
+        from core.database import ConversationRepository
         conv = await ConversationRepository.get_by_id(conversation_id)
         if not conv:
             return {"error": "Conversation not found", "action_items": [], "conversation_id": conversation_id}
@@ -506,7 +506,7 @@ async def get_interview_notes_handler(arguments: Dict) -> Dict:
 
     # Try to get company-specific questions from prediction engine
     try:
-        from database import InterviewSession
+        from core.database import InterviewSession
         try:
             from predict import predict_questions, get_checklist, get_supported_companies
             if company:
@@ -569,7 +569,7 @@ async def ask_about_conversation_handler(arguments: Dict) -> Dict:
         return {"error": "conversation_id and question required"}
 
     try:
-        from database import ConversationRepository
+        from core.database import ConversationRepository
         conv = await ConversationRepository.get_by_id(conversation_id)
         if not conv:
             return {"error": "Conversation not found", "conversation_id": conversation_id}
@@ -623,7 +623,7 @@ async def conversations_list_resource() -> str:
     try:
         # Try database first
         try:
-            from database import ConversationRepository
+            from core.database import ConversationRepository
             # Would need to get all conversations or user's conversations
             conversations = []  # Placeholder
         except ImportError:

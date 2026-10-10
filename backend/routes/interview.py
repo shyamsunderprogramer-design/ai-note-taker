@@ -4,8 +4,7 @@ import logging
 import re
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from security import ErrorCode, error_response
 from security.auth import User

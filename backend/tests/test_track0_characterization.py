@@ -343,7 +343,8 @@ class TestWsLiveAssistSourceFingerprints:
     """
 
     @pytest.fixture(scope="class")
-    def source(self):
+    @classmethod
+    def source(cls):
         import inspect
         import routes.transcription as rt
         return inspect.getsource(rt)

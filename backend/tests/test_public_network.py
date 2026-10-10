@@ -10,6 +10,9 @@ from lib.public_network import AsyncPublicBackend, PublicBackend, check_public_u
     "http://127.0.0.1", "http://10.0.0.1", "http://169.254.169.254",
     "http://[::1]", "http://[fc00::1]", "http://[::ffff:127.0.0.1]",
     "file:///etc/passwd", "https://user:secret@example.com", "http://[fe80::1%25en0]",
+    "http://224.0.0.1", "http://[ff02::1]", "http://[fec0::1]",
+    "http://[64:ff9b::7f00:1]", "http://[64:ff9b::a00:1]",
+    "http://[2002:7f00:1::]", "http://[2002:0a00:1::]", "http://192.0.0.8",
 ])
 def test_rejects_unsafe_urls(url):
     with pytest.raises(ValueError):
@@ -17,7 +20,26 @@ def test_rejects_unsafe_urls(url):
 
 
 def records(*addresses):
-    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (a, 443)) for a in addresses]
+    return [(socket.AF_INET6 if ':' in a else socket.AF_INET, socket.SOCK_STREAM, 6, "",
+             (a, 443, 0, 0) if ':' in a else (a, 443)) for a in addresses]
+
+
+@pytest.mark.parametrize('address', ['8.8.8.8', '2001:4860:4860::8888',
+                                    '::ffff:8.8.8.8', '64:ff9b::808:808'])
+def test_public_native_and_translated_addresses_remain_usable(address):
+    check_public_url(f'http://[{address}]' if ':' in address else f'http://{address}')
+    assert public_addresses(records(address)) == [address]
+
+
+@pytest.mark.parametrize('address', ['fec0::1', 'ff02::1', '224.0.0.1',
+                                    '64:ff9b::7f00:1', '2002:7f00:1::'])
+def test_dns_transition_and_nonunicast_destinations_never_connect(address):
+    with patch('socket.getaddrinfo', return_value=records(address)), patch(
+        'httpcore.SyncBackend.connect_tcp'
+    ) as connect:
+        with pytest.raises(ValueError):
+            PublicBackend().connect_tcp('attacker.example', 443)
+    connect.assert_not_called()
 
 
 def test_rejects_mixed_public_and_private_dns():

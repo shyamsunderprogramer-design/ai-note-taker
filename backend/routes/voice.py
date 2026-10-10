@@ -11,7 +11,7 @@ from security import rate_limit, ErrorCode, error_response
 from security.auth import User
 
 # Auth helpers (mirrored — will be consolidated)
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from security import get_current_user
 

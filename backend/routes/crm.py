@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from routes.deps import require_authentication
 from security import ErrorCode, error_response

@@ -54,3 +54,13 @@ A fresh root installation revealed that the prior lockfile still resolved vulner
 The revised dependency regression tests resolve braces through micromatch, IP classification through the React Native CLI, image sizing through Metro, and URI decoding through query-string. This verifies the actual consumer graph. The patched decoder preserves upstream 0.5.0 behavior with a CommonJS export for legacy navigation consumers. A clean install now audits 1,194 packages with zero known vulnerabilities, passes all six security tests, 26 mobile tests, 174 desktop tests and the web production build. CI now includes a failing npm audit gate plus desktop/mobile tests.
 
 GitHub run 38000603562 passes all four CI jobs, including end-to-end browsers, on 4dd91d4. The latest CodeQL scan on 275d351 reports 311 remaining findings; all 22 QA temporary-file findings are cleared. Infrastructure and remaining code-quality/SSRF model review are unfinished.
+
+## Backend lifecycle, data initialization and network review
+
+Optional-module health checks now probe required exports without unused global bindings. Reviewed framework imports were removed, with existing feature-dependent imports preserved. Unified local storage honors ANT_DATA_DIR for isolated runs. Database consumers consistently import core.database, avoiding a second uninitialized manager; browser logs no longer report failed audit writes. Pages declare the existing favicon asset instead of requesting a missing favicon.ico.
+
+FastAPI uses an asynchronous lifespan context that awaits startup and cleanup, including cleanup after startup failure. Three lifecycle regression cases pass. A class-scoped pytest fixture uses classmethod as required by current pytest. The clean backend suite passes 1,320 tests with 59 skipped and one remaining dependency-originated Starlette test-client warning. Both browsers pass all 44 cases, and the web build succeeds.
+
+Additional SSRF review identified Python 3.12 classification gaps for multicast, legacy site-local and IPv6 transition/translation addresses. Public address validation now rejects these unsafe routes while preserving native public IPv6 and NAT64 to public IPv4. All 31 network-security tests pass, including numeric-address connection pinning and never-connect regressions. The final complete suite passes 1,337 tests, with 59 skipped and the same single dependency-originated warning.
+
+Hosted run 38001611147 passed all CI jobs on 1118349, including the npm audit gate and desktop/mobile tests. Infrastructure and remaining CodeQL quality/transport-model review are still unfinished.

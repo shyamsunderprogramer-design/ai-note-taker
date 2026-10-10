@@ -11,7 +11,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-import psutil
 
 # Heavy ML packages — lazy-loaded so this module can be imported without them
 # (e.g. in CI test environments where torch/faster-whisper/sounddevice are not installed)

@@ -7,7 +7,7 @@ with automatic encryption of secrets at rest.
 import logging
 from typing import Optional, Dict, Any
 
-from database import IntegrationConfigRepository
+from core.database import IntegrationConfigRepository
 
 logger = logging.getLogger("routes.integration_helpers")
 

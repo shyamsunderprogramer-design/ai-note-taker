@@ -44,7 +44,7 @@ logger = logging.getLogger("routes.admin")
 
 # Database availability
 try:
-    from database import (
+    from core.database import (
         db_manager, init_database, close_database,
         UserRepository, ConversationRepository, VoiceModelRepository,
         JobApplicationRepository, AnalyticsRepository,

@@ -12,6 +12,28 @@ import httpcore
 import httpx
 
 
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_IPV4_SPECIAL = ipaddress.ip_network("192.0.0.0/24")
+
+
+def is_public_address(addr):
+    """Require public unicast, including the target behind IPv6 translation.
+
+    Python 3.12 classifies some multicast, legacy site-local and transition
+    addresses as global. They must not provide a route around the SSRF guard.
+    """
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped:
+            return is_public_address(addr.ipv4_mapped)
+        if addr in _NAT64:
+            return is_public_address(ipaddress.IPv4Address(int(addr) & 0xffffffff))
+        if addr.sixtofour or addr.teredo or addr.is_site_local:
+            return False
+    elif addr in _IPV4_SPECIAL and str(addr) not in {"192.0.0.9", "192.0.0.10"}:
+        return False
+    return addr.is_global and not addr.is_multicast and not addr.is_reserved
+
+
 def check_public_url(url):
     parsed = urlsplit(str(url))
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -24,7 +46,7 @@ def check_public_url(url):
         addr = ipaddress.ip_address(parsed.hostname)
     except ValueError:
         return
-    if not addr.is_global or (getattr(addr, "ipv4_mapped", None) and not getattr(addr, "ipv4_mapped", None).is_global):
+    if not is_public_address(addr):
         raise ValueError("Non-public destination is not allowed")
 
 
@@ -34,7 +56,7 @@ def public_addresses(records):
         raise ValueError("Destination has no addresses")
     for host in addresses:
         addr = ipaddress.ip_address(host)
-        if not addr.is_global or (getattr(addr, "ipv4_mapped", None) and not getattr(addr, "ipv4_mapped", None).is_global):
+        if not is_public_address(addr):
             raise ValueError("Non-public destination is not allowed")
     return addresses
 

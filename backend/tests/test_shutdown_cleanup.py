@@ -25,3 +25,39 @@ async def test_shutdown_awaits_database_on_running_event_loop(monkeypatch):
     assert not state.use_autonomous
     # No import-time signal handler can bypass Uvicorn's awaited shutdown.
     assert not any(isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and isinstance(n.func.value,ast.Name) and n.func.value.id=='signal' and n.func.attr=='signal' for n in ast.walk(tree))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', [None, 'request', 'startup'])
+async def test_application_lifespan_awaits_cleanup_even_on_failure(failure):
+    from contextlib import asynccontextmanager
+    tree = ast.parse((Path(__file__).parents[1] / 'core/main.py').read_text())
+    fn = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)
+              and node.name == 'application_lifespan')
+    calls = []
+
+    async def startup():
+        calls.append('startup')
+        if failure == 'startup':
+            raise RuntimeError('synthetic startup failure')
+
+    async def shutdown():
+        calls.append('shutdown')
+
+    scope = {'asynccontextmanager': asynccontextmanager,
+             'start_listener': startup, 'shutdown_event': shutdown}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), '<lifespan>', 'exec'), scope)
+
+    async def run():
+        async with scope['application_lifespan'](None):
+            calls.append('request')
+            if failure == 'request':
+                raise RuntimeError('synthetic request failure')
+
+    if failure:
+        with pytest.raises(RuntimeError):
+            await run()
+    else:
+        await run()
+    assert calls == (['startup', 'shutdown'] if failure == 'startup'
+                     else ['startup', 'request', 'shutdown'])

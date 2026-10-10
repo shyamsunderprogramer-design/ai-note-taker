@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from database import TeamRepository, TeamMemberRepository
+from core.database import TeamRepository, TeamMemberRepository
 from routes.deps import require_authentication
 from security import log_audit_event
 from security.auth import User

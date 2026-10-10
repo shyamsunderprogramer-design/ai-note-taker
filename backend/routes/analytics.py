@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Dict, List
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Depends, Query
 
 from security import ErrorCode, error_response
 

@@ -5,8 +5,7 @@ import time
 import threading
 from typing import Dict
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Form, Query
 
 from config import OLLAMA_URL
 from lib.http_client import sync_client

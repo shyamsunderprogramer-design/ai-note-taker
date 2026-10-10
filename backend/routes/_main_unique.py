@@ -35,7 +35,7 @@ import logging
 import os
 import re
 
-from fastapi import APIRouter, Depends, Form, HTTPException, WebSocket
+from fastapi import APIRouter, Depends, Form, HTTPException
 
 from security import (
     InputValidator, ErrorCode, error_response, rate_limit, log_audit_event,

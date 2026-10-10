@@ -5,7 +5,7 @@ import os
 import shutil
 import time
 
-from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from typing import Dict
 
 from security import ErrorCode, error_response

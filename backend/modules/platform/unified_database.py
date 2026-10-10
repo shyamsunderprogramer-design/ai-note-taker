@@ -36,7 +36,7 @@ class UnifiedDatabase:
 
         if db_path is None:
             # Default location: user data directory
-            data_dir = Path.home() / ".ant" / "data"
+            data_dir = Path(os.environ["ANT_DATA_DIR"]).resolve() if os.getenv("ANT_DATA_DIR") else Path.home() / ".ant" / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
             db_path = data_dir / "ant_database.db"
 

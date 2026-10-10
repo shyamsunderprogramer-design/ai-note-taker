@@ -32,7 +32,7 @@ router = APIRouter()
 
 # Try to import database for full export
 try:
-    from database import (
+    from core.database import (
         HAS_SQLALCHEMY,
         ConversationRepository, VoiceModelRepository,
         JobApplicationRepository, AnalyticsRepository,

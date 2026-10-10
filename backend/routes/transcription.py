@@ -13,7 +13,7 @@ import uuid
 
 import numpy as np
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile, WebSocket
+from fastapi import APIRouter, File, Form, Request, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from ocr_service import extract_text_from_image

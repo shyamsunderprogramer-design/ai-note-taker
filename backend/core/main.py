@@ -7,11 +7,11 @@ import platform
 import queue
 import re
 import shutil
-import signal
 import sys
 import threading
 import time
 import urllib.parse
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -252,7 +252,16 @@ def _sanitize_for_log(value: str) -> str:
     return value.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
 
 
-app = FastAPI()
+@asynccontextmanager
+async def application_lifespan(_app):
+    try:
+        await start_listener()
+        yield
+    finally:
+        await shutdown_event()
+
+
+app = FastAPI(lifespan=application_lifespan)
 
 # ── Route Module Migration ─────────────────────────────────────────────────
 # Route modules in backend/routes/ are the target architecture.
@@ -909,7 +918,6 @@ def autonomous_listener():
         transcriber.stop()
 
 
-@app.on_event("startup")
 async def start_listener():
     # State is now in _state object
     CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
@@ -2917,7 +2925,6 @@ async def get_transcription_speakers(audio_id: str):
 
 
 # Uvicorn owns SIGINT/SIGTERM and awaits the application shutdown hook.
-@app.on_event("shutdown")
 async def shutdown_event():
     """FastAPI shutdown handler - closes database connections and HTTP clients."""
     _state.use_autonomous = False

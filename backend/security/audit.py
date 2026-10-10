@@ -57,7 +57,7 @@ def _write_to_jsonl(event: AuditEvent):
 async def _write_to_database(event: AuditEvent) -> bool:
     """Write audit event to database via AuditLogRepository. Returns True on success."""
     try:
-        from database import AuditLogRepository, HAS_SQLALCHEMY
+        from core.database import AuditLogRepository, HAS_SQLALCHEMY
         if not HAS_SQLALCHEMY:
             return False
 
@@ -155,7 +155,7 @@ def get_audit_log(limit: int = 100, event_type: Optional[str] = None, actor: Opt
 async def get_audit_log_from_db(limit: int = 100, action: Optional[str] = None, user_id: Optional[str] = None) -> list:
     """Read audit log entries from database (primary source when available)"""
     try:
-        from database import AuditLogRepository, HAS_SQLALCHEMY
+        from core.database import AuditLogRepository, HAS_SQLALCHEMY
         if not HAS_SQLALCHEMY:
             return []
         logs = await AuditLogRepository.get_logs(user_id=user_id, action=action, limit=limit)

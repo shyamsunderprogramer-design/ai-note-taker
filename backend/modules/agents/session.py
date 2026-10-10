@@ -34,7 +34,7 @@ class AgentSessionManager:
         """Lazy-check if database is available."""
         if self._has_db is None:
             try:
-                from database import HAS_SQLALCHEMY
+                from core.database import HAS_SQLALCHEMY
                 self._has_db = HAS_SQLALCHEMY
             except (ImportError, Exception):
                 self._has_db = False
@@ -319,7 +319,7 @@ class AgentSessionManager:
     async def _db_create(self, session_data: Dict):
         """Create session row in database."""
         try:
-            from database import get_async_session, AgentSession as AgentSessionModel
+            from core.database import get_async_session, AgentSession as AgentSessionModel
             async with get_async_session() as db:
                 db_session = AgentSessionModel(
                     id=session_data["id"],
@@ -346,7 +346,7 @@ class AgentSessionManager:
     async def _db_get(self, session_id: str) -> Optional[Dict]:
         """Get session from database by ID."""
         try:
-            from database import get_async_session, AgentSession as AgentSessionModel
+            from core.database import get_async_session, AgentSession as AgentSessionModel
             from sqlalchemy import select
             async with get_async_session() as db:
                 result = await db.execute(
@@ -363,7 +363,7 @@ class AgentSessionManager:
     async def _db_update(self, session: Dict):
         """Update session row in database."""
         try:
-            from database import get_async_session, AgentSession as AgentSessionModel
+            from core.database import get_async_session, AgentSession as AgentSessionModel
             from sqlalchemy import select
             async with get_async_session() as db:
                 result = await db.execute(
