@@ -75,7 +75,7 @@ IP.1 = 127.0.0.1
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)  # nosec B603
+            subprocess.run(cmd, capture_output=True, text=True, check=True)  # nosec B603
             print(f"[SUCCESS] Certificate generated:")
             print(f"  - Certificate: {cert_file}")
             print(f"  - Private Key: {key_file}")

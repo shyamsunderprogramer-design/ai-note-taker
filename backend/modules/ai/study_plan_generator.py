@@ -1251,10 +1251,6 @@ class StudyPlanGenerator:
         total_tasks = len(tasks)
         task_idx = 0
 
-        # Calculate how many tasks to aim for per day based on average task duration
-        avg_task_minutes = sum(t.estimated_minutes for t in tasks) / max(total_tasks, 1)
-        tasks_per_day = max(1, min(int(daily_minutes / max(avg_task_minutes, 20)), total_tasks // max(days, 1)))
-
         for day_num in range(1, days + 1):
             session_date = start_date + timedelta(days=day_num - 1)
             day_tasks = []
@@ -1608,7 +1604,6 @@ class StudyPlanGenerator:
             return milestones
 
         total_sessions = len(sessions)
-        days_total = total_sessions  # 1 session per day
 
         # Group sessions by week (7-day chunks)
         weeks = defaultdict(list)
@@ -1633,7 +1628,6 @@ class StudyPlanGenerator:
 
         # Get top weak area names for focus descriptions
         top_areas = [a.get("name", "") for a in weak_areas[:4]]
-        top_categories = [a.get("category", "") for a in weak_areas[:4]]
 
         for week_num, week_sessions in sorted(weeks.items()):
             if not week_sessions:

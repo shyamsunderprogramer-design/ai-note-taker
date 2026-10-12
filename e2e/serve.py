@@ -5,7 +5,6 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 from pathlib import Path
-from urllib.parse import urlsplit
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=8048)

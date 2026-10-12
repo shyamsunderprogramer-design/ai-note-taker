@@ -52,7 +52,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Start AI Note Taker backend")
-    parser.add_argument("--host", default="0.0.0.0", help="Bind host")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: local access only)")
     parser.add_argument("--port", type=int, default=8000, help="Bind port")
     parser.add_argument("--ssl", action="store_true", help="Enable HTTPS with auto-generated self-signed cert")
     parser.add_argument("--prod", action="store_true", help="Production mode: requires SSL_CERT_FILE and SSL_KEY_FILE")

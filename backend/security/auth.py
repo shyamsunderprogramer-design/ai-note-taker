@@ -6,7 +6,6 @@ Handles token generation, validation, and user authentication
 import hmac
 import logging
 import os
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
@@ -45,7 +44,6 @@ if _is_production and not _jwt_secret:
 
 SECRET_KEY = _jwt_secret if _jwt_secret else os.urandom(32).hex()
 if not _jwt_secret:
-    import logging
     logging.getLogger("auth").warning(
         "JWT_SECRET_KEY not set — tokens will invalidate on restart. "
         "Set JWT_SECRET_KEY for stable authentication."

@@ -106,6 +106,7 @@ async def create_voice_clone(
                 raise HTTPException(422, "Unsupported reference audio format")
             reference = model_path / "reference.wav"
             uploaded = model_path / ("upload" + extension)
+            saved = False
             try:
                 uploaded.write_bytes(audio)
                 # Decode recordings and uploads into the same mono WAV format.
@@ -118,11 +119,10 @@ async def create_voice_clone(
                     )
                     try:
                         _, errors = await asyncio.wait_for(process.communicate(), 30)
-                    except BaseException:
+                    finally:
                         if process.returncode is None:
                             process.kill()
                             await process.wait()
-                        raise
                     if process.returncode:
                         raise HTTPException(422, "Could not decode the reference recording")
                 else:
@@ -150,10 +150,11 @@ async def create_voice_clone(
                     source="qwen_local", reference_audio=str(reference), reference_text=ref_text.strip(),
                 )
                 voice_manager._save_models()
-            except BaseException:
-                shutil.rmtree(model_path, ignore_errors=True)
-                voice_manager.models.pop(model_id, None)
-                raise
+                saved = True
+            finally:
+                if not saved:
+                    shutil.rmtree(model_path, ignore_errors=True)
+                    voice_manager.models.pop(model_id, None)
             return {"model_id": model_id, "status": "ready", "source": "qwen_local",
                     "message": "Reference voice saved. Generate speech below."}
 

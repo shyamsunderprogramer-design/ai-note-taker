@@ -339,7 +339,7 @@ class SalesforceIntegration(BaseCRMIntegration):
 
         try:
             # Query limits to test connection
-            limits = self._sf.limits()
+            self._sf.limits()
             logger.info("[Salesforce] Connection test successful")
             return True
         except Exception as e:

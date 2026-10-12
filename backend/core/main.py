@@ -780,7 +780,6 @@ def sanitize_path(filename: str) -> str:
 
     Rejects paths containing .. or absolute paths.
     """
-    import re
     # Reject paths with directory traversal attempts
     if ".." in filename or "/" in filename or "\\" in filename or filename.startswith((".", "/", "\\", "~")):
         raise ValueError(f"Invalid filename: {filename}")
@@ -906,7 +905,6 @@ def autonomous_listener():
                         continue
                     _state.last_query_time = time.time()
 
-                import asyncio
                 async def _warmup():
                     async for _ in iterate_stream(route_ai_stream(final_text, mode=_state.current_mode)):
                         pass
@@ -1285,7 +1283,6 @@ async def ask_with_image(
         messages = None
         if context:
             try:
-                import json
                 messages = json.loads(context)
             except Exception:
                 pass  # nosec B110 — JSON parse fallback for optional context
@@ -1507,11 +1504,9 @@ async def transcribe_stream(request: Request):
                 # Run blocking queue.get() in a thread with 1s timeout so event loop stays free
                 try:
                     text = await loop.run_in_executor(None, lambda: client_queue.get(True, timeout=1))
-                    import json
                     yield f"event: transcript\ndata: {json.dumps({'text': text})}\n\n"
                 except queue.Empty:
                     # No transcription in queue within timeout — send ping so renderer can check silence
-                    import json
                     yield f"event: ping\ndata: {json.dumps({'t': int(time.time())})}\n\n"
         except GeneratorExit:
             pass
@@ -1564,7 +1559,6 @@ async def overlay_ask(
                 model_name = _get_vision_model()
                 logger.info("[overlay-ask] Screenshot present, vision model: %s", _sanitize_for_log(str(model_name)))
                 if not model_name:
-                    import json
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
                 # ask_ollama_vision_stream is patched to be an async generator
@@ -1581,7 +1575,6 @@ async def overlay_ask(
                 async for event in iterate_stream(route_ai_stream(query, mode="fast", style="concise")):
                     yield event
         except Exception as e:
-            import json
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
         finally:
             _state.is_streaming = False
@@ -2456,7 +2449,6 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
         messages = None
         if context:
             try:
-                import json
                 messages = json.loads(context)
             except Exception:
                 pass
@@ -2469,7 +2461,6 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
                 yield event
 
         except Exception as e:
-            import json
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
 
         finally:
@@ -2488,7 +2479,6 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     """
     import queue as queue_mod
     import threading
-    import logging
     import time as time_module
 
     # Absolute import — see comment at line 1353.
@@ -2619,7 +2609,6 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     def stream_provider(pk):
         """Stream from a provider into the shared queue. Exit early if cancelled."""
-        import asyncio
 
         async def _run():
             provider_start = time_module.time()
@@ -3006,7 +2995,7 @@ async def ws_transcribe(ws: WebSocket):
     else:
         # Dev mode: auth optional — allow unauthenticated connections
         if token:
-            user = await get_current_user(token)
+            await get_current_user(token)
 
     # Auth succeeded
     await ws.send_text(json.dumps({"type": "auth_ok"}))
@@ -4501,7 +4490,6 @@ async def get_study_plan(user_id: str):
 
         plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
         # export_plan returns JSON string, parse it to return as dict
-        import json
         return json.loads(study_planner.export_plan(plan, "json"))
     except Exception as e:
         logger.error("[StudyPlan] Get error: %s", str(e))
@@ -5137,7 +5125,6 @@ async def search_job_applications(
 
 def extract_complexity_from_text(text: str) -> Dict:
     """Extract Big-O complexity notation from text"""
-    import re
 
     text_lower = text.lower()
 

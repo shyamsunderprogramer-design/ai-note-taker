@@ -52,12 +52,11 @@ class LocalCloneEngine:
             await reader
             if process.returncode:
                 raise RuntimeError(bytes(tail).decode(errors="replace")[-1500:] or "Local voice process failed")
-        except BaseException:
+        finally:
             if process.returncode is None:
                 process.kill()
                 await process.wait()
             await reader
-            raise
 
     async def setup(self):
         self.error = ""

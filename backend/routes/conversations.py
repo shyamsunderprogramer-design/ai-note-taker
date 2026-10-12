@@ -208,7 +208,6 @@ async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)
 
 # ─── Share Links ────────────────────────────────────────────────────────
 
-import hashlib
 import secrets
 
 # In-memory share link store (production: database)
@@ -230,7 +229,6 @@ async def create_share_link(
         return error_response(ErrorCode.VALIDATION_ERROR, "No messages to share", status_code=400)
 
     share_id = secrets.token_urlsafe(12)
-    share_token = hashlib.sha256(share_id.encode()).hexdigest()[:16]
 
     _share_links[share_id] = {
         "messages": messages,

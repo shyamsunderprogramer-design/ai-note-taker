@@ -26,12 +26,9 @@ def _default_voice_storage_dir() -> str:
     backend_root = Path(__file__).resolve().parent.parent.parent
     return str(backend_root / "data" / "voice_models")
 
-logger = None
-try:
-    import logging
-    logger = logging.getLogger("voice_clone")
-except ImportError:
-    pass
+import logging
+
+logger = logging.getLogger("voice_clone")
 
 
 @dataclass

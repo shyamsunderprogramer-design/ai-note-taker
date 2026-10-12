@@ -4,7 +4,6 @@ Provides backward compatibility while exposing new rich question database
 """
 
 from typing import List, Dict, Optional
-import random
 
 # Import both systems
 from .mock_interview_library import MockInterviewLibrary, mock_library, InterviewQuestion as OldQuestion
@@ -215,7 +214,6 @@ class UnifiedQuestionLibrary:
     def _get_resources_for_question(self, q: Dict) -> List[str]:
         """Get recommended resources for a question"""
         category = q.get("category", "")
-        topics = q.get("topics", [])
 
         resources = []
 

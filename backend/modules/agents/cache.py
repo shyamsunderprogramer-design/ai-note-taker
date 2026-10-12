@@ -228,7 +228,6 @@ class ContextCache:
     def cleanup_expired(self) -> int:
         """Remove all expired entries. Returns count of removed entries."""
         with self._lock:
-            now = time.time()
             expired_keys = [
                 k for k, v in self._store.items()
                 if v.age_seconds > self.default_ttl

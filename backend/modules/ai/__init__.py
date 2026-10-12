@@ -6,6 +6,10 @@ ML packages (sentence-transformers, spacy, neo4j) that may not be
 installed in lightweight CI environments.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 __all__ = [
     "analytics_engine",
     "cache_manager",
@@ -20,39 +24,39 @@ __all__ = [
 try:
     from . import analytics_engine
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: analytics_engine")
 
 try:
     from . import cache_manager
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: cache_manager")
 
 try:
     from . import cognitive_graph
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: cognitive_graph")
 
 try:
     from . import entity_extraction
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: entity_extraction")
 
 try:
     from . import performance_analyzer
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: performance_analyzer")
 
 try:
     from . import predictive_interview
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: predictive_interview")
 
 try:
     from . import realtime_suggestions
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: realtime_suggestions")
 
 try:
     from . import study_plan_generator
 except ImportError:
-    pass
+    logger.debug("Optional AI module unavailable: study_plan_generator")

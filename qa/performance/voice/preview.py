@@ -7,7 +7,6 @@ from pathlib import Path
 import sys
 import time
 
-import numpy as np
 from faster_whisper.audio import decode_audio
 
 ROOT = Path(__file__).resolve().parents[3]

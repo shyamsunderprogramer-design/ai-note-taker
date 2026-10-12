@@ -1,9 +1,40 @@
+import asyncio
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
 from modules.voice.local_clone_engine import LocalCloneEngine
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('interruption', ['timeout', 'cancel'])
+async def test_interrupted_process_is_reaped(tmp_path, monkeypatch, interruption):
+    started = asyncio.Event()
+    children = []
+    create_process = asyncio.create_subprocess_exec
+
+    async def track_process(*args, **kwargs):
+        process = await create_process(*args, **kwargs)
+        children.append(process)
+        started.set()
+        return process
+
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', track_process)
+    engine = LocalCloneEngine(tmp_path)
+    task = asyncio.create_task(engine._run(
+        [sys.executable, '-c', 'import time; time.sleep(30)'],
+        .05 if interruption == 'timeout' else 30,
+    ))
+    await started.wait()
+    if interruption == 'cancel':
+        task.cancel()
+    expected = TimeoutError if interruption == 'timeout' else asyncio.CancelledError
+    with pytest.raises(expected):
+        await task
+    assert len(children) == 1
+    assert children[0].returncode is not None
 
 
 def ready_engine(tmp_path):

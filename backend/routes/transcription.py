@@ -292,7 +292,6 @@ def transcribe_with_speakers(
     """Transcribe audio with speaker diarization in FastAPI's worker pool.
     T22: Supports multi-language transcription.
     Returns transcript + speakers — the frontend handles AI response separately."""
-    USE_AUTONOMOUS = False
     started_at = time.perf_counter()
     file_path = os.path.join(UPLOAD_DIR, get_secure_filename(file.filename))
 
@@ -524,7 +523,7 @@ async def ws_transcribe(ws: WebSocket):
             return
     else:
         if token:
-            user = await get_current_user(token)
+            await get_current_user(token)
 
     await ws.send_text(json.dumps({"type": "auth_ok"}))
 
@@ -852,22 +851,11 @@ async def ws_transcribe(ws: WebSocket):
 
         msg = {"type": "partial", "text": combined, "source": ws_source}
 
-        # --- Live suggestion generation -------------------------------------
-        # Fragments arrive one per 0.5s segment; when the accumulated tail
-        # looks like an interviewer question, arm a settle timer — if no new
-        # speech arrives within 1.4s, the question is done and a real answer
-        # is generated in a worker thread (never blocking transcription) and
-        # pushed as {"type": "suggestion"} over this same socket — the
-        # overlay's existing setHint() renders it unchanged.
-        tail = " ".join(combined.split()[-45:])
-        # Mock-debug instrumentation (2026-09-11): the suggestion path fired
-        # 0 times while sessions ran — log every segment + detector verdict
-        # so a dead run is diagnosable from /tmp/ant-backend.log alone.
         # Display only. Suggestion timing now comes from VadSegmenter on the
         # raw audio, not from watching this text settle — transcript lags the
         # audio by at least one slice, which is what fired hints on half-spoken
         # questions.
-        logger.info("[ws/transcribe] partial seg=%r", text[-60:])
+        logger.debug("[ws/transcribe] partial received chars=%d", len(text))
 
         if streaming_diarizer is not None:
             with _audio_lock:
@@ -881,14 +869,7 @@ async def ws_transcribe(ws: WebSocket):
             else:
                 msg["speaker"] = "Speaker 1"
                 msg["semantic_role"] = "user"
-            # Speaker-accuracy evidence for the mock (2026-09-11): before we can
-            # gate suggestion-arming on diarizer role, we need to know whether
-            # the labels separate interviewer (echo through speakers→mic) from
-            # the candidate's own voice at all. Behavior unchanged — logging only.
-            logger.info(
-                "[ws/transcribe] speaker=%s role=%s seg=%r",
-                msg["speaker"], msg["semantic_role"], text[-60:],
-            )
+            logger.debug("[ws/transcribe] speaker classification complete")
 
         if ws_meeting_id:
             msg["meeting_id"] = ws_meeting_id

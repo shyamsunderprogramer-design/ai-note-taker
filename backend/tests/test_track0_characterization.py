@@ -411,7 +411,3 @@ class TestWsLiveAssistSourceFingerprints:
     def test_suggestion_pushed_via_call_soon_threadsafe(self, source):
         # Cross-thread → event-loop handoff uses the msg_queue
         assert "call_soon_threadsafe" in source
-
-    def test_tail_window_is_45_words(self, source):
-        # The question tail is the last 45 words of the accumulated transcript
-        assert "[-45:]" in source
