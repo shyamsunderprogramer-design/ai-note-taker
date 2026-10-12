@@ -13,6 +13,7 @@ import httpx
 
 
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_LOCAL_NAT64 = ipaddress.ip_network("64:ff9b:1::/48")
 _IPV4_SPECIAL = ipaddress.ip_network("192.0.0.0/24")
 
 
@@ -23,6 +24,10 @@ def is_public_address(addr):
     addresses as global. They must not provide a route around the SSRF guard.
     """
     if isinstance(addr, ipaddress.IPv6Address):
+        # RFC 8215 translation is local-use even when the embedded IPv4 is
+        # public; older Python versions incorrectly classify this as global.
+        if addr in _LOCAL_NAT64:
+            return False
         if addr.ipv4_mapped:
             return is_public_address(addr.ipv4_mapped)
         if addr in _NAT64:

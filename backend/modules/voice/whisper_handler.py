@@ -100,12 +100,10 @@ def select_model(mode="adaptive", streaming=False):
 models = {}
 _model_lock = threading.Lock()
 model_ready = threading.Event()   # signals when first model has finished loading
-_warmup_done = False             # True once warmup thread has completed
 
 
 def warmup():
     """Load the default model at startup so first transcription is instant."""
-    global _warmup_done
     try:
         _accelerated_transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32))
         logger.info("[Warmup] Loading Whisper model...")
@@ -114,11 +112,9 @@ def warmup():
         # Also preload streaming model in background so BrowserTranscriber is fast
         threading.Thread(target=_preload_streaming_model, daemon=True, name="whisper-streaming-warmup").start()
         model_ready.set()
-        _warmup_done = True
     except Exception as e:
         logger.warning("[Warmup] Failed: %s", str(e))
         model_ready.set()  # unblock waiters even on failure
-        _warmup_done = True
 
 
 def _preload_streaming_model():

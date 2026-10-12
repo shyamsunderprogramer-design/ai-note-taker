@@ -13,6 +13,7 @@ from lib.public_network import AsyncPublicBackend, PublicBackend, check_public_u
     "http://224.0.0.1", "http://[ff02::1]", "http://[fec0::1]",
     "http://[64:ff9b::7f00:1]", "http://[64:ff9b::a00:1]",
     "http://[2002:7f00:1::]", "http://[2002:0a00:1::]", "http://192.0.0.8",
+    "http://[64:ff9b:1::7f00:1]", "http://[64:ff9b:1::808:808]",
 ])
 def test_rejects_unsafe_urls(url):
     with pytest.raises(ValueError):
@@ -32,7 +33,8 @@ def test_public_native_and_translated_addresses_remain_usable(address):
 
 
 @pytest.mark.parametrize('address', ['fec0::1', 'ff02::1', '224.0.0.1',
-                                    '64:ff9b::7f00:1', '2002:7f00:1::'])
+                                    '64:ff9b::7f00:1', '2002:7f00:1::',
+                                    '64:ff9b:1::7f00:1', '64:ff9b:1::808:808'])
 def test_dns_transition_and_nonunicast_destinations_never_connect(address):
     with patch('socket.getaddrinfo', return_value=records(address)), patch(
         'httpcore.SyncBackend.connect_tcp'
@@ -82,4 +84,16 @@ async def test_async_private_dns_never_connects():
     ) as connect:
         with pytest.raises(ValueError):
             await AsyncPublicBackend().connect_tcp("attacker.example", 443)
+    connect.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('address', ['64:ff9b:1::7f00:1', '64:ff9b:1::808:808'])
+async def test_async_local_translation_never_connects(address):
+    with patch('asyncio.BaseEventLoop.getaddrinfo', new_callable=AsyncMock,
+               return_value=records(address)), patch(
+        'httpcore.AnyIOBackend.connect_tcp', new_callable=AsyncMock,
+    ) as connect:
+        with pytest.raises(ValueError):
+            await AsyncPublicBackend().connect_tcp('attacker.example', 443)
     connect.assert_not_called()

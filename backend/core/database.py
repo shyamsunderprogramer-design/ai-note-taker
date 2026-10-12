@@ -11,10 +11,11 @@ T16: Database Migration (JSON -> PostgreSQL)
 """
 
 import os
-import re
 import json
 import uuid
 import logging
+import ssl
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -51,7 +52,7 @@ CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
 if CLOUD_MODE and DATABASE_URL and "postgresql" in DATABASE_URL:
     FORCE_SQLITE = False
     USE_SQLITE = False
-    logger.info("[Database] Cloud mode: will attempt PostgreSQL at %s", re.sub(r'://[^@]+@', '://***@', DATABASE_URL))
+    logger.info("[Database] Cloud mode: will attempt PostgreSQL")
 elif CLOUD_MODE:
     # Cloud mode but no DATABASE_URL — use SQLite with persistent path
     FORCE_SQLITE = True
@@ -70,8 +71,7 @@ if FORCE_SQLITE:
 elif USE_SQLITE:
     DATABASE_URL = DEFAULT_SQLITE_URL
 
-_redacted_url = re.sub(r'://[^@]+@', '://***@', DATABASE_URL) if DATABASE_URL else "(none)"
-logger.info(f"[Database] Module loaded. URL: {_redacted_url}")
+logger.info("[Database] Module loaded (SQLite=%s)", USE_SQLITE)
 
 # Try importing SQLAlchemy
 try:
@@ -637,19 +637,17 @@ class DatabaseManager:
             # Neon requires SSL — pass as SSLContext via connect_args
             connect_args = {}
             if "postgresql" in _db_url and "sqlite" not in _db_url:
-                # Remove sslmode from URL if present — asyncpg doesn't use it in URL
-                if "sslmode=" in _db_url:
-                    _db_url = _db_url.split("?sslmode=")[0]
-                    if _db_url.endswith("?"):
-                        _db_url = _db_url[:-1]
-                try:
-                    import ssl as _ssl
-                    _ssl_ctx = _ssl.create_default_context()
-                    _ssl_ctx.check_hostname = False
-                    _ssl_ctx.verify_mode = _ssl.CERT_NONE
-                    connect_args["ssl"] = _ssl_ctx
-                except Exception:
-                    pass
+                # asyncpg accepts an SSLContext rather than a URL sslmode.
+                # Preserve other query options and require certificate/hostname
+                # verification. A broken CA configuration must fail closed.
+                parsed = urlsplit(_db_url)
+                query = [(key, value) for key, value in
+                         parse_qsl(parsed.query, keep_blank_values=True)
+                         if key != "sslmode"]
+                _db_url = urlunsplit(parsed._replace(query=urlencode(query)))
+                connect_args["ssl"] = ssl.create_default_context(
+                    cafile=os.getenv("DATABASE_SSL_CA_FILE") or None,
+                )
 
             # Cloud mode: smaller pool to fit in 512MB RAM
             _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
@@ -667,7 +665,7 @@ class DatabaseManager:
                 if connect_args:
                     _engine_kwargs["connect_args"] = connect_args
 
-            logger.info("[Database] Connecting to: %s (SQLite=%s)", re.sub(r'://[^@]+@', '://***@', _db_url) if _db_url else "(none)", _is_sqlite)
+            logger.info("[Database] Connecting (SQLite=%s)", _is_sqlite)
 
             self.engine = create_async_engine(
                 _db_url,
@@ -1933,16 +1931,13 @@ class UserAPIKeyRepository:
                         else:
                             # Legacy or other format - try decrypt
                             if decrypt_fn:
-                                try:
-                                    decrypted[provider] = decrypt_fn(encrypted)
-                                except:
-                                    decrypted[provider] = encrypted
+                                decrypted[provider] = decrypt_fn(encrypted)
                             else:
                                 decrypted[provider] = encrypted
 
                 return decrypted
-        except Exception as e:
-            logger.error("[UserAPIKeyRepository] Get by user failed: %s", str(e))
+        except Exception:
+            logger.error("[UserAPIKeyRepository] Get by user failed")
             return None
 
     @staticmethod

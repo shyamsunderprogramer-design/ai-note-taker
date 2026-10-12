@@ -35,6 +35,9 @@ from alembic import op
 import sqlalchemy as sa
 
 
+# Alembic loads these public attributes and migration entry points dynamically.
+__all__ = ["revision", "down_revision", "branch_labels", "depends_on", "upgrade", "downgrade"]
+
 # revision identifiers, used by Alembic.
 revision: str = 'a1b2c3d4e5f6'
 down_revision: Union[str, Sequence[str], None] = 'c391192d16be'

@@ -88,9 +88,6 @@ async def _sync_to_async_iter(sync_iter):
     for item in sync_iter:
         yield item
 
-_provider_key_cache: Dict[str, bool] = {}
-_provider_key_cache_time: list = [0.0]  # mutable list to avoid closure scope issue
-_PROVIDER_KEY_CACHE_TTL = 300  # 5 minutes
 
 
 def _has_provider_key(provider: str, env_var: str) -> bool:
