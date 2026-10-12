@@ -29,7 +29,8 @@ Resources created by `terraform apply`:
   - **terraform** >= 1.7.0 (`brew tap hashicorp/tap && brew install hashicorp/tap/terraform`)
   - **Azure CLI** authenticated (`az login` or `az account set -s <subscription>`)
   - **helm** >= 3 (`brew install helm`)
-  - **kubectl** >= 1.29 (matches the AKS cluster version)
+  - **kubectl** within one minor version of the selected AKS version
+  - **kubelogin** available on PATH; Kubernetes/Helm providers use Entra tokens, not local client certificates
   - A **pre-created state storage account + container** (one-time per subscription; see `backend.tf`)
   - The **Helm chart dependencies vendored** (one-time):
         cd ../../k8s/helm/backend && helm dependency build
@@ -52,9 +53,10 @@ Resources created by `terraform apply`:
   # 4. Apply
   terraform apply tfplan
 
-  # 5. Configure kubectl (use the aks_kubeconfig_raw output)
-  terraform output -raw aks_kubeconfig_raw > /tmp/kubeconfig
-  KUBECONFIG=/tmp/kubeconfig kubectl get nodes
+  # 5. Configure kubectl using Entra authentication
+  az aks get-credentials --resource-group "$(terraform output -raw resource_group_name)" --name "$(terraform output -raw aks_cluster_name)"
+  kubelogin convert-kubeconfig -l azurecli
+  kubectl get nodes
 
 ═══════════════════════════════════════════════════════════════════════════════
   STATE
@@ -97,3 +99,38 @@ Resources created by `terraform apply`:
   resource is a **subscription-level** setting. If you run this stack in a
   shared subscription, you may want to remove it (or scope it to a dedicated
   RG) to avoid affecting other workloads.
+
+## AKS authentication and version selection
+
+Local AKS accounts are disabled. Terraform's Kubernetes and Helm providers use
+`kubelogin get-token`; `aks_login_mode` defaults to `azurecli`. Authenticate Azure
+CLI as the same principal used by the AzureRM provider. For automation, select
+`spn`, `workloadidentity` or `msi` and configure the matching kubelogin identity;
+`--use-azurerm-env-vars` supports ARM_* environment names without putting secrets
+in command arguments. See [kubelogin](https://azure.github.io/kubelogin/cli/get-token.html).
+The deploying principal receives cluster-scoped AKS RBAC administrator access
+for installation. An optional nonempty `azure_admin_group_id` adds group access;
+empty values no longer produce an invalid group ID.
+
+Azure role assignments can take time to propagate. If first-time Helm access
+returns Forbidden, verify the identity and wait for RBAC propagation before
+retrying. Terraform validation does not prove live identity access.
+
+`kubernetes_version` defaults to null instead of the retired hardcoded 1.29.
+New clusters use AKS's service default; pin a supported minor or patch when your
+release process requires one. Existing clusters need a reviewed supported
+upgrade path. Kubernetes service addresses use 172.20.0.0/16 to avoid overlap
+with this template's 10.0.0.0/8 VNet. Changing an existing cluster's service range
+can require replacement: review a saved plan and migration before applying.
+No deployed cluster was changed when validating these templates.
+
+## Subscription logging migration
+
+Subscription diagnostic settings replace the retired Monitor log-profile API.
+A Terraform `removed` block forgets the old resource without destroying it.
+The eight supported subscription activity categories are sent to storage and
+Log Analytics; storage lifecycle management preserves the previous 365-day
+base-blob retention policy for the activity-log container. Review existing
+subscription diagnostics before applying to avoid duplicate collection/cost.
+Legacy storage HTTPS and private-endpoint policy attributes use their supported
+AzureRM 3.x replacements.

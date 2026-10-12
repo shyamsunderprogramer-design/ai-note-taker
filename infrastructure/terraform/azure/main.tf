@@ -64,7 +64,8 @@ resource "azurerm_kubernetes_cluster" "main" {
   dns_prefix          = "ant"
   sku_tier            = var.environment == "production" ? "Standard" : "Free"
 
-  kubernetes_version = "1.29"
+  kubernetes_version     = var.kubernetes_version
+  local_account_disabled = true
   # Fix #24: removed the made-up `aks_clusters_min_version` attribute
   # (never a real arg in azurerm; `kubernetes_version` is the only one).
 
@@ -96,14 +97,14 @@ resource "azurerm_kubernetes_cluster" "main" {
     network_policy    = "calico"
     load_balancer_sku = "standard"
     outbound_type     = "loadBalancer"
-    service_cidr      = "10.1.0.0/16"
-    dns_service_ip    = "10.1.0.10"
+    service_cidr      = "172.20.0.0/16"
+    dns_service_ip    = "172.20.0.10"
   }
 
   azure_active_directory_role_based_access_control {
     managed                = true
     azure_rbac_enabled     = true
-    admin_group_object_ids = [var.azure_admin_group_id]
+    admin_group_object_ids = compact([trimspace(var.azure_admin_group_id)])
   }
 
   oms_agent {
@@ -163,7 +164,7 @@ resource "azurerm_subnet" "aks_system" {
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.1.0.0/24"]
 
-  enforce_private_link_endpoint_network_policies = true
+  private_endpoint_network_policies = "Enabled"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -493,29 +494,46 @@ resource "azurerm_private_endpoint" "postgresql" {
 # ─────────────────────────────────────────────────────────────────────────────
 # Kubernetes Provider
 # ─────────────────────────────────────────────────────────────────────────────
-provider "kubernetes" {
-  host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
-  client_certificate     = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_certificate)
-  client_key             = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_key)
-  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+locals {
+  aks_token_args = [
+    "get-token", "--login", var.aks_login_mode,
+    "--server-id", "6dae42f8-4368-4678-94ff-3960e28e3630",
+    "--tenant-id", data.azurerm_client_config.current.tenant_id,
+    "--use-azurerm-env-vars",
+  ]
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helm Provider
-# ─────────────────────────────────────────────────────────────────────────────
-provider "helm" {
-  kubernetes {
-    host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
-    client_certificate     = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_certificate)
-    client_key             = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_key)
-    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+# Cluster-scoped deployment access for the principal that runs Terraform.
+resource "azurerm_role_assignment" "aks_deployer" {
+  scope                = azurerm_kubernetes_cluster.main.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+provider "kubernetes" {
+  host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
+  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "kubelogin"
+    args        = local.aks_token_args
   }
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helm Release - Backend
-# ─────────────────────────────────────────────────────────────────────────────
+provider "helm" {
+  kubernetes {
+    host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
+    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "kubelogin"
+      args        = local.aks_token_args
+    }
+  }
+}
+
 resource "helm_release" "ant_backend" {
+  depends_on       = [azurerm_role_assignment.aks_deployer]
   name             = "ant-backend"
   repository       = "file://../../k8s/helm/backend"
   chart            = "ant-backend"
@@ -572,7 +590,7 @@ resource "azurerm_storage_account" "data" {
   account_tier                    = "Standard"
   account_replication_type        = "GRS"
   min_tls_version                 = "TLS1_2"
-  enable_https_traffic_only       = true
+  https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
   public_network_access_enabled   = false
 
@@ -600,7 +618,7 @@ resource "azurerm_storage_account" "logs" {
   account_tier                    = "Standard"
   account_replication_type        = "LRS"
   min_tls_version                 = "TLS1_2"
-  enable_https_traffic_only       = true
+  https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
   public_network_access_enabled   = false
 
@@ -628,7 +646,7 @@ resource "azurerm_storage_account" "backups" {
   account_tier                    = "Standard"
   account_replication_type        = "GRS"
   min_tls_version                 = "TLS1_2"
-  enable_https_traffic_only       = true
+  https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
   public_network_access_enabled   = false
 
@@ -884,35 +902,50 @@ resource "azurerm_monitor_diagnostic_setting" "postgresql_audit" {
 # App Service with TLS and Client Certificate Settings
 # ─────────────────────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────
-# Azure Monitor Log Profile (CKV2_AZURE_1, CKV2_AZURE_38, CKV2_AZURE_40, CKV2_AZURE_41)
+# Subscription activity logs and storage lifecycle retention
 # ─────────────────────────────────────────────────────────────────────
-resource "azurerm_monitor_log_profile" "main" {
-  name = "default"
+# Forget the retired API resource without deleting its existing log storage.
+removed {
+  from = azurerm_monitor_log_profile.main
+  lifecycle {
+    destroy = false
+  }
+}
 
-  categories = [
-    "Action",
-    "Delete",
-    "Write",
-    "Security",
-    "ServiceHealth",
-    "Alert",
-    "Recommendation",
-    "Policy",
-    "Autoscale",
-    "Administrative"
-  ]
+resource "azurerm_monitor_diagnostic_setting" "subscription_activity" {
+  name                       = "ant-subscription-activity"
+  target_resource_id         = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  storage_account_id         = azurerm_storage_account.logs.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
-  locations = [
-    "eastus",
-    "westus2",
-    "global"
-  ]
+  dynamic "enabled_log" {
+    for_each = toset([
+      "Administrative", "Security", "ServiceHealth", "Alert",
+      "Recommendation", "Policy", "Autoscale", "ResourceHealth"
+    ])
+    content {
+      category = enabled_log.value
+    }
+  }
+}
 
+# Diagnostic-setting retention no longer deletes stored logs. Retain the
+# original 365-day policy through Storage lifecycle management instead.
+resource "azurerm_storage_management_policy" "activity_logs" {
   storage_account_id = azurerm_storage_account.logs.id
 
-  retention_policy {
+  rule {
+    name    = "subscription-activity-retention"
     enabled = true
-    days    = 365
+    filters {
+      prefix_match = ["insights-activity-logs/"]
+      blob_types   = ["blockBlob", "appendBlob"]
+    }
+    actions {
+      base_blob {
+        delete_after_days_since_modification_greater_than = 365
+      }
+    }
   }
 }
 

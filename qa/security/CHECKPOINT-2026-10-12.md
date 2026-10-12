@@ -78,3 +78,14 @@ Outstanding: remaining CodeQL findings, low Bandit findings, cloud templates and
 - Removed 21 unused bindings from agent orchestration/coaching, entity extraction, question-library compatibility, voice transcription, CRM encryption, and request validation/rate limiting. Imported modules still initialize normally; active classes, helpers and compatibility names remain. Whole-repository consumer searches found no callers of the removed bindings.
 - Ruff F401 confirmation passes on the ten changed files. Clean reviewed backend suite: 1,376 passed, 59 skipped, no warnings. No tests were weakened or security-query coverage changed.
 - Shared HTTP error batch is pushed as cf64484; its hosted CI/CodeQL were pending at this checkpoint. Further CodeQL, low Bandit and infrastructure remediation remains outstanding.
+
+## Azure configuration review
+
+- Hosted application batches all pass CI and CodeQL: 0dab86f (CI 38266945129), cf64484 (38267597720), 84c8718 (38268956588). CodeQL 38268958114 succeeds on 84c8718 and reports 185 open branch findings.
+- Azure Kubernetes/Helm providers use kubelogin Entra tokens with local AKS accounts disabled, replacing incompatible certificate credentials. Deployment RBAC is scoped to the cluster and ordered before Helm; empty optional admin groups are filtered. The Azure CLI/automation identity must match the AzureRM principal. Live authentication/role propagation was not tested.
+- Retired hardcoded AKS 1.29 becomes an optional validated version input; new clusters can use the service default. Input checks accept 1.35/1.35.7 and report validation errors for invalid values. Service/DNS addresses now avoid the existing 10.0.0.0/8 VNet. Existing-cluster service-range changes may require replacement; deployment/migration review is required before applying.
+- Updated deprecated storage HTTPS and subnet policy arguments. Replaced retired Monitor log profiles with subscription diagnostics using supported categories and a 365-day base-blob lifecycle policy. A removed block retains the old resource; check existing diagnostics to avoid duplicate collection/cost. No snapshot/version cleanup was added.
+- Exact staged Azure configuration: Terraform validation returns zero errors and warnings using installed AzureRM 3.117.1/Kubernetes 2.38.0/Helm 2.17.0 providers. Documentation covers kubelogin prerequisites and migration limits. No cloud plan, apply or deployment was run.
+- Other AWS/Azure/GCP hardening edits remain unstaged and unfinished; the last wider cloud policy scan still has 36 failures. This validation does not prove a deployment works or the cloud templates are fully hardened.
+
+Remaining work includes 185 CodeQL findings, 66 low Bandit findings, other cloud checks and main-branch dependency alerts. The repository is not yet clean.

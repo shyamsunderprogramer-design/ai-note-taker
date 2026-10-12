@@ -14,7 +14,7 @@
 #   location                — Azure region
 
 variable "azure_admin_group_id" {
-  description = "Azure AD group ID for AKS cluster admin access (granted via Azure RBAC). Leave empty to skip RBAC setup."
+  description = "Azure AD group ID for AKS cluster admin access (granted via Azure RBAC). Leave empty to use only the deploying principal; managed Azure RBAC remains enabled."
   type        = string
   default     = ""
 }
@@ -47,4 +47,24 @@ variable "location" {
   description = "Azure region for all resources"
   type        = string
   default     = "eastus"
+}
+
+variable "kubernetes_version" {
+  description = "Optional supported AKS version. Null uses the service default for new clusters; existing clusters require a reviewed upgrade path."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.kubernetes_version == null ? true : can(regex("^[0-9]+\\.[0-9]+(\\.[0-9]+)?$", var.kubernetes_version))
+    error_message = "Use a supported AKS minor or patch version, such as 1.35 or 1.35.7."
+  }
+}
+
+variable "aks_login_mode" {
+  description = "kubelogin identity matching the Terraform principal: Azure CLI, service principal, workload identity or managed identity."
+  type        = string
+  default     = "azurecli"
+  validation {
+    condition     = contains(["azurecli", "spn", "workloadidentity", "msi"], var.aks_login_mode)
+    error_message = "Supported login modes are azurecli, spn, workloadidentity and msi."
+  }
 }
