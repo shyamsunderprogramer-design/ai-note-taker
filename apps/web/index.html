@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <link rel="icon" type="image/png" href="favicon.png">
   <title>ANT (AI Note Taker)</title>
@@ -40,7 +40,9 @@
   <script src="js/inline/sw-register.js" defer></script>
 </head>
 <body>
-  <div class="shell">
+  <a class="skip-link" href="#textInput">Skip to question input</a>
+  <div class="shell" role="main" aria-label="ANT assistant">
+    <h1 class="visually-hidden">ANT AI Note Taker</h1>
 
     <div class="compact-header">
     <!-- Banner artwork sits behind the header controls. -->
@@ -81,7 +83,7 @@
         </button>
         <div class="opacity-control" title="Background Opacity (10–150%; >100% = darker glass, CSS-only)">
           <svg class="opacity-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
-          <input type="range" id="opacitySlider" min="10" max="150" value="55" class="opacity-slider">
+          <input type="range" id="opacitySlider" aria-label="Window opacity" min="10" max="150" value="55" class="opacity-slider">
         </div>
         <button id="shortcutsInfoBtn" class="win-btn info-btn" type="button" title="Keyboard shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-expanded="false">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -159,7 +161,7 @@
 
       <!-- Mode: dropdown -->
       <div class="ctrl-group">
-        <label>Mode</label>
+        <label for="modeSelect">Mode</label>
         <select id="modeSelect">
           <option value="instant">Instant</option>
           <option value="auto">Auto</option>
@@ -178,7 +180,7 @@
       <!-- Model: dropdown -->
       <div class="ctrl-group">
         <div class="model-label-row">
-          <label>Model</label>
+          <label for="modelSelect">Model</label>
         </div>
         <select id="modelSelect">
           <option value="auto" selected>Auto (best available)</option>
@@ -434,7 +436,7 @@
     <div class="input-row">
       <div class="input-pill">
         <div class="text-input-wrap">
-          <input type="text" id="textInput" placeholder="" autocomplete="off" />
+          <input type="text" id="textInput" aria-label="Question or request" placeholder="" autocomplete="off" />
           <div id="placeholderHint" class="input-placeholder-hint" aria-hidden="true">
             <span class="placeholder-hint-lead">Ask anything</span>
             <span class="kbd-chip-sep">·</span>
@@ -725,7 +727,7 @@
                 <span class="provider-status dimmed">Launch ANT when you log in</span>
               </div>
               <label class="provider-toggle">
-                <input type="checkbox" id="toggle-autostart" />
+                <input type="checkbox" id="toggle-autostart" aria-label="Launch ANT when you log in" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -735,7 +737,7 @@
                 <span class="provider-status dimmed" style="font-size:11px;">Launch in system tray only</span>
               </div>
               <label class="provider-toggle">
-                <input type="checkbox" id="toggle-autostart-hidden" checked />
+                <input type="checkbox" id="toggle-autostart-hidden" aria-label="Launch in system tray only" checked />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -773,7 +775,7 @@
                 <span class="provider-status dimmed">Auto-screenshots</span>
               </div>
               <label class="provider-toggle">
-                <input type="checkbox" id="toggle-screenshot" />
+                <input type="checkbox" id="toggle-screenshot" aria-label="Enable automatic screenshots" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
               <span id="screenshotStatusText" class="provider-status dimmed" style="font-size:11px;margin-left:4px;">Screenshots off until enabled</span>

@@ -33,6 +33,22 @@ try {
     const response = await page.goto(`${origin}/${name}`);
     await page.waitForLoadState('networkidle');
     if (name === 'index.html') {
+      await page.locator('#unifiedSessionInfo').focus();
+      await page.keyboard.press('Enter');
+      const infoOpened = await page.evaluate(() =>
+        document.getElementById('unifiedSessionInfo').getAttribute('aria-expanded') === 'true'
+        && !isListening);
+      if (!infoOpened) errors.push('Enter on the information button started audio or failed to open its panel');
+      await page.keyboard.press('Escape');
+      const infoClosed = await page.evaluate(() =>
+        document.getElementById('unifiedSessionInfo').getAttribute('aria-expanded') === 'false'
+        && document.activeElement.id === 'unifiedSessionInfo');
+      if (!infoClosed) errors.push('Escape failed to close information and restore focus');
+      await page.locator('.skip-link').focus();
+      await page.keyboard.press('Enter');
+      if (await page.evaluate(() => document.activeElement.id !== 'textInput' || isListening)) {
+        errors.push('Skip link failed to focus the question input without starting audio');
+      }
       const preview = await page.evaluate(() => {
         textInput.value = 'My typed question';
         const speech = 'This is a complete spoken sentence that should remain readable without losing the beginning or cutting words.';
@@ -139,11 +155,14 @@ try {
         streamMessage('assistant', '');
         scrollChat(false, true);
         await frame();
+        const streamStart = chatArea.scrollTop;
         batchUpdateBubble('Hello');
         batchUpdateBubble('Hello reader');
         await frame();
         const notDuplicated = latestBotMessage.bubble.dataset.fullText === 'Hello reader';
-        const follows = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 5;
+        // Streaming follows gently rather than jumping directly to the bottom.
+        const follows = chatArea.scrollTop > streamStart
+          || chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 5;
         chatArea.dispatchEvent(new WheelEvent('wheel', {deltaY: -100, bubbles: true}));
         chatArea.scrollTop = 100;
         chatArea.dispatchEvent(new Event('scroll'));
@@ -231,6 +250,9 @@ try {
       }
       const keyboard = await page.evaluate(() => {
         let starts = 0;
+        const originalSubmitText = submitText;
+        const typedSubmissions = [];
+        submitText = async text => { typedSubmissions.push(text); };
         const originalClick = listenBtn.click;
         listenBtn.click = () => { starts++; setListeningUI(true); };
         setListeningUI(false);
@@ -240,8 +262,10 @@ try {
         const started = isListening;
         textInput.value = 'Provisional speech must not be submitted as typed text';
         textInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        const typedWhileListening = isListening && typedSubmissions.length === 1;
+        textInput.value = '';
+        textInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         const stopped = !isListening;
-        const originalSubmitText = submitText;
         let unintendedSubmissions = 0;
         submitText = async () => { unintendedSubmissions++; };
         listenBtn.click = originalClick;
@@ -264,9 +288,9 @@ try {
         const restored = isListening && !listenBtn.disabled && listenLabel.textContent === 'Stop';
         listenBtn.click = originalClick;
         setListeningUI(false);
-        return { starts, started, stopped, restored, buttonStopped, unintendedSubmissions };
+        return { starts, started, stopped, typedWhileListening, restored, buttonStopped, unintendedSubmissions };
       });
-      if (keyboard.starts !== 1 || !keyboard.started || !keyboard.stopped || !keyboard.restored || !keyboard.buttonStopped || keyboard.unintendedSubmissions) {
+      if (keyboard.starts !== 1 || !keyboard.started || !keyboard.stopped || !keyboard.typedWhileListening || !keyboard.restored || !keyboard.buttonStopped || keyboard.unintendedSubmissions) {
         errors.push(`Enter/processing regression: ${JSON.stringify(keyboard)}`);
       }
       const live = await page.evaluate(() => {

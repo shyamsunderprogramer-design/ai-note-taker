@@ -39,4 +39,14 @@ Remaining CodeQL findings, low-severity Bandit findings and cloud security check
 - Alembic's dynamically loaded metadata and entry points are explicitly exported; the real Alembic loader still finds all three revisions and the correct head. Dead warmup/cache/event-log state was removed after checking repository consumers.
 - Final clean reviewed backend suite: 1,356 passed, 59 skipped, no warnings. Updated Bandit: zero high/medium findings and 69 low findings requiring review.
 
-The follow-up needs a hosted run and CodeQL rescan after push. Remaining infrastructure and scanner findings are still unfinished.
+Hosted follow-up: CI 38260850651 passes all four jobs on 0ca9a01; CodeQL 38260686153 succeeds and reports 224 open branch findings. Remaining infrastructure and scanner findings are still unfinished.
+
+## Browser cleanup and keyboard access
+
+- Removed verified unused browser helpers and local bindings after checking repository consumers; retained active live-question and streaming helpers.
+- Enter preserves native activation for information/settings buttons and links. On focused Live helper/recording controls during a unified session, Enter still requests assistance without stopping listening. Typed questions remain independent of listening.
+- Added page language, input/select labels, a skip link, visible keyboard focus and 24px hit areas around small header icons. The app keeps its existing visual theme; light/dark OS preference does not force a new theme.
+- Clean reviewed export: 175 desktop tests, 5 web tests, production build and all five production-page smoke checks pass. Chromium/Firefox E2E: 44 passed using isolated backend data and local ports. Smoke checks cover real Enter activation, Escape/focus restoration and the skip link. Corrected old smoke assumptions about gentle scrolling and typed Enter rather than changing those existing behaviors.
+- Axe WCAG 2.2 confirmation: zero violations in four combinations (390x844 and 1440x900, each with light/dark OS preference); synthetic-data screenshots manually inspected. Private evidence: /var/folders/9h/t1d7p9094p77p_drkjffs2640000gn/T/ant-ui-security-JCDHQf. No desktop-app capture, relaunch or live user backend was used.
+
+This browser batch requires its own hosted CI and CodeQL confirmation after push. Repository remediation is not complete.

@@ -33,37 +33,14 @@ async function getBackendProviders() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Debounce function for performance
-function debounce(fn, wait) {
-  let timeout
-  return function(...args) {
-    clearTimeout(timeout)
-    timeout = setTimeout(() => fn.apply(this, args), wait)
-  }
-}
+
 
 // Throttle function for scroll/resize
-function throttle(fn, limit) {
-  let inThrottle
-  return function(...args) {
-    if (!inThrottle) {
-      fn.apply(this, args)
-      inThrottle = true
-      setTimeout(() => inThrottle = false, limit)
-    }
-  }
-}
+
 
 // Lazy load heavy components
-const lazyModules = new Map()
 
-async function lazyLoad(moduleName, importFn) {
-  if (lazyModules.has(moduleName)) {
-    return lazyModules.get(moduleName)
-  }
-  const module = await importFn()
-  lazyModules.set(moduleName, module)
-  return module
-}
+
 
 // Intersection Observer for lazy rendering
 const lazyObserver = new IntersectionObserver((entries) => {
@@ -76,7 +53,6 @@ const lazyObserver = new IntersectionObserver((entries) => {
 }, { rootMargin: '100px' })
 
 // RequestIdleCallback polyfill
-const requestIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1))
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATE
@@ -138,7 +114,6 @@ let SESSION_MAX_DURATION = 60 // Auto-stop at 60 minutes
 
 // Sales objection handling state
 let objectionDetectionEnabled = false
-let currentObjections = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PLUELY-INSPIRED FEATURES (Autostart, Portable Mode)
@@ -286,9 +261,6 @@ const newChatBtn = document.getElementById("newChatBtn")
 const settingsPanel = document.getElementById("settingsPanel")
 const closeSettingsBtn = document.getElementById("closeSettingsBtn")
 const apiKeyModal = document.getElementById("apiKeyModal")
-const apiKeyInput = document.getElementById("apiKeyInput")
-const modalProviderName = document.getElementById("modalProviderName")
-const modalSave = document.getElementById("modalSave")
 const modalCancel = document.getElementById("modalCancel")
 const backApiKeyModal = document.getElementById("backApiKeyModal")
 const cloudModelSelect = document.getElementById("cloudModelSelect")
@@ -642,7 +614,6 @@ if (window.api?.onTriggerAIScreen) {
 
 // Backend status monitoring
 const backendStatusEl = document.getElementById("backendStatusIndicator")
-const backendStatusDot = backendStatusEl?.querySelector(".backend-status-dot")
 const backendStatusText = backendStatusEl?.querySelector(".backend-status-text")
 
 let backendStatusHideTimer = null
@@ -745,6 +716,7 @@ document.addEventListener("keydown", (e) => {
   }
 
   if (e.key === "Enter") {
+    if (e.defaultPrevented) return
     if (e.isComposing || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
     if (e.repeat) { e.preventDefault(); return }
     const tag = document.activeElement.tagName.toLowerCase()
@@ -762,7 +734,13 @@ document.addEventListener("keydown", (e) => {
         return
       }
     }
-    if (tag === "select") return
+    const focusedLiveControl = ["unifiedSessionBtn", "listenBtn"].includes(document.activeElement.id)
+    if (window.unifiedSessionActive && focusedLiveControl) {
+      e.preventDefault()
+      window.requestUnifiedHelp?.()
+      return
+    }
+    if (tag === "select" || tag === "button" || tag === "a" || tag === "summary") return
     if (window.unifiedSessionActive) {
       e.preventDefault()
       window.requestUnifiedHelp?.()
@@ -790,9 +768,7 @@ function getSelectedMode() {
   return modeSelect ? modeSelect.value : "auto"
 }
 
-function getSelectedModel() {
-  return modelSelect ? modelSelect.value || "auto" : "auto"
-}
+
 
 function updateProviderRecommendation(mode) {
   const banner = document.getElementById("providerRecommendation")
@@ -837,18 +813,7 @@ function getSelectedTemperature() {
   return parseFloat(temperatureSelect?.value || "0.3")
 }
 
-function renderModelBadge(msg, displayName) {
-  if (!msg || !msg.element || !displayName) return
-  const label = msg.element.querySelector(".msg-label")
-  if (!label) return
-  let badge = label.querySelector(".model-badge")
-  if (!badge) {
-    badge = document.createElement("span")
-    badge.className = "model-badge streaming-badge"
-    label.appendChild(badge)
-  }
-  badge.textContent = `[${displayName}]`
-}
+
 
 function setListeningUI(listening) {
   isListening = listening
@@ -959,52 +924,7 @@ function generateTitle(firstMessageText) {
   return text.substring(0, 57) + "..."
 }
 
-function formatLists(text) {
-  if (!text) return text
-  const lines = text.split("\n")
-  const result = []
-  let inList = false
-  let listType = null // 'ol', 'ul', null
 
-  for (const line of lines) {
-    const trimmed = line.trim()
-    const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)/)
-    const bulletMatch = trimmed.match(/^[-*]\s+(.*)/)
-    const letteredMatch = trimmed.match(/^([a-z])\.\s+(.*)/)
-
-    if (numberedMatch || letteredMatch) {
-      if (!inList || listType !== "ol") {
-        if (inList) result.push(listType === "ol" ? "</ol>" : "</ul>")
-        result.push("<ol class='chat-list'>")
-        inList = true
-        listType = "ol"
-      }
-      const content = numberedMatch ? numberedMatch[2] : letteredMatch[2]
-      result.push(`<li>${content}</li>`)
-    } else if (bulletMatch) {
-      if (!inList || listType !== "ul") {
-        if (inList) result.push(listType === "ol" ? "</ol>" : "</ul>")
-        result.push("<ul class='chat-list'>")
-        inList = true
-        listType = "ul"
-      }
-      result.push(`<li>${bulletMatch[1]}</li>`)
-    } else {
-      if (inList) {
-        result.push(listType === "ol" ? "</ol>" : "</ul>")
-        inList = false
-        listType = null
-      }
-      result.push(line)
-    }
-  }
-
-  if (inList) {
-    result.push(listType === "ol" ? "</ol>" : "</ul>")
-  }
-
-  return result.join("\n")
-}
 
 function formatDate(timestamp) {
   if (!timestamp) return ""
@@ -2588,169 +2508,20 @@ function debouncedSave() {
  * Parse SSE event data from a buffer.
  * Returns an array of {event, data} objects as buffer is consumed.
  */
-function parseSSEEvents(buffer) {
-  const events = []
-  // Normalize line endings
-  const text = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-  const lines = text.split("\n")
-  buffer = ""
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line === "" || line === undefined) {
-      continue
-    }
-    if (line.startsWith("event:")) {
-      const eventType = line.slice(6).trim()
-      // Read the next line as data
-      if (i + 1 < lines.length) {
-        const dataLine = lines[++i]
-        if (dataLine.startsWith("data:")) {
-          const dataStr = dataLine.slice(5).trim()
-          try {
-            const data = JSON.parse(dataStr)
-            events.push({ event: eventType, data })
-          } catch {
-            events.push({ event: eventType, data: { raw: dataStr } })
-          }
-        }
-      }
-    } else if (line.startsWith("data:")) {
-      const dataStr = line.slice(5).trim()
-      try {
-        const data = JSON.parse(dataStr)
-        events.push({ event: "message", data })
-      } catch {
-        events.push({ event: "message", data: { raw: dataStr } })
-      }
-    } else if (!line.startsWith(":") && line.trim()) {
-      // Partial line — keep in buffer for next iteration
-      buffer += line + "\n"
-    }
-  }
-  return { events, buffer }
-}
 
 /**
  * Parse SSE events from a fetch ReadableStream.
  * Yields raw event objects as they arrive.
  */
 // Robust SSE parser — yields {event, data} objects from a fetch ReadableStream
-async function* SSEStream(reader, decoder, signal) {
-  let buffer = ""
-  const LINE_FEED = 10
-  let eventType = "message"
 
-  try {
-    while (true) {
-      if (signal?.aborted) break
-
-      let readPromise
-      const abortHandler = () => {
-        if (readPromise) readPromise.cancel?.()
-      }
-      signal?.addEventListener("abort", abortHandler)
-
-      let result
-      try {
-        result = await reader.read()
-      } catch(err) {
-        signal?.removeEventListener("abort", abortHandler)
-        if (err.message?.includes("aborted")) {
-          yield { event: "stream-done", data: {} }
-          break
-        }
-        throw err
-      }
-      signal?.removeEventListener("abort", abortHandler)
-
-      const { done, value } = result
-
-      if (done) {
-        // Yield any remaining buffer content (might be a partial last event)
-        if (buffer.trim()) {
-          const line = buffer.trim()
-          if (line.startsWith("data:")) {
-            try {
-              yield { event: eventType, data: JSON.parse(line.slice(5).trim()) }
-            } catch {}
-          }
-        }
-        // Always yield a special done event so the caller knows stream ended
-        yield { event: "stream-done", data: {} }
-        break
-      }
-
-      buffer += decoder.decode(value, { stream: true })
-
-      // Process complete lines
-      while (buffer.includes(LINE_FEED)) {
-        if (signal?.aborted) break
-
-        const lfIndex = buffer.indexOf(LINE_FEED)
-        const line = buffer.slice(0, lfIndex)
-        buffer = buffer.slice(lfIndex + 1)
-
-        if (!line.trim() || line.startsWith(":")) continue
-
-        if (line.startsWith("event:")) {
-          eventType = line.slice(6).trim()
-          continue
-        }
-
-        if (line.startsWith("data:")) {
-          const dataStr = line.slice(5).trim()
-          try {
-            yield { event: eventType, data: JSON.parse(dataStr) }
-          } catch (e) {
-            console.warn("[SSE] Bad JSON:", dataStr, e.message)
-          }
-        } else {
-          // Partial line — put it back and wait for more data
-          buffer = line + "\n" + buffer
-          break
-        }
-      }
-    }
-  } catch (err) {
-    if (err.message !== "aborted") {
-      console.error("[SSE] Stream error:", err)
-      yield { event: "stream-error", data: { message: err.message } }
-    }
-  }
-}
 
 // ==============================
 // STREAM AI RESPONSE (SSE-AWARE)
 // ==============================
 // Parse SSE events from a complete text body (non-streaming)
-function parseSSEFromText(text) {
-  const events = []
-  if (!text) return events
 
-  // Split on double newlines (SSE message separator)
-  const messages = text.split(/\n\n+/)
-  let eventType = "message"
-
-  for (const msg of messages) {
-    const lines = msg.split("\n")
-    eventType = "message"
-    let dataStr = ""
-
-    for (const line of lines) {
-      if (line.startsWith("event:")) {
-        eventType = line.slice(6).trim()
-      } else if (line.startsWith("data:")) {
-        dataStr = line.slice(5).trim()
-        try {
-          const data = JSON.parse(dataStr)
-          events.push({ event: eventType, data })
-        } catch {}
-      }
-    }
-  }
-  return events
-}
 
 let activeQuestion = null
 let questionSequence = 0
@@ -7916,7 +7687,6 @@ function extendSessionTimer(additionalMinutes) {
 }
 
 // Extend startListening to include session timer
-const originalStartListening = listenBtn?.onclick
 if (listenBtn) {
   listenBtn.addEventListener("click", () => {
     if (!isListening) {
@@ -9890,7 +9660,6 @@ function addRecordedFile(blob, duration) {
 }
 
 // Override renderSelectedFiles to handle recorded items
-const originalRenderSelectedFiles = renderSelectedFiles
 renderSelectedFiles = function() {
   if (!cloneSelectedFiles) return
 
@@ -10078,7 +9847,6 @@ console.log("[Voice Clone] Module initialized (will fully init after auth)")
     const hint = document.getElementById("interviewContextHint")
     if (!hint) return
     const modeSelect = document.getElementById("modeSelect")
-    const isInterview = modeSelect?.value === "interview"
     const group = document.getElementById("interviewContextGroup")
     const visible = group && group.style.display !== "none"
     if (visible) hint.style.display = "none"

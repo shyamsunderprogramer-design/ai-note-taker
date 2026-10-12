@@ -1,11 +1,11 @@
 const {test}=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('node:vm'), path=require('node:path')
 const source=fs.readFileSync(path.join(__dirname,'../../apps/web/app.js'),'utf8')
-function setup({text='',focusButton=false}={}) {
+function setup({text='',focusButton=false,buttonId='unifiedSessionBtn'}={}) {
  const calls=[]
  let handler
  const input={tagName:'TEXTAREA',value:text}
  const scope=vm.createContext({window:{unifiedSessionActive:true,requestUnifiedHelp:()=>calls.push('help')},
- document:{activeElement:focusButton?{tagName:'BUTTON'}:input,addEventListener:(_,fn)=>handler=fn},
+ document:{activeElement:focusButton?{tagName:'BUTTON',id:buttonId}:input,addEventListener:(_,fn)=>handler=fn},
  textInput:input,isListening:true,isProcessing:false,activeQuestion:null,submitText:text=>calls.push(text),
  stopListening:()=>{scope.isListening=false;calls.push('stop')},listenBtn:{click:()=>calls.push('toggle')}})
  const start=source.indexOf('document.addEventListener("keydown", (e) => {')
@@ -32,4 +32,10 @@ test('Enter cuts only the active remote question when microphone has simultaneou
  assert.deepEqual(sent,['remote'])
  scope.window.preferRemoteLiveQuestion=()=>false
  scope.cutLiveQuestion();assert.deepEqual(sent,['remote','mic','remote'])
+})
+
+test('Enter on information or other buttons preserves native activation',()=>{
+ for(const buttonId of ['unifiedSessionInfo','settingsBtn']) {
+  const s=setup({focusButton:true,buttonId});s.press();assert.equal(s.scope.isListening,true);assert.deepEqual(s.calls,[])
+ }
 })
