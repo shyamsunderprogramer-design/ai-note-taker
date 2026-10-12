@@ -13,9 +13,8 @@ from modules.agents.base import (
     BaseAgent, AgentType, AgentSuggestion, AgentContext,
     TranscriptSegment,
 )
-from modules.agents.context_builder import query_document_rag, extract_entities
+from modules.agents.context_builder import query_document_rag
 from modules.agents.prompts import MEETING_AGENT_PROMPT
-from modules.agents.session import AgentSessionManager
 
 logger = logging.getLogger("agents.meeting")
 

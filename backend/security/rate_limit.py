@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import functools
 
 try:
-    from fastapi import Request, HTTPException, status
+    from fastapi import Request, HTTPException
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import Response
     HAS_FASTAPI = True

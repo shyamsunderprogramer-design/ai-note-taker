@@ -16,7 +16,7 @@ logger = logging.getLogger("user_api_keys")
 
 # Encryption at rest
 try:
-    from security.encryption import EncryptionManager, HAS_CRYPTOGRAPHY
+    from security.encryption import EncryptionManager
     _encryption = EncryptionManager()
     ENCRYPTION_AVAILABLE = _encryption.is_available()
 except ImportError:

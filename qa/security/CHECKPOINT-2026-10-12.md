@@ -72,3 +72,9 @@ Repository remediation remains ongoing: 205 scanner findings before this batch, 
 - Success response behavior is unchanged. API consumers now receive actual failures instead of HTTP 200 containing an error body; callers should already handle response.ok/status. No production deployment or main merge was performed.
 
 Outstanding: remaining CodeQL findings, low Bandit findings, cloud templates and main-branch dependency alerts.
+
+## Verified import cleanup
+
+- Removed 21 unused bindings from agent orchestration/coaching, entity extraction, question-library compatibility, voice transcription, CRM encryption, and request validation/rate limiting. Imported modules still initialize normally; active classes, helpers and compatibility names remain. Whole-repository consumer searches found no callers of the removed bindings.
+- Ruff F401 confirmation passes on the ten changed files. Clean reviewed backend suite: 1,376 passed, 59 skipped, no warnings. No tests were weakened or security-query coverage changed.
+- Shared HTTP error batch is pushed as cf64484; its hosted CI/CodeQL were pending at this checkpoint. Further CodeQL, low Bandit and infrastructure remediation remains outstanding.

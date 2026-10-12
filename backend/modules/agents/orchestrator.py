@@ -12,16 +12,15 @@ import logging
 from typing import Dict, List, AsyncGenerator
 
 from modules.agents.base import (
-    AgentType, AgentState, AgentSuggestion, AgentContext,
-    BaseAgent, TranscriptSegment,
+    AgentType, AgentSuggestion, BaseAgent,
 )
 from modules.agents.session import AgentSessionManager, session_manager
 from modules.agents.interview_coach import InterviewCoachAgent
 from modules.agents.meeting import MeetingAgent
 from modules.agents.sales_coach import SalesCoachAgent
 from modules.agents.context_builder import extract_entities
-from modules.agents.cache import get_cache, context_cache
-from modules.agents.learning import get_learner, suggestion_learner
+from modules.agents.cache import context_cache
+from modules.agents.learning import suggestion_learner
 
 logger = logging.getLogger("agents.orchestrator")
 

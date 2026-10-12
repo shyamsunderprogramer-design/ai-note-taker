@@ -11,7 +11,7 @@ from typing import List, Dict, Any
 
 from modules.agents.base import (
     BaseAgent, AgentType, AgentSuggestion, AgentContext,
-    TranscriptSegment, is_question,
+    TranscriptSegment,
 )
 from modules.agents.context_builder import (
     query_cognitive_graph, query_document_rag, extract_entities, get_company_insights,

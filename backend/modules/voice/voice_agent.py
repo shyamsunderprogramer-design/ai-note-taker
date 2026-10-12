@@ -34,11 +34,11 @@ except ImportError:
 
 # Import whisper transcription (same pipeline used by /ws/transcribe)
 try:
-    from modules.voice.whisper_handler import transcribe, clean_text, is_meaningful, is_question
+    from modules.voice.whisper_handler import transcribe, clean_text, is_meaningful
     HAS_WHISPER = True
 except ImportError:
     try:
-        from whisper_handler import transcribe, clean_text, is_meaningful, is_question
+        from whisper_handler import transcribe, clean_text, is_meaningful
         HAS_WHISPER = True
     except ImportError:
         HAS_WHISPER = False

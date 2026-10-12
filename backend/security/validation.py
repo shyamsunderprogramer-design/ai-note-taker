@@ -11,7 +11,7 @@ from pathlib import Path
 import json
 
 try:
-    from fastapi import Request, HTTPException, status
+    from fastapi import Request
     from fastapi.responses import Response
     HAS_FASTAPI = True
 except ImportError:
