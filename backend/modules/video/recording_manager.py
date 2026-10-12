@@ -126,17 +126,20 @@ class RecordingManager:
         return results
 
     def delete(self, session_id: str) -> bool:
-        session = self._sessions.pop(session_id, None)
+        session = self._sessions.get(session_id)
         if not session:
             return False
-        try:
-            os.remove(_session_path(session_id))
-            media = _media_path(session_id)
-            if os.path.exists(media):
-                os.remove(media)
-        except OSError:
-            pass
-        logger.info("[Recording] Deleted %s", session_id)
+        # Remove media first so failed deletion keeps metadata available for retry.
+        for path in (_media_path(session_id), _session_path(session_id)):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                logger.warning("[Recording] Deletion failed; recording remains available for retry")
+                return False
+        self._sessions.pop(session_id, None)
+        logger.info("[Recording] Deleted recording")
         return True
 
     def export(self, session_id: str, format: str = "json") -> Optional[Dict]:

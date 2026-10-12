@@ -47,3 +47,21 @@ async def test_invalid_ca_never_opens_database_connection(monkeypatch, engine_fa
         await manager.initialize()
     engine_factory.assert_not_called()
     assert manager._initialized is False
+
+
+def test_integration_secret_decode_failure_is_redacted(caplog):
+    config = database.IntegrationConfig()
+    config.secrets_encrypted = 'plain:invalid private-token-secret'
+    assert config._decrypt_secrets() == {}
+    assert 'could not be decoded' in caplog.text
+    assert 'private-token-secret' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_database_initialization_errors_do_not_log_connection_secrets(monkeypatch, engine_factory, caplog):
+    engine_factory.side_effect = RuntimeError('postgresql://private:secret@example.invalid/app')
+    monkeypatch.setattr(database, 'DATABASE_URL', 'postgresql+asyncpg://example.invalid/app')
+    with pytest.raises(RuntimeError):
+        await database.DatabaseManager().initialize()
+    assert 'Initialization failed' in caplog.text
+    assert 'private:secret' not in caplog.text

@@ -5,6 +5,7 @@ import uuid
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from routes.deps import require_authentication
 from security import ErrorCode, error_response
@@ -329,12 +330,13 @@ async def delete_recording(
         session = manager.get(session_id)
         if not session or session.user_id != user.id:
             raise HTTPException(status_code=404, detail="Recording not found")
-        manager.delete(session_id)
+        if not manager.delete(session_id):
+            return JSONResponse(status_code=500, content=error_response(ErrorCode.INTERNAL_ERROR, "Recording deletion failed; please retry"))
         return {"status": "deleted", "id": session_id}
     except ImportError:
-        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available", status_code=503)
+        return JSONResponse(status_code=503, content=error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Recording manager not available"))
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("[Recording] Delete error: %s", str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+    except Exception:
+        logger.error("[Recording] Delete failed")
+        return JSONResponse(status_code=500, content=error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred"))

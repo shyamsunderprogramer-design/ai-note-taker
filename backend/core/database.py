@@ -518,7 +518,7 @@ class IntegrationConfig(Base if Base else object):
                 if decrypted:
                     return json.loads(decrypted)
         except Exception:
-            pass
+            logger.warning("[Database] Integration secrets could not be decoded")
         return {}
 
 
@@ -619,7 +619,7 @@ class DatabaseManager:
                 try:
                     await self.engine.dispose()
                 except Exception:
-                    pass
+                    logger.warning("[Database] Engine disposal failed")
                 self.engine = None
                 self.session_maker = None
 
@@ -697,14 +697,14 @@ class DatabaseManager:
             self._initialized = True
             logger.info("[Database] Initialized successfully (%s)", "SQLite" if _is_sqlite else "PostgreSQL")
 
-        except Exception as e:
-            logger.error("[Database] Failed to initialize: %s", str(e))
+        except Exception:
+            logger.error("[Database] Initialization failed")
             # Clean up partially created engine
             if self.engine:
                 try:
                     await self.engine.dispose()
                 except Exception:
-                    pass
+                    logger.warning("[Database] Engine disposal failed")
                 self.engine = None
                 self.session_maker = None
             raise

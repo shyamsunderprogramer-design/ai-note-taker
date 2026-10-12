@@ -50,3 +50,14 @@ Hosted follow-up: CI 38260850651 passes all four jobs on 0ca9a01; CodeQL 3826068
 - Axe WCAG 2.2 confirmation: zero violations in four combinations (390x844 and 1440x900, each with light/dark OS preference); synthetic-data screenshots manually inspected. Private evidence: /var/folders/9h/t1d7p9094p77p_drkjffs2640000gn/T/ant-ui-security-JCDHQf. No desktop-app capture, relaunch or live user backend was used.
 
 This browser batch requires its own hosted CI and CodeQL confirmation after push. Repository remediation is not complete.
+
+## Recording deletion and database error handling
+
+- Browser commit 98546ec: hosted CI 38265886930 passes all four jobs; CodeQL 38265887891 succeeds, with 205 open branch findings.
+- Recording deletion removes media before metadata, retains the session when filesystem deletion fails, and tolerates already absent files so retries can finish. It no longer reports success with retained recording files.
+- The deletion endpoint returns real HTTP 500/503 responses with structured errors. The shared error_response helper currently returns a dictionary and ignores its status_code argument; other endpoints using that helper still require review.
+- Database initialization and cleanup/secret-decode diagnostics use static messages, preserving original exceptions to callers without copying connection secrets into logs.
+- Clean staged export: 1,364 backend tests passed, 59 skipped, no warnings. Recording retry/media/metadata and real endpoint status regressions pass. Bandit: zero high/medium, 66 low findings remain.
+- Pre-existing storage-directory changes were preserved and excluded from this commit. No files belonging to real recordings or deployed databases were deleted during testing.
+
+Repository remediation remains ongoing: 205 scanner findings before this batch, shared error-response status handling, low-severity Bandit findings and cloud template checks are not yet complete.
