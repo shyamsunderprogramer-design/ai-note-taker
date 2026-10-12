@@ -89,3 +89,12 @@ Outstanding: remaining CodeQL findings, low Bandit findings, cloud templates and
 - Other AWS/Azure/GCP hardening edits remain unstaged and unfinished; the last wider cloud policy scan still has 36 failures. This validation does not prove a deployment works or the cloud templates are fully hardened.
 
 Remaining work includes 185 CodeQL findings, 66 low Bandit findings, other cloud checks and main-branch dependency alerts. The repository is not yet clean.
+
+## Browser success/failure states
+
+- Model-download acknowledgments say download started, not completed. HTTP/body errors retain the model input and restore controls for retry. Suggestion accept/dismiss requests check HTTP status before changing the card. Four failure/acknowledgment regressions pass.
+- Removed seven verified uncalled legacy browser helpers/maps and six dead local bindings/empty-loop entries, retaining current chat history rendering, code-copy delegation, live question cutting and streaming updates. Updated two test source-extraction boundaries after removing legacy helpers; behavior assertions are unchanged.
+- Clean reviewed source: 9 web tests, 175 desktop tests, production build, five production-page smoke checks and 44 Chromium/Firefox E2E tests pass. Workspace includes additional pre-existing tests (13 web, 176 desktop), also passing after boundary updates. No live backend/user recordings or desktop captures were used.
+- Azure source batch is pushed as 918aa69; CI/CodeQL confirmation pending. Other cloud hardening edits remain unstaged.
+
+Remaining scanner, infrastructure and main-branch dependency work is not complete.

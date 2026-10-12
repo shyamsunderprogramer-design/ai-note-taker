@@ -6,7 +6,7 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../../apps/web
 function setup(enabled=true){
  const calls=[];
  const scope=vm.createContext({pendingOcrScreenshot:null,pendingOcrText:null,window:{api:{autoScreenshotGetStatus:async()=>({enabled}),captureScreenshot:async()=>{calls.push('capture');return 'fresh-screen'}}},runOcr:async()=>({text:'Cedar: budget 4800; spent 6200'}),streamAIResponse:async q=>calls.push(q),streamAIResponseWithImage:async(q,image)=>calls.push({q,image})});
- vm.runInContext(source.slice(source.indexOf('async function getQuestionScreenContext('),source.indexOf('// Build combined query from user text + pending OCR')),scope);
+ vm.runInContext(source.slice(source.indexOf('async function getQuestionScreenContext('),source.indexOf('function startAlwaysOnListen()')),scope);
  return {calls,scope,run:code=>vm.runInContext(code,scope)};
 }
 test('fresh external screen text accompanies the actual user question',async()=>{

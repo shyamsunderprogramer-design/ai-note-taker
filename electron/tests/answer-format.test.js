@@ -12,7 +12,7 @@ const scope = {
   highlightCode: text => text,
 }
 vm.createContext(scope)
-vm.runInContext(source.slice(source.indexOf('function formatMessage('), source.indexOf('/**\n * Typing effect')), scope)
+vm.runInContext(source.slice(source.indexOf('function formatMessage('), source.indexOf('function finalizeBubble(')), scope)
 
 test('blank lines in code remain inside one preformatted block', () => {
   const html = scope.formatMessage('Before\n\n```python\ndef test():\n    x = 1\n\n    return x\n```\n\nAfter')

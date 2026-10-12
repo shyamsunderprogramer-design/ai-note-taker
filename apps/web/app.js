@@ -1118,27 +1118,7 @@ function startNewConversation() {
   closeHistoryPanel()
 }
 
-function resumeConversation(conversation) {
-  // Add messages to current chat without clearing
-  removeWelcome()
-  // Fix: set currentConversationId so new messages update the resumed conversation
-  currentConversationId = conversation.id
-  conversation.messages.forEach(msg => {
-    const item = document.createElement("div")
-    item.className = "chat-message " + msg.role
-    const label = msg.role === "user" ? "You" : "AI"
-    const bubble = document.createElement("div")
-    bubble.className = "msg-bubble"
-    setBubbleText(bubble, msg.text)
-    item.innerHTML = `<span class="msg-label">${label}</span>`
-    item.appendChild(bubble)
-    chatArea.appendChild(item)
-    currentMessages.push(msg)
-  })
-  // Update active state in history list
-  renderHistoryList()
-  scrollChat(false)
-}
+
 
 function copyConversation(conversation) {
   const text = conversation.messages.map(msg => {
@@ -2082,24 +2062,7 @@ function sanitizeInput(text) {
   return text.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, "")
 }
 
-// Copy code block from a code block's copy button (called from onclick)
-function copyCodeBlock(btn) {
-  const pre = btn.closest(".code-block")
-  if (!pre) return
-  const code = pre.querySelector(".code-content")
-  if (!code) return
-  const tmp = document.createElement("div")
-  tmp.innerHTML = code.innerHTML
-  const text = tmp.textContent || tmp.innerText || ""
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = "Copied!"
-    setTimeout(() => { btn.textContent = "Copy" }, 1500)
-  }).catch(() => {
-    fallbackCopyText(text)
-    btn.textContent = "Copied!"
-    setTimeout(() => { btn.textContent = "Copy" }, 1500)
-  })
-}
+
 
 // Detect language from code content if not specified
 function detectCodeLanguage(code) {
@@ -2388,24 +2351,7 @@ function parseLists(text) {
   return result.join("\n")
 }
 
-/**
- * Typing effect — appends a single word to the bubble's visible text node
- * without full re-render. Returns the new visible text length.
- */
-function typeWord(bubble, word) {
-  if (!bubble._typingNode) {
-    bubble._typingNode = document.createTextNode("")
-    bubble._typingCursor = document.createElement("span")
-    bubble._typingCursor.className = "typing-cursor"
-    bubble._typingCursor.textContent = "\u00A0"
-    bubble.innerHTML = ""
-    bubble.appendChild(bubble._typingNode)
-    bubble.appendChild(bubble._typingCursor)
-  }
-  bubble._typingNode.textContent += word + " "
-  bubble._typingCursor.textContent = "\u00A0"
-  return bubble._typingNode.textContent.length
-}
+
 
 /**
  * Finalize bubble after streaming — replace typing nodes with full HTML.
@@ -3843,11 +3789,7 @@ function stopWaveform() {
 // ==============================
 // MODE PILLS
 // ==============================
-const MODE_MAP = {
-  auto: "auto", fast: "fast", adaptive: "adaptive",
-  universal: "universal", interview: "interview", reasoning: "reasoning",
-  cloud: "cloud", code: "code"
-}
+
 
 document.querySelectorAll(".mode-pill").forEach(pill => {
   pill.addEventListener("click", async () => {
@@ -4512,13 +4454,7 @@ async function answerWithScreenContext(question, context, ticket = null) {
   }
 }
 
-// Build combined query from user text + pending OCR
-function buildCombinedQuery(userText) {
-  if (pendingOcrText) {
-    return `Screen context: ${pendingOcrText}\n\nUser said: ${userText}\n\nAnswer based on both the screen content and what the user said.`
-  }
-  return userText
-}
+
 
 // ==============================
 // ALWAYS-ON MIC — auto listen + transcribe + auto-query AI
@@ -5827,11 +5763,7 @@ async function loadLocalOllamaModels() {
       }
     }
 
-    // Update activeMap with local model entries
-    for (const m of models) {
-      // Local Ollama models map to "ollama" provider
-      // They don't need an activeMap entry since they use the ":" naming convention
-    }
+    // Local models use the colon naming convention and need no activeMap entries.
 
     // Refresh race toggles to include newly detected models
     if (typeof renderRaceToggles === "function") {
@@ -6027,9 +5959,10 @@ if (ollamaPullBtn) {
     try {
       const response = await window.api.pullOllamaModel(modelName)
       const result = await response.json()
+      if (!response.ok || result.error) throw new Error("Model download could not be started")
 
       if (ollamaPullStatus) {
-        ollamaPullStatus.textContent = `Successfully pulled ${modelName}`
+        ollamaPullStatus.textContent = `Download started for ${modelName}; refresh the model list to check completion`
         ollamaPullStatus.style.color = "#22c55e"
       }
       if (ollamaPullInput) ollamaPullInput.value = ""
@@ -6201,7 +6134,6 @@ async function renderRaceToggles() {
   // Wire up provider-level enable/disable all buttons
   container.querySelectorAll(".model-provider-actions button").forEach(btn => {
     btn.addEventListener("click", () => {
-      const provider = btn.dataset.provider
       const action = btn.dataset.action
       const section = btn.closest(".model-provider-section")
       if (!section) return
@@ -7019,26 +6951,9 @@ if (ingestionDryRunBtn) {
 // Note: Speaker diarization is handled server-side during transcription
 // The UI displays speaker labels when available in the transcript
 
-function formatSpeakerLabel(speakerId) {
-  // Normalize speaker IDs (SPEAKER_00 -> Speaker 1)
-  if (speakerId.startsWith("SPEAKER_")) {
-    try {
-      const num = parseInt(speakerId.split("_")[1]) + 1
-      return `Speaker ${num}`
-    } catch {
-      return speakerId
-    }
-  }
-  return speakerId
-}
 
-function getSpeakerClass(speakerId) {
-  if (speakerId.includes("1") || speakerId.endsWith("00")) return "speaker-1"
-  if (speakerId.includes("2") || speakerId.endsWith("01")) return "speaker-2"
-  if (speakerId.includes("3") || speakerId.endsWith("02")) return "speaker-3"
-  if (speakerId.includes("4") || speakerId.endsWith("03")) return "speaker-4"
-  return "speaker-unknown"
-}
+
+
 
 // Function to show speaker transcript modal
 function showSpeakerTranscriptModal(transcript) {
@@ -7799,7 +7714,6 @@ streamMessage = window.streamMessage = function(role, text, opts = {}) {
 // ==============================
 const analyticsPreview = document.getElementById("analyticsPreview")
 const viewAnalyticsBtn = document.getElementById("viewAnalyticsBtn")
-const exportAnalyticsBtn = document.getElementById("exportAnalyticsBtn")
 const analyticsModal = document.getElementById("analyticsModal")
 const closeAnalyticsBtn = document.getElementById("closeAnalyticsBtn")
 
@@ -7944,7 +7858,6 @@ const crmProviderSelect = document.getElementById("crmProviderSelect")
 const crmProviderText = document.getElementById("crmProviderText")
 const crmProviderMenu = document.getElementById("crmProviderMenu")
 const crmSaveBtn = document.getElementById("crmSaveBtn")
-const crmTestBtn = document.getElementById("crmTestBtn")
 const crmStatus = document.getElementById("crmStatus")
 
 const crmProviderLabels = { "": "Disabled", "webhook": "Webhook", "salesforce": "Salesforce", "hubspot": "HubSpot" }
@@ -8131,7 +8044,7 @@ function detectKeywords(text, speaker) {
   }
 
   // Detect objections
-  for (const [category, config] of Object.entries(OBJECTION_KEYWORDS_JS)) {
+  for (const config of Object.values(OBJECTION_KEYWORDS_JS)) {
     if (config.keywords.some(kw => lower.includes(kw))) {
       showDynamicAction(config.label, "objection", text)
       return
@@ -8408,6 +8321,7 @@ function displayAgentSuggestion(suggestion) {
 async function acceptAgentSuggestion(suggestionId) {
   try {
     const response = await fetch(`${API_BASE}/agents/suggestions/${suggestionId}/accept`, { method: "POST" })
+    if (!response.ok) throw new Error("Suggestion accept request failed")
     console.log(`[Agents] Accepted suggestion: ${suggestionId}`)
     // Visual feedback: mark the card as accepted
     const card = document.querySelector(`[data-suggestion-id="${suggestionId}"]`)
@@ -8426,6 +8340,7 @@ async function acceptAgentSuggestion(suggestionId) {
 async function dismissAgentSuggestion(suggestionId) {
   try {
     const response = await fetch(`${API_BASE}/agents/suggestions/${suggestionId}/dismiss`, { method: "POST" })
+    if (!response.ok) throw new Error("Suggestion dismiss request failed")
     console.log(`[Agents] Dismissed suggestion: ${suggestionId}`)
     // Visual feedback: mark the card as dismissed and fade it out
     const card = document.querySelector(`[data-suggestion-id="${suggestionId}"]`)
@@ -9846,7 +9761,6 @@ console.log("[Voice Clone] Module initialized (will fully init after auth)")
   function syncInterviewHint() {
     const hint = document.getElementById("interviewContextHint")
     if (!hint) return
-    const modeSelect = document.getElementById("modeSelect")
     const group = document.getElementById("interviewContextGroup")
     const visible = group && group.style.display !== "none"
     if (visible) hint.style.display = "none"
