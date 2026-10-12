@@ -4,7 +4,7 @@
  * render the existing web cognitive-graph.html since building
  * a native graph renderer is out of scope.
  */
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native"
 import { WebView } from "react-native-webview"
 import { useSettingsStore } from "../store/settings"

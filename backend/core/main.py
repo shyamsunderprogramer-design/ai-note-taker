@@ -5533,7 +5533,7 @@ async def tailor_resume_v2(
 @app.get("/search/web")
 async def web_search(
     query: str = Query(..., description="Search query"),
-    limit: int = Query(5, description="Number of results"),
+    limit: int = Query(5, ge=1, le=20, description="Number of results"),
     include_citations: bool = Query(True, description="Include source citations")
 ):
     """
@@ -5596,7 +5596,8 @@ async def web_search(
             }
 
             response = sync_client.get(
-                f"https://api.search.brave.com/res/v1/web/search?q={urllib.parse.quote(query)}&count={limit}",
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": query, "count": limit},
                 headers=headers,
                 timeout=10
             )

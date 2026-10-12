@@ -1,7 +1,6 @@
 /**
  * Push notification service for interview reminders.
  */
-import { Platform } from "react-native"
 
 export class NotificationService {
   async requestPermissions() {

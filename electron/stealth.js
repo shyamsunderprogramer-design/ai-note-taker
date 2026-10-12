@@ -14,7 +14,7 @@
  *   stealth.isUndetectable()      - Check if capture protection is active
  */
 
-const { app, Tray, Menu, nativeImage, screen, ipcMain } = require("electron")
+const { app, Tray, Menu, nativeImage, screen } = require("electron")
 const log = require("electron-log/main")
 const logger = log
 const path = require("path")
@@ -25,12 +25,10 @@ let _window = null
 let _tray = null
 let _enabled = false
 let _undetectable = false
-let _protectionInterval = null
 
 const PLATFORM = process.platform
 const IS_WINDOWS = PLATFORM === "win32"
 const IS_MAC = PLATFORM === "darwin"
-const IS_LINUX = PLATFORM === "linux"
 
 // Native Windows API for maximum protection (optional, falls back to Electron API)
 let windowsApi = null
@@ -244,12 +242,6 @@ function disable() {
   logger.info("[Stealth] Disabling stealth...")
 
   try {
-    // Stop protection interval
-    if (_protectionInterval) {
-      clearInterval(_protectionInterval)
-      _protectionInterval = null
-    }
-
     destroyTray()
     removePlatformProtection()
 

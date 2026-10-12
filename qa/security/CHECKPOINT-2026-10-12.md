@@ -98,3 +98,12 @@ Remaining work includes 185 CodeQL findings, 66 low Bandit findings, other cloud
 - Azure source batch is pushed as 918aa69; CI/CodeQL confirmation pending. Other cloud hardening edits remain unstaged.
 
 Remaining scanner, infrastructure and main-branch dependency work is not complete.
+
+## Fixed search URLs and client cleanup
+
+- Hosted CI 38279237238 passes all four jobs on 47f8782; CodeQL 38279237449 succeeds and reports 168 open branch findings. Azure CI 38276125560 and CodeQL 38276125146 also pass on 918aa69.
+- The Python SARIF report traces the shared-client partial SSRF finding to Brave search query/count interpolation in both search endpoints. Both now use the fixed provider URL and HTTPX query parameters; result counts are validated from 1 through 20. Fourteen isolated regressions verify special characters, embedded URLs, parameter boundaries and rejection of invalid counts before any provider request.
+- Removed unused mobile imports and unused desktop IPC/platform/timer state. Kept Electron's app import: the tray Exit callback uses it. Existing mobile/desktop suites passed (34/176 cases); an additional undefined-name check passes for the reviewed desktop file. This cleanup does not change capture-protection behavior.
+- Jira's separate partial SSRF finding remains under investigation. Its HTTPS-only URL validation and DNS-to-numeric-address connection guard are retained. No alerts were dismissed or query models added to hide the findings.
+
+The two search files contain other pre-existing feature work; only the reviewed query-parameter/count changes are staged. Other code-scanning findings, infrastructure checks and main-branch dependency alerts remain unfinished.
