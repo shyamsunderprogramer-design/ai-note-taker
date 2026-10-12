@@ -1213,9 +1213,9 @@ def list_ollama_models():
         response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10, skip_ssrf_check=True)
         if response.status_code == 200:
             return response.json()
-        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
+        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502, extra={"models": []})
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500) | {"models": []}
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500, extra={"models": []})
 
 
 @app.post("/ollama/pull")

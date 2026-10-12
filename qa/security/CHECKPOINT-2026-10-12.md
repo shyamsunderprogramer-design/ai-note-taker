@@ -61,3 +61,14 @@ This browser batch requires its own hosted CI and CodeQL confirmation after push
 - Pre-existing storage-directory changes were preserved and excluded from this commit. No files belonging to real recordings or deployed databases were deleted during testing.
 
 Repository remediation remains ongoing: 205 scanner findings before this batch, shared error-response status handling, low-severity Bandit findings and cloud template checks are not yet complete.
+
+## Shared HTTP error contract
+
+- CodeQL rescan 38266945392 succeeds on 0dab86f: 201 open branch findings. CI 38266945129 was still running when this checkpoint was written.
+- Fixed the shared error_response helper to return JSONResponse with the requested status and JSON-compatible encoded details. The existing structured error body is preserved; optional extra fields support Ollama's empty models list without replacing the error object.
+- Reviewed all tracked backend callers: direct returns, four dictionary unions (main/route Ollama handlers) and three nested recording responses. Unions and nested responses now use the supported helper interface.
+- Tests verify actual HTTP statuses 400/401/403/404/409/413/422/429/500/502/503, content type, datetime/UUID details and extra-field behavior through FastAPI.
+- Clean reviewed source: 1,376 backend tests passed, 59 skipped, no warnings. Full workspace: 1,421 passed, 59 skipped. Isolated Chromium/Firefox E2E: 44 passed.
+- Success response behavior is unchanged. API consumers now receive actual failures instead of HTTP 200 containing an error body; callers should already handle response.ok/status. No production deployment or main merge was performed.
+
+Outstanding: remaining CodeQL findings, low Bandit findings, cloud templates and main-branch dependency alerts.

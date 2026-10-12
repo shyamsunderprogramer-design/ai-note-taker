@@ -4,6 +4,8 @@ T6: Standardized error format across all endpoints
 """
 
 from fastapi import HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any
 
 
@@ -77,9 +79,12 @@ def error_response(
     message: str,
     status_code: int = 400,
     details: Optional[Dict[str, Any]] = None,
-) -> dict:
-    """Create a structured error response dict (for return, not raise)"""
+    *,
+    extra: Optional[Dict[str, Any]] = None,
+) -> JSONResponse:
+    """Return a structured error with its actual HTTP status."""
     error_obj: Dict[str, Any] = {"code": code, "message": message}
     if details:
         error_obj["details"] = details
-    return {"error": error_obj}
+    content = {**(extra or {}), "error": error_obj}
+    return JSONResponse(status_code=status_code, content=jsonable_encoder(content))
