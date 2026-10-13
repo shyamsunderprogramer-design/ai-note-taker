@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-import shutil
 import time
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
@@ -141,28 +140,15 @@ async def import_conversations(file: UploadFile = File(...), user: User = Depend
 async def upload_document(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Upload a document for RAG context retrieval."""
     from document_store import get_document_store
-
-    # SECURITY: Sanitize filename to prevent path traversal
-    safe_filename = os.path.basename(file.filename)
-    if not safe_filename or "/" in file.filename or "\\" in file.filename or ".." in file.filename:
-        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
-
-    temp_path = os.path.join(UPLOAD_DIR, safe_filename)
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    from lib.document_upload import InvalidDocumentName, staged_document
 
     try:
-        doc_store = get_document_store()
-        result = doc_store.add_document(temp_path)
-
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
-
-        return result
-    except Exception as e:
-        logger.error("Document upload failed: %s", str(e))
+        with staged_document(file.file, file.filename, UPLOAD_DIR) as temp_path:
+            return get_document_store().add_document(temp_path)
+    except InvalidDocumentName:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+    except Exception:
+        logger.error("Document upload failed")
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
