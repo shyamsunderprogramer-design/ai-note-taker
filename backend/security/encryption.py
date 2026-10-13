@@ -23,7 +23,6 @@ try:
     from cryptography.fernet import Fernet, InvalidToken
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     from cryptography.hazmat.backends import default_backend
     HAS_CRYPTOGRAPHY = True
 except ImportError:

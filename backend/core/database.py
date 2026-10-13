@@ -21,10 +21,7 @@ from pathlib import Path
 
 # Encryption support for data at rest
 try:
-    from security.encryption import (
-        field_encryption, encrypt_string, decrypt_string,
-        is_encryption_available, HAS_CRYPTOGRAPHY,
-    )
+    from security.encryption import encrypt_string, decrypt_string, HAS_CRYPTOGRAPHY
     ENCRYPTION_ENABLED = HAS_CRYPTOGRAPHY
 except ImportError:
     ENCRYPTION_ENABLED = False
@@ -81,7 +78,6 @@ try:
     from sqlalchemy.dialects.postgresql import UUID as PGUUID
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
     from sqlalchemy.orm import DeclarativeBase, relationship
-    from sqlalchemy.ext.asyncio import AsyncEngine
     HAS_SQLALCHEMY = True
 except ImportError as e:
     HAS_SQLALCHEMY = False

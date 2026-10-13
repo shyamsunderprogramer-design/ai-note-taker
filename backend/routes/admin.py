@@ -37,13 +37,7 @@ logger = logging.getLogger("routes.admin")
 
 # Database availability
 try:
-    from core.database import (
-        db_manager, init_database, close_database,
-        UserRepository, ConversationRepository, VoiceModelRepository,
-        JobApplicationRepository, AnalyticsRepository,
-        BackupManager, DataMigrator,
-        HAS_SQLALCHEMY,
-    )
+    from core.database import BackupManager, DataMigrator, HAS_SQLALCHEMY
     DATABASE_AVAILABLE = HAS_SQLALCHEMY
 except ImportError as e:
     DATABASE_AVAILABLE = False

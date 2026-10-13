@@ -8,7 +8,6 @@ from security import ErrorCode, error_response
 from security.auth import User
 
 # Auth helpers (mirrored — will be consolidated)
-from fastapi import status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 security_bearer = HTTPBearer(auto_error=False)
@@ -27,7 +26,7 @@ logger = logging.getLogger("routes.jobs")
 
 # Job tracker availability
 try:
-    from job_tracker import job_tracker, track_application, get_applications
+    from job_tracker import job_tracker
     JOB_TRACKER_AVAILABLE = True
 except ImportError:
     JOB_TRACKER_AVAILABLE = False

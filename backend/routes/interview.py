@@ -29,29 +29,14 @@ logger = logging.getLogger("routes.interview")
 
 # Interview simulator
 try:
-    from interview_simulator import (
-        interview_simulator,
-        create_interview,
-        get_question,
-        submit_response,
-        finish_interview
-    )
+    from interview_simulator import interview_simulator, finish_interview
     INTERVIEW_SIMULATOR_AVAILABLE = True
 except ImportError:
     INTERVIEW_SIMULATOR_AVAILABLE = False
 
 # Mock interview library - Enhanced with unified question database
 try:
-    from mock_interview_library import (
-        mock_library,
-        get_all_questions,
-        get_questions_by_role,
-        get_questions_by_company,
-        get_random_question,
-        get_practice_set,
-        get_library_stats,
-        search_questions
-    )
+    from mock_interview_library import mock_library
     MOCK_LIBRARY_AVAILABLE = True
 except ImportError as e:
     MOCK_LIBRARY_AVAILABLE = False
@@ -60,13 +45,12 @@ except ImportError as e:
 try:
     from question_library_integration import (
         unified_library,
-        get_question as get_unified_question,
         get_questions as get_unified_questions,
         get_practice_set as get_unified_practice_set,
         search_questions as search_unified_questions,
         get_company_questions as get_unified_company_questions,
         get_company_tips,
-        get_library_stats as get_unified_stats
+        get_library_stats as get_unified_stats,
     )
     UNIFIED_LIBRARY_AVAILABLE = True
 except ImportError as e:
@@ -75,7 +59,7 @@ except ImportError as e:
 
 # Resume review
 try:
-    from resume_review import resume_reviewer, analyze_resume
+    from resume_review import resume_reviewer
     RESUME_REVIEW_AVAILABLE = True
 except ImportError:
     RESUME_REVIEW_AVAILABLE = False
@@ -94,7 +78,7 @@ try:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent / "modules" / "interview"))
-    from resume_review_v2 import ResumeReviewerV2, analyze_resume as analyze_resume_v2_func
+    from resume_review_v2 import ResumeReviewerV2
     resume_reviewer_v2 = ResumeReviewerV2()
     RESUME_REVIEW_V2_AVAILABLE = True
 except ImportError as e:

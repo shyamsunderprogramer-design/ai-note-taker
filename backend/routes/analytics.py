@@ -26,7 +26,7 @@ except ImportError as e:
 
 # Conversation analyzer availability
 try:
-    from conversation_analyzer import analyzer, analyze_conversation
+    from conversation_analyzer import analyze_conversation
     ANALYZER_AVAILABLE = True
 except ImportError as e:
     ANALYZER_AVAILABLE = False

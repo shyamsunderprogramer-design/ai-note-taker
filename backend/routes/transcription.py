@@ -32,17 +32,12 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 try:
     from whisper_handler import (
         BrowserTranscriber,
-        clean_text,
         get_model,
         get_streaming_transcriber,
         is_meaningful,
         is_question,
-        is_small_talk,
-        is_technical,
-        record_audio,
         transcribe,
         transcribe_audio,
-        warmup,
     )
     WHISPER_AVAILABLE = True
 except ImportError:

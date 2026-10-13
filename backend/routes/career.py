@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from security.auth import User, get_current_user
+from security.auth import User
 
 # ---------------------------------------------------------------------------
 # Auth helpers (consistent with other route modules)

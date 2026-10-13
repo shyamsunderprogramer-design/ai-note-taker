@@ -796,7 +796,7 @@ class ResumeReviewV2 {
 
     capitalize(str) {
         if (!str) return '';
-        return String(str ?? '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return String(str).replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
 
     showNotification(message, type = 'info') {

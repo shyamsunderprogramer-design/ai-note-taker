@@ -9,6 +9,7 @@ Work continues on `ux-sprint`. The repository is not yet clean; no alerts have b
 - d069f71: CI 38358275903 and CodeQL 38358275825 pass. The scan reports 121 findings (105 Python, 16 JavaScript, zero Actions) after the reviewed browser batch.
 - 5d8a82a: CI 38422094806 and CodeQL 38421969999 pass. The subsequent open-alert listing contains 124 findings, including a newly reported résumé filename DOM-injection path and unused imports after authentication consolidation; these are being reviewed rather than suppressed.
 - e7c6185: CI 38432342857 and CodeQL 38432059132 pass. The résumé DOM-injection alert #1688 is absent from the branch's open findings. Total findings remain 124 (108 Python, 16 JavaScript, zero Actions), because CodeQL reports an additional redundant condition in the updated renderer. The remaining Jira SSRF report and other quality findings still need review.
+- d4d03c8: CI 38441240046 and CodeQL 38441124357 pass after the HTTP lifecycle fix.
 - Main still has 50 dependency alerts (1 critical, 27 high, 20 moderate, 2 low), as reported on the last push. Branch fixes require review, merge and a main rescan before those alerts can clear.
 - The hosted Bandit report has no high findings. Its four medium findings are trusted-source `exec` calls in three test modules. A wider local scan accidentally included installed voice-runtime dependencies; filtering that report to tracked application source yields zero high/medium and 66 low findings. That does not establish the installed voice runtime's dependency-audit status.
 
@@ -42,9 +43,15 @@ Work continues on `ux-sprint`. The repository is not yet clean; no alerts have b
 - Voice, database and HTTP cleanup run independently so one ordinary cleanup error cannot skip the later resources. Removed duplicate synchronous HTTP cleanup and raw exception logging. The lifespan regressions now exercise the real functions with mocked resources, removing two test-source `exec` calls.
 - Clean reviewed source: 56 focused lifecycle/transport checks, all 1,475 backend tests (59 skipped, no warnings), and all 56 Chromium/Firefox E2E tests pass. Browser evidence is `/tmp/ant-oct13-http-reviewed-e2e.log`; backend evidence is `/tmp/ant-oct13-http-reviewed-{focused,backend}.log`. Export path: `/tmp/ant-oct13-http-reviewed-path`.
 
+## Reviewed import cleanup
+
+- Removed unused imports from the backend entry point and route modules, and removed duplicate voice-agent/MCP availability probes from the entry point now that their route modules own those features. Kept runtime imports used by route calls and authentication dependencies.
+- Removed the résumé renderer's redundant null fallback after its existing empty-input guard.
+- Clean reviewed source passes all 1,475 backend tests (59 skipped, no warnings) and all 56 Chromium/Firefox E2E tests. Evidence: `/tmp/ant-oct13-imports-reviewed-{backend,e2e}.log`. Reviewed export path: `/tmp/ant-oct13-imports-reviewed-path`.
+
 ## Remaining work
 
 - Review the remaining code-scanning and low-severity Bandit findings, including the Jira custom transport and cross-script JavaScript references.
-- Recheck hosted CI/CodeQL after pushing the HTTP lifecycle batch, then review the remaining source and dependency findings.
+- Recheck hosted CI/CodeQL after pushing the import cleanup, then review the remaining source and dependency findings.
 - Other infrastructure edits remain unstaged; the last broad cloud policy scan had 36 failures. No cloud plan/apply, production deployment or main merge has been performed.
 - Preserve the existing unrelated working-tree changes. Stage only reviewed files or selected hunks. Lovable website work remains for later.

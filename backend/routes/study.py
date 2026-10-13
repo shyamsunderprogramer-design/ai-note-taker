@@ -29,7 +29,7 @@ logger = logging.getLogger("routes.study")
 
 # Study plan availability
 try:
-    from study_plan_generator import study_planner, generate_plan, adapt_plan, export_plan
+    from study_plan_generator import study_planner
     STUDY_PLAN_AVAILABLE = True
 except ImportError as e:
     STUDY_PLAN_AVAILABLE = False
@@ -44,12 +44,7 @@ except ImportError:
 
 # Realtime suggestions availability
 try:
-    from realtime_suggestions import (
-        realtime_engine,
-        voice_processor,
-        process_transcript_segment,
-        process_voice_command
-    )
+    from realtime_suggestions import realtime_engine, process_transcript_segment, process_voice_command
     REALTIME_AVAILABLE = True
 except ImportError as e:
     REALTIME_AVAILABLE = False

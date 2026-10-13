@@ -46,13 +46,12 @@ except ImportError as e:
 # Shadow agent availability
 try:
     from shadow_agent import (
-        shadow_agent,
         start_shadow_session,
         process_transcript_segment,
         get_shadow_suggestions,
         accept_suggestion_by_id,
         end_shadow_session,
-        get_shadow_stats
+        get_shadow_stats,
     )
     SHADOW_AGENT_AVAILABLE = True
 except ImportError as e:
@@ -61,13 +60,12 @@ except ImportError as e:
 # Collaboration availability
 try:
     from collaboration_mode import (
-        collaboration_manager,
         create_collaboration_session,
         join_collaboration,
         send_collaboration_message,
         get_collaboration_messages,
         get_collaboration_status,
-        end_collaboration
+        end_collaboration,
     )
     COLLABORATION_AVAILABLE = True
 except ImportError as e:
@@ -76,7 +74,6 @@ except ImportError as e:
 # Meeting templates availability
 try:
     from meeting_templates import (
-        templates_manager,
         get_all_templates,
         get_template,
         get_categories,
@@ -84,7 +81,7 @@ try:
         update_template,
         delete_template,
         search_templates,
-        generate_notes
+        generate_notes,
     )
     MEETING_TEMPLATES_AVAILABLE = True
 except ImportError as e:

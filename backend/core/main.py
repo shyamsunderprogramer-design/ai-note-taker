@@ -10,7 +10,6 @@ import shutil
 import sys
 import threading
 import time
-import urllib.parse
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -48,11 +47,21 @@ from ocr_service import extract_text_from_image
 
 # SECURITY: Import security modules
 from security import (
-    create_access_token, verify_token, get_current_user, get_current_user_with_reason, require_auth,
-    rate_limiter, rate_limit, RateLimiter,
-    SecurityHeaders, sanitize_input, validate_file_upload, InputValidator,
-    log_audit_event, get_audit_log, get_audit_stats,
-    ErrorCode, APIError, error_response,
+    create_access_token,
+    get_current_user,
+    get_current_user_with_reason,
+    rate_limiter,
+    rate_limit,
+    RateLimiter,
+    SecurityHeaders,
+    sanitize_input,
+    InputValidator,
+    log_audit_event,
+    get_audit_log,
+    get_audit_stats,
+    ErrorCode,
+    APIError,
+    error_response,
 )
 from security.auth import user_manager, User
 
@@ -61,21 +70,12 @@ from lib.http_client import sync_client
 
 # T16: Database migration - PostgreSQL with SQLAlchemy
 try:
-    from core.database import (  # T16: was `from database import ...` — that
-                                # resolves to a SECOND copy of core.database
-                                # when `core/main.py` is imported as part of
-                                # the `core` package, giving `core.main` its
-                                # own `db_manager` instance distinct from the
-                                # one `UserRepository` uses. End result:
-                                # start_listener initializes the wrong
-                                # instance, UserRepository.create() reads
-                                # `session_maker = None` from the
-                                # un-initialized one, and registration fails
-                                # with the catch-all "Registration failed".
-        db_manager, init_database, close_database,
-        UserRepository, ConversationRepository, VoiceModelRepository,
-        JobApplicationRepository, AnalyticsRepository,
-        BackupManager, DataMigrator,
+    from core.database import (
+        db_manager,
+        init_database,
+        close_database,
+        BackupManager,
+        DataMigrator,
         HAS_SQLALCHEMY,
     )
     DATABASE_AVAILABLE = HAS_SQLALCHEMY
@@ -100,8 +100,6 @@ try:
         is_question,
         is_small_talk,
         is_technical,
-        record_audio,
-        transcribe,
         transcribe_audio,
         warmup,
     )
@@ -118,11 +116,6 @@ try:
         ingest_conversation,
         query_graph,
         InterviewNode,
-        QuestionNode,
-        AnswerNode,
-        CompanyNode,
-        TopicNode,
-        SkillNode
     )
     COGNITIVE_GRAPH_AVAILABLE = True
 except ImportError:
@@ -132,13 +125,7 @@ except ImportError:
 
 # Interview Simulator - Phase 3
 try:
-    from interview_simulator import (
-        interview_simulator,
-        create_interview,
-        get_question,
-        submit_response,
-        finish_interview
-    )
+    from interview_simulator import interview_simulator, finish_interview
     INTERVIEW_SIMULATOR_AVAILABLE = True
 except ImportError:
     INTERVIEW_SIMULATOR_AVAILABLE = False
@@ -147,7 +134,7 @@ except ImportError:
 
 # Job Application Tracker - Phase 3
 try:
-    from job_tracker import job_tracker, track_application, get_applications
+    from job_tracker import job_tracker
     JOB_TRACKER_AVAILABLE = True
 except ImportError:
     JOB_TRACKER_AVAILABLE = False
@@ -156,7 +143,7 @@ except ImportError:
 
 # Resume Review - Phase 3
 try:
-    from resume_review import resume_reviewer, analyze_resume
+    from resume_review import resume_reviewer
     RESUME_REVIEW_AVAILABLE = True
 except ImportError:
     RESUME_REVIEW_AVAILABLE = False
@@ -844,7 +831,14 @@ def get_ffmpeg_path():
 def autonomous_listener():
     # Note: state is now in _state object, no global declarations needed
 
-    from whisper_handler import get_streaming_transcriber, clean_text, is_meaningful, is_question, is_small_talk, is_technical, transcribe
+    from whisper_handler import (
+        get_streaming_transcriber,
+        clean_text,
+        is_meaningful,
+        is_question,
+        is_small_talk,
+        is_technical,
+    )
 
     text_buffer = ""
     last_heard_time = time.time()
@@ -3109,15 +3103,6 @@ async def ws_transcribe(ws: WebSocket):
 # VOICE AGENT ENDPOINTS (T17)
 # ==============================
 
-try:
-    from modules.voice.voice_agent import (
-        VoiceAgent, VoiceAgentConfig, create_session,
-        process_audio_chunk, end_session, get_status
-    )
-    VOICE_AGENT_AVAILABLE = True
-except ImportError as e:
-    VOICE_AGENT_AVAILABLE = False
-    logger.warning("[VoiceAgent] Module not available: %s", str(e))
 
 
 # MIGRATED → routes/voice_agent.py:voice_agent_start (Phase 4 cleanup, 2026-06-08)
@@ -3136,18 +3121,6 @@ except ImportError as e:
 # MCP SERVER ENDPOINTS (T18)
 # ==============================
 
-try:
-    from modules.platform.mcp_server import (
-        MCPServer, MCPTool, MCPResource,
-        create_mcp_server, mcp_server,
-        search_transcripts_handler, get_summary_handler,
-        list_action_items_handler, get_interview_notes_handler,
-        ask_about_conversation_handler
-    )
-    MCP_AVAILABLE = True
-except ImportError as e:
-    MCP_AVAILABLE = False
-    logger.warning("[MCP] Module not available: %s", str(e))
 
 
 # MIGRATED → routes/mcp.py:mcp_status (Phase 4 cleanup, 2026-06-08)
@@ -3885,12 +3858,7 @@ async def get_cognitive_graph_stats():
 # ======================================
 
 try:
-    from realtime_suggestions import (
-        realtime_engine,
-        voice_processor,
-        process_transcript_segment,
-        process_voice_command
-    )
+    from realtime_suggestions import realtime_engine, process_transcript_segment, process_voice_command
     REALTIME_AVAILABLE = True
 except ImportError as e:
     REALTIME_AVAILABLE = False
@@ -4027,7 +3995,7 @@ async def clear_suggestion_state():
 # ======================================
 
 try:
-    from conversation_analyzer import analyzer, analyze_conversation
+    from conversation_analyzer import analyze_conversation
     ANALYZER_AVAILABLE = True
 except ImportError as e:
     ANALYZER_AVAILABLE = False
@@ -4110,7 +4078,7 @@ async def get_conversation_types():
 # ======================================
 
 try:
-    from analytics_engine import analytics, get_skill_progression, get_dashboard_data
+    from analytics_engine import analytics
     ANALYTICS_AVAILABLE = True
 except ImportError as e:
     ANALYTICS_AVAILABLE = False
@@ -4324,7 +4292,7 @@ async def get_personalized_checklist(
 # ======================================
 
 try:
-    from study_plan_generator import study_planner, generate_plan, adapt_plan, export_plan
+    from study_plan_generator import study_planner
     STUDY_PLAN_AVAILABLE = True
 except ImportError as e:
     STUDY_PLAN_AVAILABLE = False
@@ -5408,7 +5376,7 @@ analyze_resume_v2_func = None
 
 try:
     sys.path.insert(0, str(Path(__file__).parent.parent / "modules" / "interview"))
-    from resume_review_v2 import ResumeReviewerV2, analyze_resume as analyze_resume_v2_func
+    from resume_review_v2 import ResumeReviewerV2
     resume_reviewer_v2 = ResumeReviewerV2()
     RESUME_REVIEW_V2_AVAILABLE = True
     logger.info("[ResumeReviewV2] Enhanced resume analyzer loaded successfully")
@@ -5652,16 +5620,7 @@ logger.info("[WebSearch] Web search integration loaded")
 # ==============================
 
 try:
-    from mock_interview_library import (
-        mock_library,
-        get_all_questions,
-        get_questions_by_role,
-        get_questions_by_company,
-        get_random_question,
-        get_practice_set,
-        get_library_stats,
-        search_questions
-    )
+    from mock_interview_library import mock_library
     MOCK_LIBRARY_AVAILABLE = True
     logger.info("[MockLibrary] Mock interview library loaded")
 except ImportError as e:
@@ -5824,13 +5783,7 @@ logger.info("[MockLibrary] Mock interview endpoints loaded")
 # ==============================
 
 try:
-    from voice_clone_agent import (
-        voice_manager,
-        create_voice_model,
-        get_voice_status,
-        synthesize_voice,
-        list_voice_models
-    )
+    from voice_clone_agent import voice_manager, get_voice_status, synthesize_voice, list_voice_models
     VOICE_CLONE_AVAILABLE = True
     logger.info("[VoiceClone] Voice clone agent loaded")
 except ImportError as e:
@@ -6114,13 +6067,12 @@ logger.info("[VoiceClone] Voice clone endpoints loaded")
 
 try:
     from shadow_agent import (
-        shadow_agent,
         start_shadow_session,
         process_transcript_segment,
         get_shadow_suggestions,
         accept_suggestion_by_id,
         end_shadow_session,
-        get_shadow_stats
+        get_shadow_stats,
     )
     SHADOW_AGENT_AVAILABLE = True
     logger.info("[ShadowAgent] Shadow agent loaded")
@@ -6673,13 +6625,12 @@ logger.info("[ShadowAgent] Shadow agent endpoints loaded")
 
 try:
     from collaboration_mode import (
-        collaboration_manager,
         create_collaboration_session,
         join_collaboration,
         send_collaboration_message,
         get_collaboration_messages,
         get_collaboration_status,
-        end_collaboration
+        end_collaboration,
     )
     COLLABORATION_AVAILABLE = True
     logger.info("[Collaboration] Collaboration mode loaded")
@@ -6802,7 +6753,6 @@ logger.info("[Collaboration] Collaboration endpoints loaded")
 
 try:
     from meeting_templates import (
-        templates_manager,
         get_all_templates,
         get_template,
         get_categories,
@@ -6810,7 +6760,7 @@ try:
         update_template,
         delete_template,
         search_templates,
-        generate_notes
+        generate_notes,
     )
     MEETING_TEMPLATES_AVAILABLE = True
     logger.info("[MeetingTemplates] Meeting templates loaded")
