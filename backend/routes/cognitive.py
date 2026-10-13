@@ -64,14 +64,7 @@ try:
     from cognitive_graph import (
         cognitive_graph as neo4j_graph,
         initialize_graph,
-        ingest_conversation,
         query_graph,
-        InterviewNode,
-        QuestionNode,
-        AnswerNode,
-        CompanyNode,
-        TopicNode,
-        SkillNode
     )
     # Check if Neo4j is actually connected
     try:

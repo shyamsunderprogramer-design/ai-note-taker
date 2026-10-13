@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from security import (
     create_access_token, create_refresh_token, verify_refresh_token,
-    get_current_user, get_current_user_with_reason, rate_limit,
+    get_current_user_with_reason, rate_limit,
     log_audit_event, get_audit_log, get_audit_stats,
     session_bus,
     InputValidator, ErrorCode, error_response,

@@ -21,7 +21,7 @@ logger = logging.getLogger("realtime_suggestions")
 
 # Import cognitive graph
 try:
-    from cognitive_graph import cognitive_graph, query_graph
+    from cognitive_graph import cognitive_graph
     COGNITIVE_GRAPH_AVAILABLE = True
 except ImportError:
     COGNITIVE_GRAPH_AVAILABLE = False

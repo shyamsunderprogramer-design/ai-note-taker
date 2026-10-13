@@ -58,7 +58,7 @@ router = APIRouter()
 # Voice agent module — may be missing in some deployments
 try:
     from modules.voice.voice_agent import (
-        VoiceAgent, create_session, process_audio_chunk,
+        VoiceAgent, create_session,
         end_session, get_status,
     )
     VOICE_AGENT_AVAILABLE = True

@@ -10,7 +10,7 @@ import time
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import StreamingResponse
 
-from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
+from ai_router import route_ai_stream
 from security import sanitize_input, rate_limit, ErrorCode, error_response
 
 logger = logging.getLogger("routes.ai")
@@ -76,8 +76,6 @@ STATE = {"is_streaming": False}
 # Race history: {"winner": str, "ms": int, "providers": list, "timestamp": float}
 _race_history = []
 
-# Provider key cache (mirrors main.py)
-from typing import Dict
 
 async def _sync_to_async_iter(sync_iter):
     """Bridge a plain Python generator (sync `def`, not `async def`) into

@@ -13,7 +13,6 @@ from security.auth import User
 # Auth helpers (mirrored — will be consolidated)
 from fastapi import HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from security import get_current_user
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -33,7 +32,6 @@ logger = logging.getLogger("routes.voice")
 try:
     from voice_clone_agent import (
         voice_manager,
-        create_voice_model,
         get_voice_status,
         synthesize_voice,
         list_voice_models

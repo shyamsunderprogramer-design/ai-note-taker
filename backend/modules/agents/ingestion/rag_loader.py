@@ -9,6 +9,7 @@ and embedded using the existing DocumentStore pipeline.
 import hashlib
 import logging
 import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass
@@ -89,20 +90,21 @@ class RAGLoader:
             if content_hash in self._loaded_hashes:
                 stats.skipped_duplicates += 1
                 continue
-            self._loaded_hashes.add(content_hash)
 
             try:
                 result = self._add_qa_document(qa)
                 if result.get("status") == "success":
+                    self._loaded_hashes.add(content_hash)
                     stats.loaded += 1
                     stats.chunks_created += result.get("chunks", 0)
                 elif result.get("status") == "already_exists":
+                    self._loaded_hashes.add(content_hash)
                     stats.skipped_duplicates += 1
                 else:
                     stats.errors += 1
-                    logger.debug(f"[RAGLoader] Failed to load Q#{qa.number}: {result}")
-            except Exception as e:
-                logger.error("[RAGLoader] Error loading Q#{qa.number} from {qa.category}: %s", str(e))
+                    logger.debug("[RAGLoader] Question document was not stored")
+            except Exception:
+                logger.error("[RAGLoader] Could not load question document")
                 stats.errors += 1
 
         stats.elapsed_seconds = time.time() - start_time
@@ -133,7 +135,7 @@ class RAGLoader:
                 continue
 
             if pdf.is_empty:
-                logger.warning(f"[RAGLoader] Skipping empty PDF: {pdf.file_name}")
+                logger.warning("[RAGLoader] Skipping an empty PDF")
                 stats.skipped_duplicates += 1
                 continue
 
@@ -142,20 +144,21 @@ class RAGLoader:
             if content_hash in self._loaded_hashes:
                 stats.skipped_duplicates += 1
                 continue
-            self._loaded_hashes.add(content_hash)
 
             try:
                 result = self._add_pdf_document(pdf)
                 if result.get("status") == "success":
+                    self._loaded_hashes.add(content_hash)
                     stats.loaded += 1
                     stats.chunks_created += result.get("chunks", 0)
                 elif result.get("status") == "already_exists":
+                    self._loaded_hashes.add(content_hash)
                     stats.skipped_duplicates += 1
                 else:
                     stats.errors += 1
-                    logger.debug(f"[RAGLoader] Failed to load PDF {pdf.file_name}: {result}")
-            except Exception as e:
-                logger.error("[RAGLoader] Error loading PDF {pdf.file_name}: %s", str(e))
+                    logger.debug("[RAGLoader] PDF document was not stored")
+            except Exception:
+                logger.error("[RAGLoader] Could not load PDF document")
                 stats.errors += 1
 
         stats.elapsed_seconds = time.time() - start_time
@@ -193,28 +196,22 @@ class RAGLoader:
         if ds is None:
             return {"error": "DocumentStore not available"}
 
-        # Create a temp file with the content
-        tmp_dir = tempfile.mkdtemp(prefix="ingestion_")
-        tmp_path = os.path.join(tmp_dir, doc_name)
-
+        # Keep user-derived display names inside the private staging directory.
+        # CI/CD categories and Windows-style paths must not become directories.
+        safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', '_', doc_name).rstrip(' .')
+        safe_name = "source_" + safe_name.removesuffix(".txt").encode("utf-8")[:200].decode("utf-8", errors="ignore") + ".txt"
         try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(text)
-
-            result = ds.add_document(tmp_path)
+            with tempfile.TemporaryDirectory(prefix="ingestion_") as tmp_dir:
+                tmp_path = os.path.join(tmp_dir, safe_name)
+                with open(tmp_path, "x", encoding="utf-8") as f:
+                    f.write(text)
+                result = ds.add_document(tmp_path)
             return result
-        except Exception as e:
-            logger.error("[RAGLoader] Error adding document {doc_name}: %s", str(e))
-            return {"error": "An internal error occurred"}
-        finally:
-            # Clean up temp file (best-effort on Windows)
-            try:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                if os.path.isdir(tmp_dir):
-                    os.rmdir(tmp_dir)
-            except OSError:
-                pass
+        except Exception:
+            # Include neither source text nor raw exceptions in application logs.
+            # Cleanup failures are failures too: callers may safely retry.
+            logger.error("[RAGLoader] Document ingestion or temporary cleanup failed")
+            return {"error": "Document ingestion or temporary cleanup failed"}
 
     @staticmethod
     def _content_hash(text: str) -> str:

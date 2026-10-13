@@ -107,3 +107,13 @@ Remaining scanner, infrastructure and main-branch dependency work is not complet
 - Jira's separate partial SSRF finding remains under investigation. Its HTTPS-only URL validation and DNS-to-numeric-address connection guard are retained. No alerts were dismissed or query models added to hide the findings.
 
 The two search files contain other pre-existing feature work; only the reviewed query-parameter/count changes are staged. Other code-scanning findings, infrastructure checks and main-branch dependency alerts remain unfinished.
+
+## Document ingestion retries and stable question banks
+
+- d6f0053 passes hosted CI 38304398776 and CodeQL 38304399206. The shared HTTP-client SSRF alert is resolved; 161 branch findings remain, including the separate Jira finding.
+- Document imports mark content as loaded only after successful storage or an already-existing result. Failed QA/PDF imports remain retryable. Temporary staging now handles CI/CD categories, Windows-style paths and long Unicode filenames inside a private directory, preserves the text extension, and cleans derived sidecar files. Cleanup errors return a failure without logging source text, filenames or raw exceptions.
+- Question-bank initialization copies the bulk coding/design lists before adding expansion questions. Repeated construction no longer grows the shared data or duplicates the resulting indexes; optional bank import failures emit static debug diagnostics.
+- Removed verified unused imports in nine analytics, graph, authentication, voice and AI route modules after checking tracked Python consumers. The shared AI route file retains unrelated unstaged feature changes.
+- Clean reviewed backend suite: 1,402 passed, 59 skipped, no warnings. Twelve ingestion/question-bank regressions cover failed-import retries, deduplication after success, confined staging, sidecar cleanup, failure reporting and stable repeated initialization. Undefined-name checks pass for the reviewed modules.
+
+The Jira scanner review, other quality/security findings, cloud checks and main-branch dependency alerts are still outstanding. No main merge or production deployment has occurred.

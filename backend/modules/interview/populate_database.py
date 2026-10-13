@@ -8,7 +8,7 @@ import random
 from typing import List, Dict
 from question_database_v2 import (
     InterviewQuestion, ExpectedAnswer, QuestionCategory,
-    Difficulty, CompanyTier, QuestionDatabase
+    Difficulty, CompanyTier
 )
 from company_questions import ALL_COMPANY_QUESTIONS
 
