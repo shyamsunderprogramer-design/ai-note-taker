@@ -48,9 +48,6 @@ const IS_LINUX = PLATFORM === "linux";
 function log(msg) {
   console.log(`[generate-icons] ${msg}`);
 }
-function warn(msg) {
-  console.warn(`[generate-icons] WARN: ${msg}`);
-}
 function fatal(msg, code = 1) {
   console.error(`[generate-icons] ERROR: ${msg}`);
   if (code === 2) {

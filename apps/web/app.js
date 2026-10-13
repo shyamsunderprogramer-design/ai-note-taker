@@ -1673,7 +1673,7 @@ document.addEventListener("click", (e) => {
     e.preventDefault()
     const item = menuBtn.closest(".history-item")
     const convId = item?.getAttribute("data-id")
-    const convData = item ? { convId, item } : null
+
 
     // Remove any existing portal dropdowns
     document.querySelectorAll(".history-dropdown-portal").forEach(d => d.remove())
@@ -1698,7 +1698,7 @@ document.addEventListener("click", (e) => {
 
     // Smart position dropdown to stay within viewport
     const rect = menuBtn.getBoundingClientRect()
-    const dropdownRect = dropdown.getBoundingClientRect()
+
     const dropdownWidth = 150
     const dropdownHeight = 180 // approximate
     const padding = 10
@@ -4158,7 +4158,7 @@ async function generateFollowUpEmail() {
 // HISTORY PANEL
 // ==============================
 function toggleHistoryPanel() {
-  const wasOpen = historyPanel.classList.contains("open")
+
   historyPanel.classList.toggle("open")
   historyPanel.inert = !historyPanel.classList.contains("open")
   updatePanelBackdrop()
@@ -4987,7 +4987,7 @@ async function refreshModuleHealth() {
     for (const [key, moduleData] of Object.entries(modules)) {
       const label = MODULE_HEALTH_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
       const status = moduleData.status || 'unknown'
-      const isAvailable = status === 'green'
+
 
       // Build status detail
       let detail = ''
@@ -5020,7 +5020,7 @@ async function refreshModuleHealth() {
     console.warn('[Health] Failed to fetch module health:', e)
     // Backend not available - show all unknown
     grid.innerHTML = ""
-    for (const [key, label] of Object.entries(MODULE_HEALTH_NAMES)) {
+    for (const label of Object.values(MODULE_HEALTH_NAMES)) {
       const item = document.createElement("div")
       item.className = "module-item unknown"
       item.innerHTML = `
@@ -5068,7 +5068,7 @@ document.querySelectorAll('.settings-card-header[data-collapsible]').forEach(hea
   header.addEventListener('click', () => {
     const targetId = header.dataset.collapsible
     const body = document.getElementById(targetId)
-    const arrow = header.querySelector('.settings-card-arrow')
+
 
     if (body) {
       body.classList.toggle('collapsed')
@@ -6315,7 +6315,7 @@ async function init() {
         let hasKeyLocal = false
         try { hasKeyLocal = (await window.api.hasApiKey(provider)).hasKey } catch {}
         const hasKey = !!backendProviders[provider] || hasKeyLocal
-        const isEnabled = hasKey
+        const isEnabled = hasKey && stored.enabled !== false
         if (!isEnabled) {
           modelSelect.value = "auto"
           await appSettings.set("model", "auto")
@@ -7956,7 +7956,7 @@ init = async function() {
     }
     // Token exists — verify it's still valid
     try {
-      const testResp = await _originalFetch(`${API_BASE}/health`)
+      await _originalFetch(`${API_BASE}/health`)
       // health doesn't need auth, but let's test an auth-required endpoint
       const authTest = await _originalFetch(`${API_BASE}/ollama/models`, {
         headers: { 'Authorization': `Bearer ${token}` }

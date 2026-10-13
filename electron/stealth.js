@@ -14,7 +14,7 @@
  *   stealth.isUndetectable()      - Check if capture protection is active
  */
 
-const { app, Tray, Menu, nativeImage, screen } = require("electron")
+const { app, Tray, Menu, nativeImage } = require("electron")
 const log = require("electron-log/main")
 const logger = log
 const path = require("path")

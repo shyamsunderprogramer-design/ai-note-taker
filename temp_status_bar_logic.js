@@ -49,7 +49,7 @@ function updateStatusBar(data) {
     // Clear existing classes and reset appearance first
     backendStatusElement.className = 'backend-status';
 
-    const { status, processRunning, restartAttempts, maxAttempts } = data;
+    const { status } = data;
 
     if (!status) {
         content = 'Connecting...';
@@ -64,7 +64,7 @@ function updateStatusBar(data) {
         className = 'status-loading';
 
     } else if (status === 'error' || status === 'dead') {
-        let reason = data.reason ? ` (${data.reason})` : '';
+
         if (status === 'error' && data.restartAttempt) {
             content = `🔴 ERROR: ${data.message || 'Backend failed to start.'} Retrying in ${data.retryInMs / 1000}s...`;
             className = 'status-error';

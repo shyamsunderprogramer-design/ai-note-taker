@@ -448,7 +448,6 @@ class StudyPlanManager {
     const tips = this.getStudyTips(role, company);
     if (!tips || tips.length === 0) return;
 
-    const content = document.querySelector('.study-plan-content');
     const el = document.createElement('div');
     el.id = 'studyTipsSection';
     el.className = 'study-tips-section';

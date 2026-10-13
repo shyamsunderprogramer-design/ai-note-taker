@@ -586,7 +586,7 @@ class ResumeReviewV2 {
         if (!container) return;
 
         const unlocked = badges.filter(b => b.unlocked);
-        const locked = badges.filter(b => !b.unlocked);
+
 
         const badgeCards = (badges || []).map(b => `
             <div class="badge-item ${b.unlocked ? 'unlocked' : 'locked'}" data-rarity="${b.rarity}">

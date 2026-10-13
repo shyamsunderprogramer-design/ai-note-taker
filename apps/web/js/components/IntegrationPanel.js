@@ -357,7 +357,7 @@ export class IntegrationPanel {
     const desc = document.getElementById('int-teams-desc').value.trim();
     if (!name) { this._setMsg('int-teams-msg', 'Enter a team name', 'error'); this._clearLoading('int-teams-create'); return; }
     try {
-      const result = await API.createTeam(name, desc);
+      await API.createTeam(name, desc);
       this._setMsg('int-teams-msg', 'Team created!', 'success');
       document.getElementById('int-teams-name').value = '';
       document.getElementById('int-teams-desc').value = '';

@@ -4,12 +4,12 @@ const runtimePrivacy = configureRuntimePrivacy({app, inspector:require("node:ins
 const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
 const path = require("path")
 const { spawn } = require("child_process")
-const os = require("os")
+
 const stealth = require("./stealth")
 app.on("browser-window-created", (_event, window) => stealth.registerWindow(window))
 const { OverlayAdapter } = require("./features/overlay-adapter")
 const { ScreenRecorder } = require("./features/screen-recorder")
-const { PLATFORM, isPortableMode, initializeAppPaths, ensureConversationsDir } = require("./lib/paths")
+const { PLATFORM, isPortableMode, initializeAppPaths } = require("./lib/paths")
 const cryptoLib = require("./lib/crypto")
 const { SystemAudioCapture } = require("./lib/system-audio")
 const Store = require("electron-store")
@@ -1137,7 +1137,7 @@ ipcMain.handle("updater:install", () => {
 
 // File save dialog
 ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, content, encryptionKey }) => {
-  const { dialog, BrowserWindow: BW } = require("electron")
+  const { dialog } = require("electron")
 
   let dataToSave = content
   let actualFilters = filters

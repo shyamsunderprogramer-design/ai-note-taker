@@ -28,7 +28,7 @@
     let recordingStartTime = null;
     let timerInterval = null;
     let selectedSource = 'tab';
-    let volumeLevel = 0;
+
     let shadowHost = null;
     let shadowRoot = null;
     let lastSaveTime = 0;

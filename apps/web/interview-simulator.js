@@ -473,4 +473,4 @@ class InterviewSimulator {
 }
 
 // Initialize
-const interviewSim = new InterviewSimulator();
+window.interviewSim = new InterviewSimulator();

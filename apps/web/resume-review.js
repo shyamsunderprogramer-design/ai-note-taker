@@ -215,4 +215,4 @@ class ResumeReview {
     }
 }
 
-const resumeReview = new ResumeReview();
+window.resumeReview = new ResumeReview();
