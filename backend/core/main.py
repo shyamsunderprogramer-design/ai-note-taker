@@ -638,7 +638,7 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
-    "/", "/health", "/health/database", "/health/modules", "/health/config", "/health/db-debug",
+    "/", "/health", "/health/database", "/health/modules",
     "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/auth/debug/users",
     "/docs", "/openapi.json", "/redoc",
     "/voice-clone/audio/{filename}",  # Audio playback

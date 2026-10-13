@@ -27,12 +27,12 @@ def engine_factory(monkeypatch):
     'prepared_statement_cache_size=10&sslmode=disable',
 ])
 async def test_postgres_verifies_server_and_preserves_other_options(monkeypatch, engine_factory, query):
-    monkeypatch.setattr(database, 'DATABASE_URL', 'postgresql+asyncpg://example.invalid/app?' + query)
+    monkeypatch.setattr(database, 'DATABASE_URL', 'postgresql+asyncpg://example.invalid/sqlite_archive?' + query)
     manager = database.DatabaseManager()
     await manager.initialize()
     assert manager._initialized
     url = engine_factory.call_args.args[0]
-    assert url == 'postgresql+asyncpg://example.invalid/app?prepared_statement_cache_size=10'
+    assert url == 'postgresql+asyncpg://example.invalid/sqlite_archive?prepared_statement_cache_size=10'
     context = engine_factory.call_args.kwargs['connect_args']['ssl']
     assert context.verify_mode == ssl.CERT_REQUIRED
     assert context.check_hostname is True

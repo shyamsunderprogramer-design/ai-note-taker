@@ -14,8 +14,7 @@ import os
 import json
 import uuid
 import logging
-import ssl
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from lib.database_connection import database_dialect, postgres_connection_options
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -61,7 +60,7 @@ elif CLOUD_MODE:
     logger.info("[Database] Cloud mode: no DATABASE_URL, using SQLite at %s", DATABASE_URL)
 
 # Auto-detect: if DATABASE_URL contains sqlite, use it
-if "sqlite" in DATABASE_URL.lower():
+if database_dialect(DATABASE_URL) == "sqlite":
     USE_SQLITE = True
 
 # Force SQLite for development (safer default)
@@ -627,7 +626,7 @@ class DatabaseManager:
             _db_url = DATABASE_URL
 
             # Ensure data directory exists for SQLite
-            _is_sqlite = "sqlite" in _db_url.lower()
+            _is_sqlite = database_dialect(_db_url) == "sqlite"
             if _is_sqlite:
                 _db_path = _db_url.split("///")[-1] if ":///" in _db_url else None
                 if _db_path:
@@ -636,18 +635,8 @@ class DatabaseManager:
             # Build connection args for cloud databases
             # Neon requires SSL — pass as SSLContext via connect_args
             connect_args = {}
-            if "postgresql" in _db_url and "sqlite" not in _db_url:
-                # asyncpg accepts an SSLContext rather than a URL sslmode.
-                # Preserve other query options and require certificate/hostname
-                # verification. A broken CA configuration must fail closed.
-                parsed = urlsplit(_db_url)
-                query = [(key, value) for key, value in
-                         parse_qsl(parsed.query, keep_blank_values=True)
-                         if key != "sslmode"]
-                _db_url = urlunsplit(parsed._replace(query=urlencode(query)))
-                connect_args["ssl"] = ssl.create_default_context(
-                    cafile=os.getenv("DATABASE_SSL_CA_FILE") or None,
-                )
+            if database_dialect(_db_url) == "postgresql":
+                _db_url, connect_args = postgres_connection_options(_db_url)
 
             # Cloud mode: smaller pool to fit in 512MB RAM
             _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10

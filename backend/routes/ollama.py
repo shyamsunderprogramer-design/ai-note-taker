@@ -9,9 +9,7 @@ from fastapi import APIRouter, Depends, Form, Query
 
 from config import OLLAMA_URL
 from lib.http_client import sync_client
-from security import (
-    get_current_user, ErrorCode, error_response,
-)
+from security import ErrorCode, error_response
 from security.auth import User
 
 # Auth helpers (mirrored from auth.py — will be consolidated in a shared deps module)
@@ -27,13 +25,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 # Provider key cache

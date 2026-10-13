@@ -48,9 +48,7 @@ except ImportError:
     COGNITIVE_GRAPH_AVAILABLE = False
 
 # Auth helpers (mirrored — will be consolidated)
-from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from security import get_current_user
 from security.auth import User
 
 security_bearer = HTTPBearer(auto_error=False)
@@ -62,13 +60,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 router = APIRouter()

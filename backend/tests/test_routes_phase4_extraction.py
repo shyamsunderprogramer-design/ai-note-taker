@@ -53,32 +53,21 @@ class TestMainUniqueRoutes:
 
     @pytest.mark.asyncio
     async def test_health_config_endpoint_registers(self):
+        """The diagnostic route exists and requires authentication."""
         app, client = self._import_app()
         async with client as c:
             response = await c.get("/health/config")
-        assert response.status_code == 200
-        body = response.json()
-        # Should expose db config WITHOUT secrets (uses redaction)
-        assert "database_type" in body
-        assert "use_sqlite" in body
-        assert "cloud_mode" in body
-        # Secrets should be redacted
-        if "database_url_prefix" in body and body["database_url_prefix"]:
-            assert "***" not in body["database_url_prefix"] or "://" in body["database_url_prefix"]
-        # More important: no password in plaintext
-        url_str = str(body)
-        assert ":password" not in url_str
-        assert ":@" not in url_str
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == "Bearer"
 
     @pytest.mark.asyncio
     async def test_health_db_debug_endpoint_registers(self):
+        """The diagnostic route exists and requires authentication."""
         app, client = self._import_app()
         async with client as c:
             response = await c.get("/health/db-debug")
-        assert response.status_code == 200
-        body = response.json()
-        # Either we have a status, an error, or both
-        assert "status" in body or "error" in body
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == "Bearer"
 
     @pytest.mark.asyncio
     async def test_auth_status_endpoint_registers(self):

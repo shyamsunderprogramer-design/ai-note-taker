@@ -33,12 +33,14 @@ isolation.
 """
 import logging
 import os
-import re
+import asyncio
+from lib.database_connection import database_dialect, database_display_url, postgres_connection_options
+from routes.deps import require_admin
 
 from fastapi import APIRouter, Depends, Form, HTTPException
 
 from security import (
-    InputValidator, ErrorCode, error_response, rate_limit, log_audit_event,
+    InputValidator, ErrorCode, error_response, rate_limit,
 )
 from security.auth import user_manager, User
 from security import get_current_user
@@ -107,79 +109,64 @@ def health_check():
 
 
 @router.get("/health/config")
-def config_check():
-    """Diagnostic endpoint to verify database configuration (no secrets exposed)."""
+def config_check(_user: User = Depends(require_admin)):
+    """Return database configuration metadata to an authenticated admin."""
     from core.database import (
         DATABASE_URL as db_url,
         USE_SQLITE, FORCE_SQLITE, DEFAULT_SQLITE_URL,
         HAS_SQLALCHEMY, db_manager,
     )
-    _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
-    _db_type = (
-        "sqlite" if "sqlite" in db_url.lower()
-        else "postgresql" if "postgresql" in db_url.lower()
-        else "unknown"
-    )
     return {
-        "database_url_prefix": db_url[:40] + "..." if db_url and len(db_url) > 40 else _redacted,
-        "database_type": _db_type,
+        "database_url_prefix": database_display_url(db_url),
+        "database_type": database_dialect(db_url),
         "use_sqlite": USE_SQLITE,
         "force_sqlite": FORCE_SQLITE,
         "cloud_mode": os.getenv("CLOUD_MODE", "false"),
         "database_available": HAS_SQLALCHEMY,
         "db_initialized": db_manager._initialized if db_manager else False,
         "has_engine": db_manager.engine is not None if db_manager else False,
-        "default_sqlite_path": str(DEFAULT_SQLITE_URL)[:60],
+        "default_sqlite_path": database_display_url(DEFAULT_SQLITE_URL),
     }
 
 
 @router.get("/health/db-debug")
-async def db_debug():
-    """Diagnostic endpoint that attempts a fresh database connection and returns the error."""
+async def db_debug(_user: User = Depends(require_admin)):
+    """Run a bounded, verified database probe for an authenticated admin."""
     from core.database import DATABASE_URL as db_url, HAS_SQLALCHEMY
     if not HAS_SQLALCHEMY:
-        return {"error": "SQLAlchemy not available"}
+        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "SQLAlchemy not available", status_code=503)
+    engine = None
+    dialect = database_dialect(db_url)
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
         from sqlalchemy import text
-        _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
-        _is_sqlite = "sqlite" in db_url.lower()
-        _test_url = db_url
-        _engine_kwargs = {"echo": False}
-        if not _is_sqlite:
-            # PostgreSQL: strip sslmode from URL, add SSL context
-            import ssl as _ssl
-            _ssl_ctx = _ssl.create_default_context()
-            _ssl_ctx.check_hostname = False
-            _ssl_ctx.verify_mode = _ssl.CERT_NONE
-            if "sslmode=" in _test_url:
-                _test_url = _test_url.split("?sslmode=")[0]
-                if _test_url.endswith("?"):
-                    _test_url = _test_url[:-1]
-            _engine_kwargs["pool_size"] = 1
-            _engine_kwargs["connect_args"] = {"ssl": _ssl_ctx}
-        engine = create_async_engine(_test_url, **_engine_kwargs)
-        if _is_sqlite:
-            query = text("SELECT sqlite_version()")
-        else:
-            query = text("SELECT version()")
-        async with engine.begin() as conn:
-            result = await conn.execute(query)
-            version = result.scalar()
-        await engine.dispose()
+        effective_url = db_url
+        engine_kwargs = {"echo": False}
+        if dialect == "postgresql":
+            effective_url, connect_args = postgres_connection_options(db_url)
+            engine_kwargs.update(pool_size=1, max_overflow=0, connect_args=connect_args)
+        engine = create_async_engine(effective_url, **engine_kwargs)
+        query = text("SELECT sqlite_version()" if dialect == "sqlite" else "SELECT version()")
+        async with asyncio.timeout(5):
+            async with engine.begin() as connection:
+                result = await connection.execute(query)
+                version = result.scalar()
         return {
-            "status": "connected",
-            "version": version,
-            "url": _redacted,
-            "dialect": "sqlite" if _is_sqlite else "postgresql",
+            "status": "connected", "version": version,
+            "url": database_display_url(db_url), "dialect": dialect,
         }
-    except Exception as e:
-        return {
-            "status": "failed",
-            "error": "Database connection failed",
-            "error_type": type(e).__name__,
-            "url": re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)",
-        }
+    except Exception:
+        logger.warning("Database diagnostic connection failed")
+        return error_response(
+            ErrorCode.SERVICE_UNAVAILABLE, "Database connection failed", status_code=503,
+            extra={"status": "failed", "url": database_display_url(db_url)},
+        )
+    finally:
+        if engine is not None:
+            try:
+                await asyncio.wait_for(engine.dispose(), timeout=5)
+            except Exception:
+                logger.warning("Database diagnostic cleanup failed")
 
 
 # ── Auth (3 endpoints unique to main.py) ───────────────────────────────

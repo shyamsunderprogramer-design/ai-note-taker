@@ -5,11 +5,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from security import ErrorCode, error_response, get_current_user
+from security import ErrorCode, error_response
 from security.auth import User
 
 security_bearer = HTTPBearer(auto_error=False)
@@ -19,13 +19,7 @@ async def get_token(credentials: HTTPAuthorizationCredentials = Depends(security
     return credentials.credentials if credentials else None
 
 
-async def require_authentication(token=Depends(get_token)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Auth required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 logger = logging.getLogger("routes.auto_apply")

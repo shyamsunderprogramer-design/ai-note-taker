@@ -12,14 +12,12 @@ Endpoints:
 """
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from security import ErrorCode, error_response
 from security.auth import User
-from security import get_current_user
 
 # Local require_authentication (mirrors routes/auth.py pattern)
-from fastapi import status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends as _Depends
 
@@ -32,21 +30,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = _De
     return None
 
 
-async def require_authentication(token: str = _Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
+from routes.deps import require_authentication
 
 logger = logging.getLogger("routes.mcp")
 
