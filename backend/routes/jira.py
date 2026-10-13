@@ -2,7 +2,7 @@
 import base64
 import logging
 import re
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from lib.public_network import check_public_url, public_async_client
 from typing import Dict, List
 
@@ -20,6 +20,15 @@ router = APIRouter()
 # In-memory conversation store for extracting action items (production: database)
 _conversations: Dict[str, dict] = {}
 
+# A Jira base URL is an HTTPS authority and optional installation context.
+# International hostnames use their ASCII (IDNA) form; paths may use UTF-8
+# percent escapes. Public IP validation still happens here and at connect time.
+_DNS_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_JIRA_BASE_URL = (
+    rf"https://(?:(?:{_DNS_LABEL}\.)*{_DNS_LABEL}\.?|\[[A-Fa-f0-9:.]+\])"
+    r"(?::443)?(?:/(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})*)*"
+)
+
 
 def _jira_headers(email: str, api_token: str) -> dict:
     """Build Jira API headers with Basic auth."""
@@ -32,12 +41,20 @@ def _jira_headers(email: str, api_token: str) -> dict:
 
 
 def _jira_api_url(base_url: str, path: str) -> str:
-    """Build a full Jira API URL from base URL and path."""
+    """Validate a Jira origin/context before appending a trusted API path."""
+    if not isinstance(base_url, str) or len(base_url) > 2048 or not re.fullmatch(_JIRA_BASE_URL, base_url):
+        raise HTTPException(status_code=400, detail="A public HTTPS Jira URL is required")
     try:
         check_public_url(base_url)
         parsed = urlsplit(base_url)
-        if parsed.scheme != "https" or parsed.port not in (None, 443) or parsed.query or parsed.fragment:
-            raise ValueError("Jira requires an HTTPS origin")
+        if len(parsed.hostname) > 253:
+            raise ValueError("Invalid Jira hostname")
+        for segment in parsed.path.split("/"):
+            decoded = unquote(segment, errors="strict")
+            if decoded in {".", ".."} or any(
+                char in "/\\%" or ord(char) < 32 or ord(char) == 127 for char in decoded
+            ):
+                raise ValueError("Ambiguous Jira context path")
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="A public HTTPS Jira URL is required")
     base = base_url.rstrip("/")

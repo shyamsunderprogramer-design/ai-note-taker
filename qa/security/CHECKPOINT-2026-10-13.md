@@ -10,6 +10,7 @@ Work continues on `ux-sprint`. The repository is not yet clean; no alerts have b
 - 5d8a82a: CI 38422094806 and CodeQL 38421969999 pass. The subsequent open-alert listing contains 124 findings, including a newly reported résumé filename DOM-injection path and unused imports after authentication consolidation; these are being reviewed rather than suppressed.
 - e7c6185: CI 38432342857 and CodeQL 38432059132 pass. The résumé DOM-injection alert #1688 is absent from the branch's open findings. Total findings remain 124 (108 Python, 16 JavaScript, zero Actions), because CodeQL reports an additional redundant condition in the updated renderer. The remaining Jira SSRF report and other quality findings still need review.
 - d4d03c8: CI 38441240046 and CodeQL 38441124357 pass after the HTTP lifecycle fix.
+- 5d5fd73: CodeQL 38469473433 passes and the branch's open findings decrease from 124 to 82 after import cleanup. CI 38469550476 was still running at the last check.
 - Main still has 50 dependency alerts (1 critical, 27 high, 20 moderate, 2 low), as reported on the last push. Branch fixes require review, merge and a main rescan before those alerts can clear.
 - The hosted Bandit report has no high findings. Its four medium findings are trusted-source `exec` calls in three test modules. A wider local scan accidentally included installed voice-runtime dependencies; filtering that report to tracked application source yields zero high/medium and 66 low findings. That does not establish the installed voice runtime's dependency-audit status.
 
@@ -49,9 +50,16 @@ Work continues on `ux-sprint`. The repository is not yet clean; no alerts have b
 - Removed the résumé renderer's redundant null fallback after its existing empty-input guard.
 - Clean reviewed source passes all 1,475 backend tests (59 skipped, no warnings) and all 56 Chromium/Firefox E2E tests. Evidence: `/tmp/ant-oct13-imports-reviewed-{backend,e2e}.log`. Reviewed export path: `/tmp/ant-oct13-imports-reviewed-path`.
 
+## Reviewed Jira destination validation
+
+- Jira connection URLs now use an explicit HTTPS authority/context grammar, with valid DNS labels or IPv6, port 443 only, and a bounded URL length. Userinfo, query/fragment data, whitespace/control characters, malformed escapes and ambiguous or traversing context paths are rejected. International hostnames use IDNA ASCII form; encoded UTF-8 context paths remain supported.
+- The existing transport continues to validate every DNS address, connect to the validated numeric address and disable redirects and environment proxies. New route-level tests demonstrate that private/mixed DNS records cannot open a socket or save a connection, and redirects cannot send credentials to another destination.
+- All 88 focused Jira/public-network checks and all 1,526 backend tests pass (59 skipped, no warnings). Evidence: `/tmp/ant-oct13-jira-reviewed-{focused,backend}.log`; clean export path: `/tmp/ant-oct13-jira-reviewed-path`. No live Jira server or credentials were used.
+- The DNS pinning approach follows [CodeQL's SSRF guidance](https://codeql.github.com/codeql-query-help/python/py-partial-ssrf/). The Jira alert's status must be verified in the next hosted scan; no scan model or exclusion was added.
+
 ## Remaining work
 
 - Review the remaining code-scanning and low-severity Bandit findings, including the Jira custom transport and cross-script JavaScript references.
-- Recheck hosted CI/CodeQL after pushing the import cleanup, then review the remaining source and dependency findings.
+- Recheck hosted CI/CodeQL after pushing Jira validation, then review the remaining source and dependency findings, including temporary document cleanup on processing failures.
 - Other infrastructure edits remain unstaged; the last broad cloud policy scan had 36 failures. No cloud plan/apply, production deployment or main merge has been performed.
 - Preserve the existing unrelated working-tree changes. Stage only reviewed files or selected hunks. Lovable website work remains for later.
