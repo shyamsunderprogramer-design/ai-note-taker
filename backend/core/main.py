@@ -2915,29 +2915,26 @@ async def get_transcription_speakers(audio_id: str):
 
 # Uvicorn owns SIGINT/SIGTERM and awaits the application shutdown hook.
 async def shutdown_event():
-    """FastAPI shutdown handler - closes database connections and HTTP clients."""
+    """Close application resources independently on the running event loop."""
     _state.use_autonomous = False
+    try:
+        from modules.voice.local_clone_engine import close_local_clone_engines
+        await close_local_clone_engines()
+    except Exception:
+        logger.warning("[Shutdown] Local voice cleanup failed")
     if DATABASE_AVAILABLE:
         try:
             await close_database()
             logger.info("[Shutdown] Database connections closed")
-        except Exception as e:
-            logger.warning("[Shutdown] Database close error: %s", str(e))
+        except Exception:
+            logger.warning("[Shutdown] Database cleanup failed")
 
-    # Close shared httpx client
     try:
         from lib.http_client import close_client
         await close_client()
         logger.info("[Shutdown] HTTP client closed")
     except Exception:
-        pass
-
-    # Close synchronous httpx client
-    try:
-        from lib.http_client import sync_client
-        sync_client.close()
-    except Exception:
-        pass
+        logger.warning("[Shutdown] HTTP client cleanup failed")
 
 
 @app.websocket("/ws/transcribe")

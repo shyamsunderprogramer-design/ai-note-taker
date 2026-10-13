@@ -1,7 +1,7 @@
 """
-Shared async HTTP client for the ANT backend.
-Replaces synchronous `requests` calls with async `httpx.AsyncClient` to avoid
-blocking the asyncio event loop.
+Shared synchronous HTTP client for the ANT backend.
+Reuses connection pools for synchronous routes. Async callers must offload
+requests from the event loop; ``close_client`` offloads socket cleanup.
 
 Usage:
     from lib.http_client import sync_client
@@ -20,7 +20,9 @@ unless the caller explicitly passes ``skip_ssrf_check=True`` (used for the
 local Ollama endpoint, which is by design on 127.0.0.1).
 """
 
+import asyncio
 import logging
+import threading
 
 import httpx
 from lib.public_network import check_public_url, PublicTransport
@@ -46,24 +48,37 @@ class SyncHTTPClient:
     """
 
     def __init__(self):
+        self._lock = threading.Lock()
         self._client = httpx.Client(timeout=httpx.Timeout(30.0), transport=PublicTransport(), trust_env=False)
         self._local_client = httpx.Client(timeout=httpx.Timeout(30.0), trust_env=False)
+
+    def _get_client(self, local: bool) -> httpx.Client:
+        # Keep this wrapper's identity stable for modules that import it directly.
+        # Reopen a pool only when a later application lifespan makes a request.
+        with self._lock:
+            if local:
+                if self._local_client is None:
+                    self._local_client = httpx.Client(timeout=httpx.Timeout(30.0), trust_env=False)
+                return self._local_client
+            if self._client is None:
+                self._client = httpx.Client(timeout=httpx.Timeout(30.0), transport=PublicTransport(), trust_env=False)
+            return self._client
 
     def _check(self, url: str, skip_ssrf_check: bool) -> None:
         validate_url(url, skip_ssrf_check=skip_ssrf_check)
 
     def get(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
-        client = self._local_client if skip_ssrf_check else self._client
         if kwargs.get("follow_redirects"):
             raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
         return client.get(url, **kwargs)
 
     def post(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
-        client = self._local_client if skip_ssrf_check else self._client
         if kwargs.get("follow_redirects"):
             raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
         streaming = kwargs.pop("stream", False)
         if streaming:
             request = client.build_request("POST", url, **kwargs)
@@ -72,21 +87,29 @@ class SyncHTTPClient:
 
     def delete(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
         self._check(url, skip_ssrf_check)
-        client = self._local_client if skip_ssrf_check else self._client
         if kwargs.get("follow_redirects"):
             raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
         return client.delete(url, **kwargs)
 
     def stream(self, method: str, url: str, *, skip_ssrf_check: bool = False, **kwargs):
         self._check(url, skip_ssrf_check)
-        client = self._local_client if skip_ssrf_check else self._client
         if kwargs.get("follow_redirects"):
             raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
         return client.stream(method, url, **kwargs)
 
     def close(self) -> None:
-        self._client.close()
-        self._local_client.close()
+        with self._lock:
+            clients = (self._client, self._local_client)
+            self._client = self._local_client = None
+        for client in clients:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    # One failed pool must not prevent cleanup of the other.
+                    logger.warning("HTTP connection pool cleanup failed")
 
 
 # Process-wide synchronous client. Instantiated at module import — call sites
@@ -102,14 +125,11 @@ def get_client() -> SyncHTTPClient:
 async def close_client() -> None:
     """Async-safe shutdown hook. Called from the FastAPI lifespan exit.
 
-    Resets the singleton to a fresh client so a re-bind (e.g. test suite
-    reloading) doesn't reuse closed sockets. Best-effort: any error during
-    close is logged and swallowed — we never let a teardown hook block
-    server shutdown.
+    The wrapper remains shared by all importers. It creates fresh connection
+    pools on the next request, without opening unused pools during shutdown.
+    Synchronous socket cleanup runs off the event loop.
     """
-    global sync_client
     try:
-        sync_client.close()
-    except Exception as e:  # pragma: no cover - best-effort cleanup
-        logger.warning("Error closing sync HTTP client: %s", e)
-    sync_client = SyncHTTPClient()
+        await asyncio.to_thread(sync_client.close)
+    except Exception:  # pragma: no cover - best-effort cleanup
+        logger.warning("Shared HTTP client cleanup failed")

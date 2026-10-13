@@ -1,39 +1,53 @@
-"""Check cleanup on the existing event loop without starting the real app/database."""
+"""Exercise real lifespan functions with isolated, mocked application resources."""
 import ast
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+
 import pytest
 
+
 @pytest.mark.asyncio
-async def test_shutdown_awaits_database_on_running_event_loop(monkeypatch):
-    import lib.http_client as clients
-    close_http=AsyncMock(); close_sync=Mock()
-    monkeypatch.setattr(clients,'close_client',close_http)
-    monkeypatch.setattr(clients,'sync_client',SimpleNamespace(close=close_sync))
-    tree=ast.parse((Path(__file__).parents[1]/'core/main.py').read_text())
-    fn=next(node for node in tree.body if isinstance(node,ast.AsyncFunctionDef) and node.name=='shutdown_event')
-    fn.decorator_list=[]
-    close_db=AsyncMock()
-    state=SimpleNamespace(use_autonomous=True)
-    scope={'DATABASE_AVAILABLE':True,'close_database':close_db,'_state':state,'logger':Mock()}
-    exec(compile(ast.Module(body=[fn],type_ignores=[]),'<shutdown>','exec'),scope)
-    await scope['shutdown_event']()
+@pytest.mark.parametrize('failure', [None, 'voice', 'database', 'http'])
+async def test_shutdown_closes_each_resource_independently(monkeypatch, caplog, failure):
+    from core import main
+    from lib import http_client
+    from modules.voice import local_clone_engine
+
+    def closer(name):
+        return AsyncMock(side_effect=RuntimeError('synthetic-private-token') if failure == name else None)
+
+    close_voice, close_db, close_http = closer('voice'), closer('database'), closer('http')
+    close_sync = Mock()
+    monkeypatch.setattr(local_clone_engine, 'close_local_clone_engines', close_voice)
+    monkeypatch.setattr(http_client, 'close_client', close_http)
+    monkeypatch.setattr(http_client, 'sync_client', SimpleNamespace(close=close_sync))
+    monkeypatch.setattr(main, 'close_database', close_db)
+    monkeypatch.setattr(main, 'DATABASE_AVAILABLE', True)
+    state = SimpleNamespace(use_autonomous=True)
+    monkeypatch.setattr(main, '_state', state)
+    await main.shutdown_event()
+    close_voice.assert_awaited_once()
     close_db.assert_awaited_once()
     close_http.assert_awaited_once()
-    close_sync.assert_called_once()
+    close_sync.assert_not_called()  # The awaited hook owns both connection pools.
     assert not state.use_autonomous
-    # No import-time signal handler can bypass Uvicorn's awaited shutdown.
-    assert not any(isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and isinstance(n.func.value,ast.Name) and n.func.value.id=='signal' and n.func.attr=='signal' for n in ast.walk(tree))
+    assert 'synthetic-private-token' not in caplog.text
+    if failure:
+        assert 'cleanup failed' in caplog.text
+
+
+def test_uvicorn_owns_signal_handlers():
+    tree = ast.parse((Path(__file__).parents[1] / 'core/main.py').read_text())
+    assert not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                   and isinstance(node.func.value, ast.Name) and node.func.value.id == 'signal'
+                   and node.func.attr == 'signal' for node in ast.walk(tree))
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', [None, 'request', 'startup'])
-async def test_application_lifespan_awaits_cleanup_even_on_failure(failure):
-    from contextlib import asynccontextmanager
-    tree = ast.parse((Path(__file__).parents[1] / 'core/main.py').read_text())
-    fn = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)
-              and node.name == 'application_lifespan')
+async def test_application_lifespan_awaits_cleanup_even_on_failure(monkeypatch, failure):
+    from core import main
     calls = []
 
     async def startup():
@@ -44,12 +58,11 @@ async def test_application_lifespan_awaits_cleanup_even_on_failure(failure):
     async def shutdown():
         calls.append('shutdown')
 
-    scope = {'asynccontextmanager': asynccontextmanager,
-             'start_listener': startup, 'shutdown_event': shutdown}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), '<lifespan>', 'exec'), scope)
+    monkeypatch.setattr(main, 'start_listener', startup)
+    monkeypatch.setattr(main, 'shutdown_event', shutdown)
 
     async def run():
-        async with scope['application_lifespan'](None):
+        async with main.application_lifespan(None):
             calls.append('request')
             if failure == 'request':
                 raise RuntimeError('synthetic request failure')
