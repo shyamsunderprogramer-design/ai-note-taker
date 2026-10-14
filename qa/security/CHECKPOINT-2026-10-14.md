@@ -1,6 +1,6 @@
 # Repository remediation checkpoint — 2026-10-14
 
-Branch: `ux-sprint`. Continue from [the October 13 checkpoint](CHECKPOINT-2026-10-13.md). The repository is not yet fully remediated. No production deployment, main merge or scanner exclusion was performed. Nine specific false positives have been reviewed for explicit triage, documented below.
+Branch: `ux-sprint`. Continue from [the October 13 checkpoint](CHECKPOINT-2026-10-13.md). Application source fixes are pushed through `42697ab`; CodeQL reports **zero open findings on this branch** after fixing source issues and explicitly dismissing nine documented false positives. The whole repository is not yet fully remediated: main integration and the cloud-template/low-severity review remain pending. No production deployment, main merge or scanner exclusion was performed.
 
 ## Confirmed hosted results
 
@@ -9,7 +9,8 @@ Branch: `ux-sprint`. Continue from [the October 13 checkpoint](CHECKPOINT-2026-1
 - Document staging `6c05c51`: CI 38472507566 and CodeQL 38472381381 pass. The branch's open listing contains 79 findings, down from the expanded baseline of 494.
 - Interview authentication `0f495e0`: CI 38561561628 and CodeQL 38561504290 pass. The branch scan contains 77 findings and no SSRF alerts.
 - Cleanup `171db95`: CI 38565242776 and CodeQL 38564855607 pass. The branch scan contains 21 findings (no security-severity findings).
-- Provider/CRM/speaker fixes `235248f`: CodeQL 38616553976 passes with 12 findings: two redundant imports, one graph-driver assignment, and nine reviewed false positives. CI 38619156694 was still running when checked.
+- Provider/CRM/speaker fixes `235248f`: CI 38619156694 and CodeQL 38616553976 pass. Its scan had 12 findings: two redundant imports, one graph-driver assignment, and nine reviewed false positives.
+- Final source cleanup `42697ab`: CodeQL 38635772160 and CI 38636947464 **both pass**. All four CI jobs succeeded: backend tests, web build, E2E, and security. The open `ux-sprint` alert API returns an empty list, verified after triage. Alert evidence: `/tmp/ant-code-alerts-42697ab.jsonl` and `/tmp/ant-oct14-codeql-triage/applied.json`.
 - The last push still reports 50 dependency alerts on main (1 critical, 27 high, 20 moderate, 2 low). Branch changes have not been merged into main, so this is not evidence that those default-branch alerts are fixed.
 
 ## Interview and résumé route authentication
@@ -31,7 +32,7 @@ Branch: `ux-sprint`. Continue from [the October 13 checkpoint](CHECKPOINT-2026-1
 
 ## Remaining work
 
-- Recheck hosted CI/CodeQL after the final graph-driver/import cleanup and explicit false-positive triage. Do not claim source fixes for reports resolved by triage.
+- Hosted CI and CodeQL are confirmed passing for `42697ab`. Nine CodeQL reports were resolved by documented triage, not source changes. Preserve that distinction when reporting results.
 - Legacy CRM write support remains unavailable until backed by real provider requests; fake success responses have been removed. Speaker fallback now transcribes the detected turns.
 - Low-severity Bandit findings, embedded voice-runtime dependency auditing and cloud template hardening remain unfinished. The previous broad cloud scan had 36 failures; no cloud plan or apply was run.
 - Preserve the many unrelated working-tree changes. Stage only reviewed files or generated HEAD patches. Lovable website work is deferred.
@@ -50,6 +51,6 @@ Branch: `ux-sprint`. Continue from [the October 13 checkpoint](CHECKPOINT-2026-1
 - Failed Neo4j driver creation now closes the candidate connection pool before retry and publishes only verified connections. Diagnostics exclude raw connection exceptions. Four regressions cover reuse, failed session/query, and failed cleanup.
 - Removed the two newly redundant local asyncio imports. Added a regression proving repeated requests do not retry a missing RVC dependency.
 - All 1,645 backend tests pass (59 skipped, no warnings): `/tmp/ant-oct14-final-scanner-backend.log`. Other frontend/browser checks remain as recorded above.
-- [The false-positive review](CODEQL-REVIEW-2026-10-14.md) records nine exact alerts and their required runtime behavior. Proposed dismissal payloads with evidence are saved in `/tmp/ant-oct14-codeql-triage/`; verify GitHub state after applying them.
+- [The false-positive review](CODEQL-REVIEW-2026-10-14.md) records nine exact alerts and their required runtime behavior. All nine dismissals succeeded, and GitHub retains the per-alert evidence. Applied payloads/results are saved in `/tmp/ant-oct14-codeql-triage/`.
 - GitHub's compare API reports **no common ancestor between main and ux-sprint**. This is confirmed remotely, not just a shallow local checkout. A direct normal PR/merge is unavailable. The local snapshot comparison spans 829 files, so replacing main or force-pushing would be disproportionate without an explicit source-of-truth decision.
 - Asked which branch should be the application source going forward: continue with the tested `ux-sprint`, or retain `main` and port the fixes. No default-branch change or history replacement has been made. Main's 50 dependency alerts cannot be claimed resolved from the branch audit.

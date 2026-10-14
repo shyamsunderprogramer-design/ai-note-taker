@@ -1,6 +1,6 @@
 # CodeQL false-positive review — 2026-10-14
 
-Reviewed against `235248f` on `ux-sprint`. These nine reports concern observable Python behavior that must remain. They are candidates for explicit **false positive** triage, with this evidence recorded on each alert. No query, path, or security rule is disabled by this review.
+Reviewed against `235248f` on `ux-sprint`. These nine reports concern observable Python behavior that must remain. All nine were explicitly dismissed as **false positive**, with this evidence recorded on each alert. No query, path, or security rule is disabled by this review. The subsequent scan of `42697ab` has zero open branch findings.
 
 | Alert | Finding | Why the reported statement is necessary |
 | --- | --- | --- |
