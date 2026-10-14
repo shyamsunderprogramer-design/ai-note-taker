@@ -66,5 +66,3 @@ def batch_check_provider_keys(providers: list) -> Dict[str, bool]:
             provider = futures[future]
             results[provider] = future.result()
     return results
-
-

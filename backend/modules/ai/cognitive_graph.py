@@ -41,20 +41,22 @@ def get_driver():
                                "Please set a strong password via NEO4J_PASSWORD env var.")
 
             # Always use authentication (T4: removed auth-disabled mode)
-            _driver = GraphDatabase.driver(uri, auth=(user, password))
-
-            # Verify connection works
-            with _driver.session() as session:
-                session.run("RETURN 1")
-
-            logger.info(f"[CognitiveGraph] Connected to Neo4j at {uri} (auth enabled)")
+            candidate = GraphDatabase.driver(uri, auth=(user, password))
+            try:
+                with candidate.session() as session:
+                    session.run("RETURN 1")
+            except Exception:
+                # Do not publish a failed driver or retain its connection pool.
+                candidate.close()
+                raise
+            _driver = candidate
+            logger.info("[CognitiveGraph] Connected to Neo4j (auth enabled)")
         except ImportError:
             logger.error("[CognitiveGraph] neo4j Python package not installed. Run: pip install neo4j")
             return None
         except Exception as e:
-            logger.error("[CognitiveGraph] Failed to connect to Neo4j: %s", str(e))
+            logger.error("[CognitiveGraph] Failed to connect to Neo4j (%s)", type(e).__name__)
             logger.info("[CognitiveGraph] Make sure Neo4j is running and NEO4J_PASSWORD is set correctly.")
-            _driver = None
             return None
     return _driver
 

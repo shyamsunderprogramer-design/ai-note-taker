@@ -313,7 +313,6 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     def stream_provider(pk):
         """Stream from a provider into the shared queue. Exit early if cancelled."""
-        import asyncio
 
         async def _run():
             provider_start = time.time()
@@ -676,7 +675,6 @@ async def ask_with_image(
     cancel_flags = {p: threading.Event() for p in all_vision}
 
     def stream_vision_provider(provider_name):
-        import asyncio
 
         async def _run():
             try:
