@@ -63,19 +63,26 @@ def test_pdf_text_extraction():
 
 def test_upload_endpoint(monkeypatch):
     from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
     for relative in ['core', 'modules/ai']:
         monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / relative))
     from routes.interview import router
+    from routes import deps
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     app = FastAPI()
     app.include_router(router)
-    with TestClient(app) as client:
+    lookup = AsyncMock(return_value=SimpleNamespace(id='synthetic-user'))
+    monkeypatch.setattr(deps, 'get_current_user', lookup)
+    with TestClient(app, headers={'Authorization': 'Bearer synthetic-valid-token'}) as client:
         response = client.post('/resume/context', files={'file': ('resume.md', b'Alex built Python services at Acme.', 'text/markdown')})
         assert response.status_code == 200
         assert 'Acme' in response.json()['text']
         response = client.post('/resume/context', files={'file': ('resume.exe', b'Unsupported resume file content.', 'application/octet-stream')})
         assert response.status_code == 422
+    assert lookup.await_count == 2
+    lookup.assert_awaited_with('synthetic-valid-token')
 
 
 def test_long_resume_is_retained_in_full():

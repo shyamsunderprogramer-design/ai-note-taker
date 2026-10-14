@@ -7,7 +7,6 @@ from typing import Dict, Optional
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from security import ErrorCode, error_response
-from security.auth import User
 
 # Auth helpers (mirrored — will be consolidated)
 from fastapi import HTTPException
@@ -164,7 +163,8 @@ def extract_complexity_from_text(text: str) -> Dict:
     return results
 
 
-router = APIRouter()
+# Enforce authentication even when this router is mounted without main middleware.
+router = APIRouter(dependencies=[Depends(require_authentication)])
 
 
 @router.post('/resume/context')
