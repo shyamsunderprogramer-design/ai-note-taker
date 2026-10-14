@@ -2709,10 +2709,6 @@ async function streamAIResponse(query, ticket = null) {
 async function streamAIResponseWithImage(query, screenshotB64, ticket = null) {
   return streamRecoveringAnswer(query, screenshotB64, ticket)
 }
-async function streamAIRace(query) {
-  return streamRecoveringAnswer(query)
-}
-
 // ==============================
 function streamMessage(role, text, opts = {}) {
   removeWelcome()

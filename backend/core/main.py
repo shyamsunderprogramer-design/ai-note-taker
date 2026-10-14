@@ -42,7 +42,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
 from lib.audio_upload import transcribe_saved_upload
-from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
+import ai_router
+from lib.provider_status import has_provider_key as _has_provider_key, batch_check_provider_keys as _batch_check_provider_keys
 from ocr_service import extract_text_from_image
 
 # SECURITY: Import security modules
@@ -70,15 +71,8 @@ from lib.http_client import sync_client
 
 # T16: Database migration - PostgreSQL with SQLAlchemy
 try:
-    from core.database import (
-        db_manager,
-        init_database,
-        close_database,
-        BackupManager,
-        DataMigrator,
-        HAS_SQLALCHEMY,
-    )
-    DATABASE_AVAILABLE = HAS_SQLALCHEMY
+    from core import database as db_mod
+    DATABASE_AVAILABLE = db_mod.HAS_SQLALCHEMY
 except ImportError as e:
     DATABASE_AVAILABLE = False
     logging.getLogger("main").warning(f"[Database] module not available: {e}")
@@ -897,7 +891,7 @@ def autonomous_listener():
                     _state.last_query_time = time.time()
 
                 async def _warmup():
-                    async for _ in iterate_stream(route_ai_stream(final_text, mode=_state.current_mode)):
+                    async for _ in iterate_stream(ai_router.route_ai_stream(final_text, mode=_state.current_mode)):
                         pass
                 asyncio.run(_warmup())
 
@@ -914,7 +908,7 @@ async def start_listener():
     # T16: Initialize database — try PostgreSQL, fall back to SQLite
     if DATABASE_AVAILABLE:
         try:
-            await init_database()
+            await db_mod.init_database()
             logger.info("[Startup] Database initialized successfully")
             # Fix #35 Commit 5: auto-migrate legacy data/users.json into
             # the SQLAlchemy users table on first boot. Idempotent — the
@@ -922,7 +916,7 @@ async def start_listener():
             # and skips subsequent boots. Manual re-runs go through
             # /admin/migrate (which passes force=True).
             try:
-                mig_results = await DataMigrator.run_full_migration()
+                mig_results = await db_mod.DataMigrator.run_full_migration()
                 if mig_results.get("skipped"):
                     logger.info("[Startup] Migration skipped — already migrated")
                 elif mig_results.get("users", 0) > 0:
@@ -945,7 +939,6 @@ async def start_listener():
             if CLOUD_MODE:
                 # Fall back to SQLite for cloud mode so the app is still usable
                 logger.info("[Startup] Falling back to SQLite (data won't persist across deploys)")
-                import core.database as db_mod
                 # Reset manager state so it can reinitialize
                 db_mod.db_manager._initialized = False
                 if db_mod.db_manager.engine:
@@ -959,7 +952,7 @@ async def start_listener():
                 db_mod.USE_SQLITE = True
                 db_mod.FORCE_SQLITE = True
                 try:
-                    await init_database()
+                    await db_mod.init_database()
                     logger.info("[Startup] SQLite database initialized as fallback")
                 except Exception as e2:
                     logger.error("[Startup] SQLite fallback also failed: %s", str(e2))
@@ -1114,74 +1107,11 @@ async def start_listener():
 # MIGRATED → routes/_main_unique.py:db_debug (Phase 4 cleanup, 2026-06-08)
 
 
-# Provider key status cache — avoids flooding the key server on every /providers call
-# Per-provider timestamps so one stale entry doesn't invalidate all others
-_provider_key_cache: Dict[str, tuple] = {}  # provider -> (result: bool, timestamp: float)
-_PROVIDER_KEY_CACHE_TTL = 10  # 10 seconds
-
-
-def _has_provider_key(provider: str, env_var: str) -> bool:
-    """Check if a provider has an API key, using a per-provider cache."""
-    now = time.time()
-
-    # Return cached result if still fresh
-    if provider in _provider_key_cache:
-        cached_result, cached_time = _provider_key_cache[provider]
-        if (now - cached_time) < _PROVIDER_KEY_CACHE_TTL:
-            return cached_result
-
-    # Check env var first (fast, no network)
-    if os.getenv(env_var, "").strip():
-        _provider_key_cache[provider] = (True, now)
-        return True
-
-    # Then check secure key server (with auth secret)
-    try:
-        headers = {}
-        key_secret = os.getenv("KEY_SERVER_SECRET", "")
-        if key_secret:
-            headers["X-Key-Server-Secret"] = key_secret
-        resp = sync_client.post(
-            "http://127.0.0.1:18000/get-key",
-            json={"provider": provider},
-            headers=headers,
-            timeout=2,
-            skip_ssrf_check=True,  # internal key server, not user-supplied
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            result = bool(data.get("apiKey"))
-        else:
-            result = False
-    except Exception:
-        result = False
-
-    _provider_key_cache[provider] = (result, now)
-    return result
-
-
-def _batch_check_provider_keys(providers: list) -> Dict[str, bool]:
-    """Check multiple provider keys concurrently using threads. Returns {provider: has_key}."""
-    if not providers:
-        return {}
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    results = {}
-    with ThreadPoolExecutor(max_workers=len(providers)) as pool:
-        futures = {
-            pool.submit(_has_provider_key, p, e): p
-            for p, e in providers
-        }
-        for future in as_completed(futures):
-            provider = futures[future]
-            results[provider] = future.result()
-    return results
-
-
 @app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def list_providers(request: Request):
     """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
-    key_status = _batch_check_provider_keys([
+    key_status = await asyncio.to_thread(_batch_check_provider_keys, [
         ("openai", "OPENAI_API_KEY"),
         ("anthropic", "ANTHROPIC_API_KEY"),
         ("google", "GOOGLE_API_KEY"),
@@ -1283,8 +1213,7 @@ async def ask_with_image(
             async def text_generator():
                 _state.is_streaming = True
                 try:
-                    from ai_router import route_ai_stream
-                    async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
+                    async for event in iterate_stream(ai_router.route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1329,7 +1258,7 @@ async def ask_with_image(
                 if p in enabled_set
             ]
 
-        key_status = _batch_check_provider_keys(providers_to_check)
+        key_status = await asyncio.to_thread(_batch_check_provider_keys, providers_to_check)
 
         vision_providers = []
         for provider_name, has_key in key_status.items():
@@ -1338,8 +1267,7 @@ async def ask_with_image(
 
         ollama_vision_model = None
         try:
-            from ai_router import _get_vision_model
-            ollama_vision_model = _get_vision_model()
+            ollama_vision_model = ai_router._get_vision_model()
         except Exception:
             pass  # Local vision is optional; configured cloud vision providers remain available.
 
@@ -1354,8 +1282,7 @@ async def ask_with_image(
             async def text_only_gen():
                 _state.is_streaming = True
                 try:
-                    from ai_router import route_ai_stream
-                    async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
+                    async for event in iterate_stream(ai_router.route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1369,8 +1296,7 @@ async def ask_with_image(
             async def skip_vision_gen():
                 _state.is_streaming = True
                 try:
-                    from ai_router import route_ai_stream
-                    async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
+                    async for event in iterate_stream(ai_router.route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1437,8 +1363,7 @@ async def ask_with_image(
                         step2_provider = "gemma3:cloud"
                         logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
 
-                from ai_router import route_ai_stream
-                async for event in iterate_stream(route_ai_stream(
+                async for event in iterate_stream(ai_router.route_ai_stream(
                     combined_prompt,
                     mode=mode,
                     style=style,
@@ -1508,6 +1433,7 @@ async def transcribe_stream(request: Request):
 
 
 @app.post("/ocr")
+@app.get("/providers")
 @rate_limit(requests_per_minute=30)
 async def ocr_image(request: Request):
     """Extract text from a base64-encoded image using OCR.
@@ -1527,6 +1453,7 @@ async def ocr_image(request: Request):
 
 
 @app.post("/overlay-ask")
+@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def overlay_ask(
     request: Request,
@@ -1544,17 +1471,16 @@ async def overlay_ask(
     async def generator():
         _state.is_streaming = True
         try:
-            from ai_router import ask_ollama_vision_stream, _get_vision_model, route_ai_stream
 
             if screenshot_b64:
-                model_name = _get_vision_model()
+                model_name = ai_router._get_vision_model()
                 logger.info("[overlay-ask] Screenshot present, vision model: %s", _sanitize_for_log(str(model_name)))
                 if not model_name:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
                 # ask_ollama_vision_stream is patched to be an async generator
                 # at the top of this file, so `async for` works directly.
-                async for event in iterate_stream(ask_ollama_vision_stream(
+                async for event in iterate_stream(ai_router.ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
@@ -1563,7 +1489,7 @@ async def overlay_ask(
                 )):
                     yield event
             else:
-                async for event in iterate_stream(route_ai_stream(query, mode="fast", style="concise")):
+                async for event in iterate_stream(ai_router.route_ai_stream(query, mode="fast", style="concise")):
                     yield event
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
@@ -1631,21 +1557,21 @@ async def health_database():
         }
 
     try:
-        connected = await db_manager.health_check()
+        connected = await db_mod.db_manager.health_check()
         return {
             "available": True,
             "connected": connected,
             "message": "Database connection OK" if connected else "Database connection failed",
-            "initialized": db_manager._initialized,
-            "has_engine": db_manager.engine is not None,
+            "initialized": db_mod.db_manager._initialized,
+            "has_engine": db_mod.db_manager.engine is not None,
         }
     except Exception as e:
         return {
             "available": True,
             "connected": False,
             "message": f"Database error: {type(e).__name__}",
-            "initialized": db_manager._initialized if db_manager else False,
-            "has_engine": db_manager.engine is not None if db_manager else False,
+            "initialized": db_mod.db_manager._initialized if db_mod.db_manager else False,
+            "has_engine": db_mod.db_manager.engine is not None if db_mod.db_manager else False,
         }
 
 
@@ -1785,7 +1711,7 @@ async def admin_create_backup(user: User = Depends(require_admin)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        backup_data = await BackupManager.create_backup()
+        backup_data = await db_mod.BackupManager.create_backup()
         log_audit_event("admin_backup", user.username, "backup_created", success=True)
         return {
             "status": "success",
@@ -1804,7 +1730,7 @@ async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depen
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        restored = await BackupManager.restore_backup(backup_data)
+        restored = await db_mod.BackupManager.restore_backup(backup_data)
         log_audit_event("admin_restore", user.username, "backup_restored", resource=f"restored:{restored}", success=True)
         return {
             "status": "success",
@@ -1826,7 +1752,7 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         # Fix #35 Commit 5: pass force=True so the admin button
         # actually re-runs even after the idempotency marker is set.
         # Without it, the second click is silently a no-op.
-        results = await DataMigrator.run_full_migration(force=True)
+        results = await db_mod.DataMigrator.run_full_migration(force=True)
         log_audit_event("admin_migrate", user.username, "migration_run", resource=f"users:{results.get('users', 0)}", success=True)
         return {
             "status": "success",
@@ -2383,7 +2309,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         # Absolute import — see comment at line 1353.
         from modules.platform.cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
-        prompt = build_prompt(text, _state.current_mode)
+        prompt = ai_router.build_prompt(text, _state.current_mode)
 
         if provider == "openai":
             resp = ask_gpt(prompt, model=model)
@@ -2448,7 +2374,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             # Yield provider/mode info as first event
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
-            async for event in iterate_stream(route_ai_stream(q, mode, style, provider, messages)):
+            async for event in iterate_stream(ai_router.route_ai_stream(q, mode, style, provider, messages)):
                 yield event
 
         except Exception as e:
@@ -2577,9 +2503,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             _state.is_streaming = True
             try:
                 if single_pk == "ollama":
-                    from ai_router import ask_ollama_stream
                     # Patched to async generator at the top of this file.
-                    async for event in iterate_stream(ask_ollama_stream(q, mode=mode, style=style, messages=messages)):
+                    async for event in iterate_stream(ai_router.ask_ollama_stream(q, mode=mode, style=style, messages=messages)):
                         yield event
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
@@ -2606,8 +2531,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             logger.info("[PROVIDER START] %s", pk)
             try:
                 if pk == "ollama":
-                    from ai_router import ask_ollama_stream
-                    stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages)
+                    stream_iter = ai_router.ask_ollama_stream(q, mode=mode, style=style, messages=messages)
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
                     model_name = resolved[1]
@@ -2757,6 +2681,7 @@ def race_stats():
 # ==============================
 
 @app.post("/documents/upload")
+@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # T24: Document upload
 async def upload_document(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Upload a document for RAG context retrieval."""
@@ -2900,7 +2825,7 @@ async def shutdown_event():
         logger.warning("[Shutdown] Local voice cleanup failed")
     if DATABASE_AVAILABLE:
         try:
-            await close_database()
+            await db_mod.close_database()
             logger.info("[Shutdown] Database connections closed")
         except Exception:
             logger.warning("[Shutdown] Database cleanup failed")
@@ -3438,8 +3363,8 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             msg = await ws.receive_text()
             try:
-                result = route_ai(msg, mode=_state.current_mode)
-                await ws.send_text(clean_ai_output(result["response"]))
+                result = ai_router.route_ai(msg, mode=_state.current_mode)
+                await ws.send_text(ai_router.clean_ai_output(result["response"]))
             except Exception as e:
                 logger.error("[WS] Error processing message: %s", _sanitize_for_log(str(e)))
                 try:

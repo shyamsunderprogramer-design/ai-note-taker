@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 from ocr_service import extract_text_from_image
 from security import rate_limit, ErrorCode, error_response
-from ai_router import build_prompt, clean_ai_output, route_ai
+import ai_router
 
 logger = logging.getLogger("routes.transcription")
 
@@ -202,7 +202,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         # second (unpatched) module instance. See modules/ai/ai_router.py:628.
         from modules.platform.cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
-        prompt = build_prompt(text, CURRENT_MODE)
+        prompt = ai_router.build_prompt(text, CURRENT_MODE)
 
         if provider == "openai":
             resp = ask_gpt(prompt, model=model)
@@ -1065,8 +1065,8 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             msg = await ws.receive_text()
             try:
-                result = route_ai(msg, mode=CURRENT_MODE)
-                await ws.send_text(clean_ai_output(result["response"]))
+                result = ai_router.route_ai(msg, mode=CURRENT_MODE)
+                await ws.send_text(ai_router.clean_ai_output(result["response"]))
             except Exception as e:
                 logger.error("[WS] Error processing message: %s", str(e))
                 try:

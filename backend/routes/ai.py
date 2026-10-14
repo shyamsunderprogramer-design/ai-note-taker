@@ -1,5 +1,6 @@
 """Route module for AI streaming, race, search, and configuration endpoints."""
 import hashlib
+import asyncio
 import json
 import logging
 import os
@@ -603,8 +604,8 @@ async def ask_with_image(
     # Use batch key check if available, otherwise check individually
     key_status = {}
     try:
-        from core.main import _batch_check_provider_keys
-        key_status = _batch_check_provider_keys(providers_to_check)
+        from lib.provider_status import batch_check_provider_keys
+        key_status = await asyncio.to_thread(batch_check_provider_keys, providers_to_check)
     except ImportError:
         for p, e in providers_to_check:
             key_status[p] = bool(os.getenv(e, "").strip())

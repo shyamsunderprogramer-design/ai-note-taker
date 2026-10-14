@@ -68,7 +68,11 @@ def get_key_secure(provider, env_var):
 
 # Use full build_prompt from ai_router (with RAG + all mode variants) when available
 try:
-    from ai_router import build_prompt  # noqa: F401
+    import ai_router as _prompt_router
+
+    def build_prompt(*args, **kwargs):
+        """Use the current prompt builder, including configured runtime overrides."""
+        return _prompt_router.build_prompt(*args, **kwargs)
 except ImportError:
     # Fallback: minimal version without RAG support
     def build_prompt(user_input, mode="adaptive", style="concise", messages=None, include_rag=False):

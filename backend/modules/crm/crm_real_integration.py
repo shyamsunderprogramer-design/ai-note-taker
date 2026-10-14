@@ -1,14 +1,7 @@
-"""
-crm_real_integration.py - Real CRM Integration (T22)
-HubSpot and Salesforce API integration with contact sync, activity logging, and deal tracking
+"""CRM adapter interfaces, connection status, and confirmed-write accounting.
 
-Features:
-- HubSpot OAuth 2.0 flow and API v3 integration
-- Salesforce OAuth 2.0 flow and REST API integration
-- Contact sync (create/update contacts from meeting participants)
-- Activity logging (log meeting notes as engagements/tasks)
-- Deal/Opportunity linking
-- Real-time sync and conflict resolution
+Legacy provider writes are unavailable until backed by actual API requests;
+callers receive explicit failures instead of fabricated contact/activity IDs.
 """
 
 import logging
@@ -90,6 +83,10 @@ class CRMConfig:
             self.sync_errors = []
 
 
+class CRMOperationUnavailable(RuntimeError):
+    """An adapter operation has no implemented provider request."""
+
+
 class BaseCRMIntegration:
     """Base class for CRM integrations"""
 
@@ -122,8 +119,28 @@ class BaseCRMIntegration:
         raise NotImplementedError
 
     async def sync_contacts(self, contacts: List[CRMContact]) -> Dict[str, Any]:
-        """Bulk sync contacts"""
-        raise NotImplementedError
+        """Count only writes confirmed by the provider."""
+        results = {"total": len(contacts), "created": 0, "updated": 0,
+                   "failed": 0, "errors": []}
+        for contact in contacts:
+            try:
+                existing = await self.find_contact_by_email(contact.email)
+                if existing:
+                    confirmed = await self.update_contact(existing.get("id") or existing.get("Id"), contact)
+                    operation = "updated"
+                else:
+                    confirmed = await self.create_contact(contact)
+                    operation = "created"
+                if not confirmed:
+                    raise RuntimeError("CRM provider did not confirm the write")
+                results[operation] += 1
+            except CRMOperationUnavailable:
+                results["failed"] += 1
+                results["errors"].append("CRM writes are not implemented for this adapter")
+            except Exception:
+                results["failed"] += 1
+                results["errors"].append("CRM provider did not confirm the write")
+        return results
 
 
 class HubSpotIntegration(BaseCRMIntegration):
@@ -150,63 +167,19 @@ class HubSpotIntegration(BaseCRMIntegration):
             # Initialize HubSpot API client
             self._api_client = HubSpotApi(access_token=self.config.access_token)
             logger.info("[HubSpot] Client initialized")
-            return True
+            return await self.test_connection()
         except Exception as e:
             logger.error("[HubSpot] Initialization failed: %s", str(e))
             return False
 
     async def test_connection(self) -> bool:
-        """Test HubSpot connection"""
-        if not self._api_client:
-            return False
-
-        try:
-            # Try to get account info
-            # This would use the HubSpot API
-            logger.info("[HubSpot] Connection test successful")
-            return True
-        except Exception as e:
-            logger.error("[HubSpot] Connection test failed: %s", str(e))
-            return False
+        """Client construction alone does not verify a remote connection."""
+        logger.warning("[HubSpot] Connection verification is not implemented")
+        return False
 
     async def create_contact(self, contact: CRMContact) -> Optional[str]:
-        """
-        Create or update contact in HubSpot.
-        Uses email as unique identifier.
-        """
-        if not self._api_client:
-            return None
-
-        try:
-            # Check if contact exists
-            existing = await self.find_contact_by_email(contact.email)
-
-            properties = {
-                "email": contact.email,
-                "firstname": contact.first_name or "",
-                "lastname": contact.last_name or "",
-                "company": contact.company or "",
-                "jobtitle": contact.job_title or "",
-                "phone": contact.phone or "",
-                "hs_lead_status": "OPEN",
-            }
-
-            if existing:
-                # Update existing contact
-                contact_id = existing.get("id")
-                # Would call HubSpot API to update
-                logger.info(f"[HubSpot] Updated contact: {contact.email}")
-                return contact_id
-            else:
-                # Create new contact
-                # Would call HubSpot API to create
-                new_id = f"hubspot_{contact.email.replace('@', '_')}"
-                logger.info(f"[HubSpot] Created contact: {contact.email}")
-                return new_id
-
-        except Exception as e:
-            logger.error("[HubSpot] Create contact failed: %s", str(e))
-            return None
+        """No provider write is implemented; never fabricate a contact ID."""
+        raise CRMOperationUnavailable("HubSpot contact creation is unavailable")
 
     async def find_contact_by_email(self, email: str) -> Optional[Dict]:
         """Find contact by email in HubSpot"""
@@ -214,90 +187,17 @@ class HubSpotIntegration(BaseCRMIntegration):
             return None
 
         # Would use HubSpot API to search
-        # For now, return mock
+        # Contact lookup is not implemented in this legacy adapter.
         return None
 
     async def log_activity(self, activity: CRMActivity) -> Optional[str]:
-        """
-        Log activity in HubSpot as an Engagement.
-        Types: NOTE, CALL, MEETING, EMAIL
-        """
-        if not self._api_client:
-            return None
+        """No provider write is implemented; never fabricate an activity ID."""
+        raise CRMOperationUnavailable("HubSpot activity logging is unavailable")
 
-        try:
-            # Map activity type to HubSpot engagement type
-            engagement_type = {
-                'meeting': 'MEETING',
-                'call': 'CALL',
-                'email': 'EMAIL',
-                'note': 'NOTE'
-            }.get(activity.activity_type, 'NOTE')
-
-            # Find contact by email
-            contact = await self.find_contact_by_email(activity.contact_email) if activity.contact_email else None
-
-            if not contact:
-                logger.warning(f"[HubSpot] Contact not found for activity: {activity.contact_email}")
-                return None
-
-            # Create engagement
-            engagement_data = {
-                "engagement": {
-                    "type": engagement_type,
-                    "timestamp": activity.timestamp.isoformat(),
-                },
-                "metadata": {
-                    "body": activity.description,
-                },
-                "associations": {
-                    "contactIds": [contact.get("id")]
-                }
-            }
-
-            # Would call HubSpot API
-            activity_id = f"engagement_{activity.timestamp.timestamp()}"
-            logger.info(f"[HubSpot] Logged activity: {activity_id}")
-            return activity_id
-
-        except Exception as e:
-            logger.error("[HubSpot] Log activity failed: %s", str(e))
-            return None
-
-    async def sync_contacts(self, contacts: List[CRMContact]) -> Dict[str, Any]:
-        """Bulk sync contacts to HubSpot"""
-        results = {
-            "total": len(contacts),
-            "created": 0,
-            "updated": 0,
-            "failed": 0,
-            "errors": []
-        }
-
-        for contact in contacts:
-            try:
-                existing = await self.find_contact_by_email(contact.email)
-                if existing:
-                    await self.update_contact(existing.get("id"), contact)
-                    results["updated"] += 1
-                else:
-                    await self.create_contact(contact)
-                    results["created"] += 1
-            except Exception as e:
-                results["failed"] += 1
-                results["errors"].append("An internal error occurred")
-
-        return results
 
     async def update_contact(self, contact_id: str, contact: CRMContact) -> bool:
-        """Update existing HubSpot contact"""
-        try:
-            # Would call HubSpot API
-            logger.info(f"[HubSpot] Updated contact: {contact_id}")
-            return True
-        except Exception as e:
-            logger.error("[HubSpot] Update failed: %s", str(e))
-            return False
+        """An unimplemented update cannot be reported as successful."""
+        raise CRMOperationUnavailable("HubSpot contact updates are unavailable")
 
 
 class SalesforceIntegration(BaseCRMIntegration):
@@ -347,43 +247,8 @@ class SalesforceIntegration(BaseCRMIntegration):
             return False
 
     async def create_contact(self, contact: CRMContact) -> Optional[str]:
-        """
-        Create or update contact in Salesforce.
-        Checks both Contacts and Leads.
-        """
-        if not self._sf:
-            return None
-
-        try:
-            # Check if contact exists
-            existing_contact = await self.find_contact_by_email(contact.email)
-
-            if existing_contact:
-                # Update existing
-                contact_id = existing_contact.get("Id")
-                await self.update_contact(contact_id, contact)
-                logger.info(f"[Salesforce] Updated contact: {contact.email}")
-                return contact_id
-            else:
-                # Create new contact
-                data = {
-                    "FirstName": contact.first_name or "",
-                    "LastName": contact.last_name or "Unknown",
-                    "Email": contact.email,
-                    "Company": contact.company or "",
-                    "Title": contact.job_title or "",
-                    "Phone": contact.phone or "",
-                    "LeadSource": "AI Note Taker"
-                }
-
-                # Would create in Salesforce
-                new_id = f"003_{contact.email.replace('@', '_')}"
-                logger.info(f"[Salesforce] Created contact: {contact.email}")
-                return new_id
-
-        except Exception as e:
-            logger.error("[Salesforce] Create contact failed: %s", str(e))
-            return None
+        """No provider write is implemented; never fabricate a contact ID."""
+        raise CRMOperationUnavailable("Salesforce contact creation is unavailable")
 
     async def find_contact_by_email(self, email: str) -> Optional[Dict]:
         """Find contact or lead by email in Salesforce"""
@@ -410,71 +275,13 @@ class SalesforceIntegration(BaseCRMIntegration):
             return None
 
     async def log_activity(self, activity: CRMActivity) -> Optional[str]:
-        """
-        Log activity in Salesforce as a Task.
-        """
-        if not self._sf:
-            return None
+        """No provider write is implemented; never fabricate an activity ID."""
+        raise CRMOperationUnavailable("Salesforce activity logging is unavailable")
 
-        try:
-            # Find contact
-            contact = await self.find_contact_by_email(activity.contact_email) if activity.contact_email else None
-
-            # Create task
-            task_data = {
-                "Subject": f"{activity.activity_type.upper()}: Interview",
-                "Description": activity.description,
-                "Status": "Completed" if activity.outcome == "completed" else "Not Started",
-                "Priority": "Normal",
-                "ActivityDate": activity.timestamp.strftime("%Y-%m-%d"),
-            }
-
-            if contact:
-                task_data["WhoId"] = contact.get("Id")
-
-            # Would create task in Salesforce
-            task_id = f"task_{activity.timestamp.timestamp()}"
-            logger.info(f"[Salesforce] Logged activity: {task_id}")
-            return task_id
-
-        except Exception as e:
-            logger.error("[Salesforce] Log activity failed: %s", str(e))
-            return None
-
-    async def sync_contacts(self, contacts: List[CRMContact]) -> Dict[str, Any]:
-        """Bulk sync contacts to Salesforce"""
-        results = {
-            "total": len(contacts),
-            "created": 0,
-            "updated": 0,
-            "failed": 0,
-            "errors": []
-        }
-
-        for contact in contacts:
-            try:
-                existing = await self.find_contact_by_email(contact.email)
-                if existing:
-                    await self.update_contact(existing.get("Id"), contact)
-                    results["updated"] += 1
-                else:
-                    await self.create_contact(contact)
-                    results["created"] += 1
-            except Exception as e:
-                results["failed"] += 1
-                results["errors"].append("An internal error occurred")
-
-        return results
 
     async def update_contact(self, contact_id: str, contact: CRMContact) -> bool:
-        """Update existing Salesforce contact"""
-        try:
-            # Would update in Salesforce
-            logger.info(f"[Salesforce] Updated contact: {contact_id}")
-            return True
-        except Exception as e:
-            logger.error("[Salesforce] Update failed: %s", str(e))
-            return False
+        """An unimplemented update cannot be reported as successful."""
+        raise CRMOperationUnavailable("Salesforce contact updates are unavailable")
 
 
 class CRMManager:
@@ -540,6 +347,7 @@ class CRMManager:
         # Sync contacts
         sync_result = await integration.sync_contacts(contacts)
         results["contacts_synced"] = sync_result.get("created", 0) + sync_result.get("updated", 0)
+        results["errors"].extend(sync_result.get("errors", []))
 
         # Log meeting activity for each participant
         for contact in contacts:
@@ -553,9 +361,16 @@ class CRMManager:
                 notes=meeting_data.get("notes", "")
             )
 
-            activity_id = await integration.log_activity(activity)
-            if activity_id:
-                results["activities_logged"] += 1
+            try:
+                activity_id = await integration.log_activity(activity)
+                if activity_id:
+                    results["activities_logged"] += 1
+                else:
+                    results["errors"].append("CRM provider did not confirm activity logging")
+            except CRMOperationUnavailable:
+                results["errors"].append("CRM activity logging is not implemented for this adapter")
+            except Exception:
+                results["errors"].append("CRM provider did not confirm activity logging")
 
         return results
 

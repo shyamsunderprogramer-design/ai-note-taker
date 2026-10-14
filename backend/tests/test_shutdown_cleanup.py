@@ -22,7 +22,7 @@ async def test_shutdown_closes_each_resource_independently(monkeypatch, caplog, 
     monkeypatch.setattr(local_clone_engine, 'close_local_clone_engines', close_voice)
     monkeypatch.setattr(http_client, 'close_client', close_http)
     monkeypatch.setattr(http_client, 'sync_client', SimpleNamespace(close=close_sync))
-    monkeypatch.setattr(main, 'close_database', close_db)
+    monkeypatch.setattr(main.db_mod, 'close_database', close_db)
     monkeypatch.setattr(main, 'DATABASE_AVAILABLE', True)
     state = SimpleNamespace(use_autonomous=True)
     monkeypatch.setattr(main, '_state', state)
