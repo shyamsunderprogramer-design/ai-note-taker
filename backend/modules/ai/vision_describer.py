@@ -137,7 +137,7 @@ async def _single_provider_description(stream_fn, image_b64, model, provider_pre
                         full_description += content
                         yield make_vision(content, provider_prefix)
                 except (json.JSONDecodeError, IndexError):
-                    pass
+                    pass  # Ignore an invalid chunk and continue reading valid provider events.
                 continue
             # Check if done event
             if '"type":"done"' in event or '"type": "done"' in event:
@@ -179,7 +179,7 @@ async def _ollama_description(image_b64, model_name, temperature=0.3):
                         full_description += content
                         yield make_vision(content, "ollama")
                 except (json.JSONDecodeError, IndexError):
-                    pass
+                    pass  # Ignore an invalid chunk and continue reading valid provider events.
                 continue
             if '"type":"done"' in event or '"type": "done"' in event:
                 continue
@@ -257,7 +257,7 @@ def _race_description(image_b64, vision_providers, ollama_vision_model, temperat
                         if content:
                             race_queue.put((provider_name, "CONTENT", content))
                     except (json.JSONDecodeError, IndexError):
-                        pass
+                        pass  # A malformed provider chunk does not end the race with other providers.
                 # Skip meta and done events from the provider
 
             race_queue.put((provider_name, "DONE", None))

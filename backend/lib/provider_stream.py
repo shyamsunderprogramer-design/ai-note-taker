@@ -42,7 +42,7 @@ def check_provider_status(response, provider):
             if any(term in detail for term in ('context_length', 'context window', 'context length', 'too many tokens')):
                 code = 'context_limit'
         except (ValueError, RuntimeError):
-            pass
+            pass  # Non-JSON error bodies keep the HTTP-status classification selected above.
     retry_after = response.headers.get('retry-after')
     if retry_after:
         try:

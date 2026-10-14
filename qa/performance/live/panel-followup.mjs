@@ -50,7 +50,6 @@ try{
   streaming=false
  })()
  await sleep(3500)
- const started=Date.now()
  await run('/usr/bin/afplay',[`${directory}/followup.aiff`])
  const ended=Date.now()
  await page.waitForFunction(()=>document.querySelectorAll('#chatArea .chat-message.assistant').length===2&&!isProcessing)

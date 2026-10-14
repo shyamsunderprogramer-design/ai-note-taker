@@ -38,13 +38,7 @@ router = APIRouter()
 
 # MCP server module — optional dependency
 try:
-    from modules.platform.mcp_server import (
-        MCPServer, MCPTool, MCPResource,
-        create_mcp_server, mcp_server,
-        search_transcripts_handler, get_summary_handler,
-        list_action_items_handler, get_interview_notes_handler,
-        ask_about_conversation_handler,
-    )
+    from modules.platform.mcp_server import mcp_server as _mcp
     # `get_status` may or may not exist in the module — the original
     # main.py call site had the same fragility, so we wrap the import.
     try:
@@ -76,7 +70,6 @@ async def mcp_tool_call(tool_name: str, body: dict, user: User = Depends(require
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
 
     try:
-        from modules.platform.mcp_server import mcp_server as _mcp
         if tool_name not in _mcp.tools:
             return error_response(ErrorCode.NOT_FOUND, f"Tool not found: {tool_name}", status_code=404)
 
@@ -94,7 +87,6 @@ async def mcp_tools_list(user: User = Depends(require_authentication)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
 
     try:
-        from modules.platform.mcp_server import mcp_server as _mcp
         tools = []
         for tool in _mcp.tools.values():
             tools.append({
@@ -115,7 +107,6 @@ async def mcp_resources_list(user: User = Depends(require_authentication)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
 
     try:
-        from modules.platform.mcp_server import mcp_server as _mcp
         resources = []
         for resource in _mcp.resources.values():
             resources.append({

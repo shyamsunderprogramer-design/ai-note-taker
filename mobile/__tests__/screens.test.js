@@ -3,7 +3,7 @@
  * Uses @testing-library/react-native for component rendering.
  */
 import React from "react"
-import { render, fireEvent, waitFor } from "@testing-library/react-native"
+import { render, fireEvent } from "@testing-library/react-native"
 
 import VoiceRecordingScreen from "../src/screens/VoiceRecordingScreen"
 import JobTrackerScreen from "../src/screens/JobTrackerScreen"

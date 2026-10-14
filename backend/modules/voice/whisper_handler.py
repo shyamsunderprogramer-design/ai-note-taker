@@ -690,7 +690,7 @@ class BrowserTranscriber:
                         self._chunk_queue.get_nowait()
                         self._chunk_queue.task_done()
                     except queue.Empty:
-                        pass
+                        pass  # The consumer already removed the stale preview; enqueue the new segment below.
                     self._chunk_queue.put_nowait(segment)
 
     def start_worker(self):

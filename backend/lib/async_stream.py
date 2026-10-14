@@ -13,7 +13,7 @@ async def iterate_sync(source):
             try:
                 completed.result()
             except (Exception, asyncio.CancelledError):
-                pass
+                pass  # The caller has left; retrieve the task exception before closing its iterator.
         closer = getattr(iterator, 'close', None)
         if closer:
             closer()

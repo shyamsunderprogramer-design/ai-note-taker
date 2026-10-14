@@ -64,4 +64,4 @@ try {
  assert.equal(preferenceCheck,true);
  assert.deepEqual(errors,[]);
  console.log('PASS: real UI + production recovery endpoint; partial preservation, attribution, resume/JD, recorded-audio submission, cooldown, newer spoken-question cancellation, local fallback, bounded exhaustion.');
-} finally {await browser.close()}
+} finally {await browser.close();}

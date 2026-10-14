@@ -125,7 +125,7 @@ class InterviewCoachAgent(BaseAgent):
                             results = cognitive_graph.semantic_search(current_question, limit=5)
                             cognitive_graph_results = results or []
                     except Exception:
-                        pass
+                        pass  # Graph context is optional; retain the other interview-coaching context.
 
             # Company insights
             company = session.get("company", "")

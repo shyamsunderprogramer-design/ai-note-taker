@@ -188,20 +188,6 @@ def generate_coding_questions(count: int = 2000) -> List[InterviewQuestion]:
     questions = []
     question_id = 5000
 
-    difficulties_map = {
-        "arrays": [Difficulty.EASY, Difficulty.MEDIUM],
-        "binary": [Difficulty.EASY, Difficulty.MEDIUM],
-        "dynamic_programming": [Difficulty.MEDIUM, Difficulty.HARD],
-        "graph": [Difficulty.MEDIUM, Difficulty.HARD],
-        "intervals": [Difficulty.MEDIUM],
-        "linked_list": [Difficulty.EASY, Difficulty.MEDIUM],
-        "matrix": [Difficulty.MEDIUM, Difficulty.HARD],
-        "string": [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD],
-        "tree": [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD],
-        "heap": [Difficulty.MEDIUM, Difficulty.HARD],
-        "backtracking": [Difficulty.MEDIUM, Difficulty.HARD],
-    }
-
     companies = ["google", "amazon", "facebook", "microsoft", "apple", "netflix", "uber", "airbnb", "stripe"]
     roles = ["software_engineer", "senior_software_engineer", "backend_engineer", "full_stack_engineer"]
 

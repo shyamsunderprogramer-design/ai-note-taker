@@ -14,7 +14,8 @@ for (const action of ['accept', 'dismiss']) {
       document: {querySelector() { queried = true; throw Error('failed feedback must leave the card alone'); }},
     });
     const start = source.indexOf('async function acceptAgentSuggestion(');
-    const end = source.indexOf('// End agent session', start);
+    const end = source.indexOf('// END AI AGENTS FRAMEWORK', start);
+    assert.ok(end > start, 'feedback handlers must have a bounded extraction');
     vm.runInContext(source.slice(start, end), scope);
     await scope[`${action}AgentSuggestion`]('synthetic-feedback');
     assert.equal(queried, false);

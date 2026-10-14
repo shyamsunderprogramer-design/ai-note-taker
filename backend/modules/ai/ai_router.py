@@ -417,7 +417,7 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
                     try:
                         err_body = response.read().decode("utf-8", errors="ignore")[:200]
                     except Exception:
-                        pass
+                        pass  # A failed error-body read must still yield the actionable model-not-installed response.
                     logger.error("Ollama 404 for model %s: %s", model_display, err_body)
                     yield _make_error(
                         f"Model '{model_display}' not installed. Run: ollama pull {model_display}"

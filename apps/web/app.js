@@ -681,17 +681,6 @@ if (window.api && window.api.getBackendStatus) {
 }
 
 document.addEventListener("keydown", (e) => {
-  // Tab — auto-answer detected question (Cluely-style dynamic action)
-  if (e.key === "Tab") {
-    const tag = document.activeElement.tagName.toLowerCase()
-    if (tag === "input" || tag === "textarea" || tag === "select") return
-    if (activeDynamicAction) {
-      e.preventDefault()
-      triggerDynamicAction()
-      return
-    }
-  }
-
   // Escape — end a live session, else close panels
   if (e.key === "Escape") {
     const tag = document.activeElement.tagName.toLowerCase()
@@ -3316,8 +3305,6 @@ function startStreamingTranscription() {
           lastDetectedSpeaker = data.speaker || "Speaker 1"
           lastSpeakerRole = data.semantic_role || "user"
         }
-        // Real-time keyword detection (Cluely-style dynamic actions)
-        if (!window.unifiedSessionActive) detectKeywords(data.text, data.speaker || lastDetectedSpeaker)
       } else if (data.type === "suggestion") {
         // Live-assist hint pushed from the backend (dual-channel or fallback)
         showLiveHint(data)
@@ -8010,97 +7997,6 @@ let suggestionsEnabled = false
 let suggestionsCooldown = false
 let suggestionHistory = []
 
-// ==============================
-// REAL-TIME KEYWORD DETECTION + DYNAMIC ACTION PILLS (Cluely-style)
-// ==============================
-const QUESTION_INDICATORS = [
-  "?", "can you", "how would", "what is", "explain", "tell me", "describe",
-  "why", "when", "where", "could you", "would you", "what are", "how do",
-  "what's", "how's", "walk me", "help me understand", "what do you think",
-  "opinion", "recommend", "suggest", "difference between", "compare"
-]
-
-const OBJECTION_KEYWORDS_JS = {
-  price: { keywords: ["expensive", "too much", "price", "cost", "budget", "cheap", "afford"], label: "Price objection" },
-  competitor: { keywords: ["competitor", "alternative", "vs", "versus", "compare", "better than"], label: "Competitor mention" },
-  timing: { keywords: ["not now", "later", "next quarter", "next year", "not ready", "delay"], label: "Timing objection" },
-  features: { keywords: ["missing", "doesn't have", "lacks", "require", "need"], label: "Feature gap" },
-  security: { keywords: ["security", "privacy", "compliance", "soc2", "gdpr", "hipaa"], label: "Security concern" }
-}
-
-let activeDynamicAction = null
-let dynamicActionPill = null
-
-function detectKeywords(text, speaker) {
-  if (!text || text.length < 15) return
-
-  const lower = text.toLowerCase()
-
-  // Detect questions from interviewer/other speaker
-  const isQuestion = QUESTION_INDICATORS.some(ind => lower.includes(ind)) || lower.trim().endsWith("?")
-  if (isQuestion && speaker && speaker !== "user") {
-    showDynamicAction("Answer: " + text.substring(0, 40) + (text.length > 40 ? "..." : ""), "question", text)
-    return
-  }
-
-  // Detect objections
-  for (const config of Object.values(OBJECTION_KEYWORDS_JS)) {
-    if (config.keywords.some(kw => lower.includes(kw))) {
-      showDynamicAction(config.label, "objection", text)
-      return
-    }
-  }
-
-  // Detect user asking for help (coaching opportunity)
-  if (isQuestion && speaker === "user" && lower.length > 20) {
-    showDynamicAction("Suggest answer", "coaching", text)
-  }
-}
-
-function showDynamicAction(label, type, contextText) {
-  // Inline answer prompts are disabled: keep the recording input unobstructed.
-  removeDynamicAction()
-}
-
-function removeDynamicAction() {
-  if (dynamicActionPill) {
-    dynamicActionPill.remove()
-    dynamicActionPill = null
-  }
-  activeDynamicAction = null
-}
-
-async function triggerDynamicAction() {
-  if (!activeDynamicAction) return
-
-  const { type, contextText } = activeDynamicAction
-  removeDynamicAction()
-
-  if (isProcessing && !activeQuestion) return
-
-  // Grab latest screenshot
-  let screenshotB64 = null
-  try {
-    screenshotB64 = await window.api.overlayGetLatestScreenshot()
-  } catch {}
-
-  // Phase A: skip OCR — send screenshot directly to vision AI for fastest response
-  const visionQuery = `Detected ${type}: "${contextText}"\n\nAlso, I can see the user's screen. Provide a relevant, concise answer based on both the screen content and the detected topic.`
-
-  streamMessage("user", `[${type}]: ${contextText.substring(0, 60)}...`, { hasScreenshot: !!screenshotB64, screenshotB64 })
-
-  if (screenshotB64) {
-    await streamAIResponseWithImage(visionQuery, screenshotB64)
-  } else {
-    const selectedModel = modelSelect ? modelSelect.value : "auto"
-    if (selectedModel === "auto") {
-      await streamAIRace(visionQuery)
-    } else {
-      await streamAIResponse(visionQuery)
-    }
-  }
-}
-
 // Initialize suggestions feature
 function initSuggestions() {
   if (!suggestionsBtn) return
@@ -8147,7 +8043,6 @@ function initSuggestions() {
 // ==============================
 
 let agentSessionId = null
-let agentEventSource = null
 let agentSessionType = "meeting"  // "interview", "sales_call", "meeting"
 let activeAgentTypes = ["interview_coach", "meeting", "sales_coach"]
 let agentSuggestionsEnabled = true
@@ -8166,23 +8061,12 @@ async function initAgentSession(sessionType = "meeting", company = "", role = ""
       agentSessionId = data.id
       agentSessionType = sessionType
       console.log(`[Agents] Session created: ${data.id.substring(0, 8)} type=${sessionType} agents=${activeAgentTypes.join(",")}`)
-      // Connect SSE stream
-      connectAgentStream(data.id)
       return data
     }
   } catch (error) {
     console.error("[Agents] Failed to create session:", error)
   }
   return null
-}
-
-// Connect SSE stream for real-time agent suggestions
-function connectAgentStream(sessionId) {
-  if (agentEventSource) {
-    agentEventSource.close()
-  }
-  // SSE will be connected when segments are processed
-  // The streaming endpoint is: /agents/sessions/{id}/stream
 }
 
 // Process transcript for suggestions — AGENT FRAMEWORK (v2)
@@ -8356,36 +8240,6 @@ async function dismissAgentSuggestion(suggestionId) {
   }
 }
 
-// End agent session
-async function endAgentSession() {
-  if (!agentSessionId) return
-  try {
-    await fetch(`${API_BASE}/agents/sessions/${agentSessionId}/end`, { method: "POST" })
-    console.log(`[Agents] Session ended: ${agentSessionId.substring(0, 8)}`)
-  } catch (error) {
-    console.error("[Agents] End session error:", error)
-  }
-  agentSessionId = null
-  if (agentEventSource) {
-    agentEventSource.close()
-    agentEventSource = null
-  }
-}
-
-// Toggle agent types
-async function setActiveAgents(agents) {
-  if (!agentSessionId) return
-  activeAgentTypes = agents
-  try {
-    await fetch(`${API_BASE}/agents/sessions/${agentSessionId}/agents?active_agents=${encodeURIComponent(agents.join(","))}`, {
-      method: "POST"
-    })
-    console.log(`[Agents] Active agents updated: ${agents.join(", ")}`)
-  } catch (error) {
-    console.error("[Agents] Update agents error:", error)
-  }
-}
-
 // ==============================
 // END AI AGENTS FRAMEWORK (v2)
 // ==============================
@@ -8438,7 +8292,7 @@ function displaySuggestion(suggestion) {
 // Show message in suggestions panel
 function showSuggestionsMessage(message) {
   if (!suggestionsContent) return
-  suggestionsContent.innerHTML = `<div class="suggestions-empty">${message}</div>`
+  suggestionsContent.innerHTML = `<div class="suggestions-empty">${escapeHtml(message)}</div>`
 }
 
 // Clear suggestions state
@@ -8460,41 +8314,6 @@ async function updateSuggestionConfig(confidence) {
   } catch (error) {
     console.error("[Suggestions] Error updating config:", error)
   }
-}
-
-// Voice command handler
-async function processVoiceCommand(text) {
-  if (!text.toLowerCase().startsWith("hey ant") && !text.toLowerCase().startsWith("okay ant")) {
-    return null
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/realtime/command?text=${encodeURIComponent(text)}`)
-    const data = await response.json()
-
-    if (data.is_command) {
-      // Open suggestions panel if command found something
-      if (!suggestionsEnabled) {
-        suggestionsEnabled = true
-        suggestionsBtn?.classList.add("active")
-        suggestionsPanel.style.display = "flex"
-      }
-
-      // Display results
-      if (data.action === "search_results") {
-        showSuggestionsMessage(`Found ${data.data.results?.length || 0} results for "${data.data.query}"`)
-        // Could display results here
-      } else if (data.action === "suggestion") {
-        displaySuggestion(data.data.suggestion)
-      }
-
-      return data
-    }
-  } catch (error) {
-    console.error("[Suggestions] Voice command error:", error)
-  }
-
-  return null
 }
 
 // Initialize
@@ -8536,8 +8355,6 @@ function analyzeComplexity(text) {
 }
 
 function showComplexityBadge(analysis, targetElement) {
-  if (!analysis || !targetElement) return
-
   // Remove existing badge
   const existing = targetElement.querySelector('.complexity-badge')
   if (existing) existing.remove()
@@ -9933,3 +9750,7 @@ console.log("[Voice Clone] Module initialized (will fully init after auth)")
     }
   }
 })()
+
+// Public hooks used by the live-session controller and browser integrations.
+window.cutLiveQuestion = cutLiveQuestion
+window.batchUpdateBubble = batchUpdateBubble

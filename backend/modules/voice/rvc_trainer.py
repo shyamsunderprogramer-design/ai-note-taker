@@ -117,7 +117,6 @@ class RVCTrainer:
         Uses tts-with-rvc-onnx for processing.
         """
         model_id = job["model_id"]
-        model_name = job["model_name"]
         dataset_dir = job["dataset_dir"]
         output_dir = job["output_dir"]
 

@@ -60,7 +60,7 @@ def detect_device() -> str:
             logger.info("[RVCEngine] Using DirectML (GPU acceleration) for inference")
             return "dml"
     except ImportError:
-        pass
+        pass  # ONNX Runtime is optional; report and select the CPU fallback below.
     logger.info("[RVCEngine] Using CPU for inference")
     return "cpu"
 

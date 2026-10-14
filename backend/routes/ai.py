@@ -663,9 +663,7 @@ async def ask_with_image(
     # === Vision Race Mode ===
     import queue as queue_mod
     import threading
-    import time as time_module
 
-    race_start = time_module.time()
     SPEED_PRIORITY = {"groq": 0, "google": 1, "openai": 2, "anthropic": 3}
     vision_providers.sort(key=lambda p: SPEED_PRIORITY.get(p, 99))
 
@@ -680,7 +678,6 @@ async def ask_with_image(
         import asyncio
 
         async def _run():
-            p_start = time_module.time()
             try:
                 if provider_name == "ollama":
                     from ai_router import ask_ollama_vision_stream
@@ -697,14 +694,12 @@ async def ask_with_image(
                         return
                     stream_iter = stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature)
 
-                has_error = False
                 # All vision stream functions are patched to async generators.
                 async for event in stream_iter:
                     if cancel_flags[provider_name].is_set():
                         race_queue.put((provider_name, "DONE", None))
                         return
                     if "event: error" in event:
-                        has_error = True
                         race_queue.put((provider_name, "ERROR", event))
                     else:
                         race_queue.put((provider_name, "EVENT", event))

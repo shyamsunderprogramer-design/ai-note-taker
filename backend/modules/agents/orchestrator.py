@@ -338,7 +338,7 @@ class AgentOrchestrator:
                         data = json.loads(data_line[0][5:])
                         full_response += data.get("content", "")
                 except (json.JSONDecodeError, IndexError):
-                    pass
+                    pass  # Malformed SSE chunks are skipped without ending the remaining agent response.
             elif "event: error" in event:
                 logger.warning(f"[Orchestrator] LLM error for {agent.agent_type.value}")
                 break
@@ -408,7 +408,7 @@ class AgentOrchestrator:
                         full_response += content
                         yield _make_agent_event("agent_chunk", agent_type_str, content=content)
                 except (json.JSONDecodeError, IndexError):
-                    pass
+                    pass  # Malformed SSE chunks are skipped without ending the remaining agent response.
             elif "event: error" in event:
                 try:
                     data_line = [l for l in event.split("\n") if l.startswith("data:")]

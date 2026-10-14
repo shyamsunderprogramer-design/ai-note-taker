@@ -642,8 +642,6 @@ class PredictiveInterview:
         Returns structured preparation tasks organized by category.
         """
         company = self._normalize_company_name(company_name)
-        normalized_role = self._normalize_role(role) if role else None
-
         predictions = self.get_company_predictions(company, role, num_questions=15)
 
         # Organize by category

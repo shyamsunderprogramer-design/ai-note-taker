@@ -184,7 +184,7 @@ class AgentSessionManager:
                 started_dt = datetime.fromisoformat(started)
                 session["duration_seconds"] = int((datetime.utcnow() - started_dt).total_seconds())
             except (ValueError, TypeError):
-                pass
+                pass  # Legacy sessions may lack a valid start time; leave their duration unset.
 
         await self.save_session(session)
         self._invalidate_cache(session_id)

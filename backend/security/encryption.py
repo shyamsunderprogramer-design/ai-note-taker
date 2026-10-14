@@ -68,7 +68,7 @@ class EncryptionManager:
         try:
             identifiers.append(platform.node())
         except Exception:
-            pass
+            pass  # Some runtimes omit node names; continue collecting the OS machine identifier.
 
         # Machine identifier (varies by OS)
         if os.name == 'nt':  # Windows

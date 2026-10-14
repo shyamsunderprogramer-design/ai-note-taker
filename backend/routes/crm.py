@@ -105,7 +105,7 @@ async def sync_hubspot(
                 )
                 return {"status": "synced", "crm": "hubspot", "type": "activity", "code": response.status_code}
     except ImportError:
-        pass
+        logger.warning("[CRM] HubSpot client dependency is unavailable")
     except Exception as e:
         logger.error("[CRM] HubSpot sync error: %s", str(e))
 

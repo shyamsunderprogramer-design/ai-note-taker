@@ -14,7 +14,7 @@ test('panel follow-up cancels a pending answer and carries its question into the
  assert.equal(answers.length,1)
  assert.equal(answers[0].options.followupOf,busy.userQuestion)
  assert.match(answers[0].text,/database migration/)
-})
+});
 test('general live question does not wait for unrelated OCR',async()=>{
  const answers=[];const scope=vm.createContext({Promise,Set,setTimeout,Date,activeQuestion:null,
  window:{unifiedSessionActive:true,liveSessionContext:{needsScreen:()=>false}},

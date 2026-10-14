@@ -362,7 +362,7 @@ def _bytes_to_float32(audio_data: bytes) -> np.ndarray:
             if len(arr) > 0 and np.abs(arr).max() <= 2.0:
                 return arr
         except Exception:
-            pass
+            pass  # Try int16 below when the float32 probe cannot decode this buffer.
 
     # Fall back to int16 (2 bytes per sample)
     if len(audio_data) % 2 == 0:

@@ -93,13 +93,10 @@ from config import OLLAMA_URL
 try:
     from whisper_handler import (
         BrowserTranscriber,
-        clean_text,
         get_model,
         get_streaming_transcriber,
         is_meaningful,
         is_question,
-        is_small_talk,
-        is_technical,
         transcribe_audio,
         warmup,
     )
@@ -783,7 +780,7 @@ def cleanup_temp_audio():
                 try:
                     os.remove(os.path.join(UPLOAD_DIR, f))
                 except OSError:
-                    pass
+                    logger.warning("Could not remove a stale temporary audio file")
 
 
 def get_ffmpeg_path():
@@ -955,7 +952,7 @@ async def start_listener():
                     try:
                         await db_mod.db_manager.engine.dispose()
                     except Exception:
-                        pass
+                        logger.warning("Failed to dispose the previous database engine during fallback")
                     db_mod.db_manager.engine = None
                     db_mod.db_manager.session_maker = None
                 db_mod.DATABASE_URL = db_mod.DEFAULT_SQLITE_URL
@@ -1344,7 +1341,7 @@ async def ask_with_image(
             from ai_router import _get_vision_model
             ollama_vision_model = _get_vision_model()
         except Exception:
-            pass
+            pass  # Local vision is optional; configured cloud vision providers remain available.
 
         has_ollama_vision = ollama_vision_model is not None
         has_ollama_cloud_key = _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
@@ -1403,7 +1400,7 @@ async def ask_with_image(
                             data = json.loads(data_line[5:].strip())
                             full_description += data.get("content", "")
                         except (json.JSONDecodeError, IndexError):
-                            pass
+                            pass  # Only accumulation failed; the original stream event is forwarded below.
                         yield event
                     elif '"type":"vision_done"' in event or '"type": "vision_done"' in event:
                         yield event
@@ -1485,7 +1482,7 @@ async def transcribe_stream(request: Request):
             try:
                 client_queue.put_nowait(text)
             except Exception:
-                pass
+                logger.warning("Could not enqueue a transcript notification")
         transcriber.add_callback(sync_queue_callback)
 
         # Ensure transcriber is running
@@ -1503,7 +1500,7 @@ async def transcribe_stream(request: Request):
                     # No transcription in queue within timeout — send ping so renderer can check silence
                     yield f"event: ping\ndata: {json.dumps({'t': int(time.time())})}\n\n"
         except GeneratorExit:
-            pass
+            pass  # GeneratorExit is the normal termination signal when the subscriber disconnects.
         except Exception as e:
             logger.error("[transcribe-stream] error: %s", str(e))
 
@@ -1682,7 +1679,7 @@ async def health_modules():
             if resp.status_code == 200:
                 return bool(resp.json().get("apiKey"))
         except Exception:
-            pass
+            pass  # The local key service may be unavailable; check the configured environment fallback.
         return bool(os.getenv(env_var, "").strip())
 
     providers = {
@@ -1700,7 +1697,7 @@ async def health_modules():
         try:
             mock_interview_count = len(mock_library.get_all_questions())
         except Exception:
-            pass
+            pass  # An unavailable optional catalogue keeps the diagnostic count at zero.
 
     modules = {
         "database": {
@@ -2445,7 +2442,7 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
             try:
                 messages = json.loads(context)
             except Exception:
-                pass
+                pass  # Malformed optional history is omitted; the submitted question is still answered.
 
         try:
             # Yield provider/mode info as first event
@@ -2880,7 +2877,7 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
             try:
                 os.remove(path)
             except OSError:
-                pass
+                logger.warning("Could not remove a temporary speaker-transcription file")
 
 
 @app.get("/transcribe/{audio_id}/speakers")
@@ -2960,9 +2957,9 @@ async def ws_transcribe(ws: WebSocket):
                             token = auth_data.get("token", "")
                             user = await get_current_user(token)
                     except (json.JSONDecodeError, KeyError):
-                        pass
+                        pass  # Malformed auth leaves user unset and closes the socket below.
             except asyncio.TimeoutError:
-                pass
+                pass  # An absent auth message leaves user unset and closes the socket below.
 
         if not user:
             await ws.send_text(json.dumps({"type": "auth_error", "message": "Authentication required. Send {\"type\":\"auth\",\"token\":\"xxx\"} as first message or pass ?token=xxx in URL."}))
@@ -3028,7 +3025,7 @@ async def ws_transcribe(ws: WebSocket):
         try:
             msg_queue.put_nowait(msg)
         except asyncio.QueueFull:
-            pass
+            pass  # Drop an overloaded preview; partial_texts still retains it for the final transcript.
 
     transcriber.add_callback(on_transcript)
 
@@ -3081,7 +3078,7 @@ async def ws_transcribe(ws: WebSocket):
         try:
             await ws.send_json(final_msg)
         except Exception:
-            pass
+            pass  # The peer may already be disconnected; final cleanup must not send again.
 
 
 # ==============================
@@ -4310,7 +4307,7 @@ async def generate_study_plan(
                 stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # Graph enrichment is optional; build the plan using the available study history.
 
         plan = study_planner.generate_plan(
             user_id, days, daily_minutes, graph_data,
@@ -4354,7 +4351,7 @@ async def generate_personalized_study_plan(
                 stats = cognitive_graph.get_graph_stats(request.user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # Graph enrichment is optional; build the plan using the available study history.
 
         plan = study_planner.generate_plan(
             request.user_id, request.days, request.daily_minutes, graph_data,
@@ -4436,7 +4433,7 @@ async def get_study_plan(user_id: str):
                 stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # Graph enrichment is optional; build the plan using the available study history.
 
         plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
         # export_plan returns JSON string, parse it to return as dict
