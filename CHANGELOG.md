@@ -4,6 +4,10 @@ All notable changes to ANT (AI Note Taker) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.3.0-rc.1] - 2026-10-14
+
+Testing prerelease with the verified live-assistant and security fixes, native desktop builds, a self-contained Python runtime, and writable packaged storage. See [release notes](docs/releases/2.3.0-rc.1.md) for validation and known limitations.
+
 ## [Unreleased] — 2026-06-11
 
 This release adds the **role-based ownership refactor**. It is split into

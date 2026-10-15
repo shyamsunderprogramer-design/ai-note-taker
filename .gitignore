@@ -309,3 +309,6 @@ lib-cov
 !README.md
 !LICENSE
 !CHANGELOG.md
+
+# Relocatable runtime generated for desktop releases
+/AINT_Python/

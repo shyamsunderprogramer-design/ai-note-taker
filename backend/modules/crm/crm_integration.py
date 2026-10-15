@@ -14,6 +14,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from lib.storage_paths import storage_path
 from typing import Dict, Optional
 from dataclasses import dataclass, asdict
 import requests
@@ -21,7 +22,7 @@ import requests
 logger = logging.getLogger("crm")
 
 # Storage path
-DATA_DIR = Path(os.path.dirname(__file__)) / "data"
+DATA_DIR = storage_path(Path(os.path.dirname(__file__)) / "data", "crm")
 CRM_CONFIG_FILE = DATA_DIR / "crm_config.json"
 
 # Ensure directory exists

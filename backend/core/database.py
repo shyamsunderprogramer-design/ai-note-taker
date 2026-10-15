@@ -18,6 +18,7 @@ from lib.database_connection import database_dialect, postgres_connection_option
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
+from lib.storage_paths import storage_path
 
 # Encryption support for data at rest
 try:
@@ -35,7 +36,7 @@ DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
 
 # SQLite path: use absolute path based on this file's location
 _BACKEND_DIR = Path(__file__).resolve().parent  # backend/core/
-_DATA_DIR = _BACKEND_DIR.parent / "data"  # backend/data/
+_DATA_DIR = storage_path(_BACKEND_DIR.parent / "data")
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_SQLITE_URL = f"sqlite+aiosqlite:///{_DATA_DIR / 'ainotetaker.db'}"
 
@@ -2252,7 +2253,7 @@ class DataMigrator:
     @staticmethod
     def _marker_path() -> Path:
         """Return the absolute path of the migration marker file."""
-        return Path(__file__).resolve().parent.parent / "data" / DataMigrator.MARKER_FILENAME
+        return _DATA_DIR / DataMigrator.MARKER_FILENAME
 
     @classmethod
     def already_migrated(cls) -> bool:

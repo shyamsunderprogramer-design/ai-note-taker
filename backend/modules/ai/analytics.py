@@ -15,6 +15,7 @@ import os
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from lib.storage_paths import storage_path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from collections import defaultdict
@@ -22,7 +23,7 @@ from collections import defaultdict
 logger = logging.getLogger("analytics")
 
 # Storage path
-DATA_DIR = Path(os.path.dirname(__file__)) / "data"
+DATA_DIR = storage_path(Path(os.path.dirname(__file__)) / "data", "analytics")
 ANALYTICS_FILE = DATA_DIR / "analytics.json"
 
 # Ensure directory exists

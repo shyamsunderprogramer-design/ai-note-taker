@@ -39,7 +39,7 @@ class EncryptionManager:
     def __init__(self, key_file: Optional[str] = None):
         self._key: Optional[bytes] = None
         self._fernet: Optional[Fernet] = None
-        self.key_file = key_file or self._get_default_key_file()
+        self.key_file = key_file or os.getenv("ANT_ENCRYPTION_KEY_FILE") or self._get_default_key_file()
         self._init_encryption()
 
     def _get_default_key_file(self) -> str:

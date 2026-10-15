@@ -699,40 +699,12 @@ async function restartBackend() {
 }
 
 function getPythonExecutable() {
-  const isProd = app.isPackaged
-
-  // In dev mode, try common venv paths for current platform
-  if (!isProd) {
-    const venvBin = PLATFORM === "win32" ? "Scripts" : "bin"
-    const pythonName = PLATFORM === "win32" ? "python.exe" : "python"
-    const devPaths = [
-      path.join(__dirname, "..", "AINT_Venv", venvBin, pythonName),
-      path.join(__dirname, "..", "..", "AINT_Venv", venvBin, pythonName),
-    ]
-    for (const p of devPaths) {
-      try {
-        fs.accessSync(p, fs.constants.X_OK)
-        return p
-      } catch { /* try next */ }
-    }
-  }
-
-  // In production, look in extraResources (process.resourcesPath)
-  if (isProd) {
-    const venvBin = PLATFORM === "win32" ? "Scripts" : "bin"
-    const candidates = [
-      path.join(process.resourcesPath, "AINT_Venv", venvBin, PLATFORM === "win32" ? "python.exe" : "python"),
-    ]
-    for (const p of candidates) {
-      try {
-        fs.accessSync(p, fs.constants.X_OK)
-        return p
-      } catch { /* try next */ }
-    }
-  }
-
-  // Fallback to system python
-  return PLATFORM === "win32" ? "python" : "python3"
+  return require("./lib/python-runtime").pythonExecutable({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appDirectory: __dirname,
+    platform: PLATFORM
+  })
 }
 
 async function startBackend() {
@@ -757,7 +729,14 @@ async function startBackend() {
     return
   }
 
-  const pythonExe = getPythonExecutable()
+  let pythonExe
+  try {
+    pythonExe = getPythonExecutable()
+  } catch {
+    logger.error("[Backend] Bundled Python runtime is missing; reinstall this release")
+    notifyRendererBackendStatus("error", { reason: "missing_runtime" })
+    return
+  }
   const isProd = app.isPackaged
   const backendDir = isProd
     ? path.join(process.resourcesPath, "backend")
@@ -773,13 +752,23 @@ async function startBackend() {
     return
   }
 
+  const workingDir = isProd ? path.join(getAppDataPath(), "backend") : backendDir
+  fs.mkdirSync(workingDir, { recursive: true })
+  const dataDir = path.join(workingDir, "data")
   const env = {
     ...process.env,
-    PYTHONPATH: backendDir
+    PYTHONPATH: backendDir,
+    ...(isProd ? {
+      ANT_DATA_DIR: dataDir,
+      ANT_VOICE_STORAGE_DIR: path.join(dataDir, "voice_models"),
+      ANT_MEETING_TEMPLATES_DIR: path.join(dataDir, "meeting_templates"),
+      PYTHONDONTWRITEBYTECODE: "1",
+      PYTHONNOUSERSITE: "1"
+    } : {})
   }
 
   const spawnOpts = {
-    cwd: backendDir,
+    cwd: workingDir,
     env: env,
     stdio: ["ignore", "pipe", "pipe"]
   }

@@ -1,6 +1,6 @@
 {
   "name": "ai-note-taker",
-  "version": "2.2.3",
+  "version": "2.3.0-rc.1",
   "private": true,
   "description": "AI-powered voice note taker with stealth mode",
   "main": "main.js",
@@ -59,23 +59,8 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
-      "extraResources": [
-        {
-          "from": "../AINT_Venv_windows",
-          "to": "AINT_Venv",
-          "filter": [
-            "**/*",
-            "!**/__pycache__/**",
-            "!**/*.pyc",
-            "!**/*.pyo",
-            "!**/Lib/**/test/**",
-            "!**/Lib/**/tests/**",
-            "!**/share/**",
-            "!**/Include/**"
-          ]
-        }
-      ]
+      "artifactName": "ANT-${version}-win-${arch}.${ext}",
+      "extraResources": []
     },
     "nsis": {
       "oneClick": false,
@@ -84,17 +69,10 @@
       "createStartMenuShortcut": true,
       "shortcutName": "ANT (AI Note Taker)",
       "license": "../LICENSE",
-      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
+      "artifactName": "ANT-Setup-${version}-win-${arch}.${ext}"
     },
     "mac": {
       "target": [
-        {
-          "target": "tar.gz",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
         {
           "target": "zip",
           "arch": [
@@ -105,7 +83,7 @@
       ],
       "icon": "assets/icon.icns",
       "category": "public.app-category.productivity",
-      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "artifactName": "ANT-${version}-mac-${arch}.${ext}",
       "hardenedRuntime": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
@@ -121,22 +99,12 @@
         {
           "from": "../node_modules/audiotee/bin/audiotee",
           "to": "audiotee"
-        },
-        {
-          "from": "../AINT_Venv_macos",
-          "to": "AINT_Venv",
-          "filter": [
-            "**/*",
-            "!**/__pycache__/**",
-            "!**/*.pyc",
-            "!**/*.pyo",
-            "!**/lib/**/test/**",
-            "!**/lib/**/tests/**",
-            "!**/share/**",
-            "!**/include/**"
-          ]
         }
-      ]
+      ],
+      "signIgnore": [
+        "/Contents/Resources/python/"
+      ],
+      "minimumSystemVersion": "14.0.0"
     },
     "linux": {
       "target": [
@@ -155,25 +123,10 @@
       ],
       "icon": "assets/icons",
       "category": "Utility",
-      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "artifactName": "ANT-${version}-linux-${arch}.${ext}",
       "synopsis": "Privacy-first AI note taker with voice transcription and stealth mode",
       "description": "ANT is a privacy-first AI notepad that runs entirely on your machine. Local speech-to-text, multi-provider AI, floating overlay, and screen capture protection.",
-      "extraResources": [
-        {
-          "from": "../AINT_Venv_linux",
-          "to": "AINT_Venv",
-          "filter": [
-            "**/*",
-            "!**/__pycache__/**",
-            "!**/*.pyc",
-            "!**/*.pyo",
-            "!**/lib/**/test/**",
-            "!**/lib/**/tests/**",
-            "!**/share/**",
-            "!**/include/**"
-          ]
-        }
-      ]
+      "extraResources": []
     },
     "files": [
       "main.js",
@@ -235,7 +188,22 @@
           "!**/data/conversations/**",
           "!**/tests/**",
           "!**/coverage.xml",
-          "!**/*.egg-info/**"
+          "!**/*.egg-info/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/data/**",
+          "!**/*.db",
+          "!**/*.db-*"
+        ]
+      },
+      {
+        "from": "../AINT_Python",
+        "to": "python",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
         ]
       }
     ],
@@ -247,7 +215,8 @@
       "main.js",
       "preload.js",
       "stealth.js"
-    ]
+    ],
+    "afterPack": "scripts/sign-runtime.cjs"
   },
   "dependencies": {
     "audiotee": "^0.0.7",
