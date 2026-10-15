@@ -73,20 +73,14 @@
     },
     "mac": {
       "target": [
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
+        "zip"
       ],
       "icon": "assets/icon.icns",
       "category": "public.app-category.productivity",
       "artifactName": "ANT-${version}-mac-${arch}.${ext}",
       "hardenedRuntime": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
       "notarize": false,
       "identity": "-",
       "extendInfo": {
@@ -126,7 +120,8 @@
       "artifactName": "ANT-${version}-linux-${arch}.${ext}",
       "synopsis": "Privacy-first AI note taker with voice transcription and stealth mode",
       "description": "ANT is a privacy-first AI notepad that runs entirely on your machine. Local speech-to-text, multi-provider AI, floating overlay, and screen capture protection.",
-      "extraResources": []
+      "extraResources": [],
+      "executableName": "ai-note-taker"
     },
     "files": [
       "main.js",
