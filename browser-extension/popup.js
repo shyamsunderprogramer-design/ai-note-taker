@@ -36,9 +36,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     let jobDetected = false;
 
     // Check if on supported site
-    const isSupported = url.includes('linkedin.com') ||
-                       url.includes('indeed.com') ||
-                       url.includes('glassdoor.com');
+    const isSupported = jobBoardHostMatches(url, 'linkedin.com') ||
+                       jobBoardHostMatches(url, 'indeed.com') ||
+                       jobBoardHostMatches(url, 'glassdoor.com');
 
     if (isSupported) {
         try {
@@ -168,7 +168,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Function to run in page context
 function extractFromPage() {
-    const url = window.location.href;
     let company = '', role = '', location = '';
 
     // Strategy 1: Meta tags

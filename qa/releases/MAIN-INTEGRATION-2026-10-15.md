@@ -34,3 +34,11 @@ The user authorized moving the tested application onto `main` and proceeding wit
 4. Inspect the six native installers, audits and SHA256SUMS before publishing as a prerelease. No tag/public release exists at this checkpoint.
 
 Outstanding limits: cloud templates, low-severity scanner findings, optional voice runtimes and live hardware/provider behavior still need review. macOS builds are ad-hoc signed, Windows installers are unsigned, and no guarantee of universal capture invisibility or millisecond provider responses is made.
+
+## Integration PR follow-up
+
+- PR #25: https://github.com/shyamsunderprogramer-design/ai-note-taker/pull/25
+- Initial integration commit: `49d1e182c9e426c24ee6448765aba50d2d27a5f3`. Hosted backend, web/desktop/mobile, workflow validation, all browser tests and Vercel preview passed.
+- CodeQL found 18 retained-main issues: 10 unsafe host-substring checks, six floating third-party action references, one unused URL binding and one unused Python import. These are fixed in the follow-up source; fresh hosted analysis is required. The legacy startup script also resolves the relocated backend and current JWT library.
+- The secret-scan action failed on a root-commit range. Its pinned replacement scans both full histories and merge changes. Two real historic credentials have GitHub records of revocation; one Ollama key still needs revocation confirmation. See `qa/security/HISTORICAL-SECRETS-2026-10-15.md`. This unresolved finding must not be dismissed as a false positive.
+- All four release-parent native builds passed in run `38804653301`. No tag or public release has been created.

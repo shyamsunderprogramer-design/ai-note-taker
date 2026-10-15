@@ -42,7 +42,7 @@
         "*://*.jobs.net/*",
         "*://*.bamboohr.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["job-board-host.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

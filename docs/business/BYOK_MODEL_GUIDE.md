@@ -100,15 +100,15 @@ ollama pull llava:latest      # Vision/Screenshots
 **Via API:**
 ```bash
 curl -X POST http://localhost:8000/providers/byok/configure \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Authorization: Bearer ${ANT_AUTH_TOKEN}" \
   -d "provider=openai" \
-  -d "api_key=sk-..."
+  -d "api_key=${OPENAI_API_KEY}"
 ```
 
 ### Step 3: Verify
 ```bash
 curl http://localhost:8000/providers/byok/status \
-  -H "Authorization: Bearer YOUR_TOKEN"
+  -H "Authorization: Bearer ${ANT_AUTH_TOKEN}"
 ```
 
 ---
@@ -184,7 +184,7 @@ ollama pull qwen2.5:1.5b
 curl -X POST http://localhost:8000/providers/byok/configure \
   -H "Authorization: Bearer TOKEN" \
   -d "provider=openai" \
-  -d "api_key=sk-..."
+  -d "api_key=${OPENAI_API_KEY}"
 
 # 3. Start using premium AI
 ```

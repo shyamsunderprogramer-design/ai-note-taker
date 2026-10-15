@@ -113,14 +113,14 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-CD-${{ github.run_id }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: '1.7.0'
           terraform_wrapper: false
@@ -176,19 +176,19 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-Deploy-${{ github.run_id }}
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: '3.14.0'
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
 
       - name: Configure Kubeconfig (AWS EKS)
         env:
@@ -292,7 +292,7 @@ jobs:
 
       - name: Notify Slack
         if: vars.ENABLE_DEPLOYMENT_NOTIFICATIONS == 'true' && env.SLACK_BOT_TOKEN != ''
-        uses: slackapi/slack-github-action@v2
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}

@@ -156,18 +156,7 @@ jobs:
           fetch-depth: 0
 
       - name: GitLeaks Scan
-        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .github/gitleaks.toml
-
-      - name: Upload GitLeaks report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitleaks-report
-          path: gitleaks-report.json
-          retention-days: 30
+        uses: ./.github/actions/scan-secrets
 
   # ═══════════════════════════════════════════════════════════════════════
   # CHECKOV IaC SECURITY SCAN
