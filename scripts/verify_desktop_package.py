@@ -17,11 +17,13 @@ from pathlib import Path
 def verify(resources):
     runtime = resources / "python"
     executable = runtime / ("python.exe" if sys.platform == "win32" else "bin/python3")
-    subprocess.run([str(executable), "-I", "-c",
-                    "import ssl, sqlite3, ctypes, uvicorn, fastapi, jwt, bcrypt, faster_whisper; "
-                    "from pathlib import Path; import sys; "
-                    "assert Path(sys.prefix).resolve() == Path(sys.argv[1]).resolve(); "
-                    "print('Packaged runtime imports passed')", str(runtime)], check=True)
+    import_check = (
+        "import ssl, sqlite3, ctypes, uvicorn, fastapi, jwt, bcrypt, faster_whisper; "
+        "from pathlib import Path; import sys; "
+        "assert Path(sys.prefix).resolve() == Path(sys.argv[1]).resolve(); "
+        "print('Packaged runtime imports passed')"
+    )
+    subprocess.run([str(executable), "-I", "-c", import_check, str(runtime)], check=True)
     with tempfile.TemporaryDirectory(prefix="ant-package-smoke-") as temporary:
         user_dir = Path(temporary)
         data = user_dir / "data"
