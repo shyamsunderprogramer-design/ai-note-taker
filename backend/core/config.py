@@ -18,20 +18,28 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_CLOUD_URL = os.getenv("OLLAMA_CLOUD_URL", "https://ollama.com")
 OLLAMA_CLOUD_API_KEY = os.getenv("OLLAMA_CLOUD_API_KEY", "")
 
-# Default fallback model (must exist in `ollama list`)
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
-MODEL_FAST = os.getenv("OLLAMA_MODEL_FAST", "qwen2.5:1.5b")
-MODEL_CLOUD = os.getenv("OLLAMA_MODEL_CLOUD", "minimax-m2.7:cloud")
-MODEL_REASONING = os.getenv("OLLAMA_MODEL_REASONING", "qwen2.5:1.5b")
-MODEL_CODE = os.getenv("OLLAMA_MODEL_CODE", "qwen2.5:1.5b")
+# Default fallback model (must exist in `ollama list`).
+# Local-first routing — see the model table in .env.example for the rationale.
+# Override via OLLAMA_MODEL, OLLAMA_MODEL_<MODE>, etc.
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
+MODEL_FAST = os.getenv("OLLAMA_MODEL_FAST", "lfm2.5:latest")
+MODEL_CLOUD = os.getenv("OLLAMA_MODEL_CLOUD", "minimax-m3:cloud")
+MODEL_REASONING = os.getenv("OLLAMA_MODEL_REASONING", "gemma4:e4b")
+MODEL_CODE = os.getenv("OLLAMA_MODEL_CODE", "qwen3.5:9b")
 
 
 # ==============================
 # 🧠 MODEL CONFIG (BY MODE)
 # ==============================
-# You can override these in .env
-MODEL_INTERVIEW = os.getenv("OLLAMA_MODEL_INTERVIEW", "llama3:latest")
-MODEL_UNIVERSAL = os.getenv("OLLAMA_MODEL_UNIVERSAL", "mistral:latest")
+# Per-mode model selection. Capability-based routing across the locally-installed
+# ollama models — see `.env.example` for the full mapping table.
+#   - qwen3.5:9b  — best general-purpose (vision + tools + thinking)
+#   - gemma4:e4b  — strong technical depth, good for interview / reasoning
+#   - lfm2.5      — fastest 8.5B, used for fast / turbo
+#   - <name>:cloud — ollama.com cloud models, requires OLLAMA_CLOUD_API_KEY
+# You can override any of these in .env
+MODEL_INTERVIEW = os.getenv("OLLAMA_MODEL_INTERVIEW", "gemma4:e4b")
+MODEL_UNIVERSAL = os.getenv("OLLAMA_MODEL_UNIVERSAL", "qwen3.5:9b")
 MODEL_ADAPTIVE = os.getenv("OLLAMA_MODEL_ADAPTIVE", DEFAULT_MODEL)
 ALLOWED_MODES = ("auto", "fast", "cloud", "interview", "universal", "adaptive", "reasoning", "code", "turbo")
 
@@ -45,11 +53,12 @@ AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.1"))
 # Timeout for AI requests (seconds)
 AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "30"))
 
-# Super-fast mode: tiny model for instant responses
-MODEL_TURBO = os.getenv("OLLAMA_MODEL_TURBO", "qwen2.5:1.5b")  # Small fast model
+# Super-fast mode: fast local model for instant responses
+MODEL_TURBO = os.getenv("OLLAMA_MODEL_TURBO", "lfm2.5:latest")  # Small fast local model
 TURBO_MAX_TOKENS = int(os.getenv("TURBO_MAX_TOKENS", "150"))  # Very short responses
 
 # Instant mode: ultra-fast for immediate responses
+MODEL_INSTANT = os.getenv("OLLAMA_MODEL_INSTANT", DEFAULT_MODEL)
 INSTANT_MAX_TOKENS = int(os.getenv("INSTANT_MAX_TOKENS", "64"))  # Ultra short
 
 
@@ -73,7 +82,7 @@ def get_ai_model(mode="adaptive"):
         return MODEL_TURBO
 
     if mode == "instant":
-        return MODEL_TURBO  # Same fast model, fewer tokens
+        return MODEL_INSTANT
 
     if mode == "code":
         return MODEL_CODE

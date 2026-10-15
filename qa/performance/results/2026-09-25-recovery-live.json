@@ -1,0 +1,68 @@
+[
+  {
+    "case": "quota",
+    "scope": "Injected first failure; real Groq recovery through production controller and provider adapter",
+    "seconds": 0.881,
+    "calls": [
+      "qa-primary",
+      "groq-gpt-oss-120b"
+    ],
+    "completed": true,
+    "answer": "The resume does not list any AWS certifications, so none are known from the provided evidence.",
+    "recovery_events": [
+      {
+        "type": "recovery",
+        "provider": "groq",
+        "model": "groq-gpt-oss-120b",
+        "attempt": 1,
+        "reason": "rate_limit",
+        "continuation": false,
+        "message": "Switching to groq-gpt-oss-120b\u2026"
+      }
+    ]
+  },
+  {
+    "case": "partial_disconnect",
+    "scope": "Injected first failure; real Groq recovery through production controller and provider adapter",
+    "seconds": 2.307,
+    "calls": [
+      "qa-primary",
+      "groq-gpt-oss-120b"
+    ],
+    "completed": true,
+    "answer": "Cedar is $1,400 over budget.\n\nMaple is $300 under budget. Combined net overrun: $1,100.",
+    "recovery_events": [
+      {
+        "type": "recovery",
+        "provider": "groq",
+        "model": "groq-gpt-oss-120b",
+        "attempt": 1,
+        "reason": "transient",
+        "continuation": true,
+        "message": "Continuing with groq-gpt-oss-120b\u2026"
+      }
+    ]
+  },
+  {
+    "case": "output_limit",
+    "scope": "Injected first failure; real Groq recovery through production controller and provider adapter",
+    "seconds": 2.204,
+    "calls": [
+      "groq-gpt-oss-120b",
+      "groq-gpt-oss-120b"
+    ],
+    "completed": true,
+    "answer": "Cedar is $1,400 over budget.\n\nMaple is $300 under budget. Combined net overrun is $1,100.",
+    "recovery_events": [
+      {
+        "type": "recovery",
+        "provider": "groq",
+        "model": "groq-gpt-oss-120b",
+        "attempt": 1,
+        "reason": "output_limit",
+        "continuation": true,
+        "message": "Continuing with groq-gpt-oss-120b\u2026"
+      }
+    ]
+  }
+]

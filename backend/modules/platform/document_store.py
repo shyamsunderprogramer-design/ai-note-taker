@@ -13,13 +13,14 @@ import json
 import hashlib
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from lib.storage_paths import storage_path
+from typing import List, Dict, Optional
 import numpy as np
 
 logger = logging.getLogger("document_store")
 
 # Storage paths
-DATA_DIR = Path(os.path.dirname(__file__)) / "data"
+DATA_DIR = storage_path(Path(os.path.dirname(__file__)) / "data", "documents")
 DOCS_DIR = DATA_DIR / "documents"
 VECTOR_DIR = DATA_DIR / "vectors"
 

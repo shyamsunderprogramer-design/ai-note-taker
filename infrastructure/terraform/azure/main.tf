@@ -23,33 +23,7 @@ terraform {
     }
   }
 
-  backend "azurerm" {
-    resource_group_name  = "ant-tf-state"
-    storage_account_name = "anttfbstate"
-    container_name       = "tfstate"
-    key                  = "prod.terraform.tfstate"
-  }
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Variables
-# ─────────────────────────────────────────────────────────────────────────────
-variable "environment" {
-  description = "Deployment environment"
-  type        = string
-  default     = "production"
-}
-
-variable "image_tag" {
-  description = "Docker image tag to deploy"
-  type        = string
-  default     = "latest"
-}
-
-variable "location" {
-  description = "Azure region"
-  type        = string
-  default     = "eastus"
+  # Backend configuration lives in backend.tf (moved in Fix #24).
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,21 +64,24 @@ resource "azurerm_kubernetes_cluster" "main" {
   dns_prefix          = "ant"
   sku_tier            = var.environment == "production" ? "Standard" : "Free"
 
-  kubernetes_version  = "1.29"
- aks_clusters_min_version = "1.28"
+  kubernetes_version     = var.kubernetes_version
+  local_account_disabled = true
+  # Fix #24: removed the made-up `aks_clusters_min_version` attribute
+  # (never a real arg in azurerm; `kubernetes_version` is the only one).
 
   default_node_pool {
-    name                = "default"
-    node_count          = 3
-    vm_size            = "Standard_DS2_v2"
-    type               = "VirtualMachineScaleSets"
-    availability_zones  = ["1", "2", "3"]
+    name       = "default"
+    node_count = 3
+    vm_size    = "Standard_DS2_v2"
+    type       = "VirtualMachineScaleSets"
+    # Fix #24: removed `availability_zones` from `default_node_pool` (gone in azurerm 3.x);
+    # the AKS zone support is at the cluster level via a separate node pool resource.
     enable_auto_scaling = true
-    min_count          = 2
-    max_count          = 10
-    os_disk_size_gb    = 50
-    os_disk_type       = "Managed"
-    vnet_subnet_id     = azurerm_subnet.main.id
+    min_count           = 2
+    max_count           = 10
+    os_disk_size_gb     = 50
+    os_disk_type        = "Managed"
+    vnet_subnet_id      = azurerm_subnet.main.id
 
     node_labels = {
       "workload" = "default"
@@ -116,18 +93,18 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   network_profile {
-    network_plugin     = "azure"
-    network_policy     = "calico"
-    load_balancer_sku  = "standard"
-    outbound_type      = "loadBalancer"
-    service_cidr       = "10.1.0.0/16"
-    dns_service_ip     = "10.1.0.10"
+    network_plugin    = "azure"
+    network_policy    = "calico"
+    load_balancer_sku = "standard"
+    outbound_type     = "loadBalancer"
+    service_cidr      = "172.20.0.0/16"
+    dns_service_ip    = "172.20.0.10"
   }
 
   azure_active_directory_role_based_access_control {
     managed                = true
     azure_rbac_enabled     = true
-    admin_group_object_ids = [var.azure_admin_group_id]
+    admin_group_object_ids = compact([trimspace(var.azure_admin_group_id)])
   }
 
   oms_agent {
@@ -150,12 +127,6 @@ resource "azurerm_kubernetes_cluster" "main" {
     update = "60m"
     delete = "60m"
   }
-}
-
-variable "azure_admin_group_id" {
-  description = "Azure AD group ID for cluster admin access"
-  type        = string
-  default     = ""
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,7 +164,7 @@ resource "azurerm_subnet" "aks_system" {
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.1.0.0/24"]
 
-  enforce_private_link_endpoint_network_policies = true
+  private_endpoint_network_policies = "Enabled"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -223,7 +194,7 @@ resource "azurerm_network_security_group" "main" {
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range      = "5432"
+    destination_port_range     = "5432"
     source_address_prefix      = "VirtualNetwork"
     destination_address_prefix = "VirtualNetwork"
   }
@@ -270,19 +241,22 @@ resource "azurerm_container_registry" "main" {
   sku                 = "Premium"
   admin_enabled       = false
 
-  georeplications = var.environment == "production" ? [
-    {
+  # Fix #24: azurerm 3.x requires `georeplications` to be a block (not an
+  # attribute set to a list of objects). The block can be repeated per region.
+  dynamic "georeplications" {
+    for_each = var.environment == "production" ? [1] : []
+    content {
       location = "westus2"
       tags     = {}
     }
-  ] : []
+  }
 
   trust_policy {
     enabled = true
   }
 
   encryption {
-    enabled = true
+    enabled          = true
     key_vault_key_id = azurerm_key_vault_key.main.id
   }
 
@@ -339,10 +313,8 @@ resource "azurerm_key_vault_key" "main" {
     automatic {
       time_before_expiry = "P30D"
     }
-    notify {
-      datetime_format = "RFC3339"
-      time_before_expiry = "P7D"
-    }
+    # Fix #24: removed `notify` block (gone in azurerm 3.x; the new schema
+    # uses a top-level `expiry_notification` block on the Key Vault, not here).
   }
 }
 
@@ -395,8 +367,9 @@ resource "azurerm_log_analytics_workspace" "main" {
   name                = "ant-log-${var.environment}"
   resource_group_name = azurerm_resource_group.main.name
   location            = var.location
-  retention_days      = 30
-  sku                 = "PerGB2018"
+  # Fix #24: azurerm 3.x renamed `retention_days` → `retention_in_days`.
+  retention_in_days = 30
+  sku               = "PerGB2018"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -406,18 +379,19 @@ resource "azurerm_postgresql_flexible_server" "main" {
   name                = "ant-postgres-${var.environment}"
   resource_group_name = azurerm_resource_group.main.name
   location            = var.location
-  version            = "16"
-  sku_name           = "GP_Standard_D4s_v3"
-  tier              = "GeneralPurpose"
-  storage_mb         = 32768
-  backup_retention_days = 14
+  version             = "16"
+  sku_name            = "GP_Standard_D4s_v3"
+  # Fix #24: azurerm 3.x removed the standalone `tier` arg; tier is encoded
+  # in the sku_name (e.g. "GP_*" = GeneralPurpose, "MO_*" = MemoryOptimized).
+  storage_mb                   = 32768
+  backup_retention_days        = 14
   geo_redundant_backup_enabled = var.environment == "production"
-  delegated_subnet_id = azurerm_subnet.database.id
-  private_dns_zone_id = azurerm_private_dns_zone.main.id
+  delegated_subnet_id          = azurerm_subnet.database.id
+  private_dns_zone_id          = azurerm_private_dns_zone.main.id
 
-  administrator_login          = "antadmin"
-  administrator_password      = random_password.postgres.result
-  create_mode                = "Default"
+  administrator_login           = "antadmin"
+  administrator_password        = random_password.postgres.result
+  create_mode                   = "Default"
   public_network_access_enabled = false
 
   # CKV_AZURE_13, CKV_AZURE_65, CKV_AZURE_88: SSL enforcement is always enabled
@@ -520,33 +494,50 @@ resource "azurerm_private_endpoint" "postgresql" {
 # ─────────────────────────────────────────────────────────────────────────────
 # Kubernetes Provider
 # ─────────────────────────────────────────────────────────────────────────────
-provider "kubernetes" {
-  host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
-  client_certificate     = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_certificate)
-  client_key             = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_key)
-  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+locals {
+  aks_token_args = [
+    "get-token", "--login", var.aks_login_mode,
+    "--server-id", "6dae42f8-4368-4678-94ff-3960e28e3630",
+    "--tenant-id", data.azurerm_client_config.current.tenant_id,
+    "--use-azurerm-env-vars",
+  ]
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helm Provider
-# ─────────────────────────────────────────────────────────────────────────────
-provider "helm" {
-  kubernetes {
-    host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
-    client_certificate     = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_certificate)
-    client_key             = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.client_key)
-    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+# Cluster-scoped deployment access for the principal that runs Terraform.
+resource "azurerm_role_assignment" "aks_deployer" {
+  scope                = azurerm_kubernetes_cluster.main.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+provider "kubernetes" {
+  host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
+  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "kubelogin"
+    args        = local.aks_token_args
   }
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helm Release - Backend
-# ─────────────────────────────────────────────────────────────────────────────
+provider "helm" {
+  kubernetes {
+    host                   = azurerm_kubernetes_cluster.main.kube_config.0.host
+    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "kubelogin"
+      args        = local.aks_token_args
+    }
+  }
+}
+
 resource "helm_release" "ant_backend" {
-  name       = "ant-backend"
-  repository = "file://../../k8s/helm/backend"
-  chart      = "ant-backend"
-  namespace  = "ant"
+  depends_on       = [azurerm_role_assignment.aks_deployer]
+  name             = "ant-backend"
+  repository       = "file://../../k8s/helm/backend"
+  chart            = "ant-backend"
+  namespace        = "ant"
   create_namespace = true
 
   values = [
@@ -594,14 +585,14 @@ resource "helm_release" "ant_backend" {
 # ─────────────────────────────────────────────────────────────────────────────
 resource "azurerm_storage_account" "data" {
   name                            = "antdata${var.environment}"
-  resource_group_name              = azurerm_resource_group.main.name
-  location                         = var.location
-  account_tier                     = "Standard"
-  account_replication_type         = "GRS"
-  min_tls_version                  = "TLS1_2"
-  enable_https_traffic_only        = true
-  allow_nested_items_to_be_public  = false
-  public_network_access_enabled    = false
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = var.location
+  account_tier                    = "Standard"
+  account_replication_type        = "GRS"
+  min_tls_version                 = "TLS1_2"
+  https_traffic_only_enabled      = true
+  allow_nested_items_to_be_public = false
+  public_network_access_enabled   = false
 
   identity {
     type = "SystemAssigned"
@@ -622,14 +613,14 @@ resource "azurerm_storage_account" "data" {
 
 resource "azurerm_storage_account" "logs" {
   name                            = "antlogs${var.environment}"
-  resource_group_name              = azurerm_resource_group.main.name
-  location                         = var.location
-  account_tier                     = "Standard"
-  account_replication_type         = "LRS"
-  min_tls_version                  = "TLS1_2"
-  enable_https_traffic_only        = true
-  allow_nested_items_to_be_public  = false
-  public_network_access_enabled    = false
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = var.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  min_tls_version                 = "TLS1_2"
+  https_traffic_only_enabled      = true
+  allow_nested_items_to_be_public = false
+  public_network_access_enabled   = false
 
   identity {
     type = "SystemAssigned"
@@ -650,14 +641,14 @@ resource "azurerm_storage_account" "logs" {
 
 resource "azurerm_storage_account" "backups" {
   name                            = "antbackups${var.environment}"
-  resource_group_name              = azurerm_resource_group.main.name
-  location                         = var.location
-  account_tier                     = "Standard"
-  account_replication_type         = "GRS"
-  min_tls_version                  = "TLS1_2"
-  enable_https_traffic_only        = true
-  allow_nested_items_to_be_public  = false
-  public_network_access_enabled    = false
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = var.location
+  account_tier                    = "Standard"
+  account_replication_type        = "GRS"
+  min_tls_version                 = "TLS1_2"
+  https_traffic_only_enabled      = true
+  allow_nested_items_to_be_public = false
+  public_network_access_enabled   = false
 
   identity {
     type = "SystemAssigned"
@@ -680,9 +671,12 @@ resource "azurerm_storage_account" "backups" {
 # Storage Account Customer-Managed Keys (CKV2_AZURE_31)
 # ─────────────────────────────────────────────────────────────────────────────
 resource "azurerm_storage_account_customer_managed_key" "data" {
-  storage_account_id        = azurerm_storage_account.data.id
-  key_vault_key_id          = azurerm_key_vault_key.main.id
-  key_name                  = "ant-backend-key"
+  storage_account_id = azurerm_storage_account.data.id
+  # Fix #24: azurerm 3.x requires `key_vault_id` (a vault reference) instead
+  # of the old `key_vault_key_id` (which pointed to a key resource). The
+  # `key_name` is the name of the key inside the vault.
+  key_vault_id = azurerm_key_vault.main.id
+  key_name     = "ant-backend-key"
 
   depends_on = [
     azurerm_key_vault_access_policy.storage_data
@@ -700,9 +694,12 @@ resource "azurerm_key_vault_access_policy" "storage_data" {
 }
 
 resource "azurerm_storage_account_customer_managed_key" "logs" {
-  storage_account_id        = azurerm_storage_account.logs.id
-  key_vault_key_id          = azurerm_key_vault_key.main.id
-  key_name                  = "ant-backend-key"
+  storage_account_id = azurerm_storage_account.logs.id
+  # Fix #24: azurerm 3.x requires `key_vault_id` (a vault reference) instead
+  # of the old `key_vault_key_id` (which pointed to a key resource). The
+  # `key_name` is the name of the key inside the vault.
+  key_vault_id = azurerm_key_vault.main.id
+  key_name     = "ant-backend-key"
 
   depends_on = [
     azurerm_key_vault_access_policy.storage_logs
@@ -720,9 +717,12 @@ resource "azurerm_key_vault_access_policy" "storage_logs" {
 }
 
 resource "azurerm_storage_account_customer_managed_key" "backups" {
-  storage_account_id        = azurerm_storage_account.backups.id
-  key_vault_key_id          = azurerm_key_vault_key.main.id
-  key_name                  = "ant-backend-key"
+  storage_account_id = azurerm_storage_account.backups.id
+  # Fix #24: azurerm 3.x requires `key_vault_id` (a vault reference) instead
+  # of the old `key_vault_key_id` (which pointed to a key resource). The
+  # `key_name` is the name of the key inside the vault.
+  key_vault_id = azurerm_key_vault.main.id
+  key_name     = "ant-backend-key"
 
   depends_on = [
     azurerm_key_vault_access_policy.storage_backups
@@ -804,18 +804,18 @@ resource "azurerm_key_vault_certificate" "main" {
 # ─────────────────────────────────────────────────────────────────────────────
 # PostgreSQL Active Directory Administrator
 # ─────────────────────────────────────────────────────────────────────────────
-variable "azure_admin_object_id" {
-  description = "Azure AD object ID for PostgreSQL admin"
-  type        = string
-  default     = ""
-}
+# (variable "azure_admin_object_id" moved to variables.tf in Fix #24)
 
 resource "azurerm_postgresql_flexible_server_active_directory_administrator" "main" {
   server_name         = azurerm_postgresql_flexible_server.main.name
   resource_group_name = azurerm_resource_group.main.name
-  login               = "azuread_admin"
-  object_id           = var.azure_admin_object_id != "" ? var.azure_admin_object_id : data.azurerm_client_config.current.object_id
-  tenant_id           = data.azurerm_client_config.current.tenant_id
+  # Fix #24: azurerm 3.x renamed `login` → `principal_name` and added a
+  # required `principal_type` arg. We pin principal_type to "ServicePrincipal"
+  # because we're binding an AAD group (object_id), not a user.
+  principal_name = "azuread_admin"
+  principal_type = "ServicePrincipal"
+  object_id      = var.azure_admin_object_id != "" ? var.azure_admin_object_id : data.azurerm_client_config.current.object_id
+  tenant_id      = data.azurerm_client_config.current.tenant_id
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -902,35 +902,50 @@ resource "azurerm_monitor_diagnostic_setting" "postgresql_audit" {
 # App Service with TLS and Client Certificate Settings
 # ─────────────────────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────
-# Azure Monitor Log Profile (CKV2_AZURE_1, CKV2_AZURE_38, CKV2_AZURE_40, CKV2_AZURE_41)
+# Subscription activity logs and storage lifecycle retention
 # ─────────────────────────────────────────────────────────────────────
-resource "azurerm_monitor_log_profile" "main" {
-  name = "default"
+# Forget the retired API resource without deleting its existing log storage.
+removed {
+  from = azurerm_monitor_log_profile.main
+  lifecycle {
+    destroy = false
+  }
+}
 
-  categories = [
-    "Action",
-    "Delete",
-    "Write",
-    "Security",
-    "ServiceHealth",
-    "Alert",
-    "Recommendation",
-    "Policy",
-    "Autoscale",
-    "Administrative"
-  ]
+resource "azurerm_monitor_diagnostic_setting" "subscription_activity" {
+  name                       = "ant-subscription-activity"
+  target_resource_id         = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  storage_account_id         = azurerm_storage_account.logs.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
-  locations = [
-    "eastus",
-    "westus2",
-    "global"
-  ]
+  dynamic "enabled_log" {
+    for_each = toset([
+      "Administrative", "Security", "ServiceHealth", "Alert",
+      "Recommendation", "Policy", "Autoscale", "ResourceHealth"
+    ])
+    content {
+      category = enabled_log.value
+    }
+  }
+}
 
+# Diagnostic-setting retention no longer deletes stored logs. Retain the
+# original 365-day policy through Storage lifecycle management instead.
+resource "azurerm_storage_management_policy" "activity_logs" {
   storage_account_id = azurerm_storage_account.logs.id
 
-  retention_policy {
+  rule {
+    name    = "subscription-activity-retention"
     enabled = true
-    days    = 365
+    filters {
+      prefix_match = ["insights-activity-logs/"]
+      blob_types   = ["blockBlob", "appendBlob"]
+    }
+    actions {
+      base_blob {
+        delete_after_days_since_modification_greater_than = 365
+      }
+    }
   }
 }
 
@@ -941,8 +956,11 @@ resource "azurerm_monitor_log_profile" "main" {
 # azurerm_security_center_subscription_pricing.
 # ─────────────────────────────────────────────────────────────────────────────
 resource "azurerm_security_center_subscription_pricing" "postgresql_defender" {
-  tier          = "Standard"
-  resource_type = "PostgreSQLFlexibleServersDatabases"
+  tier = "Standard"
+  # Fix #24: the enum value was renamed `PostgreSQLFlexibleServersDatabases` →
+  # `OpenSourceRelationalDatabases` in azurerm 3.x (covers Postgres + MySQL
+  # Flexible Servers at the Defender level).
+  resource_type = "OpenSourceRelationalDatabases"
 }
 
 resource "azurerm_service_plan" "main" {
@@ -965,14 +983,17 @@ resource "azurerm_linux_web_app" "main" {
   https_only          = true
 
   site_config {
-    minimum_tls_version     = "1.2"
-    ftps_state              = "Disabled"
-    http2_enabled           = true
-    client_certificate_mode = "Required"
-    scm_minimum_tls_version = "1.2"
-    vnet_route_all_enabled  = true
+    minimum_tls_version      = "1.2"
+    ftps_state               = "Disabled"
+    http2_enabled            = true
+    scm_minimum_tls_version  = "1.2"
+    vnet_route_all_enabled   = true
     remote_debugging_enabled = false
   }
+
+  # Fix #24: azurerm 3.117+ made `client_certificate_mode` a top-level
+  # attribute (it was in `site_config` in older versions).
+  client_certificate_mode = "Required"
 
   identity {
     type = "SystemAssigned"

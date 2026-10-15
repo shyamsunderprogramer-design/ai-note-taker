@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/png" href="favicon.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume Review - ANT</title>
@@ -168,25 +169,27 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
+    <link rel="stylesheet" href="resume-review-common.css">
 </head>
 <body>
+    <a class="skip-link" href="#resumeMain">Skip to résumé workspace</a>
     <div class="resume-page">
         <header class="resume-header-fixed">
-            <button class="resume-back-arrow" onclick="window.location.href='index.html'">←</button>
+            <button class="resume-back-arrow" aria-label="Back to app" onclick="window.location.href='index.html'">←</button>
             <div class="resume-header-content">
                 <h1 class="resume-header-title">📄 AI Resume Review</h1>
             </div>
         </header>
 
-        <main class="resume-content">
+        <main class="resume-content" id="resumeMain" tabindex="-1">
             <div class="resume-container">
                 <div class="input-section">
                     <h2 class="section-title">Upload or Paste Resume</h2>
 
                     <!-- File Upload -->
                     <div class="form-group">
-                        <label>Upload Resume File (PDF, DOCX, TXT)</label>
-                        <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('resumeFile').click()">
+                        <label for="resumeFile">Upload Resume File (PDF, DOCX, TXT)</label>
+                        <div class="file-upload-area" id="fileUploadArea" role="button" tabindex="0" aria-label="Upload résumé file" onclick="document.getElementById('resumeFile').click()">
                             <input type="file" id="resumeFile" accept=".pdf,.docx,.doc,.txt,.md,.rtf" style="display: none;" onchange="resumeReview.handleFileUpload(this)">
                             <div class="file-upload-icon">📄</div>
                             <div class="file-upload-text">Click to upload or drag and drop</div>
@@ -199,12 +202,12 @@
 
                     <!-- Text Input -->
                     <div class="form-group">
-                        <label>Paste Resume Text</label>
+                        <label for="resumeInput">Paste Resume Text</label>
                         <textarea id="resumeInput" placeholder="Paste your resume content here..."></textarea>
                     </div>
 
                     <div class="form-group">
-                        <label>Job Description (optional but recommended)</label>
+                        <label for="jobInput">Job Description (optional but recommended)</label>
                         <textarea id="jobInput" rows="5" placeholder="Paste job description to compare and extract relevant keywords..."></textarea>
                     </div>
 
@@ -229,7 +232,7 @@
                         <div class="score-card">
                             <div class="score-value" id="overallScore">75</div>
                             <div class="score-label">Overall Score</div>
-                            <div id="semanticFit" style="font-size: 14px; color: #8b5cf6; margin-top: 5px; font-weight: 600;"></div>
+                            <div id="semanticFit" style="font-size: 14px; color: var(--accent-text); margin-top: 5px; font-weight: 600;"></div>
                         </div>
 
                         <div class="dashboard-grid">

@@ -1,0 +1,51 @@
+{
+  "replayPassed": true,
+  "replay": [
+    {
+      "question": "A Kubernetes deployment has just gone live, and users report increased errors and latency. As the on call engineer, how would you investigate, decide whether to roll back, and communicate?",
+      "firstVisibleAfterSpeechSeconds": 1.548,
+      "completedAfterSpeechSeconds": 1.549,
+      "passed": true
+    },
+    {
+      "question": "How would you design a CI CD pipeline that tests a Docker image, checks security, and deploys safely to Kubernetes?",
+      "firstVisibleAfterSpeechSeconds": 0.614,
+      "completedAfterSpeechSeconds": 0.614,
+      "passed": true
+    },
+    {
+      "question": "Two engineers run Terraform at the same time and encounter a state lock. What should they do, and how would you prevent this problem?",
+      "firstVisibleAfterSpeechSeconds": 1.072,
+      "completedAfterSpeechSeconds": 1.073,
+      "passed": true
+    }
+  ],
+  "replayLimits": "Simulated spoken interview in real Electron app. Video records app compositor frames with real timestamps; question audio is aligned from the same files played live. No AI responses/transcripts mocked. Audio source labels are not verified people. Timing starts when spoken playback ends, includes transcription, queueing, Enter and generation. Pass checks topic relevance, completion and absence of duplicate messages; it is not a technical correctness grade. Not a Zoom/Meet remote-call test.",
+  "panelPassed": true,
+  "panelRequests": [
+    {
+      "at": 1791335850178,
+      "carriedOriginal": true,
+      "panelFollowup": false,
+      "provisionalCandidate": false,
+      "candidateSpeaking": false,
+      "mode": "instant",
+      "style": "spoken"
+    },
+    {
+      "at": 1791335858581,
+      "carriedOriginal": true,
+      "panelFollowup": true,
+      "provisionalCandidate": true,
+      "candidateSpeaking": true,
+      "mode": "instant",
+      "style": "spoken"
+    }
+  ],
+  "followupCompleteAfterSpeechMs": 540,
+  "panelLimits": "Real Electron app, native remote capture and real ASR/LLM. Synthetic candidate PCM injected on existing microphone WebSocket; no ASR or AI response mocked. Distinct sources are not named/verified people. Not a Zoom/Meet call. Timing includes generation completion, not first token.",
+  "pythonTestsPassed": 182,
+  "nodeTestsPassed": 107,
+  "webBuildPassed": true,
+  "isolatedStagedSourceVerified": true
+}

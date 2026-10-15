@@ -1,508 +1,161 @@
-# ANT AI Note Taker - Production CI Pipeline
-# Triggers: push to main/develop/phase*/t*, PRs, releases, manual dispatch
-# Features: lint, test, security scan, container build, Electron multi-OS build
-
 name: CI
 
 on:
-  push:
-    branches: [main, develop, 'phase*', 't*']
-  pull_request:
-    branches: [main, develop]
-  release:
-    types: [published]
   workflow_dispatch:
-    inputs:
-      skip_tests:
-        description: 'Skip test execution'
-        type: boolean
-        default: false
-      skip_security:
-        description: 'Skip security scans'
-        type: boolean
-        default: false
+  pull_request:
+  push:
+    branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  packages: write
-  security-events: write
-  actions: read
-  pull-requests: read
-
-env:
-  PYTHON_VERSION: '3.11'
-  NODE_VERSION: '20'
-  REGISTRY: ghcr.io
-  IMAGE_NAME_BACKEND: ${{ github.repository_owner }}/ant-backend
 
 jobs:
-  # ═══════════════════════════════════════════════════════════════════════
-  # LINT & FORMAT CHECK
-  # ═══════════════════════════════════════════════════════════════════════
-  lint:
-    name: Lint & Format
+  workflow-validation:
+    name: Workflow validation
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # ─── Python Linting ───────────────────────────────────────────────
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: backend/requirements*.txt
-
-      - name: Install Python linters
-        run: pip install flake8 flake8-bugbear black isort
-
-      - name: Run Flake8 (critical errors only)
-        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        working-directory: ./backend
-
-      - name: Run Black (check mode)
-        run: black --check --diff backend/ || true
-        continue-on-error: true
-
-      - name: Run isort (check mode)
-        run: isort --check-only --diff backend/ || true
-        continue-on-error: true
-
-      # ─── JavaScript/Node Linting ────────────────────────────────────────
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: electron/package-lock.json
-
-      - name: Install Node dependencies
-        run: npm ci
-        working-directory: ./electron
-
-      - name: Run ESLint
-        run: npx eslint . --ext .js
-        working-directory: ./electron
-
-      # ─── IaC Scanning ─────────────────────────────────────────────────
-      - name: Run Checkov (Terraform security)
+      - uses: actions/checkout@v4
+      - name: Validate GitHub Actions syntax
         run: |
-          pip install checkov
-          for dir in infrastructure/terraform/*/; do
-            if [ -d "$dir" ]; then
-              echo "Scanning $dir"
-              checkov -d "$dir" --compact --quiet || true
-            fi
-          done
-        continue-on-error: true
+          curl --fail --silent --show-error --location --max-time 60 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= -pyflakes=
 
-      # ─── Dockerfile Linting ────────────────────────────────────────────
-      - name: Hadolint (Dockerfile lint)
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: docker/Dockerfile.backend
-        continue-on-error: true
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # TEST
-  # ═══════════════════════════════════════════════════════════════════════
-  test:
-    name: Test
+  backend-tests:
+    name: Backend (pytest)
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && inputs.skip_tests != true"
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: ant_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo apt-get clean
-          df -h
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          python-version-file: .python-version
+          cache: pip
           cache-dependency-path: backend/requirements-test.txt
-
-      - name: Install Python dependencies
+      - name: Install test dependencies
+        working-directory: backend
         run: |
-          # Use lightweight test requirements to avoid exhausting disk space
-          # (full requirements.txt includes torch/CUDA/spacy/faster-whisper ~4GB+)
+          python -m pip install --upgrade pip
           pip install -r requirements-test.txt
-        working-directory: ./backend
+      - name: Run backend tests
+        working-directory: backend
+        run: python -m pytest core/test_startup.py tests/ --tb=short -v
 
-      - name: Run Pytest with coverage
-        run: |
-          pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
-        working-directory: ./backend
-        env:
-          USE_SQLITE: "true"
-          FORCE_SQLITE: "true"
-          TESTING: "true"
-          AUTH_REQUIRED: "false"
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./backend/coverage.xml
-          fail_ci_if_error: false
-          verbose: true
-        continue-on-error: true
-
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-report
-          path: backend/coverage.xml
-          retention-days: 14
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # SONARCLOUD CODE QUALITY
-  # ═══════════════════════════════════════════════════════════════════════
-  sonarcloud:
-    name: SonarCloud Analysis
+  web-build:
+    name: Web and desktop tests
     runs-on: ubuntu-latest
-    needs: [lint]
-    if: github.event.inputs.skip_security != 'true'
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-
-      - name: SonarCloud Scan
-        uses: sonarsource/sonarcloud-github-action@v2
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # SECRET SCANNING
-  # ═══════════════════════════════════════════════════════════════════════
-  secrets-scan:
-    name: Secret Detection
-    runs-on: ubuntu-latest
-    if: inputs.skip_security != 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: GitLeaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .github/gitleaks.toml
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # CONTAINER BUILD & SCAN
-  # ═══════════════════════════════════════════════════════════════════════
-  container-build:
-    name: Build & Scan Container
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and Push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile.backend
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        if: github.event_name != 'pull_request'
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
-        continue-on-error: true
-
-      - name: Upload Trivy results to Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: github.event_name != 'pull_request'
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # SNYK DEPENDENCY SCAN
-  # ═══════════════════════════════════════════════════════════════════════
-  snyk:
-    name: Snyk Dependency Scan
-    runs-on: ubuntu-latest
-    needs: [lint]
-    if: inputs.skip_security != 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run Snyk (Python)
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: electron/package-lock.json
-
-      - name: Install Node dependencies
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked workspace dependencies
         run: npm ci
-        working-directory: ./electron
-
-      - name: Run Snyk (Node.js)
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        with:
-          command: test
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # SBOM GENERATION
-  # ═══════════════════════════════════════════════════════════════════════
-  sbom:
-    name: Generate SBOM
-    runs-on: ubuntu-latest
-    needs: [lint]
-    if: github.event_name != 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Generate Python SBOM (CycloneDX)
+      - name: Verify dependency security regressions
+        run: npm run test:security
+      - name: Audit JavaScript dependencies
+        run: npm audit --audit-level=low
+      - name: Verify desktop, web and mobile unit tests
         run: |
-          pip install cyclonedx-bom
-          cyclonedx-py requirements \
-            -i requirements.txt \
-            -o backend-bom.xml
-        working-directory: ./backend
+          npm --workspace ai-note-taker test
+          npm --workspace ant-web test
+          npm --workspace ant-mobile test -- --runInBand --watchman=false
+      - name: Build web application
+        run: npm run web:build
 
-      - name: Generate Node.js SBOM (CycloneDX)
-        run: |
-          npm install -g @cyclonedx/cyclonedx-npm
-          npm ci
-          cyclonedx-npm --output-format xml --output-file ../../node-bom.xml || true
-        working-directory: ./electron
-
-      - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom
-          path: |
-            backend/backend-bom.xml
-            electron/node-bom.xml
-          retention-days: 90
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # BUILD ELECTRON (Multi-OS)
-  # ═══════════════════════════════════════════════════════════════════════
-  build-electron:
-    name: Build Electron (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    needs: [lint, test]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact_name: win
-            build_cmd: npm run build:win
-          - os: macos-latest
-            artifact_name: mac
-            build_cmd: npm run build:mac
-          - os: ubuntu-latest
-            artifact_name: linux
-            build_cmd: npm run build:linux
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: electron/package-lock.json
-
-      - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libnotify-dev libsoup2.4-dev libappindicator3-dev libxtst-dev
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: ./electron
-
-      - name: Build Electron App
-        run: ${{ matrix.build_cmd }}
-        working-directory: ./electron
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ant-electron-${{ matrix.artifact_name }}
-          path: |
-            electron/dist/**/*.exe
-            electron/dist/**/*.dmg
-            electron/dist/**/*.AppImage
-            electron/dist/**/*.deb
-          retention-days: 14
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # BUILD BACKEND (PyInstaller)
-  # ═══════════════════════════════════════════════════════════════════════
-  build-backend:
-    name: Build Backend
-    runs-on: windows-latest
-    needs: [lint, test]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Free disk space (Windows)
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "C:\Program Files\Azure DevOps CLI" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft SDKs" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "${env:LOCALAPPDATA}\Microsoft\VisualStudio" -ErrorAction SilentlyContinue
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: backend/requirements*.txt
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
-        working-directory: ./backend
-
-      - name: Build executable
-        run: pyinstaller --onefile --name ANTBackend core/main.py
-        working-directory: ./backend
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ant-backend-win
-          path: backend/dist/ANTBackend.exe
-          retention-days: 14
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # E2E TESTS (Playwright)
-  # ═══════════════════════════════════════════════════════════════════════
   e2e:
-    name: E2E Tests (Playwright)
+    name: E2E (Playwright)
     runs-on: ubuntu-latest
-    needs: [lint]
+    timeout-minutes: 30
+    needs: [backend-tests, web-build, workflow-validation]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install Playwright dependencies
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        working-directory: backend
         run: |
-          cd e2e
-          npm ci
-          npx playwright install --with-deps
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: backend/requirements*.txt
-
-      - name: Install Python dependencies
-        run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-        working-directory: ./backend
-
-      - name: Run E2E tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked workspace and browser dependencies
         run: |
-          cd e2e
-          npx playwright test
+          npm ci
+          npm --workspace ant-e2e-tests run install:browsers -- --with-deps
+      - name: Run browser tests
+        working-directory: e2e
         env:
-          CI: true
+          CI: 'true'
+        run: npx playwright test
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/html-report
+            e2e/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  security-scan:
+    name: Security (bandit, pip-audit, gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend-tests]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: backend/requirements-security.txt
+      - name: Install security tooling
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-security.txt
+      - name: Check high-severity Python security findings
+        working-directory: backend
+        run: |
+          bandit -r . --skip B101,B601 \
+            --severity-level high --confidence-level high \
+            --exclude ./venv,./node_modules,./__pycache__ \
+            --format json --output bandit-report.json
+      - name: Audit Python dependencies
+        working-directory: backend
+        run: pip-audit --requirement requirements.txt --format json --output pip-audit-report.json
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-and-python-security-reports
+          path: |
+            backend/bandit-report.json
+            backend/pip-audit-report.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -21,7 +21,7 @@ on:
           - staging
           - production
       image_tag:
-        description: 'Image tag to deploy (defaults to latest)'
+        description: 'Image tag to deploy (defaults to the tested commit SHA)'
         required: false
         type: string
       rollout_strategy:
@@ -54,37 +54,47 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════
   pre-deploy:
     name: Pre-Deployment Validation
+    # Cloud templates require a configured, reviewed environment. A source
+    # integration or failed CI run must not implicitly provision infrastructure.
+    if: >-
+      vars.ENABLE_CLOUD_DEPLOYMENTS == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.validate.outputs.environment }}
       can_deploy: ${{ steps.validate.outputs.can_deploy }}
       image_tag: ${{ steps.validate.outputs.image_tag }}
+      source_sha: ${{ steps.validate.outputs.source_sha }}
     steps:
       - name: Validate deployment
         id: validate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
-          # Determine target environment
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            if [ "${{ github.event.workflow_run.head_branch }}" = "main" ]; then
-              ENV="staging"
-            else
-              ENV="preview"
-            fi
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            TARGET_ENVIRONMENT="staging"
+            IMAGE_TAG="$SOURCE_SHA"
           else
-            ENV="${{ github.event.inputs.environment || 'staging' }}"
+            TARGET_ENVIRONMENT="$REQUESTED_ENVIRONMENT"
+            IMAGE_TAG="${REQUESTED_IMAGE_TAG:-$SOURCE_SHA}"
           fi
-
-          # Determine image tag
-          TAG="${{ github.event.inputs.image_tag || github.sha }}"
-          # For workflow_run, use the SHA from the completed CI workflow
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            TAG="${{ github.event.workflow_run.head_sha }}"
+          case "$TARGET_ENVIRONMENT" in
+            staging|production) ;;
+            *) echo '::error::Invalid deployment environment'; exit 1 ;;
+          esac
+          if [[ ! "$IMAGE_TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+            echo '::error::Invalid container image tag'
+            exit 1
           fi
-
-          echo "environment=$ENV" >> $GITHUB_OUTPUT
-          echo "can_deploy=true" >> $GITHUB_OUTPUT
-          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Deploying to: $ENV with image tag: $TAG"
+          echo "environment=$TARGET_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo 'can_deploy=true' >> "$GITHUB_OUTPUT"
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
   # ═══════════════════════════════════════════════════════════════════════
   # TERRAFORM INFRASTRUCTURE (AWS via OIDC)
@@ -98,6 +108,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-deploy.outputs.source_sha }}
+          persist-credentials: false
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -114,25 +127,25 @@ jobs:
 
       - name: Terraform Init
         id: init
+        env:
+          STATE_BUCKET: ${{ secrets.TERRAFORM_STATE_BUCKET }}
+          TARGET_ENVIRONMENT: ${{ needs.pre-deploy.outputs.environment }}
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
-            -backend-config="key=aws/${{ needs.pre-deploy.outputs.environment }}/terraform.tfstate"
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=aws/$TARGET_ENVIRONMENT/terraform.tfstate"
         working-directory: infrastructure/terraform/aws
 
       - name: Terraform Plan
         id: plan
+        env:
+          TF_VAR_environment: ${{ needs.pre-deploy.outputs.environment }}
+          TF_VAR_image_tag: ${{ needs.pre-deploy.outputs.image_tag }}
         run: |
-          terraform plan \
-            -var="environment=${{ needs.pre-deploy.outputs.environment }}" \
-            -var="image_tag=${{ needs.pre-deploy.outputs.image_tag }}" \
-            -out=tfplan \
-            -no-color
+          terraform plan -out=tfplan -no-color
         working-directory: infrastructure/terraform/aws
-        continue-on-error: true
 
       - name: Terraform Apply
-        if: needs.pre-deploy.outputs.environment != 'production' || github.event.inputs.rollout_strategy != 'manual'
         run: terraform apply -auto-approve tfplan
         working-directory: infrastructure/terraform/aws
 
@@ -158,6 +171,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-deploy.outputs.source_sha }}
+          persist-credentials: false
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -175,10 +191,12 @@ jobs:
         uses: azure/setup-kubectl@v4
 
       - name: Configure Kubeconfig (AWS EKS)
+        env:
+          EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
         run: |
           aws eks update-kubeconfig \
-            --name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region ${{ env.AWS_REGION }}
+            --name "$EKS_CLUSTER_NAME" \
+            --region "$AWS_REGION"
 
       - name: Verify OPA Gatekeeper constraints
         run: |
@@ -189,13 +207,16 @@ jobs:
 
       # ─── Backend Deployment ────────────────────────────────────────────
       - name: Deploy Backend Helm Chart
+        env:
+          TARGET_ENVIRONMENT: ${{ needs.pre-deploy.outputs.environment }}
+          IMAGE_TAG: ${{ needs.pre-deploy.outputs.image_tag }}
         run: |
           helm upgrade --install ant-backend \
             ./k8s/helm/backend \
             --namespace ant \
             --create-namespace \
-            --values ./k8s/helm/backend/values-${{ needs.pre-deploy.outputs.environment }}.yaml \
-            --set image.tag=${{ needs.pre-deploy.outputs.image_tag }} \
+            --values "./k8s/helm/backend/values-$TARGET_ENVIRONMENT.yaml" \
+            --set-string "image.tag=$IMAGE_TAG" \
             --wait --timeout 10m \
             --atomic \
             --cleanup-on-fail
@@ -203,10 +224,12 @@ jobs:
       # ─── Canary Rollout (Production) ──────────────────────────────────
       - name: Canary Deployment (Production)
         if: needs.pre-deploy.outputs.environment == 'production' && github.event.inputs.rollout_strategy == 'canary'
+        env:
+          IMAGE_TAG: ${{ needs.pre-deploy.outputs.image_tag }}
         run: |
           # Use Argo Rollouts for canary deployment
           kubectl argo rollouts set image ant-backend \
-            ant-backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ needs.pre-deploy.outputs.image_tag }} \
+            "ant-backend=$REGISTRY/$IMAGE_NAME_BACKEND:$IMAGE_TAG" \
             --namespace ant 2>/dev/null || echo "Argo Rollouts not available, using Helm deployment"
 
           # Monitor rollout progress
@@ -255,29 +278,34 @@ jobs:
       - name: Datadog Synthetic Test
         if: needs.deploy.result == 'success' && env.DD_API_KEY != ''
         run: |
-          curl -s -X POST "https://api.datadoghq.com/api/v1/synthetics/trigger" \
+          jq -n --arg test_id "$DD_SYNTHETIC_TEST_ID" '{tests: [{public_id: $test_id}]}' > synthetic-request.json
+          curl --fail-with-body --max-time 30 -X POST "https://api.datadoghq.com/api/v1/synthetics/trigger" \
             -H "Content-Type: application/json" \
-            -H "DD-API-KEY: ${{ secrets.DD_API_KEY }}" \
-            -H "DD-APPLICATION-KEY: ${{ secrets.DD_APP_KEY }}" \
-            -d '{"tests": [{"public_id": "${{ vars.DD_SYNTHETIC_TEST_ID }}"}]}'
+            -H "DD-API-KEY: $DD_API_KEY" \
+            -H "DD-APPLICATION-KEY: $DD_APP_KEY" \
+            --data @synthetic-request.json
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+          DD_SYNTHETIC_TEST_ID: ${{ vars.DD_SYNTHETIC_TEST_ID }}
         continue-on-error: true
 
       - name: Notify Slack
-        if: env.SLACK_BOT_TOKEN != ''
+        if: vars.ENABLE_DEPLOYMENT_NOTIFICATIONS == 'true' && env.SLACK_BOT_TOKEN != ''
         uses: slackapi/slack-github-action@v2
         with:
-          channel-id: ${{ vars.DEPLOYMENT_CHANNEL || 'deployments' }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
             {
+              "channel": "${{ vars.DEPLOYMENT_CHANNEL || 'deployments' }}",
               "text": "ANT Deployment to ${{ needs.pre-deploy.outputs.environment }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Deployment ${{{ needs.deploy.result }}:*\n• Environment: ${{ needs.pre-deploy.outputs.environment }}\n• SHA: `${{ github.sha }}`\n• Image: `${{ needs.pre-deploy.outputs.image_tag }}`"
+                    "text": "*Deployment ${{ needs.deploy.result }}:*\n• Environment: ${{ needs.pre-deploy.outputs.environment }}\n• SHA: `${{ needs.pre-deploy.outputs.source_sha }}`\n• Image: `${{ needs.pre-deploy.outputs.image_tag }}`"
                   }
                 }
               ]
@@ -286,15 +314,5 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         continue-on-error: true
 
-      - name: Create deployment record
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment: context.payload.deployment?.id || 0,
-              state: '${{ needs.deploy.result }}' === 'success' ? 'active' : 'failure',
-              description: 'Deployment to ${{ needs.pre-deploy.outputs.environment }} ${{ needs.deploy.result }}'
-            });
-        continue-on-error: true
+      # Jobs with `environment` already create and update GitHub deployment
+      # records. Do not post a status to a fabricated deployment ID here.

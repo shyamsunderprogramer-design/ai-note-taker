@@ -1,0 +1,150 @@
+{
+  "conversations": [
+    {
+      "conversation_id": "test-123",
+      "start_time": 1775757600.0,
+      "end_time": 1775757660.0,
+      "duration_minutes": 1.0,
+      "message_count": 2,
+      "user_message_count": 1,
+      "ai_message_count": 1,
+      "modes_used": [],
+      "models_used": [
+        "ollama"
+      ],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780724565.485394,
+      "end_time": 1780724565.485394,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780727701.0347562,
+      "end_time": 1780727701.0347571,
+      "duration_minutes": 1.5894571940104166e-08,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780799462.6936698,
+      "end_time": 1780799462.6936698,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780799527.547424,
+      "end_time": 1780799527.547424,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780802037.9117818,
+      "end_time": 1780802037.9117818,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780802110.468236,
+      "end_time": 1780802110.468236,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1780860791.570292,
+      "end_time": 1780860791.570292,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    }
+  ],
+  "daily": {
+    "2026-04-09": {
+      "date": "2026-04-09",
+      "conversation_count": 1,
+      "total_duration_minutes": 1.0,
+      "total_messages": 2,
+      "messages_by_role": {
+        "user": 1,
+        "assistant": 1
+      },
+      "messages_by_mode": {},
+      "messages_by_model": {
+        "ollama": 1
+      }
+    },
+    "2026-06-06": {
+      "date": "2026-06-06",
+      "conversation_count": 6,
+      "total_duration_minutes": 1.5894571940104166e-08,
+      "total_messages": 0,
+      "messages_by_role": {
+        "user": 0,
+        "assistant": 0
+      },
+      "messages_by_mode": {},
+      "messages_by_model": {}
+    },
+    "2026-06-07": {
+      "date": "2026-06-07",
+      "conversation_count": 1,
+      "total_duration_minutes": 0.0,
+      "total_messages": 0,
+      "messages_by_role": {
+        "user": 0,
+        "assistant": 0
+      },
+      "messages_by_mode": {},
+      "messages_by_model": {}
+    }
+  }
+}

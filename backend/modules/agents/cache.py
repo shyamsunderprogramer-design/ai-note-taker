@@ -10,7 +10,7 @@ import time
 import hashlib
 import logging
 import threading
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("agents.cache")
@@ -228,7 +228,6 @@ class ContextCache:
     def cleanup_expired(self) -> int:
         """Remove all expired entries. Returns count of removed entries."""
         with self._lock:
-            now = time.time()
             expired_keys = [
                 k for k, v in self._store.items()
                 if v.age_seconds > self.default_ttl

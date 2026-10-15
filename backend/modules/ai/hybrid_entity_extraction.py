@@ -37,9 +37,7 @@ from modules.ai.entity_extraction import (
     COMPANY_NAMES,
     TECHNICAL_TOPICS,
     SKILLS,
-    ROLES,
-    QUESTION_CATEGORIES,
-    DIFFICULTY_KEYWORDS
+    ROLES
 )
 
 

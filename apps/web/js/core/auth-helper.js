@@ -30,12 +30,40 @@ const AuthHelper = {
     return !!this.getToken();
   },
 
+  /**
+   * Wraps fetch() with two error variants so callers can distinguish
+   * "backend is offline / unreachable" (network) from "backend responded
+   * but rejected" (HTTP). Without this, `TypeError: Failed to fetch`
+   * bubbles up raw and is shown to the user as-is — a useless error.
+   *
+   * `kind` on the thrown error is `'backend_offline'` for network
+   * failures and `'http_error'` (with `.status` and `.body`) for HTTP
+   * responses with non-2xx status. Callers should branch on `kind`
+   * before deciding what copy to display.
+   */
+  async _doFetch(url, opts = {}) {
+    try {
+      return await _originalFetch(url, opts);
+    } catch (e) {
+      // Network-layer failures (DNS, refused, timeout) surface as
+      // TypeError. Convert to a typed error with a clear message.
+      const err = new Error(
+        "Can't reach the ANT backend. It may still be starting up — " +
+        "wait a few seconds and try again. If this keeps happening, " +
+        "check View → Open Logs Folder for details."
+      );
+      err.kind = 'backend_offline';
+      err.cause = e;
+      throw err;
+    }
+  },
+
   /** Check if the backend requires authentication */
   async isAuthRequired() {
     // Return cached value if known
     if (this._authRequired !== null) return this._authRequired;
     try {
-      const resp = await _originalFetch(`${API_BASE}/auth/status`, { signal: AbortSignal.timeout(3000) });
+      const resp = await this._doFetch(`${API_BASE}/auth/status`, { signal: AbortSignal.timeout(3000) });
       const data = await resp.json();
       this._authRequired = data.auth_required !== false;
       return this._authRequired;
@@ -53,7 +81,7 @@ const AuthHelper = {
     formData.append('username', username);
     formData.append('password', password);
 
-    const res = await _originalFetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Login failed');
     const data = await res.json();
     if (data.access_token) {
@@ -73,7 +101,7 @@ const AuthHelper = {
       formData.append('security_answer', securityAnswer);
     }
 
-    const res = await _originalFetch(`${API_BASE}/auth/register`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/register`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Registration failed');
     const data = await res.json();
     return data;
@@ -83,7 +111,7 @@ const AuthHelper = {
   async forgotPassword(username) {
     const formData = new FormData();
     formData.append('username', username);
-    const res = await _originalFetch(`${API_BASE}/auth/forgot-password`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/forgot-password`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Failed to process request');
     return await res.json();
   },
@@ -94,7 +122,7 @@ const AuthHelper = {
     formData.append('username', username);
     formData.append('security_answer', securityAnswer);
     formData.append('new_password', newPassword);
-    const res = await _originalFetch(`${API_BASE}/auth/reset-password`, { method: 'POST', body: formData });
+    const res = await this._doFetch(`${API_BASE}/auth/reset-password`, { method: 'POST', body: formData });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.detail || 'Password reset failed');
@@ -107,7 +135,7 @@ const AuthHelper = {
     const formData = new FormData();
     formData.append('security_question', securityQuestion);
     formData.append('security_answer', securityAnswer);
-    const res = await _originalFetch(`${API_BASE}/auth/set-security-question`, {
+    const res = await this._doFetch(`${API_BASE}/auth/set-security-question`, {
       method: 'POST',
       body: formData,
       headers: { 'Authorization': `Bearer ${this.getToken()}` }
@@ -154,7 +182,7 @@ const AuthHelper = {
     } else {
       console.warn('[AuthHelper] authFetch called with no token for:', url);
     }
-    const res = await _originalFetch(url, options);
+    const res = await this._doFetch(url, options);
 
     // If token expired, clear it and try re-auth
     if (res.status === 401) {
@@ -183,7 +211,7 @@ const AuthHelper = {
     overlay.id = 'auth-login-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;';
     overlay.innerHTML = `
-      <div style="background:#1e1e2e;border-radius:12px;padding:32px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+      <div style="background:#1e1e2e;border-radius:12px;padding:32px;width:340px;max-width:90vw;max-height:calc(100vh - 32px);overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
         <div style="text-align:center;margin-bottom:20px;">
           <img src="ant-icon-new.png" style="width:60px;height:60px;filter:drop-shadow(0 0 12px rgba(56,189,248,0.5));margin-bottom:12px;" alt="ANT">
           <h2 id="auth-form-title" style="color:#fff;margin:0 0 4px 0;font-size:20px;">Sign In</h2>
@@ -340,7 +368,11 @@ const AuthHelper = {
         window.dispatchEvent(new Event('auth-success'));
         setTimeout(() => window.location.reload(), 200);
       } catch (e) {
-        errorDiv.textContent = 'Invalid username or password';
+        if (e?.kind === 'backend_offline') {
+          errorDiv.textContent = e.message;
+        } else {
+          errorDiv.textContent = 'Invalid username or password';
+        }
         errorDiv.style.display = 'block';
         loginBtn.disabled = false;
         loginBtn.textContent = 'Sign In';
@@ -358,6 +390,21 @@ const AuthHelper = {
     const regError = document.getElementById('auth-reg-error');
     const regSuccess = document.getElementById('auth-reg-success');
 
+    // Scroll a banner (error/success) into view inside the modal box.
+    // Mirrors the helper in signin.html — the inner modal div is the
+    // scrollable ancestor (max-height:calc(100vh - 32px); overflow-y:auto).
+    const scrollBannerIntoView = (el) => {
+      if (!el) return;
+      // The scrollable ancestor is the overlay's first child div.
+      const scrollable = overlay.firstElementChild;
+      if (!scrollable) return;
+      const scrollableRect = scrollable.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const offsetInside = elRect.top - scrollableRect.top + scrollable.scrollTop;
+      const target = Math.max(0, offsetInside - 24);
+      scrollable.scrollTo({ top: target, behavior: 'smooth' });
+    };
+
     const doRegister = async () => {
       regError.style.display = 'none';
       regSuccess.style.display = 'none';
@@ -365,11 +412,13 @@ const AuthHelper = {
       if (!regUser.value.trim() || !regEmail.value.trim() || !regPass.value) {
         regError.textContent = 'All fields are required';
         regError.style.display = 'block';
+        scrollBannerIntoView(regError);
         return;
       }
       if (regPass.value.length < 8) {
         regError.textContent = 'Password must be at least 8 characters';
         regError.style.display = 'block';
+        scrollBannerIntoView(regError);
         return;
       }
 
@@ -379,6 +428,7 @@ const AuthHelper = {
         await AuthHelper.register(regUser.value.trim(), regEmail.value.trim(), regPass.value);
         regSuccess.textContent = 'Account created! Signing you in...';
         regSuccess.style.display = 'block';
+        scrollBannerIntoView(regSuccess);
         // Auto-login after registration
         try {
           await AuthHelper.login(regUser.value.trim(), regPass.value);
@@ -395,8 +445,13 @@ const AuthHelper = {
           userInput.focus();
         }
       } catch (e) {
-        regError.textContent = 'Registration failed. Username may already exist.';
+        if (e?.kind === 'backend_offline') {
+          regError.textContent = e.message;
+        } else {
+          regError.textContent = 'Registration failed. Username may already exist.';
+        }
         regError.style.display = 'block';
+        scrollBannerIntoView(regError);
         regBtn.disabled = false;
         regBtn.textContent = 'Create Account';
       }
@@ -434,7 +489,9 @@ const AuthHelper = {
           document.getElementById('auth-forgot-no-question').style.display = 'block';
         }
       } catch (e) {
-        forgotError.textContent = 'Failed to process request. Please try again.';
+        forgotError.textContent = e?.kind === 'backend_offline'
+          ? e.message
+          : 'Failed to process request. Please try again.';
         forgotError.style.display = 'block';
       } finally {
         forgotStep1Btn.disabled = false;
@@ -477,7 +534,11 @@ const AuthHelper = {
           document.getElementById('auth-login-user').focus();
         }, 1500);
       } catch (e) {
-        forgotStep2Error.textContent = e.message || 'Reset failed. Please try again.';
+        if (e?.kind === 'backend_offline') {
+          forgotStep2Error.textContent = e.message;
+        } else {
+          forgotStep2Error.textContent = e.message || 'Reset failed. Please try again.';
+        }
         forgotStep2Error.style.display = 'block';
         forgotStep2Btn.disabled = false;
         forgotStep2Btn.textContent = 'Reset Password';

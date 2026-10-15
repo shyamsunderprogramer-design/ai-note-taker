@@ -10,6 +10,11 @@ import { View, Text, StyleSheet, ActivityIndicator, ScrollView, TextInput, Touch
 
 import apiService from "./services/api"
 import notificationService from "./services/notifications"
+import VoiceRecordingScreen from "./screens/VoiceRecordingScreen"
+import CognitiveGraphScreen from "./screens/CognitiveGraphScreen"
+import AnalyticsScreen from "./screens/AnalyticsScreen"
+import JobTrackerScreen from "./screens/JobTrackerScreen"
+import StudyPlanScreen from "./screens/StudyPlanScreen"
 
 // ── Screens ──────────────────────────────────────────────────────────────────
 
@@ -231,6 +236,11 @@ function MainTabs({ onLogout }) {
   return (
     <Tab.Navigator>
       <Tab.Screen name="Conversations" component={ConversationsScreen} />
+      <Tab.Screen name="Record" component={VoiceRecordingScreen} />
+      <Tab.Screen name="Graph" component={CognitiveGraphScreen} />
+      <Tab.Screen name="Jobs" component={JobTrackerScreen} />
+      <Tab.Screen name="Study" component={StudyPlanScreen} />
+      <Tab.Screen name="Analytics" component={AnalyticsScreen} />
       <Tab.Screen name="Interview" component={InterviewScreen} />
       <Tab.Screen name="Career" component={CareerScreen} />
       <Tab.Screen name="Settings">

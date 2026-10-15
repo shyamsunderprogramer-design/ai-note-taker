@@ -26,7 +26,7 @@ import json
 import logging
 import sys
 
-from agents.ingestion.pipeline import IngestionPipeline
+from modules.agents.ingestion.pipeline import IngestionPipeline
 
 
 def main():
@@ -132,6 +132,9 @@ def main():
             mode=mode,
             dry_run=args.dry_run,
         )
+
+    else:
+        return parser.error("Provide at least one local path or GitHub repository")
 
     # Output results
     result = stats.to_dict()

@@ -1,5 +1,5 @@
 /**
- * stealth.js - Bulletproof stealth/screen-capture-protection module
+ * stealth.js - Platform stealth/screen-capture-protection module
  *
  * Features:
  * - Stealth mode: minimal UI + tray
@@ -8,28 +8,27 @@
  *
  * Usage:
  *   stealth.init(window)           - Initialize with Electron BrowserWindow
- *   stealth.enable()              - Enable stealth + bulletproof capture protection
+ *   stealth.enable()              - Enable stealth + platform capture protection
  *   stealth.disable()             - Disable stealth
  *   stealth.isEnabled()           - Check stealth state
  *   stealth.isUndetectable()      - Check if capture protection is active
  */
 
-const { app, Tray, Menu, nativeImage, screen, ipcMain } = require("electron")
+const { app, Tray, Menu, nativeImage } = require("electron")
 const log = require("electron-log/main")
 const logger = log
 const path = require("path")
 const fs = require("fs")
 
+const protectedWindows = new Set()
 let _window = null
 let _tray = null
 let _enabled = false
 let _undetectable = false
-let _protectionInterval = null
 
 const PLATFORM = process.platform
 const IS_WINDOWS = PLATFORM === "win32"
 const IS_MAC = PLATFORM === "darwin"
-const IS_LINUX = PLATFORM === "linux"
 
 // Native Windows API for maximum protection (optional, falls back to Electron API)
 let windowsApi = null
@@ -55,7 +54,8 @@ function init(window) {
     throw new Error("[Stealth] Invalid BrowserWindow")
   }
   _window = window
-  logger.info("[Stealth] Module initialized (bulletproof mode)")
+  registerWindow(window)
+  logger.info("[Stealth] Module initialized (platform mode)")
 }
 
 /**
@@ -118,17 +118,23 @@ function destroyTray() {
 }
 
 /**
- * Apply bulletproof screen capture protection
+ * Apply platform screen capture protection
  */
-function applyBulletproofProtection() {
+function applyPlatformProtection() {
   if (!_window || _window.isDestroyed()) return
 
-  // Method 1: Electron's cross-platform content protection
+  if (!IS_WINDOWS && !IS_MAC) throw new Error("Capture exclusion is unsupported on this platform")
+
+  // Request the OS capture-exclusion setting; this does not verify external recorders.
   try {
-    _window.setContentProtection(true)
+    for (const window of liveWindows()) {
+      window.setContentProtection(true)
+      if (!window.isContentProtected?.()) throw new Error("OS capture-exclusion setting was not applied")
+    }
     logger.info("[Stealth] Content protection enabled")
   } catch (e) {
     logger.warn("[Stealth] Content protection failed:", e.message)
+    throw e
   }
 
   // Method 2: Windows native API (if available)
@@ -142,47 +148,22 @@ function applyBulletproofProtection() {
     }
   }
 
-  // Method 3: Additional visual obfuscation
-  // Make window semi-transparent which can confuse some capture methods
-  try {
-    _window.setOpacity(0.95)
-  } catch (e) {
-    // Ignore
-  }
+  // Opacity and window height do not establish capture protection.
 
-  // Method 4: Disable compositing on supported platforms
-  // This can prevent some capture methods
-  if (IS_LINUX) {
-    try {
-      _window.setContentProtection(true)
-    } catch (e) {
-      // Fallback already attempted above
-    }
-  }
-
-  // Method 5: Set window to exclude from capture on macOS
-  if (IS_MAC) {
-    try {
-      // On macOS, setContentProtection uses CGWindow
-      // Additional: set window level to be above capture
-      _window.setAlwaysOnTop(true, "screen-saver", 2147483647)
-    } catch (e) {
-      logger.warn("[Stealth] macOS additional protection failed:", e.message)
-    }
-  }
 }
 
 /**
- * Remove bulletproof protection
+ * Remove platform protection
  */
-function removeBulletproofProtection() {
+function removePlatformProtection() {
   if (!_window || _window.isDestroyed()) return
 
   // Remove content protection
   try {
-    _window.setContentProtection(false)
+    for (const window of liveWindows()) window.setContentProtection(false)
   } catch (e) {
     logger.warn("[Stealth] Remove content protection failed:", e.message)
+    throw e
   }
 
   // Restore native protection on Windows
@@ -195,12 +176,6 @@ function removeBulletproofProtection() {
     }
   }
 
-  // Restore opacity
-  try {
-    _window.setOpacity(1.0)
-  } catch (e) {
-    // Ignore
-  }
 
   // Restore window level on macOS
   if (IS_MAC) {
@@ -213,7 +188,7 @@ function removeBulletproofProtection() {
 }
 
 /**
- * Enable stealth mode with bulletproof screen capture protection
+ * Enable stealth mode with platform screen capture protection
  */
 function enable() {
   if (!_window) {
@@ -221,15 +196,15 @@ function enable() {
     return false
   }
 
-  if (_enabled) return true
+  if (_enabled && isUndetectable()) return true
 
-  logger.info("[Stealth] Enabling bulletproof stealth...")
+  logger.info("[Stealth] Enabling platform stealth...")
 
   try {
     createTray()
 
     // Apply all protection methods
-    applyBulletproofProtection()
+    applyPlatformProtection()
 
     // Note: Protection is applied once - no interval to prevent blinking
 
@@ -244,9 +219,10 @@ function enable() {
 
     _enabled = true
     _undetectable = true
-    logger.info("[Stealth] Bulletproof stealth enabled")
+    logger.info("[Stealth] Platform stealth enabled")
     return true
   } catch (e) {
+    destroyTray()
     logger.error("[Stealth] Enable error:", e.message)
     return false
   }
@@ -261,19 +237,13 @@ function disable() {
     return false
   }
 
-  if (!_enabled) return true
+  if (!_enabled && !isUndetectable()) return true
 
   logger.info("[Stealth] Disabling stealth...")
 
   try {
-    // Stop protection interval
-    if (_protectionInterval) {
-      clearInterval(_protectionInterval)
-      _protectionInterval = null
-    }
-
     destroyTray()
-    removeBulletproofProtection()
+    removePlatformProtection()
 
     // Restore always-on-top
     if (IS_WINDOWS) {
@@ -317,19 +287,15 @@ function isEnabled() {
  * Check if screen capture protection is active
  */
 function isUndetectable() {
-  return _undetectable
+  try { return !!(_window && !_window.isDestroyed() && liveWindows().every(window => window.isContentProtected?.())) }
+  catch { return false }
 }
 
 /**
  * Set undetectable state directly (for backward compatibility)
  */
-function setUndetectable(enable) {
-  if (enable) {
-    if (!_enabled) enable()
-  } else {
-    if (_enabled) disable()
-  }
-  return true
+function setUndetectable(enabled) {
+  return enabled ? enable() : disable()
 }
 
 /**
@@ -339,7 +305,23 @@ function toggleUndetectable() {
   return toggle()
 }
 
+function liveWindows() { return [...protectedWindows].filter(window => !window.isDestroyed()) }
+function registerWindow(window) {
+  if (protectedWindows.has(window)) return
+  protectedWindows.add(window)
+  window.once?.("closed", () => protectedWindows.delete(window))
+  if (_enabled && (IS_WINDOWS || IS_MAC)) window.setContentProtection(true)
+}
+
+function getProtectionState() {
+  const supported = IS_WINDOWS || IS_MAC
+  return {enabled:_enabled, undetectable:isUndetectable(), supported,
+    platform:PLATFORM, partial:liveWindows().some(window => window.isContentProtected?.()) && !isUndetectable(), limitation:IS_MAC ? "macos-screencapturekit" : supported ? null : "unsupported-platform", externallyVerified:false}
+}
+
 module.exports = {
+  getProtectionState,
+  registerWindow,
   init,
   enable,
   disable,

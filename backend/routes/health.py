@@ -1,14 +1,15 @@
 """Route module for health checks and rate-limit status."""
 import logging
+import importlib
 import os
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Request
 
 from security import rate_limiter
 
 # Database availability
 try:
-    from database import db_manager, HAS_SQLALCHEMY
+    from core.database import db_manager, HAS_SQLALCHEMY
     DATABASE_AVAILABLE = HAS_SQLALCHEMY
 except ImportError:
     DATABASE_AVAILABLE = False
@@ -20,26 +21,23 @@ try:
 except ImportError:
     COGNITIVE_GRAPH_AVAILABLE = False
 
+def _export_available(module_name, export_name):
+    """Verify optional module exports without retaining unused global bindings."""
+    try:
+        getattr(importlib.import_module(module_name), export_name)
+        return True
+    except (ImportError, AttributeError):
+        return False
+
+
 # Voice clone for health/modules
-try:
-    from voice_clone_agent import voice_manager
-    VOICE_CLONE_AVAILABLE = True
-except ImportError:
-    VOICE_CLONE_AVAILABLE = False
+VOICE_CLONE_AVAILABLE = _export_available("voice_clone_agent", "voice_manager")
 
 # RVC gallery for health/modules
-try:
-    from rvc_gallery import list_gallery
-    RVC_GALLERY_AVAILABLE = True
-except ImportError:
-    RVC_GALLERY_AVAILABLE = False
+RVC_GALLERY_AVAILABLE = _export_available("rvc_gallery", "list_gallery")
 
 # Collaboration for health/modules
-try:
-    from collaboration_mode import collaboration_manager
-    COLLABORATION_AVAILABLE = True
-except ImportError:
-    COLLABORATION_AVAILABLE = False
+COLLABORATION_AVAILABLE = _export_available("collaboration_mode", "collaboration_manager")
 
 # Mock interview library for health/modules
 try:
@@ -49,25 +47,13 @@ except ImportError:
     MOCK_LIBRARY_AVAILABLE = False
 
 # Study plan for health/modules
-try:
-    from study_plan_generator import study_planner
-    STUDY_PLAN_AVAILABLE = True
-except ImportError:
-    STUDY_PLAN_AVAILABLE = False
+STUDY_PLAN_AVAILABLE = _export_available("study_plan_generator", "study_planner")
 
 # Interview simulator for health/modules
-try:
-    from interview_simulator import interview_simulator
-    INTERVIEW_SIMULATOR_AVAILABLE = True
-except ImportError:
-    INTERVIEW_SIMULATOR_AVAILABLE = False
+INTERVIEW_SIMULATOR_AVAILABLE = _export_available("interview_simulator", "interview_simulator")
 
 # Job tracker for health/modules
-try:
-    from job_tracker import job_tracker
-    JOB_TRACKER_AVAILABLE = True
-except ImportError:
-    JOB_TRACKER_AVAILABLE = False
+JOB_TRACKER_AVAILABLE = _export_available("job_tracker", "job_tracker")
 
 logger = logging.getLogger("routes.health")
 

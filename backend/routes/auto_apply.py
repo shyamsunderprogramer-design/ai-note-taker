@@ -5,11 +5,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from security import ErrorCode, error_response, get_current_user
+from security import ErrorCode, error_response
 from security.auth import User
 
 security_bearer = HTTPBearer(auto_error=False)
@@ -19,13 +19,7 @@ async def get_token(credentials: HTTPAuthorizationCredentials = Depends(security
     return credentials.credentials if credentials else None
 
 
-async def require_authentication(token=Depends(get_token)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Auth required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 logger = logging.getLogger("routes.auto_apply")
@@ -283,14 +277,14 @@ async def apply_to_specific_job(
         job_entry["status"] = "applied"
         job_entry["applied_at"] = application_result["applied_at"]
 
-        logger.info("[AutoApply] Applied to job %s in session %s", job_id, session_id)  # lgtm[py/log-injection]
+        logger.info("[AutoApply] Operation completed")
 
         return application_result
 
     except Exception as e:
         job_entry["status"] = "failed"
         job_entry["error"] = str(e)
-        logger.error("[AutoApply] Failed to apply to job %s: %s", job_id, str(e))  # lgtm[py/log-injection]
+        logger.error("[AutoApply] Operation failed")
         return error_response(ErrorCode.INTERNAL_ERROR, "Application failed", status_code=500)  # lgtm[py/information-exposure-through-exception]
 
 
@@ -346,7 +340,7 @@ async def stop_auto_apply_session(
     jobs_failed = sum(1 for j in session["jobs"] if j["status"] == "failed")
     jobs_skipped = sum(1 for j in session["jobs"] if j["status"] == "skipped")
 
-    logger.info("[AutoApply] Session %s stopped by user %s", session_id, user.id)  # lgtm[py/log-injection]
+    logger.info("[AutoApply] Operation completed")
 
     return {
         "session_id": session_id,

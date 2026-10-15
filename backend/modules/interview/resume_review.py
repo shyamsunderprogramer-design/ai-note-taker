@@ -6,9 +6,8 @@ Analyzes resume against job descriptions and provides feedback.
 
 import json
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
 
 logger = logging.getLogger("resume_review")
 
@@ -355,8 +354,8 @@ Return ONLY JSON:
                         if 'YES' in res:
                             found.append(kw)
                             continue
-                    except:
-                        pass  # nosec B110
+                    except Exception:
+                        logger.debug("Semantic skill matching unavailable; using text matching")
 
                 # Final fallback: partial word match
                 if any(kw in word for word in text_lower.split()):
@@ -497,6 +496,8 @@ Return the response ONLY as a JSON object with this structure:
                 "suggestions": ["AI analysis temporarily unavailable. Please try again."],
                 "rewrites": []
             }
+
+        return None
 
 
 # Global instance

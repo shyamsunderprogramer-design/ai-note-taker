@@ -7,7 +7,6 @@ import logging
 import re
 import sys
 import subprocess  # nosec B404
-from datetime import datetime
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Query
@@ -65,14 +64,7 @@ try:
     from cognitive_graph import (
         cognitive_graph as neo4j_graph,
         initialize_graph,
-        ingest_conversation,
         query_graph,
-        InterviewNode,
-        QuestionNode,
-        AnswerNode,
-        CompanyNode,
-        TopicNode,
-        SkillNode
     )
     # Check if Neo4j is actually connected
     try:

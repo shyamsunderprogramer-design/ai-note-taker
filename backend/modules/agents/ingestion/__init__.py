@@ -11,11 +11,11 @@ Modules:
   - cli: Command-line entry point
 """
 
-from agents.ingestion.markdown_parser import MarkdownQAParser, ParsedQA
-from agents.ingestion.pdf_processor import PDFProcessor, PDFContent
-from agents.ingestion.graph_loader import GraphLoader, LoadStats as GraphLoadStats
-from agents.ingestion.rag_loader import RAGLoader, RAGLoadStats
-from agents.ingestion.pipeline import IngestionPipeline, IngestionStats
+from modules.agents.ingestion.markdown_parser import MarkdownQAParser, ParsedQA
+from modules.agents.ingestion.pdf_processor import PDFProcessor, PDFContent
+from modules.agents.ingestion.graph_loader import GraphLoader, LoadStats as GraphLoadStats
+from modules.agents.ingestion.rag_loader import RAGLoader, RAGLoadStats
+from modules.agents.ingestion.pipeline import IngestionPipeline, IngestionStats
 
 __all__ = [
     "MarkdownQAParser", "ParsedQA",

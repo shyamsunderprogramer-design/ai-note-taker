@@ -2,19 +2,17 @@
 import json
 import logging
 import os
-import shutil
 import time
 
-from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from typing import Dict
 
 from security import ErrorCode, error_response
 from security.auth import User
 
 # Auth helpers (mirrored — will be consolidated)
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from security import get_current_user
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -25,13 +23,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 logger = logging.getLogger("routes.conversations")
@@ -148,28 +140,15 @@ async def import_conversations(file: UploadFile = File(...), user: User = Depend
 async def upload_document(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Upload a document for RAG context retrieval."""
     from document_store import get_document_store
-
-    # SECURITY: Sanitize filename to prevent path traversal
-    safe_filename = os.path.basename(file.filename)
-    if not safe_filename or "/" in file.filename or "\\" in file.filename or ".." in file.filename:
-        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
-
-    temp_path = os.path.join(UPLOAD_DIR, safe_filename)
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    from lib.document_upload import InvalidDocumentName, staged_document
 
     try:
-        doc_store = get_document_store()
-        result = doc_store.add_document(temp_path)
-
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
-
-        return result
-    except Exception as e:
-        logger.error("Document upload failed: %s", str(e))
+        with staged_document(file.file, file.filename, UPLOAD_DIR) as temp_path:
+            return get_document_store().add_document(temp_path)
+    except InvalidDocumentName:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+    except Exception:
+        logger.error("Document upload failed")
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
@@ -208,7 +187,6 @@ async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)
 
 # ─── Share Links ────────────────────────────────────────────────────────
 
-import hashlib
 import secrets
 
 # In-memory share link store (production: database)
@@ -230,7 +208,6 @@ async def create_share_link(
         return error_response(ErrorCode.VALIDATION_ERROR, "No messages to share", status_code=400)
 
     share_id = secrets.token_urlsafe(12)
-    share_token = hashlib.sha256(share_id.encode()).hexdigest()[:16]
 
     _share_links[share_id] = {
         "messages": messages,

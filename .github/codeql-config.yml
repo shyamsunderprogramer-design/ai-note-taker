@@ -6,6 +6,9 @@ paths-ignore:
   - 'backend/core/test_*.py'
   - '_archive/**'
   - '**/node_modules/**'
+  - 'AINT_Venv/**'
+  - '**/venv/**'
+  - '**/.terraform/**'
 
 # Only analyze these languages
 queries:

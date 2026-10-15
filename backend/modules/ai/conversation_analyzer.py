@@ -16,9 +16,8 @@ Usage:
 
 import logging
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict
 from dataclasses import dataclass
-from collections import Counter
 from datetime import datetime
 
 logger = logging.getLogger("conversation_analyzer")

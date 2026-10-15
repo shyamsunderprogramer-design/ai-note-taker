@@ -70,8 +70,8 @@ async def connect_notion(
                 raise HTTPException(status_code=400, detail="Invalid Notion API key")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("[Notion] Connection check error: %s", str(exc))
+    except Exception:
+        logger.error("[Notion] Operation failed")
         raise HTTPException(status_code=502, detail="Could not reach Notion API")
 
     await save_integration_config(
@@ -82,7 +82,7 @@ async def connect_notion(
     )
 
     log_audit_event("notion_connect", user.username, "notion_connected", success=True)
-    logger.info("[Notion] Workspace %s connected for user %s", workspace_id, user.username)  # lgtm[py/log-injection]
+    logger.info("[Notion] Operation completed")
 
     return {"status": "connected", "workspace_id": workspace_id}
 
@@ -152,7 +152,7 @@ async def sync_to_notion(
             if resp.status_code in (200, 201):
                 data = resp.json()
                 log_audit_event("notion_sync", user.username, "notion_page_created", success=True)
-                logger.info("[Notion] Synced conversation %s to page %s", conversation_id, page_id)  # lgtm[py/log-injection]
+                logger.info("[Notion] Operation completed")
                 return {
                     "status": "synced",
                     "notion_page_id": data.get("id"),
@@ -160,13 +160,12 @@ async def sync_to_notion(
                     "url": data.get("url"),
                 }
             else:
-                detail = resp.json().get("message", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
-                logger.error("[Notion] Sync failed (%s): %s", resp.status_code, detail)
-                raise HTTPException(status_code=502, detail=f"Notion API error: {detail}")
+                logger.error("[Notion] Sync failed (%s)", resp.status_code)
+                raise HTTPException(status_code=502, detail="Notion could not sync the page")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("[Notion] Sync error: %s", str(exc))
+    except Exception:
+        logger.error("[Notion] Operation failed")
         raise HTTPException(status_code=502, detail="Failed to sync to Notion")
 
 
@@ -220,8 +219,8 @@ async def list_notion_pages(
                 raise HTTPException(status_code=502, detail="Failed to list Notion pages")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("[Notion] List pages error: %s", str(exc))
+    except Exception:
+        logger.error("[Notion] Operation failed")
         raise HTTPException(status_code=502, detail="Failed to list Notion pages")
 
 
@@ -230,5 +229,5 @@ async def disconnect_notion(user: User = Depends(require_authentication)):
     """Disconnect Notion integration."""
     await delete_integration_config(user.id, "notion")
     log_audit_event("notion_disconnect", user.username, "notion_disconnected", success=True)
-    logger.info("[Notion] Disconnected for user %s", user.username)
+    logger.info("[Notion] Disconnected")
     return {"status": "disconnected"}

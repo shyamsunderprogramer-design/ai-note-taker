@@ -6,17 +6,15 @@ Runs on every transcript segment (not just questions), with accumulated notes
 to prevent duplicate extraction.
 """
 
-import re
 import logging
-from typing import List, Dict, Any
+from typing import List, Any
 
-from agents.base import (
+from modules.agents.base import (
     BaseAgent, AgentType, AgentSuggestion, AgentContext,
     TranscriptSegment,
 )
-from agents.context_builder import query_document_rag, extract_entities
-from agents.prompts import MEETING_AGENT_PROMPT
-from agents.session import AgentSessionManager
+from modules.agents.context_builder import query_document_rag
+from modules.agents.prompts import MEETING_AGENT_PROMPT
 
 logger = logging.getLogger("agents.meeting")
 

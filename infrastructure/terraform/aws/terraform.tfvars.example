@@ -1,0 +1,12 @@
+# terraform.tfvars.example — Copy to terraform.tfvars and customize.
+# terraform.tfvars is gitignored; this is the committed template.
+#
+# Each var has a one-line description; see variables.tf for full docs.
+
+environment       = "production"   # production | staging | dev
+image_tag         = "latest"       # Docker image tag for the ant-backend chart
+aws_region        = "us-east-1"    # Primary AWS region
+cluster_name      = "ant-cluster"  # EKS cluster name (suffixed with environment)
+vpc_cidr          = "10.0.0.0/16"  # /16 — 3 private + 3 public /24s carved out
+replication_region = "us-west-2"   # S3 cross-region replication target
+domain_name       = ""             # Public DNS name (e.g. api.ant.example.com); leave empty to skip cert

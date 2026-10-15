@@ -30,11 +30,12 @@ on:
       - 'infrastructure/**'
       - 'docker/**'
       - 'k8s/**'
+      - 'package*.json'
+      - '.github/workflows/security.yml'
 
 permissions:
   contents: read
   security-events: write
-  issues: write
 
 env:
   REGISTRY: ghcr.io
@@ -45,7 +46,9 @@ jobs:
   # SNYK SCA (Software Composition Analysis)
   # ═══════════════════════════════════════════════════════════════════════
   snyk-sca:
-    name: Snyk Dependency Scan
+    name: Dependency Scan (npm audit, optional Snyk)
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     runs-on: ubuntu-latest
     if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'sca' || github.event.inputs.scan_type == ''
     steps:
@@ -53,7 +56,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Snyk (Python)
-        uses: snyk/actions/python@master
+        if: env.SNYK_TOKEN != ''
+        with:
+          args: --file=backend/requirements.txt --package-manager=pip --json-file-output=snyk-python.json
+        uses: snyk/actions/python@11b673cfb4b0dc0d860a1323caa199d54950dcce
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -61,19 +67,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: electron/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install Node dependencies
         run: npm ci
-        working-directory: ./electron
+
+      - name: Audit locked Node dependencies
+        run: npm audit --audit-level=low
 
       - name: Run Snyk (Node.js)
-        uses: snyk/actions/node@master
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/node@11b673cfb4b0dc0d860a1323caa199d54950dcce
         continue-on-error: true
         with:
-          args: --severity-threshold=high
+          args: --severity-threshold=high --json-file-output=snyk-node.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -82,30 +91,10 @@ jobs:
         if: always()
         with:
           name: snyk-report
-          path: snyk_results.json
+          path: snyk-*.json
+          if-no-files-found: ignore
           retention-days: 30
 
-      - name: Create GitHub Issue for critical vulns
-        if: github.event_name == 'schedule' && env.SNYK_TOKEN != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            try {
-              const report = JSON.parse(fs.readFileSync('snyk_results.json', 'utf8'));
-              const criticals = report.vulnerabilities?.filter(v => v.severity === 'critical') || [];
-              if (criticals.length > 0) {
-                github.rest.issues.create({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  title: `[Security] ${criticals.length} critical vulnerabilities found`,
-                  body: criticals.map(v => `- **${v.package}**: ${v.title} (${v.severity})`).join('\n'),
-                  labels: ['security', 'critical']
-                });
-              }
-            } catch (e) { console.log('No Snyk report found'); }
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
   # ═══════════════════════════════════════════════════════════════════════
   # TRIVY CONTAINER SCAN
@@ -123,7 +112,7 @@ jobs:
           docker build -t ant-backend:scan -f docker/Dockerfile.backend .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@6abccf398f78b4c337599c0656f933d91efb91a0
         with:
           image-ref: 'ant-backend:scan'
           format: 'sarif'
@@ -133,13 +122,13 @@ jobs:
           vuln-type: 'os,library'
 
       - name: Upload Trivy scan results to Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
           sarif_file: 'trivy-results.sarif'
         continue-on-error: true
 
-      - name: Generate Trivy HTML report
-        uses: aquasecurity/trivy-action@master
+      - name: Generate Trivy table report
+        uses: aquasecurity/trivy-action@6abccf398f78b4c337599c0656f933d91efb91a0
         with:
           image-ref: 'ant-backend:scan'
           format: 'table'
@@ -167,7 +156,7 @@ jobs:
           fetch-depth: 0
 
       - name: GitLeaks Scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .github/gitleaks.toml
@@ -192,28 +181,47 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Checkov (Terraform)
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@6f26dc90000b74feb589a906cdfae540f5119895
         continue-on-error: true
         with:
           directory: infrastructure/terraform
           framework: terraform
           output_format: sarif
-          output_file_path: checkov-results.sarif
+          output_file_path: checkov-terraform
 
       - name: Run Checkov (Kubernetes)
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@6f26dc90000b74feb589a906cdfae540f5119895
         continue-on-error: true
         with:
           directory: k8s
           framework: kubernetes
           output_format: sarif
-          output_file_path: checkov-k8s-results.sarif
+          output_file_path: checkov-kubernetes
 
-      - name: Upload Checkov results
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload Checkov Terraform results
+        uses: github/codeql-action/upload-sarif@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
-          sarif_file: 'checkov-results.sarif'
+          sarif_file: checkov-terraform/results_sarif.sarif
+          category: checkov-terraform
         continue-on-error: true
+
+      - name: Upload Checkov Kubernetes results
+        if: always()
+        uses: github/codeql-action/upload-sarif@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          sarif_file: checkov-kubernetes/results_sarif.sarif
+          category: checkov-kubernetes
+        continue-on-error: true
+
+      - name: Preserve IaC reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-reports
+          path: |
+            checkov-terraform/
+            checkov-kubernetes/
+          if-no-files-found: error
 
   # ═══════════════════════════════════════════════════════════════════════
   # OPA POLICY CHECKS (Conftest)
@@ -273,7 +281,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install Bandit
         run: pip install bandit bandit-sarif-formatter
@@ -284,7 +292,7 @@ jobs:
         working-directory: ./backend
 
       - name: Upload Bandit results to Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
           sarif_file: backend/bandit-results.sarif
         continue-on-error: true

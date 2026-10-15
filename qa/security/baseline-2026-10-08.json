@@ -1,0 +1,4246 @@
+{
+  "dependencies": [
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 151,
+      "package": "ip-address",
+      "patched": "10.5.1",
+      "range": "<= 10.5.0",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 150,
+      "package": "electron",
+      "patched": "41.10.5",
+      "range": ">= 40.0.0-alpha.1, < 41.10.5",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 149,
+      "package": "ip-address",
+      "patched": "10.5.1",
+      "range": ">= 10.2.0, <= 10.5.0",
+      "severity": "medium"
+    },
+    {
+      "manifest": "backend/requirements.txt",
+      "number": 148,
+      "package": "anyio",
+      "patched": "4.14.2",
+      "range": "< 4.14.2",
+      "severity": "critical"
+    },
+    {
+      "manifest": "backend/requirements.txt",
+      "number": 147,
+      "package": "anyio",
+      "patched": "4.14.2",
+      "range": "< 4.14.2",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 146,
+      "package": "js-yaml",
+      "patched": "4.3.2",
+      "range": ">= 4.0.0, < 4.3.2",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 145,
+      "package": "fast-uri",
+      "patched": "3.1.6",
+      "range": ">= 3.1.3, < 3.1.6",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 144,
+      "package": "fast-uri",
+      "patched": "3.1.6",
+      "range": ">= 3.1.2, < 3.1.6",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 143,
+      "package": "ip-address",
+      "patched": "10.2.2",
+      "range": ">= 10.1.1, <= 10.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 142,
+      "package": "ip-address",
+      "patched": "10.2.1",
+      "range": ">= 10.1.1, <= 10.2.0",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 141,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.15",
+      "range": ">= 0.7.0, <= 0.8.14",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 140,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.15",
+      "range": ">= 0.7.0, <= 0.8.14",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 139,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.15",
+      "range": ">= 0.7.0, <= 0.8.14",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 138,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.15",
+      "range": ">= 0.7.0, <= 0.8.14",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 137,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.14",
+      "range": ">= 0.7.0, <= 0.8.13",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 136,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.15",
+      "range": ">= 0.7.0, <= 0.8.14",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 134,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.14",
+      "range": ">= 0.7.0, <= 0.8.13",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 132,
+      "package": "extract-zip",
+      "patched": null,
+      "range": "<= 2.0.1",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 131,
+      "package": "@humanfs/node",
+      "patched": "0.16.8",
+      "range": "< 0.16.8",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 130,
+      "package": "fast-uri",
+      "patched": "3.1.6",
+      "range": ">= 3.0.0, < 3.1.6",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 129,
+      "package": "fast-uri",
+      "patched": "3.1.6",
+      "range": ">= 3.0.0, < 3.1.6",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 128,
+      "package": "@xmldom/xmldom",
+      "patched": "0.8.15",
+      "range": ">= 0.7.0, <= 0.8.14",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 125,
+      "package": "extract-zip",
+      "patched": null,
+      "range": "<= 2.0.1",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 122,
+      "package": "js-yaml",
+      "patched": "4.3.1",
+      "range": ">= 4.0.0, < 4.3.1",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 120,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 119,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 118,
+      "package": "electron",
+      "patched": "41.2.2",
+      "range": ">= 41.0.0-alpha.1, < 41.2.2",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 117,
+      "package": "electron",
+      "patched": "41.10.3",
+      "range": ">= 40.0.0-alpha.1, < 41.10.3",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 116,
+      "package": "electron",
+      "patched": "41.2.0",
+      "range": ">= 41.0.0-alpha.1, < 41.2.0",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 115,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 113,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 112,
+      "package": "electron",
+      "patched": "41.4.0",
+      "range": ">= 41.0.0-alpha.1, < 41.4.0",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 111,
+      "package": "electron",
+      "patched": "41.1.1",
+      "range": ">= 41.0.0-alpha.1, < 41.1.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 110,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 109,
+      "package": "electron",
+      "patched": "41.2.2",
+      "range": ">= 41.0.0-alpha.1, < 41.2.2",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 108,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "low"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 107,
+      "package": "electron",
+      "patched": "41.2.0",
+      "range": ">= 41.0.0-alpha.1, < 41.2.0",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 106,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "low"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 105,
+      "package": "electron",
+      "patched": "41.2.1",
+      "range": ">= 41.0.0-alpha.1, < 41.2.1",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 104,
+      "package": "fast-uri",
+      "patched": "3.1.5",
+      "range": ">= 3.0.0, < 3.1.5",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 103,
+      "package": "ip-address",
+      "patched": "10.3.1",
+      "range": "<= 10.3.0",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 97,
+      "package": "builder-util-runtime",
+      "patched": "9.7.0",
+      "range": "< 9.7.0",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 96,
+      "package": "app-builder-lib",
+      "patched": "26.15.0",
+      "range": "< 26.15.0",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 95,
+      "package": "fast-uri",
+      "patched": "3.1.4",
+      "range": ">= 3.0.0, <= 3.1.3",
+      "severity": "high"
+    },
+    {
+      "manifest": "backend/requirements.txt",
+      "number": 93,
+      "package": "setuptools",
+      "patched": "83.0.0",
+      "range": "< 83.0.0",
+      "severity": "medium"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 87,
+      "package": "brace-expansion",
+      "patched": "2.1.2",
+      "range": ">= 2.0.0, < 2.1.2",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 86,
+      "package": "brace-expansion",
+      "patched": "1.1.16",
+      "range": "< 1.1.16",
+      "severity": "high"
+    },
+    {
+      "manifest": "electron/package-lock.json",
+      "number": 72,
+      "package": "brace-expansion",
+      "patched": "5.0.7",
+      "range": ">= 3.0.0, < 5.0.7",
+      "severity": "high"
+    }
+  ],
+  "code_scanning": [
+    {
+      "line": 801,
+      "number": 1340,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 795,
+      "number": 1339,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/import-and-import-from",
+      "severity": null
+    },
+    {
+      "line": 1751,
+      "number": 1338,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 5395,
+      "number": 1337,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 664,
+      "number": 1336,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 588,
+      "number": 1335,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 68,
+      "number": 1333,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 1686,
+      "number": 1332,
+      "path": "core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 664,
+      "number": 1331,
+      "path": "core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 961,
+      "number": 1329,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/stack-trace-exposure",
+      "severity": "medium"
+    },
+    {
+      "line": 618,
+      "number": 1328,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 618,
+      "number": 1326,
+      "path": "core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 1839,
+      "number": 1325,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 137,
+      "number": 1324,
+      "path": "backend/modules/video/recording_manager.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2976,
+      "number": 1323,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 8,
+      "number": 1322,
+      "path": "backend/modules/video/recording_manager.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 3100,
+      "number": 1321,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 2985,
+      "number": 1320,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 3049,
+      "number": 1319,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/uninitialized-local-variable",
+      "severity": null
+    },
+    {
+      "line": 975,
+      "number": 1318,
+      "path": "backend/modules/interview/question_database_v2.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 309,
+      "number": 1317,
+      "path": "backend/security/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 286,
+      "number": 1316,
+      "path": "backend/security/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 7,
+      "number": 1315,
+      "path": "backend/routes/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 39,
+      "number": 1314,
+      "path": "start_server.py",
+      "ref": "refs/heads/main",
+      "rule": "B104",
+      "severity": null
+    },
+    {
+      "line": 189,
+      "number": 1313,
+      "path": "routes/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 2463,
+      "number": 1312,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 768,
+      "number": 1311,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 608,
+      "number": 1310,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 585,
+      "number": 1309,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 353,
+      "number": 1308,
+      "path": "backend/modules/voice/voice_clone_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/multiple-definition",
+      "severity": null
+    },
+    {
+      "line": 343,
+      "number": 1307,
+      "path": "backend/modules/voice/voice_clone_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/multiple-definition",
+      "severity": null
+    },
+    {
+      "line": 311,
+      "number": 1306,
+      "path": "backend/modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/multiple-definition",
+      "severity": null
+    },
+    {
+      "line": 82,
+      "number": 1305,
+      "path": "backend/routes/jira.py",
+      "ref": "refs/heads/main",
+      "rule": "py/partial-ssrf",
+      "severity": "critical"
+    },
+    {
+      "line": 199,
+      "number": 1304,
+      "path": "backend/routes/phone.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 199,
+      "number": 1303,
+      "path": "backend/routes/phone.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 141,
+      "number": 1302,
+      "path": "backend/routes/phone.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 155,
+      "number": 1301,
+      "path": "backend/routes/notion.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 155,
+      "number": 1300,
+      "path": "backend/routes/notion.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 85,
+      "number": 1299,
+      "path": "backend/routes/notion.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 283,
+      "number": 1298,
+      "path": "backend/routes/jira.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 184,
+      "number": 1297,
+      "path": "backend/routes/jira.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 104,
+      "number": 1296,
+      "path": "backend/routes/jira.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 349,
+      "number": 1295,
+      "path": "backend/routes/auto_apply.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 293,
+      "number": 1294,
+      "path": "backend/routes/auto_apply.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 286,
+      "number": 1293,
+      "path": "backend/routes/auto_apply.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 286,
+      "number": 1292,
+      "path": "backend/routes/auto_apply.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 141,
+      "number": 1291,
+      "path": "backend/routes/phone.py",
+      "ref": "refs/heads/main",
+      "rule": "py/clear-text-logging-sensitive-data",
+      "severity": "high"
+    },
+    {
+      "line": 635,
+      "number": 1290,
+      "path": "backend/modules/voice/whisper_handler.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1124,
+      "number": 1289,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 1287,
+      "path": "backend/modules/platform/mcp_server.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 638,
+      "number": 1285,
+      "path": "backend/modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 182,
+      "number": 1284,
+      "path": "backend/modules/platform/shadow_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 985,
+      "number": 1283,
+      "path": "backend/modules/interview/question_database_v2.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1248,
+      "number": 1282,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1189,
+      "number": 1281,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 487,
+      "number": 1279,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 107,
+      "number": 1278,
+      "path": "backend/routes/crm.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 671,
+      "number": 1276,
+      "path": "backend/modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 653,
+      "number": 1275,
+      "path": "backend/modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 638,
+      "number": 1274,
+      "path": "backend/modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 1264,
+      "path": "backend/modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 1261,
+      "path": "backend/modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 12,
+      "number": 1260,
+      "path": "backend/modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 7,
+      "number": 1259,
+      "path": "backend/modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6,
+      "number": 1258,
+      "path": "backend/modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 1253,
+      "path": "backend/modules/interview/question_library_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 10,
+      "number": 1252,
+      "path": "backend/modules/interview/question_library_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 7,
+      "number": 1251,
+      "path": "backend/modules/interview/question_library_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6,
+      "number": 1250,
+      "path": "backend/modules/interview/question_library_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 1249,
+      "path": "backend/modules/interview/question_database_v2.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 10,
+      "number": 1248,
+      "path": "backend/modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 8,
+      "number": 1247,
+      "path": "backend/modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 69,
+      "number": 1240,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 4,
+      "number": 1239,
+      "path": "backend/modules/ai/highlight_reel.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 49,
+      "number": 1237,
+      "path": "backend/core/fast_startup.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 48,
+      "number": 1236,
+      "path": "backend/core/fast_startup.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 47,
+      "number": 1233,
+      "path": "backend/core/fast_startup.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 1232,
+      "path": "backend/core/fast_startup.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 24,
+      "number": 1231,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6,
+      "number": 1230,
+      "path": "backend/routes/crm.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 65,
+      "number": 1228,
+      "path": "backend/routes/cognitive.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 10,
+      "number": 1227,
+      "path": "backend/routes/cognitive.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 4,
+      "number": 1220,
+      "path": "backend/modules/ai/ai_router.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 113,
+      "number": 1218,
+      "path": "backend/modules/voice/whisper_handler.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 1217,
+      "path": "backend/routes/webhooks.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 84,
+      "number": 1216,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 83,
+      "number": 1215,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 82,
+      "number": 1214,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 218,
+      "number": 1213,
+      "path": "backend/modules/interview/question_library_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 192,
+      "number": 1212,
+      "path": "backend/modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 233,
+      "number": 1211,
+      "path": "backend/routes/conversations.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 349,
+      "number": 1202,
+      "path": "backend/routes/jira.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 349,
+      "number": 1201,
+      "path": "backend/routes/jira.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 619,
+      "number": 1197,
+      "path": "backend/routes/compliance.py",
+      "ref": "refs/heads/main",
+      "rule": "py/log-injection",
+      "severity": "medium"
+    },
+    {
+      "line": 124,
+      "number": 1190,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 117,
+      "number": 1189,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 116,
+      "number": 1188,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 115,
+      "number": 1187,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 108,
+      "number": 1186,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 107,
+      "number": 1185,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 99,
+      "number": 1184,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 97,
+      "number": 1183,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 89,
+      "number": 1182,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 80,
+      "number": 1181,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 79,
+      "number": 1180,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 70,
+      "number": 1179,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 69,
+      "number": 1178,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 68,
+      "number": 1177,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 60,
+      "number": 1176,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 55,
+      "number": 1175,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 46,
+      "number": 1174,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 38,
+      "number": 1173,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 30,
+      "number": 1172,
+      "path": "tests/test_phase4_features.py",
+      "ref": "refs/heads/main",
+      "rule": "B101",
+      "severity": null
+    },
+    {
+      "line": 96,
+      "number": 1171,
+      "path": "routes/sso.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 33,
+      "number": 1170,
+      "path": "routes/sso.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 29,
+      "number": 1169,
+      "path": "routes/sso.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 205,
+      "number": 1167,
+      "path": "modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "B603",
+      "severity": null
+    },
+    {
+      "line": 97,
+      "number": 1166,
+      "path": "modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "B603",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 1165,
+      "path": "modules/voice/system_audio_capture.py",
+      "ref": "refs/heads/main",
+      "rule": "B404",
+      "severity": null
+    },
+    {
+      "line": 669,
+      "number": 1164,
+      "path": "modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B608",
+      "severity": null
+    },
+    {
+      "line": 638,
+      "number": 1163,
+      "path": "modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 462,
+      "number": 1162,
+      "path": "modules/platform/unified_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B608",
+      "severity": null
+    },
+    {
+      "line": 366,
+      "number": 1161,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 364,
+      "number": 1160,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 354,
+      "number": 1159,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 353,
+      "number": 1158,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 294,
+      "number": 1157,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 294,
+      "number": 1156,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 291,
+      "number": 1155,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 281,
+      "number": 1154,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 280,
+      "number": 1153,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 240,
+      "number": 1152,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 239,
+      "number": 1151,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 235,
+      "number": 1150,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 225,
+      "number": 1149,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 165,
+      "number": 1148,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 165,
+      "number": 1147,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 164,
+      "number": 1146,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 149,
+      "number": 1145,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 143,
+      "number": 1144,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 142,
+      "number": 1143,
+      "path": "modules/interview/populate_database.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 588,
+      "number": 1141,
+      "path": "core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 487,
+      "number": 1140,
+      "path": "core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 173,
+      "number": 1136,
+      "path": "backend/lib/http_client.py",
+      "ref": "refs/heads/main",
+      "rule": "py/partial-ssrf",
+      "severity": "critical"
+    },
+    {
+      "line": 17,
+      "number": 1135,
+      "path": "backend/modules/voice/voice_clone_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2642,
+      "number": 1134,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1349,
+      "number": 1133,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 71,
+      "number": 1132,
+      "path": "backend/security/encryption.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 167,
+      "number": 1131,
+      "path": "backend/routes/conversations.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 52,
+      "number": 1130,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 47,
+      "number": 1129,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 42,
+      "number": 1128,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 37,
+      "number": 1127,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 32,
+      "number": 1126,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 27,
+      "number": 1125,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 22,
+      "number": 1124,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2315,
+      "number": 1122,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 1415,
+      "number": 1121,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 38,
+      "number": 1120,
+      "path": "backend/security/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 1119,
+      "path": "backend/modules/ai/predictive_interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6,
+      "number": 1118,
+      "path": "backend/core/generate_ssl.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 10,
+      "number": 1117,
+      "path": "backend/modules/ai/cognitive_graph.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 1116,
+      "path": "backend/security/audit.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 19,
+      "number": 1115,
+      "path": "backend/modules/ai/analytics_engine.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 109,
+      "number": 1111,
+      "path": "backend/modules/voice/whisper_handler.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 237,
+      "number": 1108,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_289",
+      "severity": null
+    },
+    {
+      "line": 237,
+      "number": 1107,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_355",
+      "severity": null
+    },
+    {
+      "line": 84,
+      "number": 1106,
+      "path": "lib/http_client.py",
+      "ref": "refs/heads/main",
+      "rule": "B104",
+      "severity": null
+    },
+    {
+      "line": 256,
+      "number": 1104,
+      "path": "backend/modules/ai/vision_describer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 179,
+      "number": 1103,
+      "path": "backend/modules/ai/vision_describer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 137,
+      "number": 1102,
+      "path": "backend/modules/ai/vision_describer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 186,
+      "number": 1101,
+      "path": "backend/modules/agents/session.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 49,
+      "number": 1100,
+      "path": "backend/modules/voice/rvc_engine.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 217,
+      "number": 1099,
+      "path": "backend/modules/agents/ingestion/rag_loader.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 413,
+      "number": 1098,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 343,
+      "number": 1097,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 4502,
+      "number": 1096,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 4420,
+      "number": 1095,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 4376,
+      "number": 1094,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2923,
+      "number": 1092,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2857,
+      "number": 1091,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2855,
+      "number": 1090,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2808,
+      "number": 1089,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2801,
+      "number": 1088,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2777,
+      "number": 1087,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2754,
+      "number": 1086,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 2304,
+      "number": 1084,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1545,
+      "number": 1083,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1527,
+      "number": 1082,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 1329,
+      "number": 1080,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 658,
+      "number": 1076,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 176,
+      "number": 1075,
+      "path": "backend/modules/crm/job_tracker.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 125,
+      "number": 1074,
+      "path": "backend/modules/agents/interview_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 505,
+      "number": 1071,
+      "path": "backend/modules/platform/cloud_providers.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 57,
+      "number": 1070,
+      "path": "backend/modules/ai/__init__.py",
+      "ref": "refs/heads/main",
+      "rule": "py/empty-except",
+      "severity": null
+    },
+    {
+      "line": 219,
+      "number": 1061,
+      "path": "backend/modules/voice/voice_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 358,
+      "number": 1059,
+      "path": "backend/modules/interview/resume_review.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 1540,
+      "number": 1057,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 262,
+      "number": 1052,
+      "path": "backend/modules/ai/cache_manager.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 178,
+      "number": 1051,
+      "path": "backend/modules/ai/cache_manager.py",
+      "ref": "refs/heads/main",
+      "rule": "py/catch-base-exception",
+      "severity": null
+    },
+    {
+      "line": 261,
+      "number": 1049,
+      "path": "backend/modules/voice/voice_clone_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/mixed-returns",
+      "severity": null
+    },
+    {
+      "line": 447,
+      "number": 1048,
+      "path": "backend/modules/interview/resume_review.py",
+      "ref": "refs/heads/main",
+      "rule": "py/mixed-returns",
+      "severity": null
+    },
+    {
+      "line": 5143,
+      "number": 1026,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 4507,
+      "number": 1025,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 2773,
+      "number": 1024,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 2334,
+      "number": 1023,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 2302,
+      "number": 1021,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 1400,
+      "number": 1019,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 1347,
+      "number": 1018,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 1343,
+      "number": 1017,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 642,
+      "number": 1015,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 343,
+      "number": 1014,
+      "path": "backend/security/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 263,
+      "number": 1013,
+      "path": "backend/security/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/repeated-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 1012,
+      "path": "backend/modules/voice/whisper_handler.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 1008,
+      "path": "backend/modules/voice/voice_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 1007,
+      "path": "backend/modules/voice/voice_agent.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 40,
+      "number": 1006,
+      "path": "backend/routes/voice.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6,
+      "number": 1005,
+      "path": "backend/routes/voice.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 1001,
+      "path": "backend/security/validation.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 30,
+      "number": 999,
+      "path": "backend/routes/transcription.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 998,
+      "path": "backend/routes/transcription.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 55,
+      "number": 997,
+      "path": "backend/routes/study.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 40,
+      "number": 996,
+      "path": "backend/routes/study.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 995,
+      "path": "scripts/development/start_secure.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 992,
+      "path": "backend/modules/ai/semantic_search.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 19,
+      "number": 991,
+      "path": "backend/modules/agents/sales_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 17,
+      "number": 990,
+      "path": "backend/modules/agents/sales_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 989,
+      "path": "backend/modules/agents/sales_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 988,
+      "path": "backend/modules/agents/sales_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6,
+      "number": 987,
+      "path": "backend/modules/voice/rvc_gallery.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 986,
+      "path": "backend/modules/interview/resume_review_v2.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 985,
+      "path": "backend/modules/interview/resume_review.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 984,
+      "path": "backend/modules/interview/resume_review.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 25,
+      "number": 983,
+      "path": "backend/modules/ai/realtime_suggestions.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 18,
+      "number": 982,
+      "path": "backend/modules/ai/realtime_suggestions.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 981,
+      "path": "backend/modules/ai/realtime_suggestions.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 980,
+      "path": "backend/security/rate_limit.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 979,
+      "path": "backend/security/rate_limit.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 978,
+      "path": "backend/modules/agents/ingestion/rag_loader.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 977,
+      "path": "backend/modules/agents/ingestion/rag_loader.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 976,
+      "path": "backend/modules/ai/predictive_interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6822,
+      "number": 973,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6693,
+      "number": 972,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 18,
+      "number": 971,
+      "path": "backend/modules/agents/ingestion/pipeline.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 20,
+      "number": 970,
+      "path": "backend/modules/ai/performance_analyzer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 6134,
+      "number": 969,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 968,
+      "path": "backend/modules/agents/ingestion/pdf_processor.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 12,
+      "number": 967,
+      "path": "backend/modules/agents/ingestion/pdf_processor.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 5845,
+      "number": 966,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 5673,
+      "number": 965,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 5430,
+      "number": 964,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 26,
+      "number": 963,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 25,
+      "number": 962,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 961,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 960,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 12,
+      "number": 959,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 958,
+      "path": "backend/modules/agents/orchestrator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 957,
+      "path": "backend/routes/ollama.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 8,
+      "number": 956,
+      "path": "backend/routes/ollama.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 955,
+      "path": "backend/modules/ai/ocr_service.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 4344,
+      "number": 954,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 4130,
+      "number": 953,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 4047,
+      "number": 952,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 3905,
+      "number": 951,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 12,
+      "number": 950,
+      "path": "backend/modules/interview/mock_interview_library.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 949,
+      "path": "backend/modules/interview/mock_interview_library.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 8,
+      "number": 948,
+      "path": "backend/modules/interview/mock_interview_library.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 19,
+      "number": 947,
+      "path": "backend/modules/agents/meeting.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 17,
+      "number": 946,
+      "path": "backend/modules/agents/meeting.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 945,
+      "path": "backend/modules/agents/meeting.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 944,
+      "path": "backend/modules/agents/meeting.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 941,
+      "path": "backend/modules/agents/ingestion/markdown_parser.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 148,
+      "number": 940,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 139,
+      "number": 939,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 124,
+      "number": 938,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 104,
+      "number": 937,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 83,
+      "number": 936,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 63,
+      "number": 935,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 49,
+      "number": 933,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 19,
+      "number": 931,
+      "path": "backend/modules/agents/learning.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 37,
+      "number": 930,
+      "path": "backend/routes/jobs.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 926,
+      "path": "backend/modules/interview/interview_simulator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 105,
+      "number": 925,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 924,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 53,
+      "number": 923,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 40,
+      "number": 921,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 12,
+      "number": 919,
+      "path": "backend/modules/agents/interview_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 11,
+      "number": 918,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 8,
+      "number": 917,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 7,
+      "number": 916,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 5,
+      "number": 915,
+      "path": "backend/routes/interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 35,
+      "number": 914,
+      "path": "backend/modules/ai/hybrid_entity_extraction.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 67,
+      "number": 913,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 60,
+      "number": 912,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 53,
+      "number": 911,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 39,
+      "number": 910,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 32,
+      "number": 909,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 25,
+      "number": 908,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 5,
+      "number": 907,
+      "path": "backend/routes/health.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 906,
+      "path": "backend/modules/agents/ingestion/graph_loader.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 905,
+      "path": "backend/modules/agents/ingestion/graph_loader.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 26,
+      "number": 902,
+      "path": "backend/security/encryption.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 16,
+      "number": 901,
+      "path": "backend/modules/platform/document_store.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 85,
+      "number": 900,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 18,
+      "number": 899,
+      "path": "backend/core/database.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 20,
+      "number": 898,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 17,
+      "number": 897,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 896,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 895,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 17,
+      "number": 894,
+      "path": "backend/modules/crm/crm_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 8,
+      "number": 891,
+      "path": "backend/routes/conversations.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 19,
+      "number": 890,
+      "path": "backend/modules/ai/conversation_analyzer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 10,
+      "number": 889,
+      "path": "backend/modules/crm/collaboration_mode.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 7,
+      "number": 888,
+      "path": "backend/modules/crm/collaboration_mode.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 887,
+      "path": "backend/modules/ai/cognitive_graph.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 886,
+      "path": "backend/modules/ai/cognitive_graph.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 21,
+      "number": 883,
+      "path": "backend/modules/ai/cache_manager.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 20,
+      "number": 882,
+      "path": "backend/modules/ai/cache_manager.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 881,
+      "path": "backend/modules/agents/cache.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 17,
+      "number": 880,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 28,
+      "number": 879,
+      "path": "backend/core/backfill_cognitive_graph.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 10,
+      "number": 878,
+      "path": "backend/security/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 876,
+      "path": "backend/security/audit.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 27,
+      "number": 875,
+      "path": "backend/modules/ai/analytics_engine.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 18,
+      "number": 872,
+      "path": "backend/modules/ai/analytics.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 28,
+      "number": 871,
+      "path": "backend/routes/analytics.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 5,
+      "number": 870,
+      "path": "backend/routes/analytics.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 13,
+      "number": 866,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 80,
+      "number": 863,
+      "path": "backend/routes/agents.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 65,
+      "number": 862,
+      "path": "backend/routes/agents.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 50,
+      "number": 861,
+      "path": "backend/routes/agents.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 47,
+      "number": 860,
+      "path": "backend/routes/admin.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 9,
+      "number": 859,
+      "path": "backend/routes/agents.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 3,
+      "number": 858,
+      "path": "backend/routes/agents.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-import",
+      "severity": null
+    },
+    {
+      "line": 468,
+      "number": 849,
+      "path": "backend/routes/transcription.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 2962,
+      "number": 848,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 152,
+      "number": 847,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 147,
+      "number": 846,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 142,
+      "number": 845,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 136,
+      "number": 844,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 127,
+      "number": 843,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 121,
+      "number": 842,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 115,
+      "number": 841,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 109,
+      "number": 840,
+      "path": "backend/modules/agents/base.py",
+      "ref": "refs/heads/main",
+      "rule": "py/ineffectual-statement",
+      "severity": null
+    },
+    {
+      "line": 96,
+      "number": 837,
+      "path": "backend/modules/voice/whisper_handler.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 27,
+      "number": 836,
+      "path": "backend/modules/voice/rvc_engine.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 28,
+      "number": 835,
+      "path": "backend/modules/ai/ocr_service.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 59,
+      "number": 834,
+      "path": "backend/modules/ai/cognitive_graph.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-global-variable",
+      "severity": null
+    },
+    {
+      "line": 120,
+      "number": 827,
+      "path": "backend/modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/multiple-definition",
+      "severity": null
+    },
+    {
+      "line": 137,
+      "number": 825,
+      "path": "backend/modules/agents/ingestion/cli.py",
+      "ref": "refs/heads/main",
+      "rule": "py/uninitialized-local-variable",
+      "severity": null
+    },
+    {
+      "line": 1638,
+      "number": 824,
+      "path": "backend/modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 1613,
+      "number": 823,
+      "path": "backend/modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 1258,
+      "number": 822,
+      "path": "backend/modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 378,
+      "number": 821,
+      "path": "backend/modules/voice/vibevoice_diarizer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 381,
+      "number": 820,
+      "path": "backend/routes/transcription.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 247,
+      "number": 819,
+      "path": "backend/routes/transcription.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 107,
+      "number": 816,
+      "path": "backend/modules/voice/rvc_trainer.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 647,
+      "number": 815,
+      "path": "backend/modules/ai/predictive_interview.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 2867,
+      "number": 814,
+      "path": "backend/core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 79,
+      "number": 813,
+      "path": "backend/core/generate_ssl.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 372,
+      "number": 812,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 345,
+      "number": 811,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 248,
+      "number": 810,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 187,
+      "number": 809,
+      "path": "backend/modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 949,
+      "number": 808,
+      "path": "backend/modules/platform/cloud_providers.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 80,
+      "number": 807,
+      "path": "backend/modules/platform/cloud_providers.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 78,
+      "number": 806,
+      "path": "backend/modules/platform/cloud_providers.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 76,
+      "number": 805,
+      "path": "backend/modules/platform/cloud_providers.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 74,
+      "number": 804,
+      "path": "backend/modules/platform/cloud_providers.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 231,
+      "number": 803,
+      "path": "backend/modules/agents/cache.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 570,
+      "number": 800,
+      "path": "backend/routes/ai.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 191,
+      "number": 799,
+      "path": "backend/modules/ai/ai_router.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 189,
+      "number": 798,
+      "path": "backend/modules/ai/ai_router.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 187,
+      "number": 797,
+      "path": "backend/modules/ai/ai_router.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 185,
+      "number": 796,
+      "path": "backend/modules/ai/ai_router.py",
+      "ref": "refs/heads/main",
+      "rule": "py/unused-local-variable",
+      "severity": null
+    },
+    {
+      "line": 1219,
+      "number": 549,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_18",
+      "severity": null
+    },
+    {
+      "line": 1006,
+      "number": 548,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_144",
+      "severity": null
+    },
+    {
+      "line": 651,
+      "number": 543,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_33",
+      "severity": null
+    },
+    {
+      "line": 623,
+      "number": 542,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_33",
+      "severity": null
+    },
+    {
+      "line": 595,
+      "number": 541,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_33",
+      "severity": null
+    },
+    {
+      "line": 651,
+      "number": 540,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_40",
+      "severity": null
+    },
+    {
+      "line": 623,
+      "number": 539,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_40",
+      "severity": null
+    },
+    {
+      "line": 595,
+      "number": 538,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_40",
+      "severity": null
+    },
+    {
+      "line": 651,
+      "number": 534,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_38",
+      "severity": null
+    },
+    {
+      "line": 623,
+      "number": 533,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_38",
+      "severity": null
+    },
+    {
+      "line": 595,
+      "number": 532,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_38",
+      "severity": null
+    },
+    {
+      "line": 651,
+      "number": 531,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_41",
+      "severity": null
+    },
+    {
+      "line": 623,
+      "number": 530,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_41",
+      "severity": null
+    },
+    {
+      "line": 595,
+      "number": 529,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV2_AZURE_41",
+      "severity": null
+    },
+    {
+      "line": 335,
+      "number": 528,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_57",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 527,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_88",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 526,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_222",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 525,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_213",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 524,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_66",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 523,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_65",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 522,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_63",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 521,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_13",
+      "severity": null
+    },
+    {
+      "line": 960,
+      "number": 520,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_17",
+      "severity": null
+    },
+    {
+      "line": 948,
+      "number": 519,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_225",
+      "severity": null
+    },
+    {
+      "line": 948,
+      "number": 518,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_212",
+      "severity": null
+    },
+    {
+      "line": 745,
+      "number": 517,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_114",
+      "severity": null
+    },
+    {
+      "line": 651,
+      "number": 516,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_33",
+      "severity": null
+    },
+    {
+      "line": 623,
+      "number": 515,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_206",
+      "severity": null
+    },
+    {
+      "line": 623,
+      "number": 514,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_33",
+      "severity": null
+    },
+    {
+      "line": 595,
+      "number": 513,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_33",
+      "severity": null
+    },
+    {
+      "line": 335,
+      "number": 503,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_55",
+      "severity": null
+    },
+    {
+      "line": 299,
+      "number": 502,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_82",
+      "severity": null
+    },
+    {
+      "line": 119,
+      "number": 482,
+      "path": "routes/auth.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 5383,
+      "number": 474,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 132,
+      "number": 387,
+      "path": "modules/voice/vibevoice_diarizer.py",
+      "ref": "refs/heads/main",
+      "rule": "B615",
+      "severity": null
+    },
+    {
+      "line": 131,
+      "number": 386,
+      "path": "modules/voice/vibevoice_diarizer.py",
+      "ref": "refs/heads/main",
+      "rule": "B615",
+      "severity": null
+    },
+    {
+      "line": 1599,
+      "number": 384,
+      "path": "modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 1222,
+      "number": 383,
+      "path": "modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 125,
+      "number": 378,
+      "path": "modules/agents/interview_coach.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 195,
+      "number": 374,
+      "path": "modules/agents/ingestion/pipeline.py",
+      "ref": "refs/heads/main",
+      "rule": "B607",
+      "severity": null
+    },
+    {
+      "line": 494,
+      "number": 355,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_73",
+      "severity": null
+    },
+    {
+      "line": 335,
+      "number": 350,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_79",
+      "severity": null
+    },
+    {
+      "line": 335,
+      "number": 349,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_109",
+      "severity": null
+    },
+    {
+      "line": 318,
+      "number": 345,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_84",
+      "severity": null
+    },
+    {
+      "line": 154,
+      "number": 342,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_20",
+      "severity": null
+    },
+    {
+      "line": 154,
+      "number": 340,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_66",
+      "severity": null
+    },
+    {
+      "line": 154,
+      "number": 339,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_65",
+      "severity": null
+    },
+    {
+      "line": 154,
+      "number": 338,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_13",
+      "severity": null
+    },
+    {
+      "line": 103,
+      "number": 336,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_26",
+      "severity": null
+    },
+    {
+      "line": 103,
+      "number": 335,
+      "path": "infrastructure/terraform/gcp/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_GCP_74",
+      "severity": null
+    },
+    {
+      "line": 330,
+      "number": 333,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_112",
+      "severity": null
+    },
+    {
+      "line": 297,
+      "number": 332,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_109",
+      "severity": null
+    },
+    {
+      "line": 297,
+      "number": 331,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_189",
+      "severity": null
+    },
+    {
+      "line": 266,
+      "number": 330,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_237",
+      "severity": null
+    },
+    {
+      "line": 266,
+      "number": 329,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_139",
+      "severity": null
+    },
+    {
+      "line": 266,
+      "number": 328,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_233",
+      "severity": null
+    },
+    {
+      "line": 266,
+      "number": 327,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_167",
+      "severity": null
+    },
+    {
+      "line": 266,
+      "number": 326,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_166",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 325,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_115",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 324,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_226",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 323,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_168",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 322,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_117",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 321,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_116",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 320,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_232",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 319,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_171",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 318,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_141",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 317,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_227",
+      "severity": null
+    },
+    {
+      "line": 86,
+      "number": 316,
+      "path": "infrastructure/terraform/azure/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AZURE_6",
+      "severity": null
+    },
+    {
+      "line": 506,
+      "number": 315,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_136",
+      "severity": null
+    },
+    {
+      "line": 506,
+      "number": 314,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_51",
+      "severity": null
+    },
+    {
+      "line": 498,
+      "number": 313,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_136",
+      "severity": null
+    },
+    {
+      "line": 498,
+      "number": 312,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_51",
+      "severity": null
+    },
+    {
+      "line": 461,
+      "number": 311,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_AWS_382",
+      "severity": null
+    },
+    {
+      "line": 425,
+      "number": 309,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_TF_1",
+      "severity": null
+    },
+    {
+      "line": 374,
+      "number": 308,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_TF_1",
+      "severity": null
+    },
+    {
+      "line": 287,
+      "number": 307,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_TF_1",
+      "severity": null
+    },
+    {
+      "line": 220,
+      "number": 306,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_TF_1",
+      "severity": null
+    },
+    {
+      "line": 113,
+      "number": 305,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_TF_1",
+      "severity": null
+    },
+    {
+      "line": 89,
+      "number": 304,
+      "path": "infrastructure/terraform/aws/main.tf",
+      "ref": "refs/heads/main",
+      "rule": "CKV_TF_1",
+      "severity": null
+    },
+    {
+      "line": 60,
+      "number": 73,
+      "path": "tests/test_api_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 55,
+      "number": 72,
+      "path": "tests/test_api_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 15,
+      "number": 69,
+      "path": "security/errors.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 14,
+      "number": 68,
+      "path": "security/errors.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 71,
+      "number": 61,
+      "path": "security/encryption.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 618,
+      "number": 44,
+      "path": "modules/interview/mock_interview_library.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 406,
+      "number": 43,
+      "path": "modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "B608",
+      "severity": null
+    },
+    {
+      "line": 401,
+      "number": 42,
+      "path": "modules/crm/crm_real_integration.py",
+      "ref": "refs/heads/main",
+      "rule": "B608",
+      "severity": null
+    },
+    {
+      "line": 274,
+      "number": 41,
+      "path": "modules/crm/collaboration_mode.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 1204,
+      "number": 40,
+      "path": "modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 610,
+      "number": 39,
+      "path": "modules/ai/study_plan_generator.py",
+      "ref": "refs/heads/main",
+      "rule": "B311",
+      "severity": null
+    },
+    {
+      "line": 4502,
+      "number": 29,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 4420,
+      "number": 28,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 4376,
+      "number": 27,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 3511,
+      "number": 26,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 3089,
+      "number": 25,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 2976,
+      "number": 22,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 2958,
+      "number": 21,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 2808,
+      "number": 20,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 2801,
+      "number": 19,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 2777,
+      "number": 16,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 2304,
+      "number": 15,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 1779,
+      "number": 10,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B105",
+      "severity": null
+    },
+    {
+      "line": 1545,
+      "number": 9,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 1527,
+      "number": 8,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 1329,
+      "number": 7,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 1189,
+      "number": 6,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    },
+    {
+      "line": 801,
+      "number": 5,
+      "path": "core/main.py",
+      "ref": "refs/heads/main",
+      "rule": "B110",
+      "severity": null
+    }
+  ]
+}

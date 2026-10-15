@@ -4,10 +4,9 @@ Real-time collaboration feature for interview assistance
 Allows trusted friend/mentor to join and help during interview
 """
 
-import json
 import time
 import secrets
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 

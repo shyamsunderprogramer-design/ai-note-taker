@@ -6,7 +6,6 @@ Uses lazy imports to reduce startup time
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 # Configure logging immediately
 logging.basicConfig(
@@ -44,9 +43,6 @@ class LazyModule:
 
 
 # Core modules (always load)
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 # Lazy heavy modules
 class ModuleLoader:
@@ -93,7 +89,7 @@ class ModuleLoader:
     def database(self):
         if not hasattr(self, '_database'):
             try:
-                from database import (
+                from core.database import (
                     db_manager, init_database, close_database,
                     UserRepository, ConversationRepository
                 )

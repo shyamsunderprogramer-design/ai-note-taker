@@ -30,6 +30,20 @@ async function loadDashboardData() {
     const summaryResponse = await fetch(`${API_BASE}/analytics/dashboard/${DEFAULT_USER_ID}`);
     const summary = await summaryResponse.json();
 
+    if (summary.available === false) {
+      const state = document.getElementById('loadingState');
+      state.replaceChildren();
+      const message = document.createElement('p');
+      message.textContent = summary.message || 'Analytics is currently unavailable.';
+      const retry = document.createElement('button');
+      retry.textContent = 'Check again';
+      retry.addEventListener('click', loadDashboardData);
+      state.append(message, retry);
+      state.style.display = 'block';
+      document.getElementById('dashboardContent').style.display = 'none';
+      return;
+    }
+
     if (summary.error) {
       throw new Error(summary.error);
     }
@@ -400,7 +414,10 @@ async function loadCompanyComparison() {
     // Get companies from cognitive graph or use defaults
     const companies = ['Google', 'Meta', 'Amazon', 'Netflix', 'Microsoft'];
 
-    const response = await fetch(`${API_BASE}/analytics/company-comparison?companies=${companies.join(',')}`);
+    const params = new URLSearchParams();
+    companies.forEach(company => params.append('companies', company));
+    const response = await fetch(`${API_BASE}/analytics/company-comparison?${params}`, { method: 'POST' });
+    if (!response.ok) throw new Error(`Company comparison unavailable (${response.status})`);
     const data = await response.json();
 
     if (data.error) {

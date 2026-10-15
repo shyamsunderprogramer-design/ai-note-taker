@@ -18,10 +18,10 @@ async function initApp() {
 
   try {
     // Initialize core Shell component
-    const shell = new Shell('app');
+    new Shell('app');
 
     // Initialize Settings Panel
-    const settingsPanel = new SettingsPanel();
+    new SettingsPanel();
 
     // Setup menu button
     const menuBtn = document.getElementById('menuBtn');
@@ -75,7 +75,7 @@ function updateStatus(status) {
   indicator.className = 'backend-status visible';
   indicator.classList.add(status);
 
-  const dot = indicator.querySelector('.backend-status-dot');
+
   const text = indicator.querySelector('.backend-status-text');
 
   const labels = {
