@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from routes.deps import require_authentication
 from security import ErrorCode, error_response
@@ -105,7 +105,7 @@ async def sync_hubspot(
                 )
                 return {"status": "synced", "crm": "hubspot", "type": "activity", "code": response.status_code}
     except ImportError:
-        pass
+        logger.warning("[CRM] HubSpot client dependency is unavailable")
     except Exception as e:
         logger.error("[CRM] HubSpot sync error: %s", str(e))
 

@@ -1,0 +1,21 @@
+# Gradle build outputs
+build/
+.gradle/
+local.properties
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+captures/
+
+# Keystore files (commit debug.keystore only if your team policy allows)
+*.keystore
+!debug.keystore
+
+# Native libs
+.cxx/
+
+# Misc
+*.log

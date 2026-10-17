@@ -2,31 +2,42 @@
 import logging
 import time
 import uuid
-from typing import Dict, List
+from typing import Dict
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from routes.deps import require_authentication
+from security.auth import User
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger("routes.webhooks")
 
 router = APIRouter()
 
+
+class WebhookSigningRequest(BaseModel):
+    secret: str = Field(default="", max_length=1024)
+
 # Webhook subscription store (production: database)
 _webhook_subscriptions: Dict[str, dict] = {}
-_event_log: List[Dict] = []
 
 
 @router.post("/webhooks/subscribe")
 async def subscribe_webhook(
     request: Request,
+    user: User = Depends(require_authentication),
     url: str = Query(..., description="Webhook callback URL"),
     events: str = Query("transcript.ready,summary.ready", description="Comma-separated event types"),
-    secret: str = Query("", description="HMAC signing secret"),  # nosec B105 — webhook signing secret parameter
+    signing: WebhookSigningRequest | None = None,
 ):
     """Subscribe to webhook events (Zapier-compatible)."""
-    webhook_id = str(uuid.uuid4())[:8]
+    if "secret" in request.query_params:
+        raise HTTPException(422, "Send signing secrets in the JSON body")
+    secret = signing.secret if signing else ""
+    webhook_id = str(uuid.uuid4())
 
     _webhook_subscriptions[webhook_id] = {
         "id": webhook_id,
+        "owner_id": str(user.id),
         "url": url,
         "events": [e.strip() for e in events.split(",")],
         "secret": secret or str(uuid.uuid4()),
@@ -43,8 +54,8 @@ async def subscribe_webhook(
 
 
 @router.get("/webhooks")
-async def list_webhooks():
-    """List all webhook subscriptions."""
+async def list_webhooks(user: User = Depends(require_authentication)):
+    """List the authenticated user's webhook subscriptions."""
     return {
         "webhooks": [
             {
@@ -54,14 +65,16 @@ async def list_webhooks():
                 "active": w["active"],
             }
             for w in _webhook_subscriptions.values()
+            if w.get("owner_id") == str(user.id)
         ]
     }
 
 
 @router.delete("/webhooks/{webhook_id}")
-async def delete_webhook(webhook_id: str):
+async def delete_webhook(webhook_id: str, user: User = Depends(require_authentication)):
     """Delete a webhook subscription."""
-    if webhook_id in _webhook_subscriptions:
+    webhook = _webhook_subscriptions.get(webhook_id)
+    if webhook and webhook.get("owner_id") == str(user.id):
         del _webhook_subscriptions[webhook_id]
         return {"status": "deleted"}
     raise HTTPException(status_code=404, detail="Webhook not found")
@@ -84,8 +97,9 @@ async def list_webhook_events():
 @router.post("/webhooks/test")
 async def test_webhook(
     event_type: str = Query("transcript.ready"),
+    user: User = Depends(require_authentication),
 ):
-    """Test a webhook by firing a sample event."""
+    """Preview a sample event and matching owned webhook subscriptions."""
     sample_payloads = {
         "transcript.ready": {
             "event": "transcript.ready",
@@ -120,13 +134,13 @@ async def test_webhook(
 
     payload = sample_payloads.get(event_type, {"event": event_type, "data": {}})
 
-    # Fire to all matching webhooks
-    fired = 0
+    # Preview matching subscriptions; delivery is handled separately.
+    matching = 0
     for webhook in _webhook_subscriptions.values():
-        if not webhook["active"]:
+        if webhook.get("owner_id") != str(user.id) or not webhook["active"]:
             continue
         if event_type in webhook["events"] or "*" in webhook["events"]:
-            # In production: make async HTTP POST to webhook URL with HMAC signature
-            fired += 1
+            matching += 1
 
-    return {"status": "test_fired", "event": event_type, "webhooks_notified": fired, "payload": payload}
+    return {"status": "preview", "event": event_type, "matching_webhooks": matching,
+            "webhooks_notified": 0, "payload": payload}

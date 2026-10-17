@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 import threading
 
@@ -36,7 +36,7 @@ class UnifiedDatabase:
 
         if db_path is None:
             # Default location: user data directory
-            data_dir = Path.home() / ".ant" / "data"
+            data_dir = Path(os.environ["ANT_DATA_DIR"]).resolve() if os.getenv("ANT_DATA_DIR") else Path.home() / ".ant" / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
             db_path = data_dir / "ant_database.db"
 
@@ -462,9 +462,9 @@ class UnifiedDatabase:
                 cursor.execute("""
                     SELECT event_type, COUNT(*) as count
                     FROM analytics
-                    WHERE timestamp > datetime('now', '-{} days')
+                    WHERE timestamp > datetime('now', ?)
                     GROUP BY event_type
-                """.format(days))
+                """, (f"-{int(days)} days",))
                 rows = cursor.fetchall()
 
                 summary = {row['event_type']: row['count'] for row in rows}
@@ -577,8 +577,8 @@ class UnifiedDatabase:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT OR REPLACE INTO documents
-                    (id, filename, file_path, content, file_hash, file_size, mime_type, metadata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, filename, file_path, content, file_hash, file_size, mime_type, metadata, processed)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     document.get('id'),
                     document.get('filename'),
@@ -587,7 +587,8 @@ class UnifiedDatabase:
                     document.get('file_hash'),
                     document.get('file_size'),
                     document.get('mime_type'),
-                    json.dumps(document.get('metadata', {}))
+                    json.dumps(document.get('metadata', {})),
+                    document.get('processed', False)
                 ))
             return True
         except Exception as e:
@@ -635,8 +636,8 @@ class UnifiedDatabase:
             if field in result and result[field]:
                 try:
                     result[field] = json.loads(result[field])
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    continue
         return result
 
     def _cast_value(self, value: str, value_type: str) -> Any:
@@ -650,7 +651,7 @@ class UnifiedDatabase:
         elif value_type in ('dict', 'list'):
             try:
                 return json.loads(value)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 return value
         return value
 
@@ -661,14 +662,23 @@ class UnifiedDatabase:
                 cursor = conn.cursor()
                 stats = {}
 
-                tables = ['conversations', 'settings', 'api_keys', 'analytics',
-                         'documents', 'voice_models', 'jobs', 'interview_sessions', 'cache']
+                queries = {
+                    "conversations": "SELECT COUNT(*) FROM conversations",
+                    "settings": "SELECT COUNT(*) FROM settings",
+                    "api_keys": "SELECT COUNT(*) FROM api_keys",
+                    "analytics": "SELECT COUNT(*) FROM analytics",
+                    "documents": "SELECT COUNT(*) FROM documents",
+                    "voice_models": "SELECT COUNT(*) FROM voice_models",
+                    "jobs": "SELECT COUNT(*) FROM jobs",
+                    "interview_sessions": "SELECT COUNT(*) FROM interview_sessions",
+                    "cache": "SELECT COUNT(*) FROM cache",
+                }
 
-                for table in tables:
+                for table, query in queries.items():
                     try:
-                        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                        cursor.execute(query)
                         stats[table] = cursor.fetchone()[0]
-                    except:
+                    except sqlite3.Error:
                         stats[table] = 0
 
                 # Database file size

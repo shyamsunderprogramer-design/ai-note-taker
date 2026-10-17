@@ -3,14 +3,12 @@ question_library_integration.py - Integration between new and old question syste
 Provides backward compatibility while exposing new rich question database
 """
 
-from typing import List, Dict, Optional, Any
-import random
+from typing import List, Dict, Optional
 
 # Import both systems
-from .mock_interview_library import MockInterviewLibrary, mock_library, InterviewQuestion as OldQuestion
+from .mock_interview_library import mock_library, InterviewQuestion as OldQuestion
 from .question_database_v2 import (
-    QuestionDatabase, question_db, InterviewQuestion,
-    QuestionCategory, Difficulty, ExpectedAnswer
+    question_db, QuestionCategory, Difficulty
 )
 from .company_questions import ALL_COMPANY_QUESTIONS, get_company_questions, get_company_specific_tips
 
@@ -215,7 +213,6 @@ class UnifiedQuestionLibrary:
     def _get_resources_for_question(self, q: Dict) -> List[str]:
         """Get recommended resources for a question"""
         category = q.get("category", "")
-        topics = q.get("topics", [])
 
         resources = []
 

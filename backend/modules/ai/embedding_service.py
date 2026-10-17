@@ -12,6 +12,7 @@ import json
 import logging
 import threading
 from pathlib import Path
+from lib.storage_paths import storage_path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -25,7 +26,7 @@ logger = logging.getLogger("embedding_service")
 DEFAULT_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_DEVICE = "auto"
 EMBEDDING_DIMENSION = 384  # all-MiniLM-L6-v2 output dimension
-CACHE_DIR = Path(__file__).parent.parent / "platform" / "data" / "vectors"
+CACHE_DIR = storage_path(Path(__file__).parent.parent / "platform" / "data" / "vectors", "documents", "vectors")
 CACHE_FILE = CACHE_DIR / "embedding_cache.json"
 MAX_CACHE_SIZE = 10000
 

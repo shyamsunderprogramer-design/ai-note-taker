@@ -1,0 +1,10 @@
+{
+  "name": "@ant/image-size-compat",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "image-size-modern": "npm:image-size@2.0.4"
+  }
+}

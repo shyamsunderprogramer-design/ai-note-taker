@@ -9,15 +9,17 @@ import re
 import logging
 from typing import List, Dict, Any
 
-from agents.base import (
+from modules.agents.base import (
     BaseAgent, AgentType, AgentSuggestion, AgentContext,
-    TranscriptSegment, is_question,
+    TranscriptSegment,
 )
-from agents.context_builder import (
-    query_cognitive_graph, query_document_rag, extract_entities,
+from modules.agents.context_builder import (
+    query_cognitive_graph, query_document_rag, extract_entities, get_company_insights,
     format_graph_results, format_rag_results, format_company_insights,
 )
-from agents.prompts import INTERVIEW_COACH_PROMPT, INTERVIEW_COACH_PROMPT_MINIMAL
+from modules.agents.prompts import INTERVIEW_COACH_PROMPT, INTERVIEW_COACH_PROMPT_MINIMAL
+
+from modules.agents.cache import get_cache
 
 logger = logging.getLogger("agents.interview_coach")
 
@@ -123,7 +125,7 @@ class InterviewCoachAgent(BaseAgent):
                             results = cognitive_graph.semantic_search(current_question, limit=5)
                             cognitive_graph_results = results or []
                     except Exception:
-                        pass
+                        pass  # Graph context is optional; retain the other interview-coaching context.
 
             # Company insights
             company = session.get("company", "")

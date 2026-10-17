@@ -1,12 +1,10 @@
 """Route module for AI agents, shadow agent, collaboration, and meeting templates."""
 import asyncio
-import json
 import logging
 import uuid
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, Query, Request
-from fastapi.responses import StreamingResponse
 
 from security import ErrorCode, error_response
 from security.auth import User
@@ -28,7 +26,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
 async def require_authentication(token: str = Depends(get_token_from_request)):
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
     return user
@@ -48,13 +46,12 @@ except ImportError as e:
 # Shadow agent availability
 try:
     from shadow_agent import (
-        shadow_agent,
         start_shadow_session,
         process_transcript_segment,
         get_shadow_suggestions,
         accept_suggestion_by_id,
         end_shadow_session,
-        get_shadow_stats
+        get_shadow_stats,
     )
     SHADOW_AGENT_AVAILABLE = True
 except ImportError as e:
@@ -63,13 +60,12 @@ except ImportError as e:
 # Collaboration availability
 try:
     from collaboration_mode import (
-        collaboration_manager,
         create_collaboration_session,
         join_collaboration,
         send_collaboration_message,
         get_collaboration_messages,
         get_collaboration_status,
-        end_collaboration
+        end_collaboration,
     )
     COLLABORATION_AVAILABLE = True
 except ImportError as e:
@@ -78,7 +74,6 @@ except ImportError as e:
 # Meeting templates availability
 try:
     from meeting_templates import (
-        templates_manager,
         get_all_templates,
         get_template,
         get_categories,
@@ -86,7 +81,7 @@ try:
         update_template,
         delete_template,
         search_templates,
-        generate_notes
+        generate_notes,
     )
     MEETING_TEMPLATES_AVAILABLE = True
 except ImportError as e:
@@ -102,6 +97,7 @@ router = APIRouter()
 
 @router.post("/agents/sessions")
 async def create_agent_session(
+    user: User = Depends(require_authentication),  # Fix #31: pulled from auth (was hardcoded "default")
     session_type: str = Query("meeting", description="Session type: interview, sales_call, meeting"),
     company: str = Query(None, description="Company name"),
     role: str = Query(None, description="Role/position"),
@@ -117,7 +113,7 @@ async def create_agent_session(
         agents_list = [a.strip() for a in active_agents.split(",") if a.strip()]
         config = {"provider": provider}
         session = await session_manager.create_session(
-            user_id="default",
+            user_id=str(user.id),  # Fix #31: was hardcoded "default" — caused cross-user session collisions
             session_type=session_type,
             active_agents=agents_list,
             config=config,
@@ -455,6 +451,7 @@ async def get_ingestion_status(task_id: Optional[str] = None):
 
 @router.post("/shadow/start")
 async def start_shadow_interview(
+    user: User = Depends(require_authentication),  # Fix #31: pulled from auth (was hardcoded "default")
     company: str = Query(..., description="Company name"),
     role: str = Query(..., description="Role being interviewed for"),
     stage: str = Query("", description="Interview stage")
@@ -463,7 +460,7 @@ async def start_shadow_interview(
     if AGENTS_AVAILABLE:
         try:
             session = await session_manager.create_session(
-                user_id="default",
+                user_id=str(user.id),  # Fix #31: same bug as /agents/sessions
                 session_type="interview",
                 active_agents=["interview_coach"],
                 config={"company": company, "role": role, "stage": stage},

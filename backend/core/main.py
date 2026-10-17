@@ -1,5 +1,5 @@
+from lib.async_stream import iterate_stream
 import asyncio
-import base64
 import json
 import logging
 import os
@@ -7,11 +7,10 @@ import platform
 import queue
 import re
 import shutil
-import signal
 import sys
 import threading
 import time
-import urllib.parse
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,16 +41,28 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-from ai_router import build_prompt, clean_ai_output, route_ai, route_ai_stream
+from lib.audio_upload import transcribe_saved_upload
+import ai_router
+from lib.provider_status import has_provider_key as _has_provider_key, batch_check_provider_keys as _batch_check_provider_keys
 from ocr_service import extract_text_from_image
 
 # SECURITY: Import security modules
 from security import (
-    create_access_token, verify_token, get_current_user, require_auth,
-    rate_limiter, rate_limit, RateLimiter,
-    SecurityHeaders, sanitize_input, validate_file_upload, InputValidator,
-    log_audit_event, get_audit_log, get_audit_stats,
-    ErrorCode, APIError, error_response,
+    create_access_token,
+    get_current_user,
+    get_current_user_with_reason,
+    rate_limiter,
+    rate_limit,
+    RateLimiter,
+    SecurityHeaders,
+    sanitize_input,
+    InputValidator,
+    log_audit_event,
+    get_audit_log,
+    get_audit_stats,
+    ErrorCode,
+    APIError,
+    error_response,
 )
 from security.auth import user_manager, User
 
@@ -60,14 +71,8 @@ from lib.http_client import sync_client
 
 # T16: Database migration - PostgreSQL with SQLAlchemy
 try:
-    from database import (
-        db_manager, init_database, close_database,
-        UserRepository, ConversationRepository, VoiceModelRepository,
-        JobApplicationRepository, AnalyticsRepository,
-        BackupManager, DataMigrator,
-        HAS_SQLALCHEMY,
-    )
-    DATABASE_AVAILABLE = HAS_SQLALCHEMY
+    from core import database as db_mod
+    DATABASE_AVAILABLE = db_mod.HAS_SQLALCHEMY
 except ImportError as e:
     DATABASE_AVAILABLE = False
     logging.getLogger("main").warning(f"[Database] module not available: {e}")
@@ -82,15 +87,10 @@ from config import OLLAMA_URL
 try:
     from whisper_handler import (
         BrowserTranscriber,
-        clean_text,
         get_model,
         get_streaming_transcriber,
         is_meaningful,
         is_question,
-        is_small_talk,
-        is_technical,
-        record_audio,
-        transcribe,
         transcribe_audio,
         warmup,
     )
@@ -107,11 +107,6 @@ try:
         ingest_conversation,
         query_graph,
         InterviewNode,
-        QuestionNode,
-        AnswerNode,
-        CompanyNode,
-        TopicNode,
-        SkillNode
     )
     COGNITIVE_GRAPH_AVAILABLE = True
 except ImportError:
@@ -121,13 +116,7 @@ except ImportError:
 
 # Interview Simulator - Phase 3
 try:
-    from interview_simulator import (
-        interview_simulator,
-        create_interview,
-        get_question,
-        submit_response,
-        finish_interview
-    )
+    from interview_simulator import interview_simulator, finish_interview
     INTERVIEW_SIMULATOR_AVAILABLE = True
 except ImportError:
     INTERVIEW_SIMULATOR_AVAILABLE = False
@@ -136,7 +125,7 @@ except ImportError:
 
 # Job Application Tracker - Phase 3
 try:
-    from job_tracker import job_tracker, track_application, get_applications
+    from job_tracker import job_tracker
     JOB_TRACKER_AVAILABLE = True
 except ImportError:
     JOB_TRACKER_AVAILABLE = False
@@ -145,7 +134,7 @@ except ImportError:
 
 # Resume Review - Phase 3
 try:
-    from resume_review import resume_reviewer, analyze_resume
+    from resume_review import resume_reviewer
     RESUME_REVIEW_AVAILABLE = True
 except ImportError:
     RESUME_REVIEW_AVAILABLE = False
@@ -155,6 +144,85 @@ except ImportError:
 sys.stdout.reconfigure(encoding="utf-8")
 
 
+def _smart_classifier_importable() -> bool:
+    """Non-side-effecting probe: is `modules.ai.smart_classifier` importable?
+
+    Used by the CLASSIFIER_ENABLED=false startup warning to avoid
+    warning when the package isn't installed at all. Uses
+    `importlib.util.find_spec` (no actual import side effects), so
+    it's cheap and safe to call from the startup hook.
+    """
+    try:
+        import importlib.util
+        return importlib.util.find_spec("modules.ai.smart_classifier") is not None
+    except Exception:
+        return False
+
+
+def _warn_on_optional_ml_disabled(CLOUD_MODE: bool = False) -> None:
+    """Startup warning: optional ML features disabled but their consumers are present.
+
+    Addresses audit item 3.2 ("EMBEDDING_ENABLED=false but cognitive
+    features require it"). Free-tier users on Render (or anyone running
+    with `EMBEDDING_ENABLED=false` to save RAM) would otherwise see
+    silently degraded semantic search with no signal. This function
+    emits two clearly-formatted warnings pointing the operator at the
+    env var to flip, including the RAM cost of enabling.
+
+    Extracted from the `@app.on_event("startup")` hook so it can be
+    unit-tested directly without spinning up the full app.
+
+    Skipped in CLOUD_MODE: cloud deploys have these disabled by design
+    (saves 420MB RAM) and warning on every cloud boot would be noise.
+    """
+    if CLOUD_MODE:
+        return
+
+    # Resolve `EMBEDDING_ENABLED` / `CLASSIFIER_ENABLED` robustly across
+    # the project's two equivalent import paths:
+    #   1. `from config import ...` (works when `core/` is on sys.path,
+    #      e.g. `uvicorn core.main:app` from the backend/ dir)
+    #   2. `from core.config import ...` (works when backend/ is on
+    #      sys.path, e.g. pytest from backend/)
+    # Both end up pointing at the same `core/config.py` source, but
+    # Python's import system creates *separate module objects* in
+    # `sys.modules` for the two names. We must read from whichever one
+    # was actually populated — so we use `importlib.import_module` with
+    # an unambiguous dotted path, and fall back to the bare name if
+    # that fails (e.g. minimal install where `core` isn't a package).
+    EMBEDDING_ENABLED = None
+    CLASSIFIER_ENABLED = None
+    try:
+        import importlib
+        try:
+            cfg_mod = importlib.import_module("core.config")
+        except ImportError:
+            cfg_mod = importlib.import_module("config")
+        EMBEDDING_ENABLED = cfg_mod.EMBEDDING_ENABLED
+        CLASSIFIER_ENABLED = cfg_mod.CLASSIFIER_ENABLED
+    except (ImportError, AttributeError):
+        return  # config not importable in any form — bail silently
+
+    if not EMBEDDING_ENABLED and COGNITIVE_GRAPH_AVAILABLE:
+        # cognitive_graph._init_semantic_search() short-circuits to
+        # legacy_keyword_search() when EMBEDDING_AVAILABLE is False.
+        logger.warning(
+            "[Startup] EMBEDDING_ENABLED=false but cognitive graph is "
+            "available — semantic search will fall back to keyword "
+            "matching (legacy_keyword_search). To enable semantic "
+            "search, set EMBEDDING_ENABLED=true in your env "
+            "(costs ~120MB RAM for the all-MiniLM-L6-v2 model)."
+        )
+
+    if not CLASSIFIER_ENABLED and _smart_classifier_importable():
+        logger.warning(
+            "[Startup] CLASSIFIER_ENABLED=false but the smart "
+            "classifier module is importable — requests will use the "
+            "heuristic router (less accurate intent detection). To "
+            "enable, set CLASSIFIER_ENABLED=true (costs ~300MB RAM)."
+        )
+
+
 def _sanitize_for_log(value: str) -> str:
     """Remove newlines and control characters from user input before logging to prevent log injection."""
     if not isinstance(value, str):
@@ -162,7 +230,16 @@ def _sanitize_for_log(value: str) -> str:
     return value.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
 
 
-app = FastAPI()
+@asynccontextmanager
+async def application_lifespan(_app):
+    try:
+        await start_listener()
+        yield
+    finally:
+        await shutdown_event()
+
+
+app = FastAPI(lifespan=application_lifespan)
 
 # ── Route Module Migration ─────────────────────────────────────────────────
 # Route modules in backend/routes/ are the target architecture.
@@ -189,7 +266,7 @@ class AppState:
         self.use_autonomous = False
         self.always_on_mic_enabled = False
         self.last_query_time = 0.0
-        self.cooldown_seconds = 5
+        self.cooldown_seconds = 2  # Phase A: reduced from 5s for faster follow-ups
         self.is_streaming = False
         self.race_history = []
         self.listener_thread = None
@@ -206,99 +283,132 @@ _route_deps.DATABASE_AVAILABLE = DATABASE_AVAILABLE
 _route_deps.COGNITIVE_GRAPH_AVAILABLE = COGNITIVE_GRAPH_AVAILABLE
 _route_deps.WHISPER_AVAILABLE = WHISPER_AVAILABLE
 
-# Route module imports — available for migration when endpoints are removed from this file.
-# To activate: remove the duplicate endpoints below, then uncomment these lines.
-# from routes.health import router as health_router
-# from routes.auth import router as auth_router
-# from routes.ai import router as ai_router
-# from routes.transcription import router as transcription_router
-# from routes.ollama import router as ollama_router
-# from routes.conversations import router as conversations_router
-# from routes.analytics import router as analytics_router
-# from routes.cognitive import router as cognitive_router
-# from routes.study import router as study_router
-# from routes.interview import router as interview_router
-# from routes.jobs import router as jobs_router
-# from routes.voice import router as voice_router
-# from routes.agents import router as agents_router
-# from routes.admin import router as admin_router
-# from routes.crm import router as crm_router
+# Route module imports — activated 2026-06-05 as part of Fix #4.
+# Each module in backend/routes/ owns a slice of the API surface. main.py
+# keeps only the cross-cutting concerns (startup, middleware, app state,
+# rate limiting, security headers) and the 14 endpoints that haven't yet
+# been migrated (see routes/_main_unique.py for the migration plan).
 #
-# app.include_router(health_router)
-# app.include_router(auth_router)
-# app.include_router(ai_router)
-# app.include_router(transcription_router)
-# app.include_router(ollama_router)
-# app.include_router(conversations_router)
-# app.include_router(analytics_router)
-# app.include_router(cognitive_router)
-# app.include_router(study_router)
-# app.include_router(interview_router)
-# app.include_router(jobs_router)
-# app.include_router(voice_router)
-# app.include_router(agents_router)
-# app.include_router(admin_router)
-# app.include_router(crm_router)
+# IMPORTANT: When a route is registered both in a route module AND in
+# main.py with the same path, FastAPI serves the route module's handler
+# (it was added first). The duplicate main.py handler is dead code that
+# is kept temporarily for backward compatibility — see the
+# _warn_legacy_endpoint decorator below.
 
-# GDPR compliance routes (active)
-from routes.gdpr import router as gdpr_router
-app.include_router(gdpr_router)
+# Phase 1-2: Core functionality
+from routes.health import router as health_router
+from routes.auth import router as auth_router
+from routes.ai import router as ai_router
+from routes.transcription import router as transcription_router
+from routes.ollama import router as ollama_router
+from routes.conversations import router as conversations_router
+from routes.analytics import router as analytics_router
 
-# Calendar integration (Phase 4)
-from routes.calendar import router as calendar_router
-app.include_router(calendar_router)
+# Phase 3: Cognitive features
+from routes.cognitive import router as cognitive_router
+from routes.study import router as study_router
+from routes.interview import router as interview_router
+from routes.jobs import router as jobs_router
 
-# Slack integration (Phase 4)
-from routes.slack import router as slack_router
-app.include_router(slack_router)
-
-# Team workspaces (Phase 4)
-from routes.teams import router as teams_router
-app.include_router(teams_router)
-
-# Webhook / Zapier integration (Phase 4)
-from routes.webhooks import router as webhooks_router
-app.include_router(webhooks_router)
-
-# CRM integration (Phase 4)
+# Phase 4: Voice, agents, admin
+from routes.voice import router as voice_router
+from routes.agents import router as agents_router
+from routes.admin import router as admin_router
 from routes.crm import router as crm_router
+# Phase 4 unique-to-main extraction (2026-06-08): the 15 endpoints that
+# were still inline in main.py are now in their own route modules. The
+# corresponding @app.X decorators in main.py are commented out and the
+# live handler is the route module's.
+from routes._main_unique import router as main_unique_router
+from routes.voice_agent import router as voice_agent_router
+from routes.mcp import router as mcp_router
+
+# ---------------------------------------------------------------------------
+# Route migration status (Fix #4, audit 2026-06-05)
+# ---------------------------------------------------------------------------
+# 28 routers are registered below, each handling its own endpoints.  15 of
+# those routers (Phase 1-4) were previously commented out — Fix #4 uncommented
+# them.  The route module handlers register BEFORE the inline @app.X
+# decorators further down in this file, so they own the matching (method,
+# path) keys and shadow 162 duplicate inline handlers here.
+#
+# What remains in this file:
+#   - 162 dead @app.X handlers — unreachable (route modules win), but kept
+#     as a safety net so we can roll back the migration if needed.
+#   - 13 HTTP + 1 WS endpoint that are unique to main.py and have no
+#     equivalent in any route module: /auth/{debug/users, status,
+#     forgot-password, set-security-question}, /health/{config,
+#     db-debug}, /mcp/{resources, status, tools, tools/{tool_name}},
+#     /voice-agent/{start, stop, status}, /ws/voice-agent.
+#
+# Next steps (optional, not in audit priority list):
+#   1. Move the 14 unique endpoints into routes/_main_unique.py.
+#   2. Strip the 162 dead @app.X handlers + their body functions from
+#      this file (saves ~200KB; the file is currently 277KB).
+#   3. Once main.py is just app + middleware + startup, the file can
+#      shrink to ~10KB.
+# ---------------------------------------------------------------------------
+
+# Register in declaration order (matches original commented-out block
+# in the same order to keep startup logs familiar).
+app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(ai_router)
+from routes.recovery import router as recovery_router
+app.include_router(recovery_router)
+app.include_router(transcription_router)
+app.include_router(ollama_router)
+app.include_router(conversations_router)
+app.include_router(analytics_router)
+app.include_router(cognitive_router)
+app.include_router(study_router)
+app.include_router(interview_router)
+app.include_router(jobs_router)
+app.include_router(voice_router)
+app.include_router(agents_router)
+app.include_router(admin_router)
 app.include_router(crm_router)
 
-# Video clips and highlight reels (Phase 5)
+# Phase 4-7 routes (already active before Fix #4)
+# These were registered directly in main.py before the migration; we keep
+# them as-is and import them here so the include_router() calls work.
+from routes.gdpr import router as gdpr_router
+from routes.calendar import router as calendar_router
+from routes.slack import router as slack_router
+from routes.teams import router as teams_router
+from routes.webhooks import router as webhooks_router
 from routes.video import router as video_router
-app.include_router(video_router)
-
-# Career features — cover letter, resume tailor, interview prep (Phase 5)
 from routes.career import router as career_router
-app.include_router(career_router)
-
-# SSO — Google and Microsoft OAuth2 (Phase 6)
 from routes.sso import router as sso_router
-app.include_router(sso_router)
-
-# Compliance — SOC 2, EU AI Act, data residency (Phase 6)
 from routes.compliance import router as compliance_router
-app.include_router(compliance_router)
-
-# Notion integration (Phase 7)
 from routes.notion import router as notion_router
-app.include_router(notion_router)
-
-# Jira integration (Phase 7)
 from routes.jira import router as jira_router
-app.include_router(jira_router)
-
-# Auto-apply for jobs (Phase 7)
 from routes.auto_apply import router as auto_apply_router
-app.include_router(auto_apply_router)
-
-# Phone call transcription support (Phase 7)
 from routes.phone import router as phone_router
-app.include_router(phone_router)
 
-# Cognitive graph — in-memory (zero-config) + Neo4j fallback
-from routes.cognitive import router as cognitive_router
-app.include_router(cognitive_router)
+app.include_router(gdpr_router)        # GDPR compliance
+app.include_router(calendar_router)    # Calendar integration
+app.include_router(slack_router)       # Slack integration
+app.include_router(teams_router)       # Team workspaces
+app.include_router(webhooks_router)    # Webhook / Zapier
+# NOTE: crm_router is registered above (Phase 4) — the line below was
+# a duplicate and has been removed (was registering the same router twice).
+app.include_router(video_router)       # Video clips / highlight reels
+app.include_router(career_router)      # Cover letter, resume tailor
+app.include_router(sso_router)         # SSO — Google, Microsoft
+app.include_router(compliance_router)  # SOC 2, EU AI Act
+app.include_router(notion_router)      # Notion integration
+app.include_router(jira_router)        # Jira integration
+app.include_router(auto_apply_router)  # Auto-apply for jobs
+app.include_router(phone_router)       # Phone call transcription
+# Phase 4 unique-to-main extraction (2026-06-08): these routers own the
+# 15 endpoints that were inline in main.py after the 2026-06-05 migration.
+# See routes/_main_unique.py, routes/voice_agent.py, and routes/mcp.py.
+app.include_router(main_unique_router)  # /, /health/config, /health/db-debug, /auth/{status, debug/users, forgot-password, set-security-question}
+app.include_router(voice_agent_router)  # /voice-agent/{start, stop, status}, /ws/voice-agent
+app.include_router(mcp_router)          # /mcp/{status, tools, resources, tools/{tool_name}}
+# cognitive_router is registered above (Phase 3) — the line below was
+# a duplicate and has been removed.
 
 # T6: Global exception handler for structured APIError
 @app.exception_handler(APIError)
@@ -415,7 +525,7 @@ async def global_rate_limit_middleware(request: Request, call_next):
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if user:
             client_id = f"user:{user.username}"
             # Admins bypass rate limiting
@@ -494,7 +604,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
 async def optional_auth(request: Request, token: str = Depends(get_token_from_request)):
     """Optional authentication - adds user to request state if valid"""
     if token:
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if user:
             request.state.current_user = user
     return request
@@ -506,7 +616,7 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 
 # Paths that never require authentication
 AUTH_PUBLIC_PATHS = {
-    "/", "/health", "/health/database", "/health/modules", "/health/config", "/health/db-debug",
+    "/", "/health", "/health/database", "/health/modules",
     "/auth/login", "/auth/register", "/auth/reset-password", "/auth/forgot-password", "/auth/debug/users",
     "/docs", "/openapi.json", "/redoc",
     "/voice-clone/audio/{filename}",  # Audio playback
@@ -534,11 +644,17 @@ async def auth_enforcement_middleware(request: Request, call_next):
     path = request.url.path
     auth_header = request.headers.get("authorization", "")
 
-    # Try to identify user from token
+    # Try to identify user from token. We use get_current_user_with_reason
+    # (not get_current_user) so the 401 response can carry an
+    # X-Error-Code header that distinguishes a kicked session
+    # (Fix #34: another device logged in) from a malformed/expired
+    # token. The route layer's require_authentication does the same
+    # thing for per-route 401s; this keeps the two layers in sync.
     user = None
+    rejected_reason = None
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
-        user = get_current_user(token)
+        user, rejected_reason = await get_current_user_with_reason(token)
 
     # Set user in request state
     if user:
@@ -555,10 +671,13 @@ async def auth_enforcement_middleware(request: Request, call_next):
             break
 
     if always_required and not user:
+        kick_headers = {"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
+        if rejected_reason == "session_invalidated":
+            kick_headers["X-Error-Code"] = "session_invalidated"
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "Authentication required for this endpoint"}},
-            headers={"WWW-Authenticate": "Bearer", "Access-Control-Allow-Origin": request.headers.get("origin", "*")}
+            headers=kick_headers,
         )
 
     # In production mode, enforce auth on all non-public paths
@@ -582,7 +701,7 @@ async def require_authentication(token: str = Depends(get_token_from_request)):
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = get_current_user(token)
+    user = await get_current_user(token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -639,7 +758,6 @@ def sanitize_path(filename: str) -> str:
 
     Rejects paths containing .. or absolute paths.
     """
-    import re
     # Reject paths with directory traversal attempts
     if ".." in filename or "/" in filename or "\\" in filename or filename.startswith((".", "/", "\\", "~")):
         raise ValueError(f"Invalid filename: {filename}")
@@ -656,7 +774,7 @@ def cleanup_temp_audio():
                 try:
                     os.remove(os.path.join(UPLOAD_DIR, f))
                 except OSError:
-                    pass
+                    logger.warning("Could not remove a stale temporary audio file")
 
 
 def get_ffmpeg_path():
@@ -704,15 +822,22 @@ def get_ffmpeg_path():
 def autonomous_listener():
     # Note: state is now in _state object, no global declarations needed
 
-    from whisper_handler import get_streaming_transcriber, clean_text, is_meaningful, is_question, is_small_talk, is_technical, transcribe
+    from whisper_handler import (
+        get_streaming_transcriber,
+        clean_text,
+        is_meaningful,
+        is_question,
+        is_small_talk,
+        is_technical,
+    )
 
     text_buffer = ""
     last_heard_time = time.time()
-    silence_threshold = 2.5
+    silence_threshold = 1.0  # Phase A: reduced from 2.5s for faster response
     min_words = 3
 
     def get_silence_threshold():
-        return 1.8 if _state.current_mode == "interview" else silence_threshold
+        return 0.8 if _state.current_mode == "interview" else silence_threshold  # Phase A: interview 1.8s → 0.8s
 
     transcriber = get_streaming_transcriber()
 
@@ -765,9 +890,8 @@ def autonomous_listener():
                         continue
                     _state.last_query_time = time.time()
 
-                import asyncio
                 async def _warmup():
-                    async for _ in route_ai_stream(final_text, mode=_state.current_mode):
+                    async for _ in iterate_stream(ai_router.route_ai_stream(final_text, mode=_state.current_mode)):
                         pass
                 asyncio.run(_warmup())
 
@@ -777,7 +901,6 @@ def autonomous_listener():
         transcriber.stop()
 
 
-@app.on_event("startup")
 async def start_listener():
     # State is now in _state object
     CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
@@ -785,28 +908,51 @@ async def start_listener():
     # T16: Initialize database — try PostgreSQL, fall back to SQLite
     if DATABASE_AVAILABLE:
         try:
-            await init_database()
+            await db_mod.init_database()
             logger.info("[Startup] Database initialized successfully")
+            # Fix #35 Commit 5: auto-migrate legacy data/users.json into
+            # the SQLAlchemy users table on first boot. Idempotent — the
+            # DataMigrator writes a marker file after a successful run
+            # and skips subsequent boots. Manual re-runs go through
+            # /admin/migrate (which passes force=True).
+            try:
+                mig_results = await db_mod.DataMigrator.run_full_migration()
+                if mig_results.get("skipped"):
+                    logger.info("[Startup] Migration skipped — already migrated")
+                elif mig_results.get("users", 0) > 0:
+                    logger.info(
+                        "[Startup] Migrated %d users, %d conversations from users.json",
+                        mig_results["users"],
+                        mig_results.get("conversations", 0),
+                    )
+            except Exception as mig_err:
+                # A migration failure must not block startup — the
+                # SQL store is empty but the app is still usable (users
+                # just have to register fresh). Log loudly so the
+                # operator notices.
+                logger.warning(
+                    "[Startup] Auto-migration failed (continuing without it): %s",
+                    str(mig_err),
+                )
         except Exception as e:
             logger.warning("[Startup] Database init failed: %s", str(e))
             if CLOUD_MODE:
                 # Fall back to SQLite for cloud mode so the app is still usable
                 logger.info("[Startup] Falling back to SQLite (data won't persist across deploys)")
-                import core.database as db_mod
                 # Reset manager state so it can reinitialize
                 db_mod.db_manager._initialized = False
                 if db_mod.db_manager.engine:
                     try:
                         await db_mod.db_manager.engine.dispose()
                     except Exception:
-                        pass
+                        logger.warning("Failed to dispose the previous database engine during fallback")
                     db_mod.db_manager.engine = None
                     db_mod.db_manager.session_maker = None
                 db_mod.DATABASE_URL = db_mod.DEFAULT_SQLITE_URL
                 db_mod.USE_SQLITE = True
                 db_mod.FORCE_SQLITE = True
                 try:
-                    await init_database()
+                    await db_mod.init_database()
                     logger.info("[Startup] SQLite database initialized as fallback")
                 except Exception as e2:
                     logger.error("[Startup] SQLite fallback also failed: %s", str(e2))
@@ -839,6 +985,30 @@ async def start_listener():
     else:
         logger.info("[Startup] Whisper warmup skipped — voice packages not installed or cloud mode")
 
+    # Preload the live-assist model. Measured 2026-09-11: a cold generation
+    # took 5.4-5.7s against a 4.0s gate while a warm one took 1.8-2.2s, so the
+    # first interview question — the one that matters most — was the slowest.
+    # keep_alive holds it resident afterwards.
+    if not CLOUD_MODE:
+        def _warmup_live():
+            try:
+                from modules.ai.realtime_suggestions import warmup_live_model
+                res = warmup_live_model()
+                if res.get("ok"):
+                    logger.info(
+                        "[Startup] Live-assist model ready: %s in %sms",
+                        res.get("model"), res.get("ms"),
+                    )
+                else:
+                    logger.warning(
+                        "[Startup] Live-assist warmup failed (%s) — first hint will be slow",
+                        res.get("error"),
+                    )
+            except Exception as exc:
+                logger.warning("[Startup] Live-assist warmup unavailable: %s", exc)
+
+        threading.Thread(target=_warmup_live, daemon=True).start()
+
     # Start embedding service and classifier warmup in background
     # These are optional — if they fail, existing keyword logic is used as fallback
     if not CLOUD_MODE:
@@ -852,6 +1022,48 @@ async def start_listener():
                 threading.Thread(target=classifier_warmup, daemon=True, name="classifier-warmup").start()
         except Exception as e:
             logger.warning("[Startup] ML warmup skipped: %s", str(e))
+
+    # Warn loud when optional ML features are disabled but their consumers
+    # are present — addresses audit item 3.2 ("EMBEDDING_ENABLED=false but
+    # cognitive features require it"). Without this warning, free-tier
+    # users see silently degraded semantic search with no signal.
+    _warn_on_optional_ml_disabled(CLOUD_MODE=CLOUD_MODE)
+
+    # Probe local ollama so misconfigurations fail loud at startup, not
+    # silently on the first /stream request. Compares installed models
+    # against the per-mode slots in config and warns if any are missing.
+    if not CLOUD_MODE:
+        try:
+            from config import (
+                OLLAMA_URL, DEFAULT_MODEL, MODEL_FAST, MODEL_CLOUD,
+                MODEL_REASONING, MODEL_CODE, MODEL_INTERVIEW,
+                MODEL_UNIVERSAL, MODEL_ADAPTIVE, MODEL_TURBO,
+            )
+            from lib.http_client import sync_client
+            try:
+                resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=2, skip_ssrf_check=True)
+                if resp.status_code == 200:
+                    installed = {m.get("name", "") for m in (resp.json() or {}).get("models", [])}
+                    slots = {
+                        "default": DEFAULT_MODEL, "adaptive": MODEL_ADAPTIVE,
+                        "universal": MODEL_UNIVERSAL, "interview": MODEL_INTERVIEW,
+                        "reasoning": MODEL_REASONING, "code": MODEL_CODE,
+                        "fast": MODEL_FAST, "turbo": MODEL_TURBO, "cloud": MODEL_CLOUD,
+                    }
+                    missing = {k: v for k, v in slots.items() if v and v not in installed}
+                    msg = f"[Startup] Ollama at {OLLAMA_URL} — {len(installed)} models installed: {sorted(installed)}"
+                    if missing:
+                        msg += f" | MISSING: {missing}"
+                    print(msg, flush=True)
+                    logger.info(msg)
+                else:
+                    print(f"[Startup] Ollama probe returned HTTP {resp.status_code}", flush=True)
+                    logger.warning("[Startup] Ollama probe returned HTTP %d — AI calls will fail until ollama is up.", resp.status_code)
+            except Exception as e:
+                print(f"[Startup] Ollama unreachable: {e}", flush=True)
+                logger.warning("[Startup] Ollama unreachable at %s (%s) — AI calls will fall back to heuristics.", OLLAMA_URL, str(e)[:120])
+        except ImportError as e:
+            print(f"[Startup] Ollama probe ImportError: {e}", flush=True)
 
     # Pre-warm cloud provider connections (DNS + TLS handshake) for sub-second first-byte
     # Skip in cloud mode to save memory — connections warm up on first request
@@ -886,149 +1098,20 @@ async def start_listener():
         logger.info("[Startup] Cloud mode active — skipped ML warmup, cache init, connection pre-warming")
 
 
-@app.get("/")
-def health_check():
-    return {
-        "status": "ok",
-        "service": "ai-backend",
-        "mode": _state.current_mode,
-        "security": {
-            "authentication": "enabled",
-            "rate_limiting": "enabled",
-            "https_required": False  # Set to True when SSL is configured
-        }
-    }
+# MIGRATED → routes/_main_unique.py:health_check (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/health/config")
-def config_check():
-    """Diagnostic endpoint to verify database configuration (no secrets exposed)"""
-    from core.database import DATABASE_URL as db_url, USE_SQLITE, FORCE_SQLITE, DEFAULT_SQLITE_URL
-    _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
-    _db_type = "sqlite" if "sqlite" in db_url.lower() else "postgresql" if "postgresql" in db_url.lower() else "unknown"
-    return {
-        "database_url_prefix": db_url[:40] + "..." if db_url and len(db_url) > 40 else _redacted,
-        "database_type": _db_type,
-        "use_sqlite": USE_SQLITE,
-        "force_sqlite": FORCE_SQLITE,
-        "cloud_mode": os.getenv("CLOUD_MODE", "false"),
-        "database_available": DATABASE_AVAILABLE,
-        "db_initialized": db_manager._initialized if db_manager else False,
-        "has_engine": db_manager.engine is not None if db_manager else False,
-        "default_sqlite_path": str(DEFAULT_SQLITE_URL)[:60],
-    }
+# MIGRATED → routes/_main_unique.py:config_check (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/health/db-debug")
-async def db_debug():
-    """Diagnostic endpoint that attempts a fresh database connection and returns the error"""
-    from core.database import DATABASE_URL as db_url, HAS_SQLALCHEMY
-    if not HAS_SQLALCHEMY:
-        return {"error": "SQLAlchemy not available"}
-    try:
-        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-        from sqlalchemy import text
-        _redacted = re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"
-        _is_sqlite = "sqlite" in db_url.lower()
-        _test_url = db_url
-        _engine_kwargs = {"echo": False}
-        if _is_sqlite:
-            # SQLite doesn't support pool_size, max_overflow, pool_pre_ping, or SSL
-            pass
-        else:
-            # PostgreSQL: strip sslmode from URL, add SSL context
-            import ssl as _ssl
-            _ssl_ctx = _ssl.create_default_context()
-            _ssl_ctx.check_hostname = False
-            _ssl_ctx.verify_mode = _ssl.CERT_NONE
-            if "sslmode=" in _test_url:
-                _test_url = _test_url.split("?sslmode=")[0]
-                if _test_url.endswith("?"):
-                    _test_url = _test_url[:-1]
-            _engine_kwargs["pool_size"] = 1
-            _engine_kwargs["connect_args"] = {"ssl": _ssl_ctx}
-        engine = create_async_engine(_test_url, **_engine_kwargs)
-        if _is_sqlite:
-            query = text("SELECT sqlite_version()")
-        else:
-            query = text("SELECT version()")
-        async with engine.begin() as conn:
-            result = await conn.execute(query)
-            version = result.scalar()
-        await engine.dispose()
-        return {"status": "connected", "version": version, "url": _redacted, "dialect": "sqlite" if _is_sqlite else "postgresql"}
-    except Exception as e:
-        return {"status": "failed", "error": str(e), "error_type": type(e).__name__, "url": re.sub(r'://[^@]+@', '://***@', db_url) if db_url else "(none)"}
-
-
-# Provider key status cache — avoids flooding the key server on every /providers call
-# Per-provider timestamps so one stale entry doesn't invalidate all others
-_provider_key_cache: Dict[str, tuple] = {}  # provider -> (result: bool, timestamp: float)
-_PROVIDER_KEY_CACHE_TTL = 10  # 10 seconds
-
-
-def _has_provider_key(provider: str, env_var: str) -> bool:
-    """Check if a provider has an API key, using a per-provider cache."""
-    now = time.time()
-
-    # Return cached result if still fresh
-    if provider in _provider_key_cache:
-        cached_result, cached_time = _provider_key_cache[provider]
-        if (now - cached_time) < _PROVIDER_KEY_CACHE_TTL:
-            return cached_result
-
-    # Check env var first (fast, no network)
-    if os.getenv(env_var, "").strip():
-        _provider_key_cache[provider] = (True, now)
-        return True
-
-    # Then check secure key server (with auth secret)
-    try:
-        headers = {}
-        key_secret = os.getenv("KEY_SERVER_SECRET", "")
-        if key_secret:
-            headers["X-Key-Server-Secret"] = key_secret
-        resp = sync_client.post(
-            "http://127.0.0.1:18000/get-key",
-            json={"provider": provider},
-            headers=headers,
-            timeout=2,
-            skip_ssrf_check=True,  # internal key server, not user-supplied
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            result = bool(data.get("apiKey"))
-        else:
-            result = False
-    except Exception:
-        result = False
-
-    _provider_key_cache[provider] = (result, now)
-    return result
-
-
-def _batch_check_provider_keys(providers: list) -> Dict[str, bool]:
-    """Check multiple provider keys concurrently using threads. Returns {provider: has_key}."""
-    if not providers:
-        return {}
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    results = {}
-    with ThreadPoolExecutor(max_workers=len(providers)) as pool:
-        futures = {
-            pool.submit(_has_provider_key, p, e): p
-            for p, e in providers
-        }
-        for future in as_completed(futures):
-            provider = futures[future]
-            results[provider] = future.result()
-    return results
+# MIGRATED → routes/_main_unique.py:db_debug (Phase 4 cleanup, 2026-06-08)
 
 
 @app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def list_providers(request: Request):
     """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
-    key_status = _batch_check_provider_keys([
+    key_status = await asyncio.to_thread(_batch_check_provider_keys, [
         ("openai", "OPENAI_API_KEY"),
         ("anthropic", "ANTHROPIC_API_KEY"),
         ("google", "GOOGLE_API_KEY"),
@@ -1051,9 +1134,9 @@ def list_ollama_models():
         response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10, skip_ssrf_check=True)
         if response.status_code == 200:
             return response.json()
-        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
+        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502, extra={"models": []})
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500) | {"models": []}
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500, extra={"models": []})
 
 
 @app.post("/ollama/pull")
@@ -1121,7 +1204,6 @@ async def ask_with_image(
         messages = None
         if context:
             try:
-                import json
                 messages = json.loads(context)
             except Exception:
                 pass  # nosec B110 — JSON parse fallback for optional context
@@ -1131,8 +1213,7 @@ async def ask_with_image(
             async def text_generator():
                 _state.is_streaming = True
                 try:
-                    from ai_router import route_ai_stream
-                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(ai_router.route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1142,7 +1223,9 @@ async def ask_with_image(
             return StreamingResponse(text_generator(), media_type="text/event-stream")
 
         # === Screenshot provided — Two-Step Vision Pipeline ===
-        from cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
+        # Absolute import — bare `from cloud_providers` resolves to a
+        # second (unpatched) module instance.
+        from modules.platform.cloud_providers import VISION_PROVIDER_MAP, PROVIDER_MODEL_MAP, get_vision_stream_fn
         from modules.ai.vision_describer import stream_vision_description
 
         resolved_model = None
@@ -1175,7 +1258,7 @@ async def ask_with_image(
                 if p in enabled_set
             ]
 
-        key_status = _batch_check_provider_keys(providers_to_check)
+        key_status = await asyncio.to_thread(_batch_check_provider_keys, providers_to_check)
 
         vision_providers = []
         for provider_name, has_key in key_status.items():
@@ -1184,10 +1267,9 @@ async def ask_with_image(
 
         ollama_vision_model = None
         try:
-            from ai_router import _get_vision_model
-            ollama_vision_model = _get_vision_model()
+            ollama_vision_model = ai_router._get_vision_model()
         except Exception:
-            pass
+            pass  # Local vision is optional; configured cloud vision providers remain available.
 
         has_ollama_vision = ollama_vision_model is not None
         has_ollama_cloud_key = _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY")
@@ -1200,8 +1282,7 @@ async def ask_with_image(
             async def text_only_gen():
                 _state.is_streaming = True
                 try:
-                    from ai_router import route_ai_stream
-                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(ai_router.route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1215,8 +1296,7 @@ async def ask_with_image(
             async def skip_vision_gen():
                 _state.is_streaming = True
                 try:
-                    from ai_router import route_ai_stream
-                    async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(ai_router.route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     import json as _json
@@ -1230,7 +1310,7 @@ async def ask_with_image(
             full_description = ""
 
             try:
-                async for event in stream_vision_description(
+                async for event in iterate_stream(stream_vision_description(
                     image_b64=image_b64,
                     vision_providers=vision_providers,
                     ollama_vision_model=ollama_vision_model if has_ollama_vision else None,
@@ -1239,14 +1319,14 @@ async def ask_with_image(
                     mode=mode,
                     style=style,
                     temperature=temperature,
-                ):
+                )):
                     if '"type":"vision"' in event or '"type": "vision"' in event:
                         try:
                             data_line = [l for l in event.split("\n") if l.startswith("data:")][0]
                             data = json.loads(data_line[5:].strip())
                             full_description += data.get("content", "")
                         except (json.JSONDecodeError, IndexError):
-                            pass
+                            pass  # Only accumulation failed; the original stream event is forwarded below.
                         yield event
                     elif '"type":"vision_done"' in event or '"type": "vision_done"' in event:
                         yield event
@@ -1268,8 +1348,9 @@ async def ask_with_image(
 
                 step2_provider = provider
                 if provider == "auto" and vision_providers:
-                    from cloud_providers import PROVIDER_MODEL_MAP
-                    SPEED_PRIORITY = ["groq-llama-3-3-70b", "google-gemini-2-0-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
+                    # Absolute import — see comment at line 1353.
+                    from modules.platform.cloud_providers import PROVIDER_MODEL_MAP
+                    SPEED_PRIORITY = ["groq-gpt-oss-120b", "google-gemini-3-8-flash", "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku"]
                     found_paid = False
                     for fast_model in SPEED_PRIORITY:
                         if fast_model in PROVIDER_MODEL_MAP:
@@ -1282,15 +1363,14 @@ async def ask_with_image(
                         step2_provider = "gemma3:cloud"
                         logger.info("[ask-with-image] Step 2 using Ollama Cloud text (gemma3:cloud)")
 
-                from ai_router import route_ai_stream
-                async for event in route_ai_stream(
+                async for event in iterate_stream(ai_router.route_ai_stream(
                     combined_prompt,
                     mode=mode,
                     style=style,
                     provider=step2_provider,
                     messages=messages,
                     temperature=temperature,
-                ):
+                )):
                     yield event
 
             except Exception as e:
@@ -1327,7 +1407,7 @@ async def transcribe_stream(request: Request):
             try:
                 client_queue.put_nowait(text)
             except Exception:
-                pass
+                logger.warning("Could not enqueue a transcript notification")
         transcriber.add_callback(sync_queue_callback)
 
         # Ensure transcriber is running
@@ -1340,14 +1420,12 @@ async def transcribe_stream(request: Request):
                 # Run blocking queue.get() in a thread with 1s timeout so event loop stays free
                 try:
                     text = await loop.run_in_executor(None, lambda: client_queue.get(True, timeout=1))
-                    import json
                     yield f"event: transcript\ndata: {json.dumps({'text': text})}\n\n"
                 except queue.Empty:
                     # No transcription in queue within timeout — send ping so renderer can check silence
-                    import json
                     yield f"event: ping\ndata: {json.dumps({'t': int(time.time())})}\n\n"
         except GeneratorExit:
-            pass
+            pass  # GeneratorExit is the normal termination signal when the subscriber disconnects.
         except Exception as e:
             logger.error("[transcribe-stream] error: %s", str(e))
 
@@ -1355,6 +1433,7 @@ async def transcribe_stream(request: Request):
 
 
 @app.post("/ocr")
+@app.get("/providers")
 @rate_limit(requests_per_minute=30)
 async def ocr_image(request: Request):
     """Extract text from a base64-encoded image using OCR.
@@ -1374,6 +1453,7 @@ async def ocr_image(request: Request):
 
 
 @app.post("/overlay-ask")
+@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def overlay_ask(
     request: Request,
@@ -1391,28 +1471,27 @@ async def overlay_ask(
     async def generator():
         _state.is_streaming = True
         try:
-            from ai_router import ask_ollama_vision_stream, _get_vision_model, route_ai_stream
 
             if screenshot_b64:
-                model_name = _get_vision_model()
+                model_name = ai_router._get_vision_model()
                 logger.info("[overlay-ask] Screenshot present, vision model: %s", _sanitize_for_log(str(model_name)))
                 if not model_name:
-                    import json
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
-                async for event in ask_ollama_vision_stream(
+                # ask_ollama_vision_stream is patched to be an async generator
+                # at the top of this file, so `async for` works directly.
+                async for event in iterate_stream(ai_router.ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
                     style="concise",
                     model_name=model_name
-                ):
+                )):
                     yield event
             else:
-                async for event in route_ai_stream(query, mode="fast", style="concise"):
+                async for event in iterate_stream(ai_router.route_ai_stream(query, mode="fast", style="concise")):
                     yield event
         except Exception as e:
-            import json
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
         finally:
             _state.is_streaming = False
@@ -1463,6 +1542,7 @@ async def configure_provider(body: dict):
 
 @app.get("/health")
 def health():
+    from routes.health import health_check
     return health_check()
 
 
@@ -1477,21 +1557,21 @@ async def health_database():
         }
 
     try:
-        connected = await db_manager.health_check()
+        connected = await db_mod.db_manager.health_check()
         return {
             "available": True,
             "connected": connected,
             "message": "Database connection OK" if connected else "Database connection failed",
-            "initialized": db_manager._initialized,
-            "has_engine": db_manager.engine is not None,
+            "initialized": db_mod.db_manager._initialized,
+            "has_engine": db_mod.db_manager.engine is not None,
         }
     except Exception as e:
         return {
             "available": True,
             "connected": False,
             "message": f"Database error: {type(e).__name__}",
-            "initialized": db_manager._initialized if db_manager else False,
-            "has_engine": db_manager.engine is not None if db_manager else False,
+            "initialized": db_mod.db_manager._initialized if db_mod.db_manager else False,
+            "has_engine": db_mod.db_manager.engine is not None if db_mod.db_manager else False,
         }
 
 
@@ -1525,7 +1605,7 @@ async def health_modules():
             if resp.status_code == 200:
                 return bool(resp.json().get("apiKey"))
         except Exception:
-            pass
+            pass  # The local key service may be unavailable; check the configured environment fallback.
         return bool(os.getenv(env_var, "").strip())
 
     providers = {
@@ -1543,7 +1623,7 @@ async def health_modules():
         try:
             mock_interview_count = len(mock_library.get_all_questions())
         except Exception:
-            pass
+            pass  # An unavailable optional catalogue keeps the diagnostic count at zero.
 
     modules = {
         "database": {
@@ -1631,7 +1711,7 @@ async def admin_create_backup(user: User = Depends(require_admin)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        backup_data = await BackupManager.create_backup()
+        backup_data = await db_mod.BackupManager.create_backup()
         log_audit_event("admin_backup", user.username, "backup_created", success=True)
         return {
             "status": "success",
@@ -1650,7 +1730,7 @@ async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depen
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        restored = await BackupManager.restore_backup(backup_data)
+        restored = await db_mod.BackupManager.restore_backup(backup_data)
         log_audit_event("admin_restore", user.username, "backup_restored", resource=f"restored:{restored}", success=True)
         return {
             "status": "success",
@@ -1669,7 +1749,10 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        results = await DataMigrator.run_full_migration()
+        # Fix #35 Commit 5: pass force=True so the admin button
+        # actually re-runs even after the idempotency marker is set.
+        # Without it, the second click is silently a no-op.
+        results = await db_mod.DataMigrator.run_full_migration(force=True)
         log_audit_event("admin_migrate", user.username, "migration_run", resource=f"users:{results.get('users', 0)}", success=True)
         return {
             "status": "success",
@@ -1685,23 +1768,10 @@ async def admin_run_migration(user: User = Depends(require_admin)):
 # SECURITY: AUTHENTICATION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════
 
-@app.get("/auth/status")
-async def auth_status():
-    """Returns whether authentication is required. Frontend uses this
-    to decide whether to show the login screen."""
-    return {"auth_required": AUTH_REQUIRED}
+# MIGRATED → routes/_main_unique.py:auth_status (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/auth/debug/users")
-async def debug_users():
-    """Temporary debug endpoint — check user store status (remove after debugging)"""
-    from security.auth import user_manager
-    return {
-        "user_count": len(user_manager.users),
-        "usernames": list(user_manager.users.keys()),
-        "has_jwt": HAS_JWT,
-        "users_file": str(user_manager.USERS_FILE) if hasattr(user_manager, 'USERS_FILE') else "N/A",
-    }
+# MIGRATED → routes/_main_unique.py:debug_users (Phase 4 cleanup, 2026-06-08)
 
 
 @app.post("/auth/register")
@@ -1736,7 +1806,7 @@ async def register_user(
             raise HTTPException(status_code=400, detail="Security answer must be 2-100 characters")
 
     try:
-        user = user_manager.create_user(
+        user = await user_manager.create_user(
             username=username, email=email, password=password,
             security_question=valid_question, security_answer=valid_answer
         )
@@ -1748,16 +1818,26 @@ async def register_user(
             "username": user.username
         }
     except ValueError as e:
-        logger.error("[Auth] Registration failed for '%s': %s", username, str(e))
+        logger.error("[Auth] Registration failed")
         log_audit_event("auth_register", username, "user_register_failed", details={"reason": str(e)}, success=False)
-        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
+        raise HTTPException(status_code=400, detail="Registration failed; check your account details")
 
 
 @app.post("/auth/login")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
-async def login_user(username: str = Form(...), password: str = Form(...)):  # nosec B105 — form parameter
-    """Login and get JWT token"""
-    user = user_manager.authenticate_user(username, password)
+async def login_user(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),  # nosec B105 — form parameter
+):
+    """Login and get JWT token pair (legacy duplicate in core/main.py;
+    the live handler is routes/auth.py:login_user). Single-session
+    enforcement (Fix #34): jti on both tokens is the freshly rotated
+    user.active_session_id."""
+    from routes.auth import _client_ip, _user_agent
+    user = await user_manager.authenticate_user(
+        username, password, ip=_client_ip(request), user_agent=_user_agent(request),
+    )
     if not user:
         log_audit_event("auth_failure", username, "login_failed", resource="auth", success=False)
         raise HTTPException(
@@ -1767,10 +1847,11 @@ async def login_user(username: str = Form(...), password: str = Form(...)):  # n
 
     log_audit_event("auth_login", username, "user_logged_in", resource=f"user:{user.id}", success=True)
 
-    # Create access token
+    jti = user.active_session_id
     access_token = create_access_token(
         data={"sub": user.id, "username": user.username},
-        expires_delta=timedelta(hours=24)
+        expires_delta=timedelta(hours=24),
+        jti=jti,
     )
 
     return {
@@ -1813,7 +1894,10 @@ async def logout_user(user: User = Depends(require_authentication)):
 @app.post("/auth/refresh")
 @rate_limit(requests_per_minute=10)
 async def refresh_token(request: Request):
-    """Refresh access token using refresh token."""
+    """Refresh access token using refresh token (legacy duplicate in
+    core/main.py; the live handler is routes/auth.py:refresh_access_token).
+    Single-session enforcement (Fix #34): a refresh token whose jti
+    no longer matches the user's active_session_id is rejected."""
     try:
         data = await request.json()
         refresh_token_str = data.get("refresh_token")
@@ -1830,36 +1914,44 @@ async def refresh_token(request: Request):
             return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
 
         username = payload.get("sub")
-        user = user_manager.get_user(username)
+        user = await user_manager.get_user(username)
         if not user:
             return error_response(ErrorCode.AUTHENTICATION_ERROR, "User not found", status_code=401)
 
-        new_token = create_access_token(username)
-        log_audit_event("auth_refresh", username, "token_refreshed", resource=f"user:{user.id}", success=True)
+        # Single-session enforcement (Fix #34): the jti on the refresh
+        # token must match the user's active session, or a 2nd-device
+        # login has rotated the session since this refresh was issued.
+        if payload.jti and user.active_session_id and payload.jti != user.active_session_id:
+            log_audit_event(
+                "auth_session_invalidated", user.username,
+                "refresh_rejected_session_rotated",
+                resource=f"user:{user.id}",
+                details={"token_jti": payload.jti, "active_jti": user.active_session_id},
+                success=False,
+            )
+            return error_response(
+                ErrorCode.AUTHENTICATION_ERROR,
+                "Session invalidated: another device has logged in as this user",
+                status_code=401,
+            )
+
+        # Incidental fix: previously called create_access_token(username)
+        # which passed a str instead of a dict and would have crashed
+        # under the jti path. The data shape is what the jti kwarg
+        # requires.
+        new_token = create_access_token(
+            data={"sub": user.id, "username": user.username},
+            expires_delta=timedelta(hours=24),
+            jti=(payload.jti or user.active_session_id),
+        )
+        log_audit_event("auth_refresh", user.username, "token_refreshed", resource=f"user:{user.id}", success=True)
         return {"access_token": new_token, "token_type": "bearer"}
     except Exception as e:
         logger.error("[Auth] Refresh error: %s", str(e))
         return error_response(ErrorCode.AUTHENTICATION_ERROR, "Invalid refresh token", status_code=401)
 
 
-@app.post("/auth/forgot-password")
-@rate_limit(requests_per_minute=3)
-async def forgot_password(username: str = Form(...)):
-    """Step 1 of password reset: look up user's security question.
-    Always returns 200 to prevent username enumeration."""
-    question = user_manager.has_security_question(username)
-    if question:
-        return {
-            "status": "success",
-            "security_question": question,
-            "has_security_question": True
-        }
-    return {
-        "status": "success",
-        "security_question": None,
-        "has_security_question": False,
-        "message": "If this account exists and has a security question set, it will be shown."
-    }
+# MIGRATED → routes/_main_unique.py:forgot_password (Phase 4 cleanup, 2026-06-08)
 
 
 @app.post("/auth/reset-password")
@@ -1870,7 +1962,7 @@ async def reset_password(
     new_password: str = Form(..., min_length=8)  # nosec B105 — form parameter
 ):
     """Step 2 of password reset: verify security answer and set new password."""
-    user = user_manager.get_user(username)
+    user = await user_manager.get_user(username)
     if not user:
         log_audit_event("auth_reset_password", username, "password_reset_failed", resource="auth", success=False)
         raise HTTPException(status_code=400, detail="Invalid request")
@@ -1881,36 +1973,16 @@ async def reset_password(
             detail="Password reset requires a security question. Please set one up after logging in."
         )
 
-    if not user_manager.verify_security_answer(username, security_answer):
+    if not await user_manager.verify_security_answer(username, security_answer):
         log_audit_event("auth_reset_password", username, "password_reset_failed", resource="auth", success=False)
         raise HTTPException(status_code=400, detail="Security answer is incorrect")
 
-    user_manager.update_password(username, new_password)
+    await user_manager.update_password(username, new_password)
     log_audit_event("auth_reset_password", username, "password_reset", resource=f"user:{user.id}", success=True)
     return {"status": "success", "message": "Password reset successfully"}
 
 
-@app.post("/auth/set-security-question")
-async def set_security_question_endpoint(
-    user: User = Depends(require_authentication),
-    security_question: str = Form(...),
-    security_answer: str = Form(...)
-):
-    """Set or update the security question for the authenticated user."""
-    valid_question = InputValidator.validate_security_question(security_question)
-    valid_answer = InputValidator.validate_security_answer(security_answer)
-    if not valid_question:
-        raise HTTPException(status_code=400, detail="Security question must be 5-200 characters")
-    if not valid_answer:
-        raise HTTPException(status_code=400, detail="Security answer must be 2-100 characters")
-
-    user_manager.set_security_question(user.username, valid_question, valid_answer)
-    return {"status": "success", "message": "Security question set successfully"}
-
-
-# ═══════════════════════════════════════════════════════════════════
-# AUDIT LOG (T7)
-# ═══════════════════════════════════════════════════════════════════
+# MIGRATED → routes/_main_unique.py:set_security_question_endpoint (Phase 4 cleanup, 2026-06-08)
 
 @app.get("/audit/log")
 async def get_audit_log_endpoint(
@@ -2207,10 +2279,7 @@ async def transcribe_api(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     # Skip redundant ffmpeg conversion — faster-whisper decodes webm directly
-    text = transcribe_audio(file_path, mode=_state.current_mode, fast=True)
-
-    try: os.remove(file_path)
-    except OSError: pass  # nosec B110
+    text = await transcribe_saved_upload(transcribe_audio, file_path, mode=_state.current_mode, fast=True)
 
     return {"text": text or ""}
 
@@ -2227,10 +2296,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         shutil.copyfileobj(file.file, buffer)
 
     # Skip redundant ffmpeg conversion — faster-whisper decodes webm directly
-    text = transcribe_audio(file_path, mode=_state.current_mode, fast=True)
-
-    try: os.remove(file_path)
-    except OSError: pass  # nosec B110
+    text = await transcribe_saved_upload(transcribe_audio, file_path, mode=_state.current_mode, fast=True)
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -2240,9 +2306,10 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
 
     # Route to cloud provider
     try:
-        from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
+        # Absolute import — see comment at line 1353.
+        from modules.platform.cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
-        prompt = build_prompt(text, _state.current_mode)
+        prompt = ai_router.build_prompt(text, _state.current_mode)
 
         if provider == "openai":
             resp = ask_gpt(prompt, model=model)
@@ -2299,20 +2366,18 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
         messages = None
         if context:
             try:
-                import json
                 messages = json.loads(context)
             except Exception:
-                pass
+                pass  # Malformed optional history is omitted; the submitted question is still answered.
 
         try:
             # Yield provider/mode info as first event
             yield f"event: meta\ndata: {{\"type\":\"meta\",\"provider\":\"{provider}\"}}\n\n"
 
-            async for event in route_ai_stream(q, mode, style, provider, messages):
+            async for event in iterate_stream(ai_router.route_ai_stream(q, mode, style, provider, messages)):
                 yield event
 
         except Exception as e:
-            import json
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
 
         finally:
@@ -2331,10 +2396,10 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     """
     import queue as queue_mod
     import threading
-    import logging
     import time as time_module
 
-    from cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
+    # Absolute import — see comment at line 1353.
+    from modules.platform.cloud_providers import MODEL_DISPLAY_NAMES, PROVIDER_MODEL_MAP, get_stream_fn
 
     logger = logging.getLogger(__name__)
     race_start = time_module.time()
@@ -2438,15 +2503,15 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
             _state.is_streaming = True
             try:
                 if single_pk == "ollama":
-                    from ai_router import ask_ollama_stream
-                    async for event in ask_ollama_stream(q, mode=mode, style=style, messages=messages):
+                    # Patched to async generator at the top of this file.
+                    async for event in iterate_stream(ai_router.ask_ollama_stream(q, mode=mode, style=style, messages=messages)):
                         yield event
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(single_pk, ("openai", "gpt-4o-mini"))
                     model_name = resolved[1]
                     stream_fn = get_stream_fn(single_pk)
                     if stream_fn:
-                        async for event in stream_fn(q, model=model_name, mode=mode, style=style, messages=messages):
+                        async for event in iterate_stream(stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)):
                             yield event
                     else:
                         yield f'event: error\ndata: {{"type":"error","message":"No stream function for {single_pk}"}}\n\n'
@@ -2460,15 +2525,13 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 
     def stream_provider(pk):
         """Stream from a provider into the shared queue. Exit early if cancelled."""
-        import asyncio
 
         async def _run():
             provider_start = time_module.time()
             logger.info("[PROVIDER START] %s", pk)
             try:
                 if pk == "ollama":
-                    from ai_router import ask_ollama_stream
-                    stream_iter = ask_ollama_stream(q, mode=mode, style=style, messages=messages)
+                    stream_iter = ai_router.ask_ollama_stream(q, mode=mode, style=style, messages=messages)
                 else:
                     resolved = PROVIDER_MODEL_MAP.get(pk, ("openai", "gpt-4o-mini"))
                     model_name = resolved[1]
@@ -2480,7 +2543,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                     stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages)
 
                 has_error = False
-                async for event in stream_iter:
+                async for event in iterate_stream(stream_iter):
                     if cancel_flags[pk].is_set():
                         logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time_module.time() - provider_start)
                         race_queue.put((pk, "DONE", None))
@@ -2584,7 +2647,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
 def race_stats():
     """Return race performance statistics from recent races."""
     try:
-        from cloud_providers import MODEL_DISPLAY_NAMES
+        # Absolute import — see comment at line 1353.
+        from modules.platform.cloud_providers import MODEL_DISPLAY_NAMES
     except ImportError:
         MODEL_DISPLAY_NAMES = {}
     recent = _state.race_history[-20:]
@@ -2617,34 +2681,20 @@ def race_stats():
 # ==============================
 
 @app.post("/documents/upload")
+@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # T24: Document upload
 async def upload_document(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Upload a document for RAG context retrieval."""
     from document_store import get_document_store
-
-    # SECURITY: Sanitize filename to prevent path traversal
-    safe_filename = os.path.basename(file.filename)
-    if not safe_filename or "/" in file.filename or "\\" in file.filename or ".." in file.filename:
-        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
-
-    # Save uploaded file temporarily
-    temp_path = os.path.join(UPLOAD_DIR, safe_filename)
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    from lib.document_upload import InvalidDocumentName, staged_document
 
     try:
-        doc_store = get_document_store()
-        result = doc_store.add_document(temp_path)
-
-        # Clean up temp file
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
-
-        return result
-    except Exception as e:
-        logger.error("Document upload failed: %s", str(e))
+        with staged_document(file.file, file.filename, UPLOAD_DIR) as temp_path:
+            return get_document_store().add_document(temp_path)
+    except InvalidDocumentName:
+        return error_response(ErrorCode.VALIDATION_ERROR, "Invalid filename", status_code=400)
+    except Exception:
+        logger.error("Document upload failed")
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
@@ -2752,7 +2802,7 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
             try:
                 os.remove(path)
             except OSError:
-                pass
+                logger.warning("Could not remove a temporary speaker-transcription file")
 
 
 @app.get("/transcribe/{audio_id}/speakers")
@@ -2764,49 +2814,28 @@ async def get_transcription_speakers(audio_id: str):
     return {"status": "not_implemented", "audio_id": audio_id}
 
 
-def shutdown_handler(*args):
-    # State is now in _state object
-    _state.use_autonomous = False
-    # T16: Close database connections on shutdown
-    if DATABASE_AVAILABLE:
-        try:
-            import asyncio
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(close_database())
-            loop.close()
-        except Exception:
-            pass
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, shutdown_handler)
-signal.signal(signal.SIGTERM, shutdown_handler)
-
-
-@app.on_event("shutdown")
+# Uvicorn owns SIGINT/SIGTERM and awaits the application shutdown hook.
 async def shutdown_event():
-    """FastAPI shutdown handler - closes database connections and HTTP clients."""
+    """Close application resources independently on the running event loop."""
+    _state.use_autonomous = False
+    try:
+        from modules.voice.local_clone_engine import close_local_clone_engines
+        await close_local_clone_engines()
+    except Exception:
+        logger.warning("[Shutdown] Local voice cleanup failed")
     if DATABASE_AVAILABLE:
         try:
-            await close_database()
+            await db_mod.close_database()
             logger.info("[Shutdown] Database connections closed")
-        except Exception as e:
-            logger.warning("[Shutdown] Database close error: %s", str(e))
+        except Exception:
+            logger.warning("[Shutdown] Database cleanup failed")
 
-    # Close shared httpx client
     try:
         from lib.http_client import close_client
         await close_client()
         logger.info("[Shutdown] HTTP client closed")
     except Exception:
-        pass
-
-    # Close synchronous httpx client
-    try:
-        from lib.http_client import sync_client
-        sync_client.close()
-    except Exception:
-        pass
+        logger.warning("[Shutdown] HTTP client cleanup failed")
 
 
 @app.websocket("/ws/transcribe")
@@ -2841,7 +2870,7 @@ async def ws_transcribe(ws: WebSocket):
     if AUTH_REQUIRED:
         # Production: always require auth
         if token:
-            user = get_current_user(token)
+            user = await get_current_user(token)
         else:
             # Stealth: wait for auth message as first message
             try:
@@ -2851,11 +2880,11 @@ async def ws_transcribe(ws: WebSocket):
                         auth_data = json.loads(first_msg["text"])
                         if auth_data.get("type") == "auth":
                             token = auth_data.get("token", "")
-                            user = get_current_user(token)
+                            user = await get_current_user(token)
                     except (json.JSONDecodeError, KeyError):
-                        pass
+                        pass  # Malformed auth leaves user unset and closes the socket below.
             except asyncio.TimeoutError:
-                pass
+                pass  # An absent auth message leaves user unset and closes the socket below.
 
         if not user:
             await ws.send_text(json.dumps({"type": "auth_error", "message": "Authentication required. Send {\"type\":\"auth\",\"token\":\"xxx\"} as first message or pass ?token=xxx in URL."}))
@@ -2864,7 +2893,7 @@ async def ws_transcribe(ws: WebSocket):
     else:
         # Dev mode: auth optional — allow unauthenticated connections
         if token:
-            user = get_current_user(token)
+            await get_current_user(token)
 
     # Auth succeeded
     await ws.send_text(json.dumps({"type": "auth_ok"}))
@@ -2921,7 +2950,7 @@ async def ws_transcribe(ws: WebSocket):
         try:
             msg_queue.put_nowait(msg)
         except asyncio.QueueFull:
-            pass
+            pass  # Drop an overloaded preview; partial_texts still retains it for the final transcript.
 
     transcriber.add_callback(on_transcript)
 
@@ -2974,209 +3003,43 @@ async def ws_transcribe(ws: WebSocket):
         try:
             await ws.send_json(final_msg)
         except Exception:
-            pass
+            pass  # The peer may already be disconnected; final cleanup must not send again.
 
 
 # ==============================
 # VOICE AGENT ENDPOINTS (T17)
 # ==============================
 
-try:
-    from modules.voice.voice_agent import (
-        VoiceAgent, VoiceAgentConfig, create_session,
-        process_audio_chunk, end_session, get_status
-    )
-    VOICE_AGENT_AVAILABLE = True
-except ImportError as e:
-    VOICE_AGENT_AVAILABLE = False
-    logger.warning("[VoiceAgent] Module not available: %s", str(e))
 
 
-@app.post("/voice-agent/start")
-async def voice_agent_start(user: User = Depends(require_authentication)):
-    """Start a new voice agent session."""
-    if not VOICE_AGENT_AVAILABLE:
-        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice agent not available", status_code=503)
-    result = await create_session(user.id)
-    return result
+# MIGRATED → routes/voice_agent.py:voice_agent_start (Phase 4 cleanup, 2026-06-08)
 
 
-@app.post("/voice-agent/stop")
-async def voice_agent_stop(user: User = Depends(require_authentication)):
-    """Stop the current voice agent session."""
-    if not VOICE_AGENT_AVAILABLE:
-        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Voice agent not available", status_code=503)
-    result = await end_session("current")
-    return result
+# MIGRATED → routes/voice_agent.py:voice_agent_stop (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/voice-agent/status")
-async def voice_agent_status():
-    """Get voice agent availability status."""
-    if not VOICE_AGENT_AVAILABLE:
-        return {"available": False, "error": "Voice agent module not installed"}
-    return get_status()
+# MIGRATED → routes/voice_agent.py:voice_agent_status (Phase 4 cleanup, 2026-06-08)
 
 
-@app.websocket("/ws/voice-agent")
-async def ws_voice_agent(ws: WebSocket):
-    """
-    T17: Real-time voice agent WebSocket.
-    Receives audio chunks, returns VAD + AI response actions.
-    """
-    token = ws.query_params.get("token")
-    if AUTH_REQUIRED:
-        if not token:
-            await ws.accept()
-            await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
-            await ws.close(code=4001)
-            return
-        user = get_current_user(token)
-        if not user:
-            await ws.accept()
-            await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
-            await ws.close(code=4001)
-            return
-
-    await ws.accept()
-
-    if not VOICE_AGENT_AVAILABLE:
-        await ws.send_text(json.dumps({"error": {"code": "MODULE_NOT_AVAILABLE", "message": "Voice agent module not installed"}}))
-        await ws.close(code=4002)
-        return
-
-    agent = VoiceAgent()
-    await agent.start_session(user.id if 'user' in dir() else "anonymous")
-
-    try:
-        while True:
-            message = await ws.receive_text()
-            try:
-                data = json.loads(message)
-                msg_type = data.get("type", "audio")
-
-                if msg_type == "audio":
-                    audio_b64 = data.get("audio", "")
-                    audio_bytes = base64.b64decode(audio_b64) if audio_b64 else b""
-                    result = await agent.process_audio(audio_bytes)
-                    await ws.send_text(json.dumps(result))
-
-                elif msg_type == "config":
-                    config_updates = data.get("config", {})
-                    for key, value in config_updates.items():
-                        if hasattr(agent.config, key):
-                            setattr(agent.config, key, value)
-                    await ws.send_text(json.dumps({"action": "config_updated", "config": {
-                        "voice": agent.config.voice,
-                        "enable_interruption": agent.config.enable_interruption,
-                    }}))
-
-                elif msg_type == "speak":
-                    text = data.get("text", "")
-                    success = await agent.speak_text(text)
-                    await ws.send_text(json.dumps({"action": "speak_result", "success": success}))
-
-                elif msg_type == "ping":
-                    await ws.send_text(json.dumps({"action": "pong"}))
-
-                else:
-                    await ws.send_text(json.dumps({"action": "unknown_type", "received_type": msg_type}))
-
-            except Exception as e:
-                logger.error("[WS VoiceAgent] Error: %s", str(e))
-                await ws.send_text(json.dumps({"error": "An internal error occurred"}))
-
-    except Exception:
-        pass
-    finally:
-        await agent.end_session()
+# MIGRATED → routes/voice_agent.py:ws_voice_agent (Phase 4 cleanup, 2026-06-08)
 
 
 # ==============================
 # MCP SERVER ENDPOINTS (T18)
 # ==============================
 
-try:
-    from modules.platform.mcp_server import (
-        MCPServer, MCPTool, MCPResource,
-        create_mcp_server, mcp_server,
-        search_transcripts_handler, get_summary_handler,
-        list_action_items_handler, get_interview_notes_handler,
-        ask_about_conversation_handler
-    )
-    MCP_AVAILABLE = True
-except ImportError as e:
-    MCP_AVAILABLE = False
-    logger.warning("[MCP] Module not available: %s", str(e))
 
 
-@app.get("/mcp/status")
-async def mcp_status():
-    """Get MCP server status."""
-    if not MCP_AVAILABLE:
-        return {"available": False, "error": "MCP module not installed"}
-    return get_status()
+# MIGRATED → routes/mcp.py:mcp_status (Phase 4 cleanup, 2026-06-08)
 
 
-@app.post("/mcp/tools/{tool_name}")
-async def mcp_tool_call(tool_name: str, body: dict, user: User = Depends(require_authentication)):
-    """Call an MCP tool via HTTP."""
-    if not MCP_AVAILABLE:
-        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
-
-    try:
-        from modules.platform.mcp_server import mcp_server
-        if tool_name not in mcp_server.tools:
-            return error_response(ErrorCode.NOT_FOUND, f"Tool not found: {tool_name}", status_code=404)
-
-        result = await mcp_server.tools[tool_name].handler(body)
-        return {"tool": tool_name, "result": result}
-    except Exception as e:
-        logger.error("[MCP] Tool call error: %s", str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, "Tool execution failed", status_code=500)
+# MIGRATED → routes/mcp.py:mcp_tool_call (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/mcp/tools")
-async def mcp_tools_list(user: User = Depends(require_authentication)):
-    """List all available MCP tools."""
-    if not MCP_AVAILABLE:
-        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
-
-    try:
-        from modules.platform.mcp_server import mcp_server
-        tools = []
-        for tool in mcp_server.tools.values():
-            tools.append({
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.input_schema
-            })
-        return {"tools": tools}
-    except Exception as e:
-        logger.error("[MCP] Tools list error: %s", str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, "Failed to list tools", status_code=500)
+# MIGRATED → routes/mcp.py:mcp_tools_list (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/mcp/resources")
-async def mcp_resources_list(user: User = Depends(require_authentication)):
-    """List all available MCP resources."""
-    if not MCP_AVAILABLE:
-        return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "MCP not available", status_code=503)
-
-    try:
-        from modules.platform.mcp_server import mcp_server
-        resources = []
-        for resource in mcp_server.resources.values():
-            resources.append({
-                "uri": resource.uri,
-                "name": resource.name,
-                "description": resource.description,
-                "mime_type": resource.mime_type
-            })
-        return {"resources": resources}
-    except Exception as e:
-        logger.error("[MCP] Resources list error: %s", str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, "Failed to list resources", status_code=500)
+# MIGRATED → routes/mcp.py:mcp_resources_list (Phase 4 cleanup, 2026-06-08)
 
 
 # ==============================
@@ -3488,7 +3351,7 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
             await ws.close(code=4001)
             return
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if not user:
             await ws.accept()
             await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
@@ -3500,8 +3363,8 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             msg = await ws.receive_text()
             try:
-                result = route_ai(msg, mode=_state.current_mode)
-                await ws.send_text(clean_ai_output(result["response"]))
+                result = ai_router.route_ai(msg, mode=_state.current_mode)
+                await ws.send_text(ai_router.clean_ai_output(result["response"]))
             except Exception as e:
                 logger.error("[WS] Error processing message: %s", _sanitize_for_log(str(e)))
                 try:
@@ -3902,12 +3765,7 @@ async def get_cognitive_graph_stats():
 # ======================================
 
 try:
-    from realtime_suggestions import (
-        realtime_engine,
-        voice_processor,
-        process_transcript_segment,
-        process_voice_command
-    )
+    from realtime_suggestions import realtime_engine, process_transcript_segment, process_voice_command
     REALTIME_AVAILABLE = True
 except ImportError as e:
     REALTIME_AVAILABLE = False
@@ -4044,7 +3902,7 @@ async def clear_suggestion_state():
 # ======================================
 
 try:
-    from conversation_analyzer import analyzer, analyze_conversation
+    from conversation_analyzer import analyze_conversation
     ANALYZER_AVAILABLE = True
 except ImportError as e:
     ANALYZER_AVAILABLE = False
@@ -4127,7 +3985,7 @@ async def get_conversation_types():
 # ======================================
 
 try:
-    from analytics_engine import analytics, get_skill_progression, get_dashboard_data
+    from analytics_engine import analytics
     ANALYTICS_AVAILABLE = True
 except ImportError as e:
     ANALYTICS_AVAILABLE = False
@@ -4341,7 +4199,7 @@ async def get_personalized_checklist(
 # ======================================
 
 try:
-    from study_plan_generator import study_planner, generate_plan, adapt_plan, export_plan
+    from study_plan_generator import study_planner
     STUDY_PLAN_AVAILABLE = True
 except ImportError as e:
     STUDY_PLAN_AVAILABLE = False
@@ -4374,7 +4232,7 @@ async def generate_study_plan(
                 stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # Graph enrichment is optional; build the plan using the available study history.
 
         plan = study_planner.generate_plan(
             user_id, days, daily_minutes, graph_data,
@@ -4418,7 +4276,7 @@ async def generate_personalized_study_plan(
                 stats = cognitive_graph.get_graph_stats(request.user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # Graph enrichment is optional; build the plan using the available study history.
 
         plan = study_planner.generate_plan(
             request.user_id, request.days, request.daily_minutes, graph_data,
@@ -4500,11 +4358,10 @@ async def get_study_plan(user_id: str):
                 stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
-                pass
+                pass  # Graph enrichment is optional; build the plan using the available study history.
 
         plan = study_planner.generate_plan(user_id, days=30, daily_minutes=60, cognitive_graph_data=graph_data)
         # export_plan returns JSON string, parse it to return as dict
-        import json
         return json.loads(study_planner.export_plan(plan, "json"))
     except Exception as e:
         logger.error("[StudyPlan] Get error: %s", str(e))
@@ -5140,7 +4997,6 @@ async def search_job_applications(
 
 def extract_complexity_from_text(text: str) -> Dict:
     """Extract Big-O complexity notation from text"""
-    import re
 
     text_lower = text.lower()
 
@@ -5427,7 +5283,7 @@ analyze_resume_v2_func = None
 
 try:
     sys.path.insert(0, str(Path(__file__).parent.parent / "modules" / "interview"))
-    from resume_review_v2 import ResumeReviewerV2, analyze_resume as analyze_resume_v2_func
+    from resume_review_v2 import ResumeReviewerV2
     resume_reviewer_v2 = ResumeReviewerV2()
     RESUME_REVIEW_V2_AVAILABLE = True
     logger.info("[ResumeReviewV2] Enhanced resume analyzer loaded successfully")
@@ -5549,7 +5405,7 @@ async def tailor_resume_v2(
 @app.get("/search/web")
 async def web_search(
     query: str = Query(..., description="Search query"),
-    limit: int = Query(5, description="Number of results"),
+    limit: int = Query(5, ge=1, le=20, description="Number of results"),
     include_citations: bool = Query(True, description="Include source citations")
 ):
     """
@@ -5612,7 +5468,8 @@ async def web_search(
             }
 
             response = sync_client.get(
-                f"https://api.search.brave.com/res/v1/web/search?q={urllib.parse.quote(query)}&count={limit}",
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": query, "count": limit},
                 headers=headers,
                 timeout=10
             )
@@ -5670,16 +5527,7 @@ logger.info("[WebSearch] Web search integration loaded")
 # ==============================
 
 try:
-    from mock_interview_library import (
-        mock_library,
-        get_all_questions,
-        get_questions_by_role,
-        get_questions_by_company,
-        get_random_question,
-        get_practice_set,
-        get_library_stats,
-        search_questions
-    )
+    from mock_interview_library import mock_library
     MOCK_LIBRARY_AVAILABLE = True
     logger.info("[MockLibrary] Mock interview library loaded")
 except ImportError as e:
@@ -5842,13 +5690,7 @@ logger.info("[MockLibrary] Mock interview endpoints loaded")
 # ==============================
 
 try:
-    from voice_clone_agent import (
-        voice_manager,
-        create_voice_model,
-        get_voice_status,
-        synthesize_voice,
-        list_voice_models
-    )
+    from voice_clone_agent import voice_manager, get_voice_status, synthesize_voice, list_voice_models
     VOICE_CLONE_AVAILABLE = True
     logger.info("[VoiceClone] Voice clone agent loaded")
 except ImportError as e:
@@ -6132,13 +5974,12 @@ logger.info("[VoiceClone] Voice clone endpoints loaded")
 
 try:
     from shadow_agent import (
-        shadow_agent,
         start_shadow_session,
         process_transcript_segment,
         get_shadow_suggestions,
         accept_suggestion_by_id,
         end_shadow_session,
-        get_shadow_stats
+        get_shadow_stats,
     )
     SHADOW_AGENT_AVAILABLE = True
     logger.info("[ShadowAgent] Shadow agent loaded")
@@ -6178,7 +6019,7 @@ async def create_agent_session(
         agents_list = [a.strip() for a in active_agents.split(",") if a.strip()]
         config = {"provider": provider}
         session = await session_manager.create_session(
-            user_id="default",  # TODO: use actual user_id from auth
+            user_id="default",  # TODO: use actual user_id from auth — see Fix #31, but the live handler is routes/agents.py
             session_type=session_type,
             active_agents=agents_list,
             config=config,
@@ -6254,7 +6095,7 @@ async def stream_agent_suggestions(
     from starlette.responses import StreamingResponse
 
     async def event_generator():
-        async for event in orchestrator.process_segment_stream(session_id, text, speaker):
+        async for event in iterate_stream(orchestrator.process_segment_stream(session_id, text, speaker)):
             yield event
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -6554,7 +6395,7 @@ async def start_shadow_interview(
     if AGENTS_AVAILABLE:
         try:
             session = await session_manager.create_session(
-                user_id="default",
+                user_id="default",  # TODO: see Fix #31, but the live handler is routes/agents.py
                 session_type="interview",
                 active_agents=["interview_coach"],
                 config={"company": company, "role": role, "stage": stage},
@@ -6691,13 +6532,12 @@ logger.info("[ShadowAgent] Shadow agent endpoints loaded")
 
 try:
     from collaboration_mode import (
-        collaboration_manager,
         create_collaboration_session,
         join_collaboration,
         send_collaboration_message,
         get_collaboration_messages,
         get_collaboration_status,
-        end_collaboration
+        end_collaboration,
     )
     COLLABORATION_AVAILABLE = True
     logger.info("[Collaboration] Collaboration mode loaded")
@@ -6820,7 +6660,6 @@ logger.info("[Collaboration] Collaboration endpoints loaded")
 
 try:
     from meeting_templates import (
-        templates_manager,
         get_all_templates,
         get_template,
         get_categories,
@@ -6828,7 +6667,7 @@ try:
         update_template,
         delete_template,
         search_templates,
-        generate_notes
+        generate_notes,
     )
     MEETING_TEMPLATES_AVAILABLE = True
     logger.info("[MeetingTemplates] Meeting templates loaded")
@@ -6962,4 +6801,3 @@ async def generate_meeting_notes(template_id: str, body: dict):
 
 
 logger.info("[MeetingTemplates] Meeting templates endpoints loaded")
-

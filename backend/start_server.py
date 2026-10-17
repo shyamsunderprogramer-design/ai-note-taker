@@ -13,9 +13,19 @@ Environment:
     HSTS_MAX_AGE    - HSTS max-age in seconds (default: 31536000)
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
+
+# Without basicConfig, the root logger has no handler and Python's last-resort
+# handler prints only WARNING+ — every app logger.info (e.g. "[ws/transcribe]
+# suggestion ready") was silently swallowed, making the live-assist path
+# invisible in the logs (found 2026-09-11 during mock debugging).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 # Add paths
 _project_root = Path(__file__).parent.parent
@@ -28,6 +38,12 @@ _modules_root = _project_root / "modules"
 if str(_modules_root) not in sys.path:
     sys.path.insert(0, str(_modules_root))
 
+# Add core/ to sys.path so `from generate_ssl import ...` resolves
+# (the module lives at backend/core/generate_ssl.py)
+_core_pkg = _core_dir / "core"
+if str(_core_pkg) not in sys.path:
+    sys.path.insert(0, str(_core_pkg))
+
 from generate_ssl import generate_self_signed_cert, get_ssl_context
 
 
@@ -36,7 +52,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Start AI Note Taker backend")
-    parser.add_argument("--host", default="0.0.0.0", help="Bind host")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: local access only)")
     parser.add_argument("--port", type=int, default=8000, help="Bind port")
     parser.add_argument("--ssl", action="store_true", help="Enable HTTPS with auto-generated self-signed cert")
     parser.add_argument("--prod", action="store_true", help="Production mode: requires SSL_CERT_FILE and SSL_KEY_FILE")

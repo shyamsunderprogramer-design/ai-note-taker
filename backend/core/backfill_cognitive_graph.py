@@ -26,9 +26,7 @@ logger = logging.getLogger("backfill")
 # Import cognitive graph
 try:
     from cognitive_graph import (
-        cognitive_graph,
         initialize_graph,
-        InterviewNode,
         ingest_conversation
     )
     from entity_extraction import entity_extractor

@@ -4,11 +4,11 @@ import logging
 import re
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from security.auth import User, get_current_user
+from security.auth import User
 
 # ---------------------------------------------------------------------------
 # Auth helpers (consistent with other route modules)
@@ -24,21 +24,7 @@ async def get_token_from_request(
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)) -> User:
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
+from routes.deps import require_authentication
 
 
 logger = logging.getLogger("routes.career")

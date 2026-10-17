@@ -11,15 +11,16 @@ import argparse
 from pathlib import Path
 
 # Add backend to path
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
+BACKEND_DIR = Path(__file__).resolve().parents[2] / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
 
-from generate_ssl import generate_self_signed_cert, get_ssl_context
+from core.generate_ssl import generate_self_signed_cert
 
 
 def check_dependencies():
     """Check if required security packages are installed"""
     required = [
-        ("python-jose", "python-jose[cryptography]"),
+        ("jwt", "PyJWT[crypto]"),
         ("passlib", "passlib[bcrypt]"),
     ]
 
@@ -51,7 +52,7 @@ def generate_ssl_if_needed(cert_file: str = "", key_file: str = ""):
         print(f"[SUCCESS] SSL certificates ready:")
         print(f"  Certificate: {cert_file}")
         print(f"  Private Key: {key_file}")
-        return cert_file, key_file
+        return str(Path(cert_file).resolve()), str(Path(key_file).resolve())
     else:
         print("[ERROR] Failed to generate/load SSL certificates")
         return None, None
@@ -73,12 +74,16 @@ def start_server(host: str = "127.0.0.1", port: int = 8000,
     print()
 
     # Change to backend directory
-    os.chdir(Path(__file__).parent / "backend")
+    if ssl_cert:
+        ssl_cert = str(Path(ssl_cert).resolve())
+    if ssl_key:
+        ssl_key = str(Path(ssl_key).resolve())
+    os.chdir(BACKEND_DIR)
 
     # Build uvicorn command
     cmd = [
         sys.executable, "-m", "uvicorn",
-        "main:app",
+        "core.main:app",
         "--host", host,
         "--port", str(port),
     ]

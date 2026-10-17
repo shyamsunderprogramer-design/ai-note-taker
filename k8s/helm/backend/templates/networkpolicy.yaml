@@ -1,0 +1,95 @@
+{{- /*
+  NetworkPolicy template for ANT Backend
+
+  Wired to .Values.networkPolicy. By default:
+    - Ingress: only allow the same namespace + monitoring namespace (for
+      Prometheus scraping on port 9090) + ingress-nginx (for HTTP traffic)
+    - Egress: allow DNS (kube-system/53), Postgres, Redis, Neo4j, and
+      external HTTPS to AI providers (OpenAI/Anthropic/Google)
+
+  The intent is deny-by-default. The extraPolicies block lets you open
+  additional ingress rules for debugging or specific integrations.
+
+  Requires a CNI that enforces NetworkPolicy (Calico, Cilium, Weave).
+  Plain Flannel does NOT enforce these — pods will still be reachable
+  from anywhere.
+*/ -}}
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ant-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ant-backend.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ant-backend.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Same-namespace traffic (other services calling us, e.g. neo4j or a
+    # sidecar).
+    - from:
+        - podSelector: {}
+      ports:
+        - port: {{ .Values.service.targetPort | default 8000 }}
+          protocol: TCP
+    {{- if .Values.networkPolicy.allowCloud }}
+    # Allow the cluster ingress controller (e.g. ingress-nginx) to reach us.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: {{ .Values.service.targetPort | default 8000 }}
+          protocol: TCP
+    {{- end }}
+    {{- with .Values.networkPolicy.extraPolicies }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL (same namespace by default — override the to selector
+    # via extraPolicies if Postgres is in a different namespace).
+    - to:
+        - podSelector: {}
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Redis
+    - to:
+        - podSelector: {}
+      ports:
+        - port: 6379
+          protocol: TCP
+    # Neo4j (Bolt)
+    - to:
+        - podSelector: {}
+      ports:
+        - port: 7687
+          protocol: TCP
+    # External HTTPS to AI provider APIs (OpenAI, Anthropic, Google AI, etc.)
+    - ports:
+        - port: 443
+          protocol: TCP
+    # Kubernetes API server (for pod metadata lookups)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+      ports:
+        - port: 443
+          protocol: TCP
+{{- end }}

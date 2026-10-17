@@ -15,13 +15,13 @@ import shutil
 import subprocess  # nosec B404
 import tempfile
 import time
-from typing import List, Optional
+from typing import List
 from dataclasses import dataclass, field
 
-from agents.ingestion.markdown_parser import MarkdownQAParser
-from agents.ingestion.pdf_processor import PDFProcessor
-from agents.ingestion.graph_loader import GraphLoader
-from agents.ingestion.rag_loader import RAGLoader
+from modules.agents.ingestion.markdown_parser import MarkdownQAParser
+from modules.agents.ingestion.pdf_processor import PDFProcessor
+from modules.agents.ingestion.graph_loader import GraphLoader
+from modules.agents.ingestion.rag_loader import RAGLoader
 
 logger = logging.getLogger("agents.ingestion.pipeline")
 

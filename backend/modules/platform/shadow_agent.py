@@ -180,7 +180,7 @@ class ShadowInterviewAgent:
                             data = json.loads(data_line[0][5:])
                             full_response += data.get("content", "")
                     except (json.JSONDecodeError, IndexError):
-                        pass
+                        pass  # Ignore malformed SSE payloads while retaining valid chunks from the stream.
 
             # Parse structured output
             suggestions = []

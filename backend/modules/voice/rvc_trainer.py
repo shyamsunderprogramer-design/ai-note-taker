@@ -9,7 +9,20 @@ import logging
 import threading
 import time
 import shutil
+from pathlib import Path
 from typing import Dict, Optional
+
+
+def _default_voice_storage_dir() -> str:
+    """Canonical voice-clone storage: backend/data/voice_models/.
+
+    See voice_clone_agent.py for rationale. Single source of truth.
+    """
+    env_override = os.environ.get("ANT_VOICE_STORAGE_DIR")
+    if env_override:
+        return env_override
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    return str(backend_root / "data" / "voice_models")
 
 logger = logging.getLogger("rvc_trainer")
 
@@ -20,8 +33,8 @@ class RVCTrainer:
     Training is optional — models can use edge-tts or pre-trained .onnx files.
     """
 
-    def __init__(self, storage_dir: str = "data/voice_models"):
-        self.storage_dir = storage_dir
+    def __init__(self, storage_dir: str = None):
+        self.storage_dir = storage_dir or _default_voice_storage_dir()
         self._active_jobs: Dict[str, dict] = {}
         self._rvc_available: Optional[bool] = None
 
@@ -104,7 +117,6 @@ class RVCTrainer:
         Uses tts-with-rvc-onnx for processing.
         """
         model_id = job["model_id"]
-        model_name = job["model_name"]
         dataset_dir = job["dataset_dir"]
         output_dir = job["output_dir"]
 

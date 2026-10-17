@@ -16,7 +16,7 @@ Usage:
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -24,7 +24,7 @@ logger = logging.getLogger("analytics_engine")
 
 # Import cognitive graph
 try:
-    from cognitive_graph import cognitive_graph, query_graph
+    from cognitive_graph import cognitive_graph
     COGNITIVE_GRAPH_AVAILABLE = True
 except ImportError:
     COGNITIVE_GRAPH_AVAILABLE = False
@@ -413,6 +413,10 @@ class AnalyticsEngine:
 
         Combines key metrics from all analytics.
         """
+        if not self.graph or not self.graph.driver:
+            return {"available": False, "reason": "graph_unavailable",
+                    "message": "Analytics is unavailable until the knowledge graph is connected."}
+
         trends = self.get_performance_trends(user_id)
         calendar = self.get_interview_calendar(user_id, months=3)
 

@@ -16,9 +16,9 @@ Supporting modules:
   - vibevoice_diarizer: Speaker diarization integration (in voice module)
 """
 
-from agents.base import AgentType, AgentState, AgentSuggestion, AgentContext, BaseAgent, TranscriptSegment
-from agents.orchestrator import AgentOrchestrator
-from agents.session import AgentSessionManager
+from modules.agents.base import AgentType, AgentState, AgentSuggestion, AgentContext, BaseAgent, TranscriptSegment
+from modules.agents.orchestrator import AgentOrchestrator
+from modules.agents.session import AgentSessionManager
 
 __all__ = [
     "AgentType", "AgentState", "AgentSuggestion", "AgentContext",

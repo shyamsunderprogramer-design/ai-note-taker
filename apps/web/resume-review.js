@@ -13,6 +13,13 @@ class ResumeReview {
         const uploadArea = document.getElementById('fileUploadArea');
         if (!uploadArea) return;
 
+        uploadArea.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                document.getElementById('resumeFile').click();
+            }
+        });
+
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -59,10 +66,11 @@ class ResumeReview {
         // Display file info
         const fileInfo = document.getElementById('fileInfo');
         fileInfo.innerHTML = `
-            <span class="file-info-name">📄 ${file.name}</span>
+            <span class="file-info-name"></span>
             <span class="file-info-size">${(file.size / 1024).toFixed(1)} KB</span>
             <button class="file-remove-btn" onclick="resumeReview.removeFile()">Remove</button>
         `;
+        fileInfo.querySelector('.file-info-name').textContent = `📄 ${file.name}`;
         fileInfo.classList.remove('hidden');
 
         // Disable text input
@@ -163,8 +171,8 @@ class ResumeReview {
             sectionScoresEl.innerHTML = Object.entries(analysis.section_scores)
                 .map(([section, score]) => `
                     <div class="section-score-item">
-                        <div class="section-score-value">${score}</div>
-                        <div class="section-score-label">${this.capitalize(section)}</div>
+                        <div class="section-score-value">${this.escapeHTML(score)}</div>
+                        <div class="section-score-label">${this.escapeHTML(this.capitalize(section))}</div>
                     </div>
                 `).join('');
         }
@@ -174,10 +182,10 @@ class ResumeReview {
         if (analysis.rewrites && analysis.rewrites.length > 0) {
             rewritesEl.innerHTML = analysis.rewrites.map(r => `
                 <div class="rewrite-item">
-                    <div class="rewrite-original">${r.original}</div>
-                    <div class="rewrite-improved">${r.rewritten}</div>
-                    <div class="rewrite-explanation">${r.explanation}</div>
-                    <div class="rewrite-impact">${r.impact}</div>
+                    <div class="rewrite-original">${this.escapeHTML(r.original)}</div>
+                    <div class="rewrite-improved">${this.escapeHTML(r.rewritten)}</div>
+                    <div class="rewrite-explanation">${this.escapeHTML(r.explanation)}</div>
+                    <div class="rewrite-impact">${this.escapeHTML(r.impact)}</div>
                 </div>
             `).join('');
         } else {
@@ -186,33 +194,41 @@ class ResumeReview {
 
         // Keyword Heatmap
         const heatmapEl = document.getElementById('keywordHeatmap');
-        const allKeywords = [...analysis.missing_keywords, ... (data.analysis.found_keywords || [])];
+        const missingKeywords = analysis.missing_keywords || [];
+        const allKeywords = [...missingKeywords, ...(analysis.found_keywords || [])];
 
         if (allKeywords.length > 0) {
             heatmapEl.innerHTML = allKeywords.map(kw => {
-                const isMissing = analysis.missing_keywords.includes(kw);
-                return `<span class="keyword-pill ${isMissing ? 'kw-missing' : 'kw-found'}">${kw}</span>`;
+                const isMissing = missingKeywords.includes(kw);
+                return `<span class="keyword-pill ${isMissing ? 'kw-missing' : 'kw-found'}">${this.escapeHTML(kw)}</span>`;
             }).join('');
         } else {
             heatmapEl.innerHTML = '<p class="file-upload-hint">No keywords analyzed.</p>';
         }
 
         // Strengths
-        document.getElementById('strengthsList').innerHTML = analysis.strengths
-            .map(s => `<li class="result-item"><span class="result-icon strength">✓</span>${s}</li>`)
+        document.getElementById('strengthsList').innerHTML = (analysis.strengths || [])
+            .map(s => `<li class="result-item"><span class="result-icon strength">✓</span>${this.escapeHTML(s)}</li>`)
             .join('');
 
         // Improvements
-        document.getElementById('improvementsList').innerHTML = analysis.improvements
-            .map(i => `<li class="result-item"><span class="result-icon improvement">→</span>${i}</li>`)
+        document.getElementById('improvementsList').innerHTML = (analysis.improvements || [])
+            .map(i => `<li class="result-item"><span class="result-icon improvement">→</span>${this.escapeHTML(i)}</li>`)
             .join('');
 
         document.getElementById('resultsContent').classList.remove('hidden');
     }
 
+    // Analysis text and filenames are untrusted, even when returned by our API.
+    escapeHTML(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
+
     capitalize(str) {
-        return str.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return String(str ?? '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
 }
 
-const resumeReview = new ResumeReview();
+window.resumeReview = new ResumeReview();

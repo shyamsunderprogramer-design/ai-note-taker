@@ -11,10 +11,13 @@ Structure:
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict
 from enum import Enum
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 class QuestionCategory(Enum):
     BEHAVIORAL = "behavioral"
@@ -967,13 +970,13 @@ class QuestionDatabase:
                 BULK_TECHNICAL, BULK_CULTURE_FIT, BULK_CASE_STUDY,
             )
             _bulk_behavioral = BULK_BEHAVIORAL
-            _bulk_coding = BULK_CODING
-            _bulk_system_design = BULK_SYSTEM_DESIGN
+            _bulk_coding = list(BULK_CODING)
+            _bulk_system_design = list(BULK_SYSTEM_DESIGN)
             _bulk_technical = BULK_TECHNICAL
             _bulk_culture_fit = BULK_CULTURE_FIT
             _bulk_case_study = BULK_CASE_STUDY
         except ImportError:
-            pass
+            logger.debug("Optional bulk question data is unavailable")
 
         # T14: Load expansion questions
         try:
@@ -983,7 +986,7 @@ class QuestionDatabase:
             _bulk_coding += EXPANSION_CODING
             _bulk_system_design += EXPANSION_SYSTEM_DESIGN
         except ImportError:
-            pass
+            logger.debug("Optional expansion question data is unavailable")
 
         all_questions = (
             BEHAVIORAL_QUESTIONS + _bulk_behavioral + _bulk_culture_fit + _bulk_case_study +

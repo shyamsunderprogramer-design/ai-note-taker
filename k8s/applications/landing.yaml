@@ -1,0 +1,38 @@
+# Landing page — static marketing site served by Vercel
+# This ArgoCD application manages DNS/ingress for the landing page
+# subdomain (e.g. landing.ai-note-taker.com). The site itself is
+# served by Vercel; this manifest only provisions the ExternalSecret
+# for the Vercel API token + the cert-manager Certificate.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ant-landing
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: ant-landing
+    app.kubernetes.io/part-of: ant
+spec:
+  source:
+    repoURL: https://github.com/shyamsunderprogramer-design/ai-note-taker.git
+    targetRevision: HEAD
+    path: k8s/applications/landing
+    # The landing page is mostly a config-only application — it
+    # provisions an ExternalSecret and a Certificate, not a workload.
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ant
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

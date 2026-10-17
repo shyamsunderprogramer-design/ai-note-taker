@@ -1,0 +1,11 @@
+# terraform.tfvars.example — Copy to terraform.tfvars and customize.
+# terraform.tfvars is gitignored; this is the committed template.
+#
+# Each var has a one-line description; see variables.tf for full docs.
+
+environment          = "production"   # production | staging | dev
+image_tag            = "latest"       # Docker image tag for the ant-backend chart
+location             = "eastus"       # Primary Azure region
+azure_admin_group_id = ""             # Azure AD group ID for AKS admin; empty skips RBAC
+azure_admin_object_id = ""            # Azure AD object ID for PG AAD admin; falls back to deploying principal
+domain_name          = ""             # Custom DNS name (e.g. ant.example.com); empty uses *.azurewebsites.net

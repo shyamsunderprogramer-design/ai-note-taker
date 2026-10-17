@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────
+# ANT (AI Note Taker) — EditorConfig
+#
+# Tells every editor (VS Code, JetBrains, vim, Sublime, etc.) what
+# indentation, line endings, and charset to use for each file type.
+# Most editors auto-pick this up; if not, install the "EditorConfig"
+# extension (https://editorconfig.org/).
+# ─────────────────────────────────────────────────────────────────────
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+# Python: PEP 8 prefers 4 spaces, 79-char line limit. We relax to 100
+# for pragmatism — many of our existing files exceed 79.
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# JavaScript / TypeScript: Prettier defaults (2-space, 80-char). We
+# bump to 100 to match the rest of the codebase.
+[*.{js,jsx,ts,tsx,mjs,cjs}]
+indent_size = 2
+max_line_length = 100
+
+# HTML, CSS, YAML, JSON, Markdown: 2-space is the de-facto web standard.
+[*.{html,css,scss,sass,less,yaml,yml,json,md}]
+indent_size = 2
+
+# Markdown: trailing whitespace matters (2 trailing spaces = <br>),
+# so don't trim it.
+[*.md]
+trim_trailing_whitespace = false
+
+# Go: gofmt default (tabs, 4-tab width for display).
+[*.go]
+indent_style = tab
+indent_size = 4
+
+# Rust: rustfmt default (4 spaces).
+[*.rs]
+indent_size = 4
+
+# Shell scripts: 4 spaces, no max line length (long pipes are fine).
+[*.{sh,bash,zsh}]
+indent_size = 4
+
+# Makefile: tabs are required by make.
+[Makefile]
+indent_style = tab
+
+# Windows-native files: CRLF endings, but everything else stays LF.
+[*.{bat,cmd,ps1}]
+end_of_line = crlf

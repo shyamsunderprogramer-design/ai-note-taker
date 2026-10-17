@@ -5,7 +5,7 @@
 
 class JobTracker {
     constructor() {
-        this.apiUrl = 'http://127.0.0.1:8000';
+        this.apiUrl = window.API_BASE || 'http://127.0.0.1:8000';
         this.applications = [];
         this.stats = {};
 

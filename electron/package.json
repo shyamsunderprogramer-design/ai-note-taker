@@ -1,6 +1,7 @@
 {
   "name": "ai-note-taker",
-  "version": "1.0.0",
+  "version": "2.3.0-rc.1",
+  "private": true,
   "description": "AI-powered voice note taker with stealth mode",
   "main": "main.js",
   "scripts": {
@@ -10,7 +11,11 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "icons": "node scripts/generate-icons.js",
+    "icons:win": "node scripts/generate-icons.js",
+    "icons:mac": "node scripts/generate-icons.js",
+    "test": "node --test tests/*.test.js"
   },
   "keywords": [
     "ai",
@@ -42,15 +47,20 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+      "artifactName": "ANT-${version}-win-${arch}.${ext}",
+      "extraResources": []
     },
     "nsis": {
       "oneClick": false,
@@ -59,76 +69,172 @@
       "createStartMenuShortcut": true,
       "shortcutName": "ANT (AI Note Taker)",
       "license": "../LICENSE",
-      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
+      "artifactName": "ANT-Setup-${version}-win-${arch}.${ext}"
     },
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
+        "zip"
       ],
       "icon": "assets/icon.icns",
       "category": "public.app-category.productivity",
-      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+      "artifactName": "ANT-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "notarize": false,
+      "identity": "-",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "ANT needs microphone access for voice transcription.",
+        "NSScreenCaptureUsageDescription": "ANT uses screen capture APIs only when you explicitly enable screenshots for AI vision features.",
+        "NSAudioCaptureUsageDescription": "ANT captures system audio so it can hear the other side of your call. Without this permission macOS returns silence and live assist cannot work.",
+        "LSApplicationCategoryType": "public.app-category.productivity"
+      },
+      "extraResources": [
+        {
+          "from": "../node_modules/audiotee/bin/audiotee",
+          "to": "audiotee"
+        }
+      ],
+      "signIgnore": [
+        "/Contents/Resources/python/"
+      ],
+      "minimumSystemVersion": "14.0.0"
     },
     "linux": {
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "icon": "assets",
+      "icon": "assets/icons",
       "category": "Utility",
-      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+      "artifactName": "ANT-${version}-linux-${arch}.${ext}",
+      "synopsis": "Privacy-first AI note taker with voice transcription and stealth mode",
+      "description": "ANT is a privacy-first AI notepad that runs entirely on your machine. Local speech-to-text, multi-provider AI, floating overlay, and screen capture protection.",
+      "extraResources": [],
+      "executableName": "ai-note-taker"
     },
     "files": [
       "main.js",
       "preload.js",
       "stealth.js",
+      "features/**",
+      "lib/**",
       "assets/**"
     ],
     "extraResources": [
       {
-        "from": "../renderer",
+        "from": "../apps/web",
         "to": "renderer",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*",
+          "!**/node_modules/**",
+          "!**/dist/**",
+          "!**/dev-dist/**",
+          "!**/data/**",
+          "!**/.env",
+          "!**/.env.*"
+        ]
       },
       {
         "from": "../backend",
         "to": "backend",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*.py",
+          "**/*.txt",
+          "**/*.md",
+          "**/*.json",
+          "**/modules/**",
+          "**/routes/**",
+          "**/security/**",
+          "**/lib/**",
+          "**/core/**",
+          "**/start_server.py",
+          "**/generate_ssl.py",
+          "**/fast_startup.py",
+          "**/backfill_cognitive_graph.py",
+          "**/test_startup.py",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo",
+          "!**/venv/**",
+          "!**/.venv/**",
+          "!**/AINT_Venv/**",
+          "!**/data/ainotetaker.db",
+          "!**/data/ainotetaker.db-*",
+          "!**/data/users.json",
+          "!**/data/users.json.*",
+          "!**/data/audit_logs/**",
+          "!**/data/audit.jsonl",
+          "!**/data/recordings/**",
+          "!**/data/temp_audio/**",
+          "!**/data/user_keys/**",
+          "!**/data/meeting_templates/**",
+          "!**/data/voice_models/**",
+          "!**/data/conversations/**",
+          "!**/tests/**",
+          "!**/coverage.xml",
+          "!**/*.egg-info/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/data/**",
+          "!**/*.db",
+          "!**/*.db-*"
+        ]
       },
       {
-        "from": "../AINT_Venv",
-        "to": "AINT_Venv",
-        "filter": ["**/*"]
+        "from": "../AINT_Python",
+        "to": "python",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       }
-    ],
-    "asarUnpack": [
-      "node_modules/electron-updater/**"
     ],
     "extraMetadata": {
       "main": "main.js"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/electron-updater/**",
+      "main.js",
+      "preload.js",
+      "stealth.js"
+    ],
+    "afterPack": "scripts/sign-runtime.cjs"
   },
   "dependencies": {
+    "audiotee": "^0.0.7",
     "electron-log": "^5.2.4",
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.8.3"
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
-    "electron": "^41.1.0",
-    "electron-builder": "^26.8.1",
+    "electron": "41.10.7",
+    "electron-builder": "26.15.3",
     "eslint": "^9.0.0"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "0.8.15",
+    "fast-uri": "3.1.8",
+    "ip-address": "10.5.1",
+    "@humanfs/node": "0.16.8",
+    "js-yaml@^4.0.0": "4.3.2",
+    "js-yaml@^3.0.0": "3.15.2",
+    "brace-expansion@^1.0.0": "1.1.21",
+    "brace-expansion@^2.0.0": "2.1.7",
+    "brace-expansion@>=3.0.0": "5.0.12",
+    "extract-zip": "npm:@electron-internal/extract-zip@1.0.5",
+    "@electron/get": "5.1.0"
   }
 }

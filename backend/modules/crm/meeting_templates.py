@@ -5,9 +5,23 @@ Predefined templates for different meeting types
 
 import json
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
+
+
+def _default_meeting_templates_dir() -> str:
+    """Canonical meeting-template storage: backend/data/meeting_templates/.
+
+    Resolved relative to *this* file so the path is stable regardless of
+    server CWD. Overridable via the ANT_MEETING_TEMPLATES_DIR env var.
+    """
+    env_override = os.environ.get("ANT_MEETING_TEMPLATES_DIR")
+    if env_override:
+        return env_override
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    return str(backend_root / "data" / "meeting_templates")
 
 
 @dataclass
@@ -633,12 +647,14 @@ Average: {safety_score}
 class MeetingTemplatesManager:
     """Manager for meeting templates"""
 
-    def __init__(self, storage_dir: str = "data/meeting_templates"):
-        self.storage_dir = storage_dir
-        self.custom_templates_file = os.path.join(storage_dir, "custom_templates.json")
+    def __init__(self, storage_dir: str = None):
+        # Use absolute path derived from this file's location so meeting-
+        # template data lives in the same place regardless of server CWD.
+        self.storage_dir = storage_dir or _default_meeting_templates_dir()
+        self.custom_templates_file = os.path.join(self.storage_dir, "custom_templates.json")
         self.custom_templates: Dict[str, MeetingTemplate] = {}
 
-        os.makedirs(storage_dir, exist_ok=True)
+        os.makedirs(self.storage_dir, exist_ok=True)
         self._load_custom_templates()
 
     def _load_custom_templates(self):

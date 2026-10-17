@@ -10,14 +10,22 @@ from . import mcp_server
 from .unified_database import UnifiedDatabase, get_db, db
 
 # Convenience exports
-def migrate_from_json(data_dir: str) -> dict:
+def migrate_from_json(data_dir: str = None) -> dict:
     """
     Migrate existing JSON files to unified database.
     Call this on first run to migrate user data.
+
+    `data_dir` defaults to backend/data/ (resolved from this file's location)
+    so the path is stable regardless of server CWD. Pass an explicit path to
+    override (e.g. when migrating from a legacy install).
     """
     import json
     import os
     from pathlib import Path
+
+    if data_dir is None:
+        # backend/modules/platform/__init__.py -> backend/data/
+        data_dir = str(Path(__file__).resolve().parent.parent.parent / "data")
 
     results = {"migrated": [], "errors": []}
     db = get_db()

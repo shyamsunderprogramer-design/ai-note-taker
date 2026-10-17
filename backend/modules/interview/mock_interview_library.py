@@ -5,11 +5,9 @@ Strategy: Massive combinatorial template filling with lazy generation
 """
 
 import random  # nosec B311 — used for question randomization, not security
-import uuid
-from typing import Dict, List, Optional, Set, Iterator
+from typing import Dict, List, Optional, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-import hashlib
 
 @dataclass
 class InterviewQuestion:
