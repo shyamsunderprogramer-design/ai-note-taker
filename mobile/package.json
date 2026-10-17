@@ -21,7 +21,7 @@
     "react-native-push-notification": "^8.1.1",
     "react-native-audio-recorder-player": "^3.6.4",
     "react-native-webview": "^13.10.0",
-    "zustand": "^4.5.0"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@babel/core": "^7.23.0",
