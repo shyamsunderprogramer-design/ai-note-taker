@@ -41,7 +41,7 @@ RUN npm run build || npm run dist
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3: Package for distribution
 # ─────────────────────────────────────────────────────────────────────────────
-FROM ubuntu:22.04 AS packager
+FROM ubuntu:25.10 AS packager
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -64,7 +64,7 @@ COPY --from=builder /app/dist-win /app/dist-win
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 4: Minimal runtime image
 # ─────────────────────────────────────────────────────────────────────────────
-FROM ubuntu:22.04 AS production
+FROM ubuntu:25.10 AS production
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
