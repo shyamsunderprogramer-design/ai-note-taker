@@ -8,22 +8,19 @@ enforces per-agent cooldowns, and persists session state.
 
 import time
 import json
-import uuid
-import asyncio
 import logging
-from typing import Dict, List, Optional, Any, AsyncGenerator
+from typing import Dict, List, AsyncGenerator
 
-from agents.base import (
-    AgentType, AgentState, AgentSuggestion, AgentContext,
-    BaseAgent, TranscriptSegment,
+from modules.agents.base import (
+    AgentType, AgentSuggestion, BaseAgent,
 )
-from agents.session import AgentSessionManager, session_manager
-from agents.interview_coach import InterviewCoachAgent
-from agents.meeting import MeetingAgent
-from agents.sales_coach import SalesCoachAgent
-from agents.context_builder import extract_entities
-from agents.cache import get_cache, context_cache
-from agents.learning import get_learner, suggestion_learner
+from modules.agents.session import AgentSessionManager, session_manager
+from modules.agents.interview_coach import InterviewCoachAgent
+from modules.agents.meeting import MeetingAgent
+from modules.agents.sales_coach import SalesCoachAgent
+from modules.agents.context_builder import extract_entities
+from modules.agents.cache import context_cache
+from modules.agents.learning import suggestion_learner
 
 logger = logging.getLogger("agents.orchestrator")
 
@@ -341,7 +338,7 @@ class AgentOrchestrator:
                         data = json.loads(data_line[0][5:])
                         full_response += data.get("content", "")
                 except (json.JSONDecodeError, IndexError):
-                    pass
+                    pass  # Malformed SSE chunks are skipped without ending the remaining agent response.
             elif "event: error" in event:
                 logger.warning(f"[Orchestrator] LLM error for {agent.agent_type.value}")
                 break
@@ -411,7 +408,7 @@ class AgentOrchestrator:
                         full_response += content
                         yield _make_agent_event("agent_chunk", agent_type_str, content=content)
                 except (json.JSONDecodeError, IndexError):
-                    pass
+                    pass  # Malformed SSE chunks are skipped without ending the remaining agent response.
             elif "event: error" in event:
                 try:
                     data_line = [l for l in event.split("\n") if l.startswith("data:")]

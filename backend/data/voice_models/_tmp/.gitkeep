@@ -1,0 +1,3 @@
+# Keep this directory tracked in git even when empty.
+# _tmp/ is the scratch directory for rvc_engine.py / rvc_trainer.py
+# during model training. Contents are runtime-only and gitignored.

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/png" href="favicon.png">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign In - ANT</title>
@@ -57,6 +58,10 @@
     .card {
       position: relative; z-index: 1;
       width: 400px; max-width: 90vw;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
       background: rgba(15,20,35,0.55);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 20px;
@@ -67,6 +72,14 @@
       -webkit-app-region: no-drag;
       animation: cardIn 0.5s ease;
     }
+    /* Pretty scrollbar inside the card */
+    .card::-webkit-scrollbar { width: 8px; }
+    .card::-webkit-scrollbar-track { background: transparent; }
+    .card::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 4px;
+    }
+    .card::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
     @keyframes cardIn {
       from { opacity: 0; transform: translateY(20px) scale(0.97); }
       to { opacity: 1; transform: translateY(0) scale(1); }
@@ -217,6 +230,35 @@
     .sso-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-weight: 700; font-size: 12px; }
     .sso-btn-google .sso-icon { background: #4285f4; color: #fff; }
     .sso-btn-microsoft .sso-icon { background: #00a4ef; color: #fff; }
+
+    /* Backend status indicator — mirrors overlay.html so users see at
+       a glance whether the ANT backend is reachable. Helps triage the
+       "failed to fetch" path: when the indicator is offline, the user
+       knows the issue isn't their credentials. */
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      margin-top: 4px;
+    }
+    .status-indicator .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px rgba(34,197,94,0.6);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .status-indicator.offline .dot {
+      background: #6b7280;
+      box-shadow: none;
+    }
+    .status-indicator.error .dot {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239,68,68,0.6);
+    }
   </style>
 </head>
 <body>
@@ -235,6 +277,9 @@
       <img class="logo-img" src="ant-icon-new.png" alt="ANT">
       <div class="logo-title">ANT</div>
       <div class="logo-sub">AI Note Taker</div>
+      <div class="status-indicator" id="signinBackendStatus">
+        <span class="dot"></span><span>Checking backend…</span>
+      </div>
     </div>
 
     <!-- Sign In View -->
@@ -424,6 +469,12 @@
     function showView(viewId) {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.getElementById(viewId).classList.add('active');
+      // Scroll the card back to the top so users see the start of the new view.
+      // Without this, switching to a longer view (e.g. registration) on a
+      // shorter window leaves the scroll position from the previous view,
+      // which makes the form look empty until they scroll up manually.
+      const card = document.querySelector('.card');
+      if (card) card.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // Toggle password visibility
@@ -507,6 +558,33 @@
     }
     checkAuth();
 
+    // ─── Backend Status Indicator ───
+    // Mirrors overlay.html:698 — surfaces backend reachability so users
+    // see at a glance whether "failed to fetch" is a credentials issue
+    // or a backend-down issue. Only wires when running in Electron
+    // (window.api is exposed via preload.js).
+    const signinStatus = document.getElementById('signinBackendStatus');
+    const signinStatusLabel = signinStatus?.querySelector('span:last-child');
+    function setSigninBackendStatus({ status, restartAttempts, maxAttempts } = {}) {
+      if (!signinStatus || !signinStatusLabel) return;
+      const offline = status !== 'ready' && status !== 'starting';
+      signinStatus.classList.toggle('offline', offline);
+      signinStatus.classList.toggle('error', status === 'error' || status === 'dead');
+      signinStatusLabel.textContent =
+        status === 'ready' ? 'Backend ready' :
+        status === 'starting' ? 'Backend starting…' :
+        status === 'error' ? `Backend error (attempt ${restartAttempts || '?'}/${maxAttempts || '?'})` :
+        status === 'dead' ? 'Backend offline — restart the app' :
+        'Checking backend…';
+    }
+    if (window.api?.onBackendStatus) {
+      window.api.onBackendStatus(setSigninBackendStatus);
+      // Seed initial state in case the first status event hasn't fired yet.
+      if (window.api.getBackendStatus) {
+        window.api.getBackendStatus().then(setSigninBackendStatus).catch(() => {});
+      }
+    }
+
     // ─── Sign In ───
     async function doSignIn() {
       const btn = document.getElementById('siBtn');
@@ -531,7 +609,11 @@
         await AuthHelper.login(user, pass);
         window.location.href = 'index.html';
       } catch (e) {
-        errEl.textContent = 'Invalid username or password';
+        if (e?.kind === 'backend_offline') {
+          errEl.textContent = e.message;
+        } else {
+          errEl.textContent = 'Invalid username or password';
+        }
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Sign In';
@@ -542,6 +624,23 @@
     document.getElementById('siUser')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('siPass')?.focus(); });
 
     // ─── Register ───
+    // Scroll an element into view inside the scrollable .card container.
+    // The default scrollIntoView() scrolls the window — but body has
+    // overflow:hidden, so it would scroll the wrong ancestor. Anchor to
+    // the card explicitly so the banner is visible.
+    function scrollBannerIntoView(el) {
+      if (!el) return;
+      const card = document.querySelector('.card');
+      if (!card) return;
+      // Compute the element's offset relative to the card, then scroll
+      // the card so the element sits comfortably below the top edge.
+      const cardRect = card.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const offsetInsideCard = elRect.top - cardRect.top + card.scrollTop;
+      const target = Math.max(0, offsetInsideCard - 24); // 24px breathing room
+      card.scrollTo({ top: target, behavior: 'smooth' });
+    }
+
     async function doRegister() {
       const btn = document.getElementById('regBtn');
       const errEl = document.getElementById('regError');
@@ -556,11 +655,11 @@
       errEl.style.display = 'none';
       sucEl.style.display = 'none';
 
-      if (!user || !email || !pass) { errEl.textContent = 'Username, email, and password are required'; errEl.style.display = 'block'; return; }
-      if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; errEl.style.display = 'block'; return; }
-      if (pass !== passConfirm) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; return; }
-      if (secQuestion && !secAnswer) { errEl.textContent = 'Please provide an answer for your security question'; errEl.style.display = 'block'; return; }
-      if (!secQuestion && secAnswer) { errEl.textContent = 'Please provide a security question'; errEl.style.display = 'block'; return; }
+      if (!user || !email || !pass) { errEl.textContent = 'Username, email, and password are required'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (pass !== passConfirm) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (secQuestion && !secAnswer) { errEl.textContent = 'Please provide an answer for your security question'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
+      if (!secQuestion && secAnswer) { errEl.textContent = 'Please provide a security question'; errEl.style.display = 'block'; scrollBannerIntoView(errEl); return; }
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>Creating account...';
@@ -569,6 +668,7 @@
         await AuthHelper.register(user, email, pass, secQuestion || undefined, secAnswer || undefined);
         sucEl.textContent = 'Account created! Signing you in...';
         sucEl.style.display = 'block';
+        scrollBannerIntoView(sucEl);
         // Auto-login after registration
         try {
           await AuthHelper.login(user, pass);
@@ -579,9 +679,12 @@
           document.getElementById('siUser').focus();
         }
       } catch (e) {
-        const detail = e.message || 'Registration failed. Username may already exist.';
+        const detail = e?.kind === 'backend_offline'
+          ? e.message
+          : (e.message || 'Registration failed. Username may already exist.');
         errEl.textContent = detail;
         errEl.style.display = 'block';
+        scrollBannerIntoView(errEl);
         btn.disabled = false;
         btn.textContent = 'Create Account';
       }
@@ -627,7 +730,9 @@
           document.getElementById('forgotSwitchText').style.display = 'none';
         }
       } catch (e) {
-        errEl.textContent = 'Failed to process request. Please try again.';
+        errEl.textContent = e?.kind === 'backend_offline'
+          ? e.message
+          : 'Failed to process request. Please try again.';
         errEl.style.display = 'block';
       } finally {
         btn.disabled = false;
@@ -665,7 +770,11 @@
           resetForgotForm();
         }, 1500);
       } catch (e) {
-        errEl.textContent = e.message || 'Reset failed. Please try again.';
+        if (e?.kind === 'backend_offline') {
+          errEl.textContent = e.message;
+        } else {
+          errEl.textContent = e.message || 'Reset failed. Please try again.';
+        }
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Reset Password';

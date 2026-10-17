@@ -3,7 +3,7 @@
  * Provides offline capability and caching
  */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = 'ant-cache-' + CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',
@@ -15,7 +15,9 @@ const STATIC_ASSETS = [
   '/hljs-github-dark.min.css',
   '/js/core/config.js',
   '/js/core/api.js',
-  '/js/core/auth-helper.js'
+  '/js/core/auth-helper.js',
+  '/js/inline/platform-class.js',
+  '/js/inline/sw-register.js'
 ];
 
 // Install event - cache static assets
@@ -39,7 +41,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
+          .filter((name) => name.startsWith('ant-cache-') && name !== CACHE_NAME)
           .map((name) => caches.delete(name))
       );
     })
@@ -47,51 +49,35 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache or network
+// Cache only known public assets. API responses must never enter Cache Storage.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+  const isStatic = STATIC_ASSETS.includes(url.pathname) ||
+    /^\/(?:assets|js|css)\/.*\.(?:js|css|png|jpe?g|svg|webp|woff2?|ttf)$/.test(url.pathname);
+  if (request.method !== 'GET' || url.origin !== self.location.origin ||
+      request.headers.has('Authorization') || !isStatic) return;
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return;
-
-  // Skip API calls - don't cache these
-  // Also skip requests to the cloud backend (Render)
-  var CLOUD_BACKEND = 'ai-note-taker-7xvn.onrender.com';
-  if (url.pathname.startsWith('/api/') ||
-      url.hostname === '127.0.0.1' ||
-      url.port === '8000' ||
-      url.hostname === CLOUD_BACKEND) {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request)
-      .then((cached) => {
-        if (cached) {
-          // Return cached version
-          return cached;
-        }
-
-        // Fetch from network
-        return fetch(request)
-          .then((response) => {
-            // Cache successful responses
-            if (response.status === 200 &&
-                response.type === 'basic') {
-              const responseClone = response.clone();
-              caches.open(CACHE_NAME)
-                .then((cache) => cache.put(request, responseClone));
-            }
-            return response;
-          })
-          .catch((err) => {
-            console.error('[SW] Fetch failed:', err);
-            // Return offline page if available
-            return caches.match('/index.html');
-          });
-      })
-  );
+  // Network first ensures deployments refresh unversioned scripts and HTML.
+  // Match the complete URL so one script version cannot satisfy another.
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(request);
+      if (response.status === 200 && response.type === 'basic' &&
+          !/no-store|private/i.test(response.headers.get('Cache-Control') || '')) {
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE_NAME)
+          .then(cache => cache.put(request, copy))
+          .catch(err => console.warn('[SW] Cache write failed:', err)));
+      }
+      return response;
+    } catch (err) {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request);
+      // Never return HTML for a missing script, stylesheet, or API request.
+      return cached || Response.error();
+    }
+  })());
 });
 
 // Background sync for offline form submissions

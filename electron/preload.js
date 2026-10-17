@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Screenshot capture + multimodal AI
   captureScreenshot: () => ipcRenderer.invoke("window:capture-screenshot"),
+  captureScreenshotContext: () => ipcRenderer.invoke("window:capture-screenshot-context"),
   getAskWithImageUrl: () => `${BASE_URL}/ask-with-image`,
   getOcrUrl: () => `${BASE_URL}/ocr`,
 
@@ -120,6 +121,7 @@ contextBridge.exposeInMainWorld("api", {
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggle-maximize"),
   isWindowMaximized: () => ipcRenderer.invoke("window:is-maximized"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
+  setConversationCollapsed: (collapsed, height) => ipcRenderer.invoke("window:conversation-collapsed", collapsed, height),
   resizeWindow: (width, height) => ipcRenderer.invoke("window:resize", width, height),
   forceTop: () => ipcRenderer.invoke("window:force-top"),
   onMaximizeChanged: (callback) => {
@@ -131,6 +133,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Screen capture protection
   setUndetectable: (enabled) => ipcRenderer.invoke("window:set-undetectable", enabled),
+  getStealthState: () => ipcRenderer.invoke("window:get-stealth-state"),
 
   // Open logs folder
   openLogs: () => ipcRenderer.invoke("app:open-logs"),
@@ -163,6 +166,23 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("stealth:state-changed", (_event, state) => callback(state))
   },
 
+  // Interviewer channel: system-audio capture lives in the main process
+  // because it spawns a native helper (see lib/system-audio.js).
+  startSystemAudio: () => ipcRenderer.invoke("system-audio:start"),
+  stopSystemAudio: () => ipcRenderer.invoke("system-audio:stop"),
+  onSystemAudioData: (callback) => {
+    ipcRenderer.removeAllListeners("system-audio:data")
+    ipcRenderer.on("system-audio:data", (_event, chunk) => callback(chunk))
+  },
+  onSystemAudioSilent: (callback) => {
+    ipcRenderer.removeAllListeners("system-audio:silent")
+    ipcRenderer.on("system-audio:silent", () => callback())
+  },
+  onSystemAudioError: (callback) => {
+    ipcRenderer.removeAllListeners("system-audio:error")
+    ipcRenderer.on("system-audio:error", (_event, message) => callback(message))
+  },
+
   // Global Ctrl+Enter — trigger AI from any app
   onTriggerAI: (callback) => {
     ipcRenderer.on("trigger-ai", () => callback())
@@ -171,6 +191,16 @@ contextBridge.exposeInMainWorld("api", {
   // Global Ctrl+Shift+Enter — screen-only AI answer (Cluely stealth answer)
   onTriggerAIScreen: (callback) => {
     ipcRenderer.on("trigger-ai-screen", () => callback())
+  },
+
+  // Global Ctrl/Cmd+, — open settings
+  onOpenSettings: (callback) => {
+    ipcRenderer.on("open-settings", () => callback())
+  },
+
+  // Best-effort: bring the main window to focus (used after the open-settings signal)
+  focusMainWindow: () => {
+    ipcRenderer.send("main:focus")
   },
 
   // Backend process status and restart
@@ -311,6 +341,12 @@ contextBridge.exposeInMainWorld("api", {
   showCaptionOverlay: () => ipcRenderer.invoke("caption:show"),
   hideCaptionOverlay: () => ipcRenderer.invoke("caption:hide"),
   toggleCaptionOverlay: () => ipcRenderer.invoke("caption:toggle"),
+
+  // Interview overlay
+  showInterviewOverlay: () => ipcRenderer.invoke("interview-overlay:show"),
+  hideInterviewOverlay: () => ipcRenderer.invoke("interview-overlay:hide"),
+  toggleInterviewOverlay: () => ipcRenderer.invoke("interview-overlay:toggle"),
+  setInterviewOverlayContext: (ctx) => ipcRenderer.invoke("interview-overlay:set-context", ctx),
 
   // Opacity controls
   setOverlayOpacity: (value) => ipcRenderer.invoke("overlay:set-opacity", value),

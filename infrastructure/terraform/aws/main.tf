@@ -5,54 +5,13 @@ terraform {
   required_version = ">= 1.7.0"
 
   required_providers {
-    aws        = { source  = "hashicorp/aws", version = "~> 5.30" }
-    kubernetes = { source  = "hashicorp/kubernetes", version = "~> 2.25" }
-    helm       = { source  = "hashicorp/helm", version = "~> 2.12" }
+    aws        = { source = "hashicorp/aws", version = "~> 5.30" }
+    kubernetes = { source = "hashicorp/kubernetes", version = "~> 2.25" }
+    helm       = { source = "hashicorp/helm", version = "~> 2.12" }
   }
 
-  backend "s3" {
-    encrypt = true
-    # Configure via backend config or environment variables
-  }
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Variables
-# ─────────────────────────────────────────────────────────────────────────────
-variable "environment" {
-  description = "Deployment environment"
-  type        = string
-  default     = "production"
-}
-
-variable "image_tag" {
-  description = "Docker image tag to deploy"
-  type        = string
-  default     = "latest"
-}
-
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "cluster_name" {
-  description = "EKS cluster name"
-  type        = string
-  default     = "ant-cluster"
-}
-
-variable "vpc_cidr" {
-  description = "VPC CIDR block"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "replication_region" {
-  description = "AWS region for S3 cross-region replication"
-  type        = string
-  default     = "us-west-2"
+  # Backend configuration lives in backend.tf (moved in Fix #24).
+  # Run `terraform init -backend-config="bucket=... -backend-config=key=..."` etc.
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -97,10 +56,10 @@ module "vpc" {
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
 
-  enable_nat_gateway     = true
-  single_nat_gateway     = false
-  enable_dns_hostnames   = true
-  enable_dns_support     = true
+  enable_nat_gateway   = true
+  single_nat_gateway   = false
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
   tags = {
     Environment = var.environment
@@ -114,8 +73,8 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "20.8.0"
 
-  cluster_name    = "${var.cluster_name}-${var.environment}"
-  cluster_version = "1.29"
+  cluster_name                   = "${var.cluster_name}-${var.environment}"
+  cluster_version                = "1.29"
   cluster_endpoint_public_access = true
 
   vpc_id                   = module.vpc.vpc_id
@@ -142,10 +101,10 @@ module "eks" {
         xvda = {
           device_name = "/dev/xvda"
           ebs = {
-            volume_size           = 50
-            volume_type           = "gp3"
-            encrypted             = true
-            kms_key_id            = aws_kms_key.ebs.arn
+            volume_size = 50
+            volume_type = "gp3"
+            encrypted   = true
+            kms_key_id  = aws_kms_key.ebs.arn
           }
         }
       }
@@ -241,8 +200,8 @@ resource "aws_iam_policy" "aws_lb_controller" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "iam:CreateServiceLinkedRole",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeImages",
@@ -308,8 +267,8 @@ resource "aws_iam_policy" "cluster_autoscaler" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "autoscaling:DescribeAutoScalingGroups",
           "autoscaling:DescribeAutoScalingInstances",
           "autoscaling:DescribeLaunchConfigurations",
@@ -327,10 +286,10 @@ resource "aws_iam_policy" "cluster_autoscaler" {
 # ANT Backend Helm Release
 # ─────────────────────────────────────────────────────────────────────────────
 resource "helm_release" "ant_backend" {
-  name       = "ant-backend"
-  repository = "file://../../k8s/helm/backend"
-  chart      = "ant-backend"
-  namespace  = "ant"
+  name             = "ant-backend"
+  repository       = "file://../../k8s/helm/backend"
+  chart            = "ant-backend"
+  namespace        = "ant"
   create_namespace = true
 
   values = [
@@ -343,8 +302,11 @@ resource "helm_release" "ant_backend" {
   }
 
   set {
-    name  = "image.repository"
-    value = "${var.ecr_repository_url}/ant-backend"
+    name = "image.repository"
+    # Fix #24: was ${var.ecr_repository_url} (orphan var, never declared). Use
+    # the resource attribute directly so the chart deploys against the ECR
+    # repo defined below.
+    value = "${aws_ecr_repository.backend.repository_url}/ant-backend"
   }
 
   set {
@@ -430,7 +392,7 @@ module "rds" {
 
   engine               = "postgres"
   engine_version       = "16.1"
-  family              = "postgres16"
+  family               = "postgres16"
   major_engine_version = "16"
   instance_class       = "db.t3.medium"
 
@@ -447,9 +409,9 @@ module "rds" {
   vpc_security_group_ids = [aws_security_group.rds.id]
 
   maintenance_window      = "mon:02:00-mon:04:00"
-  backup_window          = "03:00-05:00"
+  backup_window           = "03:00-05:00"
   backup_retention_period = 7
-  multi_az               = var.environment == "production"
+  multi_az                = var.environment == "production"
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
@@ -498,7 +460,10 @@ resource "aws_network_interface" "rds_endpoint" {
 resource "aws_ecr_repository" "backend" {
   name                 = "ant-backend"
   image_tag_mutability = "MUTABLE"
-  image_scanning_configuration = {
+
+  # Fix #24: was `image_scanning_configuration = { scan_on_push = true }`
+  # (attribute syntax); AWS provider 5.x requires a block.
+  image_scanning_configuration {
     scan_on_push = true
   }
 }
@@ -506,7 +471,9 @@ resource "aws_ecr_repository" "backend" {
 resource "aws_ecr_repository" "electron" {
   name                 = "ant-electron"
   image_tag_mutability = "MUTABLE"
-  image_scanning_configuration = {
+
+  # Fix #24: same change as the backend repo above.
+  image_scanning_configuration {
     scan_on_push = true
   }
 }
@@ -707,7 +674,7 @@ resource "aws_sns_topic" "s3_events" {
 }
 
 resource "aws_sns_topic_policy" "s3_events" {
-  arn  = aws_sns_topic.s3_events.arn
+  arn = aws_sns_topic.s3_events.arn
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -837,20 +804,22 @@ resource "aws_s3_bucket_replication_configuration" "data" {
   bucket = aws_s3_bucket.data.id
   role   = aws_iam_role.s3_replication.arn
 
-  destination {
-    bucket        = aws_s3_bucket.replication.arn
-    storage_class = "STANDARD_IA"
-
-    encryption_configuration {
-      replica_kms_key_id = aws_kms_key.s3.arn
-    }
-  }
-
+  # Fix #24: AWS provider 5.x removed the top-level `destination` block; the
+  # destination now lives inside each `rule`. Moved below.
   rule {
     id     = "replicate-all"
     status = "Enabled"
 
     filter {}
+
+    destination {
+      bucket        = aws_s3_bucket.replication.arn
+      storage_class = "STANDARD_IA"
+
+      encryption_configuration {
+        replica_kms_key_id = aws_kms_key.s3.arn
+      }
+    }
 
     delete_marker_replication {
       status = "Disabled"
@@ -868,7 +837,7 @@ resource "aws_s3_bucket_replication_configuration" "data" {
 # KMS Key in Replication Region (for replication bucket SSE)
 # ─────────────────────────────────────────────────────────────────────────────
 resource "aws_kms_key" "s3_replication" {
-  provider  = aws.replication
+  provider                = aws.replication
   description             = "KMS key for ANT S3 replication bucket encryption"
   deletion_window_in_days = 7
   enable_key_rotation     = true
@@ -1141,7 +1110,7 @@ resource "aws_sns_topic" "logs_events" {
 }
 
 resource "aws_sns_topic_policy" "logs_events" {
-  arn  = aws_sns_topic.logs_events.arn
+  arn = aws_sns_topic.logs_events.arn
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -1343,20 +1312,22 @@ resource "aws_s3_bucket_replication_configuration" "logs" {
   bucket = aws_s3_bucket.logs.id
   role   = aws_iam_role.logs_replication.arn
 
-  destination {
-    bucket        = aws_s3_bucket.logs_replication.arn
-    storage_class = "STANDARD_IA"
-
-    encryption_configuration {
-      replica_kms_key_id = aws_kms_key.s3_replication.arn
-    }
-  }
-
+  # Fix #24: same change as the data replication config above — `destination`
+  # moved inside `rule`.
   rule {
     id     = "replicate-logs"
     status = "Enabled"
 
     filter {}
+
+    destination {
+      bucket        = aws_s3_bucket.logs_replication.arn
+      storage_class = "STANDARD_IA"
+
+      encryption_configuration {
+        replica_kms_key_id = aws_kms_key.s3_replication.arn
+      }
+    }
 
     delete_marker_replication {
       status = "Disabled"

@@ -1,0 +1,52 @@
+"""Iterate blocking provider streams without freezing the async event loop."""
+import asyncio
+
+
+async def iterate_sync(source):
+    iterator = iter(source)
+    sentinel = object()
+    pending = None
+
+    def close(completed=None):
+        if completed is not None:
+            # Retrieve background errors even when the caller was cancelled.
+            try:
+                completed.result()
+            except (Exception, asyncio.CancelledError):
+                pass  # The caller has left; retrieve the task exception before closing its iterator.
+        closer = getattr(iterator, 'close', None)
+        if closer:
+            closer()
+
+    try:
+        while True:
+            pending = asyncio.create_task(asyncio.to_thread(next, iterator, sentinel))
+            item = await asyncio.shield(pending)
+            if item is sentinel:
+                break
+            yield item
+    finally:
+        # Never close a generator while a worker is executing its next().
+        if pending is not None and not pending.done():
+            pending.add_done_callback(close)
+        else:
+            close()
+
+
+async def iterate_stream(source):
+    """Accept either provider protocol without mutating its module globally."""
+    if hasattr(source, '__aiter__'):
+        try:
+            async for item in source:
+                yield item
+        finally:
+            closer = getattr(source, 'aclose', None)
+            if closer:
+                await closer()
+    else:
+        stream = iterate_sync(source)
+        try:
+            async for item in stream:
+                yield item
+        finally:
+            await stream.aclose()

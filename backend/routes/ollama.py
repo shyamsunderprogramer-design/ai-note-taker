@@ -5,18 +5,15 @@ import time
 import threading
 from typing import Dict
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Form, Query
 
 from config import OLLAMA_URL
 from lib.http_client import sync_client
-from security import (
-    get_current_user, ErrorCode, error_response,
-)
+from security import ErrorCode, error_response
 from security.auth import User
 
 # Auth helpers (mirrored from auth.py — will be consolidated in a shared deps module)
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 security_bearer = HTTPBearer(auto_error=False)
@@ -28,13 +25,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 # Provider key cache
@@ -108,9 +99,9 @@ def list_ollama_models():
         response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=10, skip_ssrf_check=True)
         if response.status_code == 200:
             return response.json()
-        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502) | {"models": []}
+        return error_response(ErrorCode.SERVICE_UNAVAILABLE, f"Ollama returned {response.status_code}", status_code=502, extra={"models": []})
     except Exception as e:
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500) | {"models": []}
+        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500, extra={"models": []})
 
 
 @router.post("/ollama/pull")
@@ -154,9 +145,58 @@ def delete_ollama_model(model_name: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
+# Ollama status cache — probe /api/tags every 30s so /providers and the
+# frontend health check see the real state without re-hitting ollama per call.
+_ollama_status_cache: Dict = {"available": False, "models": [], "ts": 0.0}
+_OLLAMA_STATUS_TTL = 30  # seconds
+
+
+def _probe_ollama() -> Dict:
+    """Probe ollama /api/tags with a 1s timeout. Cached for 30s.
+
+    Returns: {"available": bool, "models": [str, ...], "url": str, "error": str|None}
+    """
+    now = time.time()
+    if (now - _ollama_status_cache["ts"]) < _OLLAMA_STATUS_TTL:
+        return {
+            "available": _ollama_status_cache["available"],
+            "models": _ollama_status_cache["models"],
+            "url": OLLAMA_URL,
+            "error": _ollama_status_cache.get("error"),
+        }
+    try:
+        resp = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=1, skip_ssrf_check=True)
+        if resp.status_code == 200:
+            data = resp.json() or {}
+            models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+            _ollama_status_cache.update({"available": True, "models": models, "ts": now, "error": None})
+        else:
+            _ollama_status_cache.update({"available": False, "models": [], "ts": now, "error": f"HTTP {resp.status_code}"})
+    except Exception as e:
+        _ollama_status_cache.update({"available": False, "models": [], "ts": now, "error": str(e)[:120]})
+    return {
+        "available": _ollama_status_cache["available"],
+        "models": _ollama_status_cache["models"],
+        "url": OLLAMA_URL,
+        "error": _ollama_status_cache.get("error"),
+    }
+
+
 @router.get("/providers")
 async def list_providers(request=None):
-    """Returns which cloud providers have API keys configured"""
+    """Returns which AI providers are available.
+
+    Shape (backwards-compatible):
+      {
+        "openai": bool, "anthropic": bool, ...,       # cloud providers (BYOK)
+        "ollama-cloud": bool,                          # ollama.com cloud
+        "ollama": bool,                                # legacy: true if local ollama is up
+        "ollama_status": {available, url, models, error},  # NEW: full status
+      }
+    Frontend code that does `providers.ollama` truthy-check still works
+    (the bool stays). New code should read providers.ollama_status.models.
+    """
+    status = _probe_ollama()
     return {
         "openai": _has_provider_key("openai", "OPENAI_API_KEY"),
         "anthropic": _has_provider_key("anthropic", "ANTHROPIC_API_KEY"),
@@ -166,7 +206,8 @@ async def list_providers(request=None):
         "groq": _has_provider_key("groq", "GROQ_API_KEY"),
         "ollama-cloud": _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
         "perplexity": _has_provider_key("perplexity", "PERPLEXITY_API_KEY"),
-        "ollama": True
+        "ollama": status["available"],
+        "ollama_status": status,
     }
 
 

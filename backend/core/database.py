@@ -11,20 +11,18 @@ T16: Database Migration (JSON -> PostgreSQL)
 """
 
 import os
-import re
 import json
 import uuid
 import logging
-from datetime import datetime, timedelta, timezone
+from lib.database_connection import database_dialect, postgres_connection_options
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
+from lib.storage_paths import storage_path
 
 # Encryption support for data at rest
 try:
-    from security.encryption import (
-        field_encryption, encrypt_string, decrypt_string,
-        is_encryption_available, HAS_CRYPTOGRAPHY,
-    )
+    from security.encryption import encrypt_string, decrypt_string, HAS_CRYPTOGRAPHY
     ENCRYPTION_ENABLED = HAS_CRYPTOGRAPHY
 except ImportError:
     ENCRYPTION_ENABLED = False
@@ -38,7 +36,7 @@ DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
 
 # SQLite path: use absolute path based on this file's location
 _BACKEND_DIR = Path(__file__).resolve().parent  # backend/core/
-_DATA_DIR = _BACKEND_DIR.parent / "data"  # backend/data/
+_DATA_DIR = storage_path(_BACKEND_DIR.parent / "data")
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_SQLITE_URL = f"sqlite+aiosqlite:///{_DATA_DIR / 'ainotetaker.db'}"
 
@@ -51,7 +49,7 @@ CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
 if CLOUD_MODE and DATABASE_URL and "postgresql" in DATABASE_URL:
     FORCE_SQLITE = False
     USE_SQLITE = False
-    logger.info("[Database] Cloud mode: will attempt PostgreSQL at %s", re.sub(r'://[^@]+@', '://***@', DATABASE_URL))
+    logger.info("[Database] Cloud mode: will attempt PostgreSQL")
 elif CLOUD_MODE:
     # Cloud mode but no DATABASE_URL — use SQLite with persistent path
     FORCE_SQLITE = True
@@ -60,7 +58,7 @@ elif CLOUD_MODE:
     logger.info("[Database] Cloud mode: no DATABASE_URL, using SQLite at %s", DATABASE_URL)
 
 # Auto-detect: if DATABASE_URL contains sqlite, use it
-if "sqlite" in DATABASE_URL.lower():
+if database_dialect(DATABASE_URL) == "sqlite":
     USE_SQLITE = True
 
 # Force SQLite for development (safer default)
@@ -70,8 +68,7 @@ if FORCE_SQLITE:
 elif USE_SQLITE:
     DATABASE_URL = DEFAULT_SQLITE_URL
 
-_redacted_url = re.sub(r'://[^@]+@', '://***@', DATABASE_URL) if DATABASE_URL else "(none)"
-logger.info(f"[Database] Module loaded. URL: {_redacted_url}")
+logger.info("[Database] Module loaded (SQLite=%s)", USE_SQLITE)
 
 # Try importing SQLAlchemy
 try:
@@ -82,7 +79,6 @@ try:
     from sqlalchemy.dialects.postgresql import UUID as PGUUID
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
     from sqlalchemy.orm import DeclarativeBase, relationship
-    from sqlalchemy.ext.asyncio import AsyncEngine
     HAS_SQLALCHEMY = True
 except ImportError as e:
     HAS_SQLALCHEMY = False
@@ -116,6 +112,22 @@ class User(Base if Base else object):
         api_quota = Column(JSON, default=dict)
         display_name = Column(String(100), nullable=True)
         timezone = Column(String(50), default="UTC")
+        # Single-session enforcement (Fix #34). All nullable so the
+        # migration is a pure add-column, no backfill needed. Existing
+        # users (no active_session_id) keep working: a token's jti is
+        # only enforced when the user has an active_session_id set.
+        active_session_id = Column(String(64), nullable=True, index=True)
+        active_session_ip = Column(String(45), nullable=True)
+        active_session_user_agent = Column(String(500), nullable=True)
+        active_session_started_at = Column(DateTime, nullable=True)
+        on_new_login_pref = Column(String(20), default="auto_kick")
+        # Security question for password reset (Fix #35 wire SQLAlchemy
+        # User into auth flow). Both nullable so the migration is a
+        # pure add-column, no backfill needed. NULL when the user has
+        # never set a question; the `/auth/reset-password` route falls
+        # back to the admin-reset path when both columns are NULL.
+        security_question = Column(String(200), nullable=True)
+        hashed_security_answer = Column(String(255), nullable=True)
 
         # Relationships
         conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
@@ -134,10 +146,27 @@ class User(Base if Base else object):
             "last_login": getattr(self, 'last_login', None),
             "display_name": getattr(self, 'display_name', None),
             "timezone": getattr(self, 'timezone', "UTC"),
+            "active_session_id": getattr(self, 'active_session_id', None),
+            "active_session_started_at": self._iso(getattr(self, 'active_session_started_at', None)),
+            "on_new_login_pref": getattr(self, 'on_new_login_pref', "auto_kick"),
         }
         if include_sensitive:
             data["api_quota"] = getattr(self, 'api_quota', {})
+            data["active_session_ip"] = getattr(self, 'active_session_ip', None)
+            data["active_session_user_agent"] = getattr(self, 'active_session_user_agent', None)
         return data
+
+    @staticmethod
+    def _iso(dt):
+        if dt is None:
+            return None
+        # Some callers (test fixtures) pass a string; let those through.
+        if isinstance(dt, str):
+            return dt
+        try:
+            return dt.isoformat()
+        except AttributeError:
+            return None
 
 
 class Conversation(Base if Base else object):
@@ -485,7 +514,7 @@ class IntegrationConfig(Base if Base else object):
                 if decrypted:
                     return json.loads(decrypted)
         except Exception:
-            pass
+            logger.warning("[Database] Integration secrets could not be decoded")
         return {}
 
 
@@ -586,7 +615,7 @@ class DatabaseManager:
                 try:
                     await self.engine.dispose()
                 except Exception:
-                    pass
+                    logger.warning("[Database] Engine disposal failed")
                 self.engine = None
                 self.session_maker = None
 
@@ -594,7 +623,7 @@ class DatabaseManager:
             _db_url = DATABASE_URL
 
             # Ensure data directory exists for SQLite
-            _is_sqlite = "sqlite" in _db_url.lower()
+            _is_sqlite = database_dialect(_db_url) == "sqlite"
             if _is_sqlite:
                 _db_path = _db_url.split("///")[-1] if ":///" in _db_url else None
                 if _db_path:
@@ -603,20 +632,8 @@ class DatabaseManager:
             # Build connection args for cloud databases
             # Neon requires SSL — pass as SSLContext via connect_args
             connect_args = {}
-            if "postgresql" in _db_url and "sqlite" not in _db_url:
-                # Remove sslmode from URL if present — asyncpg doesn't use it in URL
-                if "sslmode=" in _db_url:
-                    _db_url = _db_url.split("?sslmode=")[0]
-                    if _db_url.endswith("?"):
-                        _db_url = _db_url[:-1]
-                try:
-                    import ssl as _ssl
-                    _ssl_ctx = _ssl.create_default_context()
-                    _ssl_ctx.check_hostname = False
-                    _ssl_ctx.verify_mode = _ssl.CERT_NONE
-                    connect_args["ssl"] = _ssl_ctx
-                except Exception:
-                    pass
+            if database_dialect(_db_url) == "postgresql":
+                _db_url, connect_args = postgres_connection_options(_db_url)
 
             # Cloud mode: smaller pool to fit in 512MB RAM
             _pool_size = 2 if os.getenv("CLOUD_MODE", "false").lower() == "true" else 10
@@ -634,7 +651,7 @@ class DatabaseManager:
                 if connect_args:
                     _engine_kwargs["connect_args"] = connect_args
 
-            logger.info("[Database] Connecting to: %s (SQLite=%s)", re.sub(r'://[^@]+@', '://***@', _db_url) if _db_url else "(none)", _is_sqlite)
+            logger.info("[Database] Connecting (SQLite=%s)", _is_sqlite)
 
             self.engine = create_async_engine(
                 _db_url,
@@ -650,19 +667,30 @@ class DatabaseManager:
 
             # Create tables
             async with self.engine.begin() as conn:
+                # Fix #23: Run Alembic migrations first (idempotent — no-op
+                # when the DB is already at HEAD). This makes the schema
+                # versioned instead of implicit. If alembic isn't installed
+                # (very minimal envs), fall through to the legacy
+                # `Base.metadata.create_all` path which is also idempotent.
+                await self._run_alembic_migrations(conn)
+
+                # Legacy safety net: for installs that pre-date alembic,
+                # `create_all` will create any tables the migration set
+                # missed. After this runs once, the alembic stamp
+                # (`_stamp_database` if it ran) takes precedence.
                 await conn.run_sync(Base.metadata.create_all)
 
             self._initialized = True
             logger.info("[Database] Initialized successfully (%s)", "SQLite" if _is_sqlite else "PostgreSQL")
 
-        except Exception as e:
-            logger.error("[Database] Failed to initialize: %s", str(e))
+        except Exception:
+            logger.error("[Database] Initialization failed")
             # Clean up partially created engine
             if self.engine:
                 try:
                     await self.engine.dispose()
                 except Exception:
-                    pass
+                    logger.warning("[Database] Engine disposal failed")
                 self.engine = None
                 self.session_maker = None
             raise
@@ -673,6 +701,71 @@ class DatabaseManager:
             await self.engine.dispose()
             self._initialized = False
             logger.info("[Database] Connections closed")
+
+    async def _run_alembic_migrations(self, conn) -> None:
+        """Run `alembic upgrade head` against the live engine.
+
+        This is the core of Fix #23. We delegate to Alembic's API rather
+        than spawning a subprocess so the migration runs on the same
+        async connection we just opened. Falls back gracefully if alembic
+        isn't installed or the migrations directory is missing — in that
+        case the legacy `Base.metadata.create_all` path will handle it.
+
+        Honors `ANT_SKIP_ALEMBIC=1` to disable migrations entirely (used
+        by tests that build a fresh in-memory DB and don't want alembic's
+        state table to interfere).
+        """
+        # Opt-out escape hatch for tests
+        if os.getenv("ANT_SKIP_ALEMBIC", "").lower() in ("1", "true", "yes"):
+            logger.info("[Database] ANT_SKIP_ALEMBIC set — skipping alembic")
+            return
+
+        try:
+            from alembic import command  # type: ignore
+        except ImportError:
+            logger.info("[Database] Alembic not installed — using create_all fallback")
+            return
+
+        # Locate the migrations/ directory (sibling of core/, not inside it).
+        migrations_dir = _BACKEND_DIR.parent / "migrations"
+        if not migrations_dir.is_dir():
+            logger.info("[Database] No migrations/ dir — using create_all fallback")
+            return
+
+        try:
+            from alembic import command  # type: ignore
+            from alembic.config import Config as AlembicConfig  # type: ignore
+
+            # Build an Alembic Config that points at the project's
+            # alembic.ini (sibling of migrations/) and the resolved URL.
+            # We pass the URL directly so we don't depend on the .ini file
+            # being read from a specific CWD.
+            ini_path = migrations_dir.parent / "alembic.ini"
+            alembic_cfg = AlembicConfig(str(ini_path) if ini_path.is_file() else None)
+            # Re-set the URL from our env-aware resolution (env.py's
+            # programmatic override will fire if the ini value is empty).
+            alembic_cfg.set_main_option(
+                "sqlalchemy.url",
+                (DATABASE_URL or DEFAULT_SQLITE_URL),
+            )
+            # `script_location` defaults to %(here)s/migrations, which is
+            # correct relative to alembic.ini.
+
+            # `command.upgrade` calls env.py's `asyncio.run` under the
+            # hood, which raises "asyncio.run() cannot be called from a
+            # running event loop" because we're already inside
+            # `DatabaseManager.initialize`. Run the migration in a worker
+            # thread to sidestep the conflict.
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(command.upgrade, alembic_cfg, "head")
+                future.result()  # propagate exceptions
+            logger.info("[Database] Alembic migrations applied (head)")
+        except Exception as e:
+            # Never let a migration failure kill the app — the legacy
+            # create_all below will fill in any missing tables.
+            logger.warning("[Database] Alembic upgrade failed (continuing with create_all): %s", str(e))
 
     async def health_check(self) -> bool:
         """Check database connectivity"""
@@ -855,6 +948,295 @@ class UserRepository:
         except Exception as e:
             logger.error("[UserRepository] List failed: %s", str(e))
             return []
+
+    # ------------------------------------------------------------------
+    # Auth-flow helpers (Fix #35 wire SQLAlchemy User into auth flow).
+    #
+    # These methods are the new persistence-layer surface the
+    # `security.auth.user_manager` async shim delegates to. They are
+    # pure additions — no callers until Commit 3 — and follow the same
+    # `@staticmethod async def` + `async with db_manager.session_maker()`
+    # pattern as the rest of UserRepository.
+    #
+    # Every method checks `HAS_SQLALCHEMY` and returns a safe sentinel
+    # (None / False / 0) if SQLAlchemy is unavailable. The bcrypt
+    # hashing helpers live in `security.auth` (`pwd_context`) and are
+    # imported by the callers — these repository methods take already-
+    # hashed values so the bcrypt<4.1 pin stays in one place.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def count() -> int:
+        """Return the number of users in the table.
+
+        Used by the auth path's "first user becomes admin" rule. Returns
+        0 if SQLAlchemy is unavailable or the table is empty.
+        """
+        if not HAS_SQLALCHEMY:
+            return 0
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(select(func.count(User.id)))
+                return int(result.scalar() or 0)
+        except Exception as e:
+            logger.error("[UserRepository] count failed: %s", str(e))
+            return 0
+
+    @staticmethod
+    async def authenticate_and_rotate_session(
+        username: str,
+        plain_password: str,
+        ip: str = "",
+        user_agent: str = "",
+    ) -> Optional[User]:
+        """Verify credentials, rotate the user's active session, return ORM User.
+
+        On success: generates a fresh `uuid4()` jti, stamps the 4
+        active_session_* columns, updates `last_login`, and commits. On
+        failure (unknown user, inactive user, wrong password): returns
+        None without mutating any row.
+
+        The caller passes the **plain** password. The hashing is done
+        here so the auth path doesn't thread `pwd_context` through. The
+        `ip` / `user_agent` strings are optional (empty string = "no
+        change" for that field; a non-empty value is recorded).
+        """
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            # Lazy import to avoid a circular dep — security.auth imports
+            # `core.database.User` (the model) and that triggers the SA
+            # engine init; importing `pwd_context` here only at call
+            # time keeps the import order clean.
+            from security.auth import pwd_context
+
+            async with db_manager.session_maker() as db:
+                result = await db.execute(select(User).where(User.username == username))
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return None
+                if not user.is_active:
+                    return None
+                if not pwd_context.verify(plain_password, user.hashed_password):
+                    return None
+                # Rotate session atomically with the verify.
+                import uuid as _uuid
+                user.active_session_id = str(_uuid.uuid4())
+                if ip:
+                    user.active_session_ip = ip
+                if user_agent:
+                    user.active_session_user_agent = user_agent
+                user.active_session_started_at = datetime.now(timezone.utc)
+                user.last_login = datetime.now(timezone.utc)
+                await db.commit()
+                await db.refresh(user)
+                return user
+        except Exception as e:
+            logger.error("[UserRepository] authenticate_and_rotate_session failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def rotate_session(
+        user_id: str,
+        ip: str = "",
+        user_agent: str = "",
+    ) -> Optional[User]:
+        """Rotate the user's active session without a password check.
+
+        Used by SSO (`_rotate_session_for` in `routes/sso.py`) — the
+        OAuth flow already verified the user, so this just stamps a new
+        jti and updates IP/UA. Returns the ORM User on success, None on
+        unknown user_id.
+        """
+        if not HAS_SQLALCHEMY:
+            return None
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return None
+                import uuid as _uuid
+                user.active_session_id = str(_uuid.uuid4())
+                if ip:
+                    user.active_session_ip = ip
+                if user_agent:
+                    user.active_session_user_agent = user_agent
+                user.active_session_started_at = datetime.now(timezone.utc)
+                await db.commit()
+                await db.refresh(user)
+                return user
+        except Exception as e:
+            logger.error("[UserRepository] rotate_session failed: %s", str(e))
+            return None
+
+    @staticmethod
+    async def clear_session(user_id: str) -> bool:
+        """Zero out the 4 active_session_* columns on the user. Returns
+        True if a row was updated, False otherwise.
+
+        Called by `routes.auth.logout_user` (Fix #34). After this,
+        any jti-bearing token for this user is rejected (the back-compat
+        rule in `_enforce_single_session` says "jti-bearing token +
+        active_session_id=None => reject (user logged out)").
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.active_session_id = None
+                user.active_session_ip = None
+                user.active_session_user_agent = None
+                user.active_session_started_at = None
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] clear_session failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def update_password(user_id: str, new_hashed: str) -> bool:
+        """Replace the user's hashed password. Returns True on success.
+
+        The caller hashes the new password (using `security.auth._hash_password`)
+        and passes the bcrypt hash. We don't hash here so the bcrypt<4.1
+        pin stays in one place.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.hashed_password = new_hashed
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] update_password failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def bump_last_login(user_id: str, at: Optional[datetime] = None) -> bool:
+        """Set ``last_login = now()`` for the user. Returns True on success.
+
+        Used by ``routes.sso._auto_create_or_get_user`` after a successful
+        SSO login. Not on the hot path for password login — that path
+        uses ``authenticate_and_rotate_session`` which sets ``last_login``
+        as a side effect of the rotation. SSO has no password, so the
+        rotation is called separately and we need a dedicated bump.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            from sqlalchemy import update as _sa_update
+            stamp = at or datetime.now(timezone.utc)
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    _sa_update(User)
+                    .where(User.id == uuid.UUID(user_id))
+                    .values(last_login=stamp)
+                )
+                await db.commit()
+                return result.rowcount > 0
+        except Exception as e:
+            logger.error("[UserRepository] bump_last_login failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def set_security_question(
+        user_id: str, question: str, hashed_answer: str
+    ) -> bool:
+        """Set the security question and the bcrypt-hashed answer. Returns
+        True on success. The caller is responsible for hashing the answer
+        (using `security.auth._hash_password`) and validating the
+        question against the allow-list (the route does both).
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.security_question = question
+                user.hashed_security_answer = hashed_answer
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] set_security_question failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def verify_security_answer(
+        user_id: str, plain_answer: str, hashed_answer: str
+    ) -> bool:
+        """Constant-time bcrypt comparison of the user's stored
+        `hashed_security_answer` against a freshly-hashed plain answer.
+
+        The caller fetches the user's stored `hashed_security_answer`
+        and passes both. This signature keeps the repository method
+        DB-free (no User coupling) and lets the auth path stay
+        straightforward.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        if not hashed_answer:
+            # No question set — treat as "cannot verify" rather than
+            # raising. The route layer falls back to admin-reset in
+            # this case.
+            return False
+        try:
+            from security.auth import pwd_context
+            return pwd_context.verify(plain_answer, hashed_answer)
+        except Exception as e:
+            logger.error("[UserRepository] verify_security_answer failed: %s", str(e))
+            return False
+
+    @staticmethod
+    async def auth_headers_set_jti(user_id: str, jti: str) -> bool:
+        """Test-fixture-only helper.
+
+        Stamps `active_session_id = jti` on the user. This is what
+        `tests/conftest.py:auth_headers` and the Fix #34 tests use to
+        pre-stamp a user so a freshly-minted JWT passes the single-
+        session check.
+
+        Lives in UserRepository (not in test code) so the conftest
+        fixture and the production login path call the same helper —
+        the contract is "stamp jti on the user, then mint a token with
+        the same jti" and both sides must use the same write.
+        """
+        if not HAS_SQLALCHEMY:
+            return False
+        try:
+            async with db_manager.session_maker() as db:
+                result = await db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if user is None:
+                    return False
+                user.active_session_id = jti
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error("[UserRepository] auth_headers_set_jti failed: %s", str(e))
+            return False
 
 
 class ConversationRepository:
@@ -1535,16 +1917,13 @@ class UserAPIKeyRepository:
                         else:
                             # Legacy or other format - try decrypt
                             if decrypt_fn:
-                                try:
-                                    decrypted[provider] = decrypt_fn(encrypted)
-                                except:
-                                    decrypted[provider] = encrypted
+                                decrypted[provider] = decrypt_fn(encrypted)
                             else:
                                 decrypted[provider] = encrypted
 
                 return decrypted
-        except Exception as e:
-            logger.error("[UserAPIKeyRepository] Get by user failed: %s", str(e))
+        except Exception:
+            logger.error("[UserAPIKeyRepository] Get by user failed")
             return None
 
     @staticmethod
@@ -1855,14 +2234,100 @@ class TeamMemberRepository:
 # ============================================================================
 
 class DataMigrator:
-    """Migrate data from JSON files to PostgreSQL"""
+    """Migrate data from JSON files to PostgreSQL/SQLite.
+
+    Fix #35 Commit 5: full-fidelity migration. The previous version
+    dropped security_question / hashed_security_answer / active_session_*
+    / on_new_login_pref / last_login on the floor (only username,
+    email, hashed_password, is_admin, is_active, api_quota, created_at
+    were copied). That silently invalidated every migrated user's
+    security question and forced a re-login on first use. This version
+    copies every column the User ORM knows about.
+    """
+
+    # Idempotency marker. Once a successful full migration has run, this
+    # file is written next to users.json so subsequent boots skip the
+    # migration (the JSON store is stale; the SQL store is canonical).
+    MARKER_FILENAME = ".migrated_to_sql"
+
+    @staticmethod
+    def _marker_path() -> Path:
+        """Return the absolute path of the migration marker file."""
+        return _DATA_DIR / DataMigrator.MARKER_FILENAME
+
+    @classmethod
+    def already_migrated(cls) -> bool:
+        """True if a prior successful migration wrote the marker."""
+        return cls._marker_path().exists()
+
+    @classmethod
+    def mark_migrated(cls, results: Dict[str, Any]) -> None:
+        """Write the marker file with a small summary of what ran.
+
+        Touch-only: errors are logged, not raised — we don't want a
+        marker-write failure to fail the migration itself.
+        """
+        try:
+            marker = cls._marker_path()
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "users_migrated": results.get("users", 0),
+                "conversations_migrated": results.get("conversations", 0),
+                "version": "1.0",
+            }
+            marker.write_text(json.dumps(payload, indent=2))
+        except Exception as e:
+            logger.warning("[Migration] Could not write marker file: %s", str(e))
+
+    @staticmethod
+    def _parse_iso_dt(value):
+        """Parse an ISO-8601 string into a datetime, or return None.
+
+        Defensive: the JSON store may hold either naive strings
+        (pre-Fix-34 users.json) or timezone-aware strings. We don't
+        care which — the ORM accepts both — but a totally missing or
+        malformed value should yield None, not crash the migration.
+        """
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            logger.warning("[Migration] Unparseable datetime: %r", value)
+            return None
 
     @staticmethod
     async def migrate_users() -> Dict[str, str]:
-        """Migrate users from data/users.json"""
-        users_file = Path(__file__).resolve().parent / "data" / "users.json"
-        if not users_file.exists():
-            logger.info("[Migration] No users.json found at %s", users_file)
+        """Migrate users from data/users.json.
+
+        Looks in `backend/data/users.json` (canonical) first, then falls back
+        to the legacy `backend/core/data/users.json` location used by older
+        installs. Both paths are kept in sync by auth.USERS_FILE on first write.
+
+        Fix #35 Commit 5: now copies every User column that exists in
+        the source record (security_question, hashed_security_answer,
+        active_session_id/ip/user_agent/started_at, on_new_login_pref,
+        last_login) so a migrated user has the same auth state they had
+        under the JSON store.
+        """
+        # Candidate paths, in priority order
+        candidates = [
+            Path(__file__).resolve().parent.parent / "data" / "users.json",  # backend/data/
+            Path(__file__).resolve().parent / "data" / "users.json",          # backend/core/data/ (legacy)
+        ]
+
+        users_file = None
+        for candidate in candidates:
+            if candidate.exists():
+                users_file = candidate
+                break
+
+        if users_file is None:
+            logger.info("[Migration] No users.json found in: %s",
+                        ", ".join(str(p) for p in candidates))
             return {}
 
         id_mapping = {}
@@ -1876,19 +2341,34 @@ class DataMigrator:
                 existing = await UserRepository.get_by_username(user_data["username"])
                 if existing:
                     id_mapping[old_id] = str(existing.id)
-                else:
-                    # Create user
-                    user = await UserRepository.create(
-                        username=user_data["username"],
-                        email=user_data.get("email", f"{user_data['username']}@localhost"),
-                        hashed_password=user_data.get("hashed_password", ""),
-                        is_admin=user_data.get("is_admin", False),
-                        is_active=user_data.get("is_active", True),
-                        api_quota=user_data.get("api_quota", {}),
-                        created_at=datetime.fromisoformat(user_data["created_at"]) if user_data.get("created_at") else datetime.now(timezone.utc)
-                    )
-                    if user:
-                        id_mapping[old_id] = str(user.id)
+                    continue
+                # Create user — copy every column the ORM accepts so a
+                # migrated user keeps their auth state.
+                # `UserRepository.create` passes **kwargs through to the
+                # User(...) constructor, so we can drop new fields in
+                # without touching the repo layer.
+                user = await UserRepository.create(
+                    username=user_data["username"],
+                    email=user_data.get("email", f"{user_data['username']}@localhost"),
+                    hashed_password=user_data.get("hashed_password", ""),
+                    is_admin=user_data.get("is_admin", False),
+                    is_active=user_data.get("is_active", True),
+                    api_quota=user_data.get("api_quota", {}),
+                    created_at=DataMigrator._parse_iso_dt(user_data.get("created_at"))
+                                 or datetime.now(timezone.utc),
+                    last_login=DataMigrator._parse_iso_dt(user_data.get("last_login")),
+                    security_question=user_data.get("security_question"),
+                    hashed_security_answer=user_data.get("hashed_security_answer"),
+                    active_session_id=user_data.get("active_session_id"),
+                    active_session_ip=user_data.get("active_session_ip"),
+                    active_session_user_agent=user_data.get("active_session_user_agent"),
+                    active_session_started_at=DataMigrator._parse_iso_dt(
+                        user_data.get("active_session_started_at")
+                    ),
+                    on_new_login_pref=user_data.get("on_new_login_pref", "auto_kick"),
+                )
+                if user:
+                    id_mapping[old_id] = str(user.id)
 
             logger.info(f"[Migration] Migrated {len(id_mapping)} users")
             return id_mapping
@@ -1931,8 +2411,21 @@ class DataMigrator:
             return 0
 
     @staticmethod
-    async def run_full_migration() -> Dict[str, Any]:
-        """Run all migrations"""
+    async def run_full_migration(force: bool = False) -> Dict[str, Any]:
+        """Run all migrations.
+
+        Fix #35 Commit 5: idempotent. If a successful prior migration
+        wrote the marker file (``backend/data/.migrated_to_sql``), this
+        call is a no-op and returns ``{"skipped": true, ...}`` so the
+        boot-time hook doesn't waste time re-reading a stale JSON file
+        on every restart. Pass ``force=True`` to re-run (used by
+        ``/admin/migrate`` when an operator wants to re-import).
+        """
+        if not force and DataMigrator.already_migrated():
+            logger.info("[Migration] Skipping — marker file present at %s",
+                        DataMigrator._marker_path())
+            return {"users": 0, "conversations": 0, "errors": [],
+                    "skipped": True}
         results = {"users": 0, "conversations": 0, "errors": []}
         try:
             user_mapping = await DataMigrator.migrate_users()
@@ -1941,6 +2434,16 @@ class DataMigrator:
             if user_mapping:
                 conv_count = await DataMigrator.migrate_conversations(user_mapping)
                 results["conversations"] = conv_count
+
+            # Write the marker so subsequent boots skip this work.
+            # Only mark if at least one user migrated — a no-op run
+            # (no users.json present) leaves the marker unwritten so
+            # the next boot retries; useful if the operator drops a
+            # users.json into place between restarts.
+            if results["users"] > 0:
+                DataMigrator.mark_migrated(results)
+            else:
+                logger.info("[Migration] No users migrated; marker not written")
 
         except Exception as e:
             results["errors"].append("An internal error occurred")

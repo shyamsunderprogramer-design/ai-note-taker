@@ -2,7 +2,7 @@ name: CodeQL Analysis
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, ux-sprint]
   pull_request:
     branches: [main, develop]
   schedule:
@@ -22,19 +22,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['python']
+        language: ['python', 'javascript-typescript', 'actions']
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
           languages: ${{ matrix.language }}
+          build-mode: none
           config-file: ./.github/codeql-config.yml
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
           category: "/language:${{ matrix.language }}"

@@ -10,7 +10,6 @@ from security.auth import User
 # Auth helpers (mirrored — will be consolidated)
 from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from security import get_current_user
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -21,13 +20,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 async def require_admin(user: User = Depends(require_authentication)):
@@ -44,13 +37,7 @@ logger = logging.getLogger("routes.admin")
 
 # Database availability
 try:
-    from database import (
-        db_manager, init_database, close_database,
-        UserRepository, ConversationRepository, VoiceModelRepository,
-        JobApplicationRepository, AnalyticsRepository,
-        BackupManager, DataMigrator,
-        HAS_SQLALCHEMY,
-    )
+    from core.database import BackupManager, DataMigrator, HAS_SQLALCHEMY
     DATABASE_AVAILABLE = HAS_SQLALCHEMY
 except ImportError as e:
     DATABASE_AVAILABLE = False
@@ -103,7 +90,10 @@ async def admin_run_migration(user: User = Depends(require_admin)):
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Database module not available")
 
     try:
-        results = await DataMigrator.run_full_migration()
+        # Fix #35 Commit 5: pass force=True so the admin button
+        # actually re-runs even after the idempotency marker is set.
+        # Without it, the second click is silently a no-op.
+        results = await DataMigrator.run_full_migration(force=True)
         log_audit_event("admin_migrate", user.username, "migration_run", resource=f"users:{results.get('users', 0)}", success=True)
         return {
             "status": "success",

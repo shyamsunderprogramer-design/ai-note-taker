@@ -128,9 +128,10 @@ class VibeVoiceDiarizer:
             model_name = "microsoft/VibeVoice-ASR"
             logger.info(f"[VibeVoice] Attempting to load {model_name}...")
 
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name, revision="d0c9efdb8d614685062c04425d91e01b6f37d944", trust_remote_code=True)
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
+                revision="d0c9efdb8d614685062c04425d91e01b6f37d944",
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 device_map="auto" if torch.cuda.is_available() else None,
                 trust_remote_code=True,
@@ -318,92 +319,72 @@ class VibeVoiceDiarizer:
         audio: np.ndarray,
         sample_rate: int,
     ) -> Optional[List[SpeakerSegment]]:
-        """Fallback 1: Use pyannote diarization + Whisper transcription."""
+        """Transcribe detected audio turns instead of guessing text ownership."""
         try:
             from modules.voice.speaker_diarization import get_diarizer, SimpleSpeakerDetector
-
-            diarizer = get_diarizer()
-
-            # Transcribe with Whisper first
             try:
                 from modules.voice.whisper_handler import transcribe
             except ImportError:
                 from whisper_handler import transcribe
 
-            result = transcribe(audio, mode="adaptive")
-            text = result.get("text", "") if isinstance(result, dict) else result
-            if not text or not text.strip():
-                return None
-
-            duration = len(audio) / sample_rate if len(audio) > 0 else 0
-
-            # If pyannote is available, save audio to temp file and run full diarization
+            if not len(audio):
+                return []
+            if sample_rate <= 0:
+                raise ValueError("Sample rate must be positive")
+            duration = len(audio) / sample_rate
+            diarizer = get_diarizer()
+            turns = []
             if diarizer.available:
                 import tempfile
                 import soundfile as sf
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                    sf.write(tmp.name, audio, sample_rate)
-                    tmp_path = tmp.name
-                try:
-                    segments = diarizer.diarize_audio(tmp_path)
-                    if segments and len(segments) > 1:
-                        # Map Whisper text onto pyannote segments
-                        full_segment = SpeakerSegment(
-                            speaker_id="Speaker 1",
-                            start_time=0.0,
-                            end_time=duration,
-                            text=text.strip(),
-                            confidence=0.85,
-                        )
-                        return [full_segment]
-                finally:
-                    try:
-                        os.unlink(tmp_path)
-                    except OSError:
-                        pass  # nosec B110
+                # Cleanup also covers a failed write or diarizer invocation.
+                with tempfile.TemporaryDirectory(prefix="ant-speaker-") as directory:
+                    audio_path = os.path.join(directory, "audio.wav")
+                    sf.write(audio_path, audio, sample_rate)
+                    detected = diarizer.diarize_audio(audio_path)
+                for turn in detected or []:
+                    start = max(0.0, float(turn.start_time))
+                    end = min(duration, float(turn.end_time))
+                    if np.isfinite(start) and np.isfinite(end) and end > start:
+                        turns.append(SpeakerSegment(turn.speaker_id, start, end, "", 0.85))
+                turns.sort(key=lambda turn: turn.start_time)
 
-            # Fallback: use SimpleSpeakerDetector for basic clustering
-            detector = SimpleSpeakerDetector()
-            chunk_duration = 3.0  # seconds per chunk
-            chunk_samples = int(chunk_duration * sample_rate)
+            if not turns:
+                detector = SimpleSpeakerDetector()
+                chunk_samples = max(1, int(3.0 * sample_rate))
+                for start in range(0, len(audio), chunk_samples):
+                    end = min(start + chunk_samples, len(audio))
+                    # A short tail belongs to the preceding acoustic window;
+                    # keep its audio so the last words are not discarded.
+                    speaker = (turns[-1].speaker_id
+                               if turns and end - start < sample_rate // 2
+                               else detector.identify_speaker(audio[start:end]))
+                    turns.append(SpeakerSegment(speaker, start / sample_rate,
+                                                end / sample_rate, "", 0.6))
+                turns = self._merge_consecutive(turns)
+
             segments = []
-            current_text = ""
-            current_start = 0.0
-
-            for i in range(0, len(audio), chunk_samples):
-                chunk = audio[i:i + chunk_samples]
-                if len(chunk) < sample_rate // 2:  # Skip very short chunks
+            for turn in turns:
+                start = max(0, int(round(turn.start_time * sample_rate)))
+                end = min(len(audio), int(round(turn.end_time * sample_rate)))
+                if end <= start:
                     continue
-                speaker = detector.identify_speaker(chunk)
-                chunk_end = min((i + len(chunk)) / sample_rate, duration)
-
-                if speaker != (segments[-1].speaker_id if segments else None):
-                    if current_text.strip():
-                        segments.append(SpeakerSegment(
-                            speaker_id=segments[-1].speaker_id if segments else speaker,
-                            start_time=current_start,
-                            end_time=i / sample_rate,
-                            text=current_text.strip(),
-                            confidence=0.6,
-                        ))
-                    current_start = i / sample_rate
-                    current_text = ""
-                current_text += " "
-
-            if current_text.strip() or text.strip():
-                segments.append(SpeakerSegment(
-                    speaker_id=segments[-1].speaker_id if segments else "Speaker 1",
-                    start_time=current_start,
-                    end_time=duration,
-                    text=text.strip(),
-                    confidence=0.6,
-                ))
-
-            return segments if segments else None
-
-        except Exception as e:
-            logger.debug("[VibeVoice] Pyannote fallback unavailable: %s", str(e))
+                samples = audio[start:end]
+                if sample_rate != 16000:
+                    samples = self._resample(samples, sample_rate, 16000)
+                result = transcribe(samples, mode="adaptive")
+                text = result.get("text", "") if isinstance(result, dict) else result
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                turn.text = text.strip()
+                segments.append(turn)
+            # Preserve the fallback API's empty-result placeholder when ASR is
+            # unavailable; zero confidence prevents claiming recognized speech.
+            return segments or [SpeakerSegment("Speaker 1", 0.0, duration, "", 0.0)]
+        except Exception as error:
+            logger.debug("[VibeVoice] Speaker fallback unavailable (%s)", type(error).__name__)
             return None
+
 
     def _transcribe_simple_fallback(
         self,
@@ -445,7 +426,10 @@ class VibeVoiceDiarizer:
 
         try:
             detector = SimpleSpeakerDetector()
-            text = transcribe(audio, mode="adaptive")
+            transcribe_result = transcribe(audio, mode="adaptive")
+
+            # transcribe() returns a dict: {"text": "...", "language": "..."}
+            text = transcribe_result.get("text", "") if isinstance(transcribe_result, dict) else str(transcribe_result)
 
             if not text or not text.strip():
                 duration = len(audio) / sample_rate if len(audio) > 0 else 0
@@ -502,7 +486,13 @@ class VibeVoiceDiarizer:
         except Exception as e:
             logger.warning("[VibeVoice] Simple fallback error: %s", str(e))
             duration = len(audio) / sample_rate if len(audio) > 0 else 0
-            fallback_text = text.strip() if 'text' in dir() and text else ""
+            # transcribe_result may be a dict from transcribe()
+            fallback_text = ""
+            if 'transcribe_result' in dir() and transcribe_result:
+                if isinstance(transcribe_result, dict):
+                    fallback_text = transcribe_result.get("text", "")
+                elif isinstance(transcribe_result, str):
+                    fallback_text = transcribe_result.strip()
             return [SpeakerSegment(
                 speaker_id="Speaker 1",
                 start_time=0.0,

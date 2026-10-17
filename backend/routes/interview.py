@@ -2,18 +2,15 @@
 import io
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from security import ErrorCode, error_response
-from security.auth import User
 
 # Auth helpers (mirrored — will be consolidated)
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from security import get_current_user
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -24,42 +21,21 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-async def require_authentication(token: str = Depends(get_token_from_request)):
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
-    return user
+from routes.deps import require_authentication
 
 
 logger = logging.getLogger("routes.interview")
 
 # Interview simulator
 try:
-    from interview_simulator import (
-        interview_simulator,
-        create_interview,
-        get_question,
-        submit_response,
-        finish_interview
-    )
+    from interview_simulator import interview_simulator, finish_interview
     INTERVIEW_SIMULATOR_AVAILABLE = True
 except ImportError:
     INTERVIEW_SIMULATOR_AVAILABLE = False
 
 # Mock interview library - Enhanced with unified question database
 try:
-    from mock_interview_library import (
-        mock_library,
-        get_all_questions,
-        get_questions_by_role,
-        get_questions_by_company,
-        get_random_question,
-        get_practice_set,
-        get_library_stats,
-        search_questions
-    )
+    from mock_interview_library import mock_library
     MOCK_LIBRARY_AVAILABLE = True
 except ImportError as e:
     MOCK_LIBRARY_AVAILABLE = False
@@ -68,13 +44,12 @@ except ImportError as e:
 try:
     from question_library_integration import (
         unified_library,
-        get_question as get_unified_question,
         get_questions as get_unified_questions,
         get_practice_set as get_unified_practice_set,
         search_questions as search_unified_questions,
         get_company_questions as get_unified_company_questions,
         get_company_tips,
-        get_library_stats as get_unified_stats
+        get_library_stats as get_unified_stats,
     )
     UNIFIED_LIBRARY_AVAILABLE = True
 except ImportError as e:
@@ -83,7 +58,7 @@ except ImportError as e:
 
 # Resume review
 try:
-    from resume_review import resume_reviewer, analyze_resume
+    from resume_review import resume_reviewer
     RESUME_REVIEW_AVAILABLE = True
 except ImportError:
     RESUME_REVIEW_AVAILABLE = False
@@ -102,7 +77,7 @@ try:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent / "modules" / "interview"))
-    from resume_review_v2 import ResumeReviewerV2, analyze_resume as analyze_resume_v2_func
+    from resume_review_v2 import ResumeReviewerV2
     resume_reviewer_v2 = ResumeReviewerV2()
     RESUME_REVIEW_V2_AVAILABLE = True
 except ImportError as e:
@@ -188,7 +163,23 @@ def extract_complexity_from_text(text: str) -> Dict:
     return results
 
 
-router = APIRouter()
+# Enforce authentication even when this router is mounted without main middleware.
+router = APIRouter(dependencies=[Depends(require_authentication)])
+
+
+@router.post('/resume/context')
+async def upload_resume_context(file: UploadFile = File(...)):
+    """Extract resume context for the current chat; do not persist the file."""
+    import asyncio
+    from lib.resume_input import MAX_BYTES, extract_resume
+    try:
+        content = await file.read(MAX_BYTES + 1)
+        text = await asyncio.to_thread(extract_resume, file.filename or '', content)
+        return {'text': text, 'filename': file.filename}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        await file.close()
 
 
 # --- Interview Simulator Endpoints ---

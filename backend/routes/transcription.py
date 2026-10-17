@@ -1,21 +1,24 @@
 """Route module for audio transcription, OCR, and WebSocket endpoints."""
 import asyncio
+from lib.audio_upload import transcribe_saved_upload
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess  # nosec B404
 import threading
 import time
+import uuid
 
 import numpy as np
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile, WebSocket
+from fastapi import APIRouter, File, Form, Request, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from ocr_service import extract_text_from_image
 from security import rate_limit, ErrorCode, error_response
-from ai_router import build_prompt, clean_ai_output, route_ai
+import ai_router
 
 logger = logging.getLogger("routes.transcription")
 
@@ -29,17 +32,12 @@ AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
 try:
     from whisper_handler import (
         BrowserTranscriber,
-        clean_text,
         get_model,
         get_streaming_transcriber,
         is_meaningful,
         is_question,
-        is_small_talk,
-        is_technical,
-        record_audio,
         transcribe,
         transcribe_audio,
-        warmup,
     )
     WHISPER_AVAILABLE = True
 except ImportError:
@@ -99,6 +97,59 @@ def get_ffmpeg_path():
 from security import get_current_user
 
 router = APIRouter()
+from lib.log_redaction import CredentialFilter
+logging.getLogger('uvicorn.access').addFilter(CredentialFilter())
+
+try:
+    from modules.voice.vad_segmenter import VadSegmenter
+except ImportError:  # pragma: no cover - path shape differs per entrypoint
+    from voice.vad_segmenter import VadSegmenter
+
+
+_ACKNOWLEDGEMENTS = {
+    "ok", "okay", "right", "sure", "great", "thanks", "thank you", "got it",
+    "mm-hmm", "uh-huh", "yeah", "yes", "no", "perfect", "exactly", "nice",
+    "cool", "alright", "understood", "makes sense", "interesting",
+}
+
+
+def _should_answer(text: str) -> bool:
+    """Is this complete utterance worth answering?
+
+    Keep completed participant statements in session memory without answering
+    every remark. Explicit questions and requests trigger guidance; manual
+    cuts can still request help with a meaningful statement.
+    """
+    stripped = text.strip().strip(".?!,").lower()
+    if not stripped or stripped in _ACKNOWLEDGEMENTS:
+        return False
+    words = stripped.split()
+    if len(words) < 2:
+        return False
+    # Retain statements in the transcript, but don't spend answer slots on
+    # unrelated remarks. Scenario questions can contain the request mid-turn.
+    return ('?' in text or bool(re.search(
+        r'(?:^|[.!?,;]\s+)(?:what|why|how|when|where|who|which)\b|'
+        r'(?:^|[.!?,;]\s+)(?:please\s+)?(?:can|could|would|should|do|does|did|is|are|tell|explain|describe|walk|write|fix|complete|implement|debug|help|summarize)\b',
+        stripped)))
+
+
+# Legacy question-shape check. The live assist no longer uses it — utterance
+# segmentation replaced starter-word guessing — but /realtime and the
+# characterization suite still reference it.
+_QUESTION_STARTERS = {
+    "what", "why", "how", "when", "where", "who", "which", "can", "could",
+    "would", "should", "do", "does", "did", "is", "are", "tell", "explain",
+    "describe", "walk",
+}
+
+
+def _looks_like_interview_question(text: str) -> bool:
+    words = text.strip().split()
+    if len(words) < 5:
+        return False
+    first = words[0].lower().strip(".,!?'\"")
+    return "?" in text or first in _QUESTION_STARTERS
 
 
 @router.get("/transcribe/languages")
@@ -122,12 +173,7 @@ async def transcribe_api(file: UploadFile = File(...)):
 
     # Pass file directly to faster-whisper (it uses ffmpeg internally, supports webm/wav/mp3/etc.)
     # This skips a redundant 300-800ms ffmpeg subprocess call.
-    text = transcribe_audio(file_path, mode=CURRENT_MODE, fast=True)
-
-    try:
-        os.remove(file_path)
-    except OSError:
-        pass  # nosec B110
+    text = await transcribe_saved_upload(transcribe_audio, file_path, mode=CURRENT_MODE, fast=True)
 
     return {"text": text or ""}
 
@@ -143,12 +189,7 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         shutil.copyfileobj(file.file, buffer)
 
     # Pass file directly to faster-whisper, skipping redundant ffmpeg subprocess
-    text = transcribe_audio(file_path, mode=CURRENT_MODE, fast=True)
-
-    try:
-        os.remove(file_path)
-    except OSError:
-        pass  # nosec B110
+    text = await transcribe_saved_upload(transcribe_audio, file_path, mode=CURRENT_MODE, fast=True)
 
     if not text:
         return {"text": "", "response": "", "error": "No speech detected"}
@@ -157,9 +198,11 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         return {"text": text, "response": "", "error": "Not a meaningful question"}
 
     try:
-        from cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
+        # Absolute import — bare `from cloud_providers` resolves to a
+        # second (unpatched) module instance. See modules/ai/ai_router.py:628.
+        from modules.platform.cloud_providers import ask_gpt, ask_claude, ask_gemini, ask_grok, ask_deepseek, ask_groq, clean_ai_output as cloud_clean
 
-        prompt = build_prompt(text, CURRENT_MODE)
+        prompt = ai_router.build_prompt(text, CURRENT_MODE)
 
         if provider == "openai":
             resp = ask_gpt(prompt, model=model)
@@ -236,28 +279,55 @@ async def transcribe_stream(request: Request):
 
 
 @router.post("/transcribe-with-speakers")
-async def transcribe_with_speakers(
+def transcribe_with_speakers(
     file: UploadFile = File(...),
     language: str = Form("en"),
     auto_detect: bool = Form(False),
 ):
-    """Transcribe audio with speaker diarization.
+    """Transcribe audio with speaker diarization in FastAPI's worker pool.
     T22: Supports multi-language transcription.
     Returns transcript + speakers — the frontend handles AI response separately."""
-    USE_AUTONOMOUS = False
+    started_at = time.perf_counter()
     file_path = os.path.join(UPLOAD_DIR, get_secure_filename(file.filename))
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    wav_path = file_path.rsplit(".", 1)[0] + ".wav"
+    if os.path.getsize(file_path) < 256:
+        os.remove(file_path)
+        return {"text": "", "speakers": [], "error": "No usable audio was recorded. Check your microphone input and record again."}
+
+    wav_path = file_path + ".decoded.wav"
     ffmpeg_path = get_ffmpeg_path()
-    result = subprocess.run(  # nosec B603
-        [ffmpeg_path, "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
-        capture_output=True, text=True
-    )
+    # v2.1.7: Wrap ffmpeg call so missing-binary / timeout / non-zero exit
+    # all surface as 200 with an error body the frontend can render,
+    # instead of unhandled 500s. Speaker diarization requires the user
+    # to have ffmpeg installed (the bundled venv doesn't ship it).
+    try:
+        result = subprocess.run(  # nosec B603
+            [ffmpeg_path, "-hide_banner", "-loglevel", "error", "-i", file_path, "-ar", "16000", "-ac", "1", wav_path, "-y"],
+            capture_output=True, text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return {
+            "text": "",
+            "speakers": [],
+            "error": "ffmpeg not found. Speaker diarization requires ffmpeg installed on this machine — install it via Homebrew (`brew install ffmpeg`) or disable speaker diarization in Settings.",
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "text": "",
+            "speakers": [],
+            "error": "ffmpeg conversion timed out after 30s.",
+        }
+
     if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+        return {
+            "text": "",
+            "speakers": [],
+            "error": "Audio could not be decoded. The recording may be incomplete; check your microphone and record again.",
+        }
 
     try:
         # Speaker diarization using Whisper + speaker clustering
@@ -273,7 +343,8 @@ async def transcribe_with_speakers(
             vad_filter=True,
             condition_on_previous_text=False,
             language=lang,
-            word_timestamps=True
+            temperature=0.0,  # Avoid repeated temperature-fallback decoding of long speech.
+            word_timestamps=False  # Only segment start/end times are used below.
         )
 
         whisper_segments = []
@@ -285,7 +356,11 @@ async def transcribe_with_speakers(
             })
 
         full_text = " ".join(s["text"] for s in whisper_segments)
+        transcription_done = time.perf_counter()
         speaker_result = process_transcription_with_speakers(wav_path, whisper_segments)
+        logger.info("Audio processing: transcription=%.2fs speaker_detection=%.2fs total=%.2fs",
+                    transcription_done - started_at, time.perf_counter() - transcription_done,
+                    time.perf_counter() - started_at)
 
         # NOTE: AI response is handled by the frontend separately via streaming.
         # Do NOT call route_ai() here — it blocks the event loop and doubles latency.
@@ -328,11 +403,64 @@ async def ocr_image(request: Request):
         image_b64 = body.get("image_b64", "")
         if not image_b64:
             return JSONResponse({"text": "", "method": "none", "error": "No image provided"}, status_code=400)
-        result = extract_text_from_image(image_b64)
+        result = await asyncio.to_thread(extract_text_from_image, image_b64)
         return JSONResponse(result)
     except Exception as e:
         logger.error("[OCR] Error: %s", str(e))
         return JSONResponse({"text": "", "method": "none", "error": "An internal error occurred"}, status_code=500)
+
+
+# Dual-channel live assist (2026-09-11, Cluely-style): when a source="system"
+# socket is connected, IT owns suggestion-arming — the interviewer's voice is
+# whatever the meeting app plays through the speakers (system audio), and the
+# candidate's mic can no longer arm hints (their echo/self-talk polluted the
+# question tail in every mock so far).
+_DUAL_CHANNEL = {"system": 0, "last_system_speech": 0.0}
+
+# How long a system channel stays trusted after it last produced speech.
+# Ownership must follow WORKING audio, not a connected socket: on 2026-09-12 a
+# system channel connected but captured silence (permission not yet granted),
+# and because "connected" was the test, the mic — which had transcribed all
+# three questions perfectly — was suppressed and no hint was delivered.
+_SYSTEM_TRUST_WINDOW_S = 120.0
+
+# How often a rolling preview may fire while someone is still speaking.
+# Frequent enough to feel live, spaced enough that previews never queue up
+# behind each other or crowd out the committed answer.
+_PREVIEW_INTERVAL_S = 2.5
+_PREVIEW_MIN_AUDIO_S = 1.5
+
+# Whisper invents these out of silence and near-silence. They are not speech,
+# and answering them wastes a generation slot the real question needs.
+_NOISE_TEXT = {
+    "you", "thank you", "thanks", "thanks for watching", "sigh", "bye",
+    "uh", "um", "hmm", "the", "watch", "see you soon", "love", "okay",
+    "so", "yeah", ".", "..", "...",
+}
+
+# Two cuts closer together than this are a double-tap, not two questions.
+_CUT_DEBOUNCE_S = 1.2
+
+
+def _is_noise_text(text: str) -> bool:
+    """Reject hallucinations even on an explicit cut.
+
+    Manual cuts skip the answerability filter on purpose — a short question is
+    still a question. But they must not skip THIS: on 2026-09-12 repeated
+    presses each generated a full answer to the word "you", queueing on the
+    GPU until latency climbed past 14s and the app looked frozen.
+    """
+    stripped = text.strip().strip(".?!,").lower()
+    if not stripped or stripped in _NOISE_TEXT:
+        return True
+    return len(stripped.split()) < 2
+
+
+def _system_channel_is_live() -> bool:
+    """Is a system channel connected AND actually carrying speech?"""
+    if _DUAL_CHANNEL["system"] <= 0:
+        return False
+    return (time.time() - _DUAL_CHANNEL["last_system_speech"]) < _SYSTEM_TRUST_WINDOW_S
 
 
 @router.websocket("/ws/transcribe")
@@ -347,6 +475,18 @@ async def ws_transcribe(ws: WebSocket):
     # Extract optional source and meeting_id params
     ws_source = ws.query_params.get("source", "tab")
     ws_meeting_id = ws.query_params.get("meeting_id", "")
+    live_assistance = ws.query_params.get("assist", "true").lower() != "false"
+    questions_only = ws.query_params.get("questions_only", "false").lower() == "true"
+
+    # Interview context for live suggestion generation (from interview-overlay
+    # via ?role=&company=&skills=&resume= query params)
+    ctx = {
+        "model": ws.query_params.get("model", "auto"),
+        "role": ws.query_params.get("role", ""),
+        "company": ws.query_params.get("company", ""),
+        "skills": ws.query_params.get("skills", ""),
+        "resume": ws.query_params.get("resume", ""),
+    }
 
     await ws.accept()
 
@@ -356,7 +496,7 @@ async def ws_transcribe(ws: WebSocket):
 
     if AUTH_REQUIRED:
         if token:
-            user = get_current_user(token)
+            user = await get_current_user(token)
         else:
             # Brief wait for auth message (2s), then reject fast
             try:
@@ -366,7 +506,7 @@ async def ws_transcribe(ws: WebSocket):
                         auth_data = json.loads(first_msg["text"])
                         if auth_data.get("type") == "auth":
                             token = auth_data.get("token", "")
-                            user = get_current_user(token)
+                            user = await get_current_user(token)
                     except (json.JSONDecodeError, KeyError):
                         pass  # nosec B110
             except asyncio.TimeoutError:
@@ -378,14 +518,309 @@ async def ws_transcribe(ws: WebSocket):
             return
     else:
         if token:
-            user = get_current_user(token)
+            await get_current_user(token)
 
     await ws.send_text(json.dumps({"type": "auth_ok"}))
 
+    if questions_only:
+        from modules.voice.apple_speech import start_warmup
+        start_warmup()
+
     transcriber = BrowserTranscriber()
+    # Utterance boundaries come from the audio itself (see VadSegmenter).
+    # A half-second breath remains inside the question; live guidance needn't
+    # wait the legacy full second before beginning whole-utterance decoding.
+    segmenter = VadSegmenter(silence_frames_required=6 if questions_only else 10)
+    transcriber.start_worker()  # was missing — queue segments were never consumed, no transcript ever fired
     partial_texts = []
     msg_queue = asyncio.Queue()
     ws_closed = False
+    loop = asyncio.get_running_loop()
+
+    # Live suggestion state. With utterance segmentation each spoken question
+    # arrives exactly once, complete, so the machinery this replaced is gone:
+    # the 1.0s transcript settle timer, the 10s substring cooldown, the
+    # refinement exception, and the starter-word fallback scan. All of them
+    # were repairs for not knowing where a question began and ended.
+    # What remains is an ordering guard — two questions asked in quick
+    # succession can finish generating out of order, and the newer must win.
+    _utt_state = {"seq": 0, "delivered": 0}
+    answer_session_id = uuid.uuid4().hex
+    # Answered turns, so later answers build on earlier ones instead of
+    # re-introducing the candidate for every question.
+    _history = []
+    _preview_state = {"at": 0.0, "busy": False, "last_text": "", "epoch": 0}
+    _cut_state = {"at": 0.0}
+    _decode_pending = {"count": 0}
+    _decode_lock = threading.Lock()
+    _activity_state = {"speaking": False}
+    _draft_state = {"busy": False, "at": 0, "epoch": 0}
+
+    def _on_draft(audio, epoch):
+        """Hidden, provisional candidate speech for panel interruptions."""
+        try:
+            from modules.voice.apple_speech import transcribe_cached
+            result = transcribe_cached(audio)
+            if (not ws_closed and epoch == _draft_state["epoch"]
+                    and result and result.get("text", "").strip()):
+                loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                    "type": "partial", "text": result["text"], "source": ws_source,
+                    "provisional": True,
+                })
+        finally:
+            _draft_state["busy"] = False
+
+    def _emit_activity():
+        if not ws_closed:
+            loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                "type": "activity", "source": ws_source,
+                "speaking": segmenter.is_speaking,
+                "transcribing": _decode_pending["count"],
+            })
+
+    def _fire_suggestion(question, asked_at, seq, timing=None):
+        requested_model = ctx["model"]
+        if ws_closed:
+            logger.info("[ws/transcribe] suggestion skipped: socket already closed")
+            return
+
+        if questions_only:
+            # The desktop captures current screen context and owns generation.
+            loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                "type": "question", "question": question, "source": ws_source,
+                "session_id": answer_session_id, "answer_id": seq,
+                "timing": timing,
+            })
+            return
+
+        def _generate():
+            if seq < _utt_state["seq"]:
+                # A newer question arrived before this one reached the GPU.
+                # Generating anyway only queues work whose result is already
+                # guaranteed to be dropped at delivery.
+                logger.info("[ws/transcribe] superseded before generating, skipping")
+                return
+            try:
+                from modules.ai.realtime_suggestions import generate_live_suggestion
+
+                def _first_sentence(sentence, gen_ms):
+                    """Ship the opening line the moment it exists.
+
+                    The candidate can start speaking on the first sentence; the
+                    rest arrives while they are already talking. Waiting for the
+                    full answer is what pushed the gate past 4s.
+                    """
+                    if ws_closed or ctx["model"] != requested_model or seq <= _utt_state["delivered"]:
+                        return
+                    first_ms = int((time.time() - asked_at) * 1000)
+                    logger.info(
+                        "[ws/transcribe] first sentence out at %sms (gen %sms)",
+                        first_ms, gen_ms,
+                    )
+                    try:
+                        loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                            "type": "suggestion",
+                            "answer_id": seq,
+                            "session_id": answer_session_id,
+                            "partial": True,
+                            "text": sentence,
+                            "question": question,
+                            "latency_ms": first_ms,
+                            "category": "answer",
+                            "confidence": 0.9,
+                        })
+                    except RuntimeError:
+                        pass  # nosec B110 — loop shut down mid-generation
+
+                result = generate_live_suggestion(
+                    question, role=ctx["role"], company=ctx["company"],
+                    skills=ctx["skills"], resume=ctx["resume"],
+                    model=None if requested_model == "auto" else requested_model,
+                    history=list(_history),
+                    on_first_sentence=_first_sentence,
+                )
+            except Exception as gen_exc:
+                logger.error("[ws/transcribe] suggestion generation failed: %s", gen_exc)
+                return
+            if ws_closed or ctx["model"] != requested_model or not result.get("text"):
+                if not ws_closed and ctx["model"] == requested_model and result.get("error"):
+                    loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                        "type": "suggestion_error",
+                        "message": "The selected live model could not answer. Check the model/provider or try again.",
+                    })
+                logger.info(
+                    "[ws/transcribe] suggestion discarded: ws_closed=%s empty_text=%s err=%s",
+                    ws_closed, not result.get("text"), result.get("error"),
+                )
+                return
+            # Drop only if a NEWER answer already reached the screen. Keying
+            # this on "is a newer question known" instead silently ate a
+            # correct answer whenever the next question arrived while the
+            # first was still generating (e2e run 22:33: both questions
+            # transcribed perfectly, only one hint delivered).
+            if seq <= _utt_state["delivered"]:
+                logger.info(
+                    "[ws/transcribe] stale suggestion dropped (seq=%s, delivered=%s)",
+                    seq, _utt_state["delivered"],
+                )
+                return
+            _utt_state["delivered"] = seq
+            _preview_state["last_text"] = ""
+            _history.append({"question": question, "answer": result["text"]})
+            del _history[:-6]
+            total_ms = int((time.time() - asked_at) * 1000)
+            logger.info(
+                "[ws/transcribe] suggestion ready: model=%s gen=%sms e2e=%sms",
+                result.get("model"), result.get("gen_ms"), total_ms,
+            )
+            sugg = {
+                "type": "suggestion",
+                "answer_id": seq,
+                "session_id": answer_session_id,
+                "partial": False,
+                "text": result["text"],
+                "question": question,
+                "model": result.get("model"),
+                "gen_ms": result.get("gen_ms"),
+                "latency_ms": total_ms,
+                "category": "answer",
+                "confidence": 0.9,
+            }
+            try:
+                loop.call_soon_threadsafe(msg_queue.put_nowait, sugg)
+                logger.info(
+                    "[ws/transcribe] suggestion QUEUED to socket (e2e=%sms)", total_ms,
+                )
+            except RuntimeError:
+                pass  # nosec B110 — loop shut down mid-generation
+
+        threading.Thread(target=_generate, daemon=True).start()
+
+    def _on_preview(audio, epoch):
+        """A provisional line of direction while the question is still coming.
+
+        Deliberately not a full answer: the question is incomplete, so
+        committing early invites drift onto the wrong point. Previews replace
+        each other in the UI rather than stacking — repeated hints were what
+        made the assist feel messy before.
+        """
+        try:
+            if ws_closed:
+                return
+            result = transcribe(audio, mode="adaptive", streaming=True)
+            text = (
+                result.get("text", "") if isinstance(result, dict) else str(result or "")
+            ).strip()
+            if not text or len(text.split()) < 3:
+                return
+            if text.lower() == _preview_state["last_text"]:
+                return  # nothing new has been said since the last preview
+            _preview_state["last_text"] = text.lower()
+
+            from modules.ai.realtime_suggestions import generate_live_preview
+            hint = generate_live_preview(
+                text, role=ctx["role"], company=ctx["company"],
+                skills=ctx["skills"], resume=ctx["resume"],
+                history=list(_history),
+            )
+            if ws_closed or not hint.get("text"):
+                return
+            if epoch != _preview_state["epoch"]:
+                # The question was committed while this was generating. Showing
+                # it now would replace a real answer with a guess about a
+                # question that is already over.
+                logger.info("[ws/transcribe] stale preview dropped")
+                return
+            logger.info(
+                "[ws/transcribe] preview ready (%s characters)",
+                len(hint["text"]),
+            )
+            loop.call_soon_threadsafe(msg_queue.put_nowait, {
+                "type": "suggestion",
+                "preview": True,
+                "text": hint["text"],
+                "question": text,
+                "model": hint.get("model"),
+                "gen_ms": hint.get("gen_ms"),
+                "category": "direction",
+                "confidence": 0.5,
+            })
+        except Exception as exc:
+            logger.error("[ws/transcribe] preview failed: %s", exc)
+        finally:
+            _preview_state["busy"] = False
+
+    def _process_utterance(audio, captured_at, manual=False):
+        """One complete spoken utterance: transcribe it whole, then answer.
+
+        This is the design change (2026-09-11). The boundary comes from
+        silence in the AUDIO, so Whisper receives the entire question instead
+        of 1.5s fragments. Measured on identical speech, the slicing path this
+        replaced split "What is your greatest strength" into "What?" plus
+        "is your greatest strength.", emitted "Tell me." before "Tell me about
+        yourself.", and lost a third question entirely; this path returned all
+        three verbatim.
+        """
+        if not live_assistance:
+            return
+        decode_started = time.perf_counter()
+        try:
+            result = transcribe(audio, mode="adaptive", streaming=True)
+        except Exception as exc:
+            logger.error("[ws/transcribe] utterance transcription failed: %s", exc)
+            return
+        text = (
+            result.get("text", "") if isinstance(result, dict) else str(result or "")
+        ).strip()
+        logger.info(
+            "[ws/transcribe] utterance %.1fs decoded (%s characters)",
+            len(audio) / 16000.0, len(text),
+        )
+        if not text:
+            return
+        if _is_noise_text(text):
+            # An explicit request is honoured for any real question, however
+            # short — but not for a hallucination.
+            logger.info("[ws/transcribe] cut ignored, not speech")
+            return
+        # Every completed utterance belongs to shared session memory, even
+        # when it is a statement rather than an answerable question.
+        loop.call_soon_threadsafe(msg_queue.put_nowait, {
+            "type": "utterance", "text": text, "source": ws_source,
+            "session_id": answer_session_id, "utterance_id": uuid.uuid4().hex,
+            "captured_at": captured_at,
+        })
+        if not manual and not _should_answer(text):
+            logger.info("[ws/transcribe] not answerable, no hint")
+            return
+        if ws_source == "system":
+            # Proof this channel works — it just produced speech.
+            _DUAL_CHANNEL["last_system_speech"] = time.time()
+        elif _system_channel_is_live() and not questions_only and not manual:
+            # A working interviewer channel owns assist, so the candidate's own
+            # voice cannot trigger hints. A merely-connected-but-silent one
+            # does not: that would strand the user with no hints at all.
+            logger.info(
+                "[ws/transcribe] mic utterance suppressed: system channel owns assist",
+            )
+            return
+        _utt_state["seq"] += 1
+        _fire_suggestion(text, captured_at, _utt_state["seq"], {
+            "asr_ms": round((time.perf_counter() - decode_started) * 1000),
+            "engine": result.get("engine", "faster-whisper-cpu") if isinstance(result, dict) else "unknown",
+        })
+
+    def _on_utterance(audio, captured_at, manual=False):
+        _draft_state["epoch"] += 1
+        with _decode_lock:
+            _decode_pending["count"] += 1
+        _emit_activity()
+        try:
+            _process_utterance(audio, captured_at, manual)
+        finally:
+            with _decode_lock:
+                _decode_pending["count"] -= 1
+            _emit_activity()
 
     # StreamingDiarizer
     streaming_diarizer = None
@@ -411,6 +846,12 @@ async def ws_transcribe(ws: WebSocket):
 
         msg = {"type": "partial", "text": combined, "source": ws_source}
 
+        # Display only. Suggestion timing now comes from VadSegmenter on the
+        # raw audio, not from watching this text settle — transcript lags the
+        # audio by at least one slice, which is what fired hints on half-spoken
+        # questions.
+        logger.debug("[ws/transcribe] partial received chars=%d", len(text))
+
         if streaming_diarizer is not None:
             with _audio_lock:
                 audio_chunk = _audio_buffer[0].copy()
@@ -423,13 +864,15 @@ async def ws_transcribe(ws: WebSocket):
             else:
                 msg["speaker"] = "Speaker 1"
                 msg["semantic_role"] = "user"
+            logger.debug("[ws/transcribe] speaker classification complete")
 
         if ws_meeting_id:
             msg["meeting_id"] = ws_meeting_id
+        # asyncio queues must be touched on their owning event loop.
         try:
-            msg_queue.put_nowait(msg)
-        except asyncio.QueueFull:
-            pass  # nosec B110
+            loop.call_soon_threadsafe(msg_queue.put_nowait, msg)
+        except RuntimeError:
+            pass  # Event loop already closed during shutdown.
 
     transcriber.add_callback(on_transcript)
 
@@ -447,16 +890,126 @@ async def ws_transcribe(ws: WebSocket):
 
     transcribe_task = asyncio.create_task(background_transcriber())
 
+    if ws_source == "system":
+        _DUAL_CHANNEL["system"] += 1
+        logger.info("[ws/transcribe] system-audio (interviewer) channel connected")
+
     try:
         while True:
             try:
-                data = await asyncio.wait_for(ws.receive_bytes(), timeout=60)
+                message = await asyncio.wait_for(ws.receive(), timeout=0.4)
             except asyncio.TimeoutError:
+                # Audio stopped arriving. A question spoken right before the
+                # recorder stops leaves an utterance buffered with no trailing
+                # silence to close it, so without this the last — and most
+                # important — question of a session is never answered.
+                _pending = segmenter.flush()
+                if _pending is not None:
+                    logger.info(
+                        "[ws/transcribe] audio stalled, flushing %.1fs utterance",
+                        len(_pending) / 16000.0,
+                    )
+                    threading.Thread(
+                        target=_on_utterance,
+                        args=(_pending, time.time()),
+                        daemon=True,
+                    ).start()
+                continue
+
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            control = message.get("text")
+            if control:
+                # Manual cut: the candidate pressed the key to say "the
+                # question ends here, answer it now". Takes whatever audio is
+                # buffered without waiting for the silence threshold, which is
+                # both faster and more reliable than inferring the boundary.
+                try:
+                    payload = json.loads(control)
+                except (ValueError, TypeError):
+                    payload = {}
+                if payload.get("type") == "stop":
+                    break
+                if payload.get("type") == "configure":
+                    selected = payload.get("model")
+                    if isinstance(selected, str) and 0 < len(selected) <= 200:
+                        ctx["model"] = selected
+                    continue
+                if payload.get("type") == "cut":
+                    _now_cut = time.time()
+                    if _now_cut - _cut_state["at"] < _CUT_DEBOUNCE_S:
+                        logger.info("[ws/transcribe] cut ignored: double-tap")
+                        continue
+                    _cut_state["at"] = _now_cut
+                    # Invalidate previews for the question being committed:
+                    # they are guesses about a question that just ended, and
+                    # they compete with the real answer for the GPU.
+                    _preview_state["epoch"] += 1
+                    _preview_state["last_text"] = ""
+                    _cut = segmenter.flush(force=True)
+                    if _cut is None:
+                        logger.info("[ws/transcribe] manual cut: nothing buffered")
+                    else:
+                        logger.info(
+                            "[ws/transcribe] manual cut: %.1fs of audio",
+                            len(_cut) / 16000.0,
+                        )
+                        threading.Thread(
+                            target=_on_utterance,
+                            args=(_cut, time.time()),
+                            kwargs={"manual": True},
+                            daemon=True,
+                        ).start()
+                continue
+
+            data = message.get("bytes")
+            if not data:
                 continue
 
             chunk = np.frombuffer(data, dtype=np.float32)
             if chunk is not None and len(chunk) > 0:
-                transcriber.add_chunk(chunk)
+                # Hidden live transcripts use complete utterances. Running a
+                # second ASR pass over provisional slices competes with both
+                # channels' final questions and is unnecessary here.
+                if not questions_only:
+                    transcriber.add_chunk(chunk)
+                for _utt in segmenter.add_chunk(chunk):
+                    threading.Thread(
+                        target=_on_utterance,
+                        args=(_utt, time.time()),
+                        daemon=True,
+                    ).start()
+                if segmenter.is_speaking != _activity_state["speaking"]:
+                    _activity_state["speaking"] = segmenter.is_speaking
+                    _emit_activity()
+                _now = time.time()
+                if (questions_only and ws_source != "system" and segmenter.is_speaking
+                        and not _draft_state["busy"] and _now - _draft_state["at"] >= 1.5):
+                    _draft = segmenter.peek()
+                    if _draft is not None and len(_draft) >= 16000:
+                        _draft_state["busy"] = True
+                        _draft_state["at"] = _now
+                        threading.Thread(target=_on_draft,
+                                         args=(_draft, _draft_state["epoch"]), daemon=True).start()
+                if (
+                    segmenter.is_speaking
+                    and live_assistance
+                    and not questions_only
+                    and ctx["model"] == "auto"
+                    and not _preview_state["busy"]
+                    and _now - _preview_state["at"] >= _PREVIEW_INTERVAL_S
+                ):
+                    _peek = segmenter.peek()
+                    if _peek is not None and len(_peek) >= 16000 * _PREVIEW_MIN_AUDIO_S:
+                        _preview_state["busy"] = True
+                        _preview_state["at"] = _now
+                        threading.Thread(
+                            target=_on_preview,
+                            args=(_peek, _preview_state["epoch"]),
+                            daemon=True,
+                        ).start()
+
                 if streaming_diarizer is not None:
                     with _audio_lock:
                         _audio_buffer[0] = np.concatenate([_audio_buffer[0], chunk])
@@ -465,9 +1018,17 @@ async def ws_transcribe(ws: WebSocket):
         pass  # nosec B110
     finally:
         ws_closed = True
-        await transcribe_task
-        final_text = transcriber.get_final()
-        combined = " ".join(partial_texts).strip() or final_text
+        if ws_source == "system":
+            _DUAL_CHANNEL["system"] = max(0, _DUAL_CHANNEL["system"] - 1)
+        # Cleanup must run even if the ASGI task is cancelled at an await.
+        from starlette.websockets import WebSocketState
+        try:
+            await transcribe_task
+            final_text = (await asyncio.to_thread(transcriber.get_final)
+                          if ws.client_state == WebSocketState.CONNECTED else "")
+        finally:
+            transcriber.stop(wait=False)
+        combined = final_text or " ".join(partial_texts).strip()
         final_msg = {"type": "final", "text": combined, "source": ws_source}
         if ws_meeting_id:
             final_msg["meeting_id"] = ws_meeting_id
@@ -492,7 +1053,7 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_text(json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "Authentication required. Pass ?token=xxx in WebSocket URL."}}))
             await ws.close(code=4001)
             return
-        user = get_current_user(token)
+        user = await get_current_user(token)
         if not user:
             await ws.accept()
             await ws.send_text(json.dumps({"error": {"code": "INVALID_TOKEN", "message": "Invalid authentication token"}}))
@@ -504,8 +1065,8 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             msg = await ws.receive_text()
             try:
-                result = route_ai(msg, mode=CURRENT_MODE)
-                await ws.send_text(clean_ai_output(result["response"]))
+                result = ai_router.route_ai(msg, mode=CURRENT_MODE)
+                await ws.send_text(ai_router.clean_ai_output(result["response"]))
             except Exception as e:
                 logger.error("[WS] Error processing message: %s", str(e))
                 try:

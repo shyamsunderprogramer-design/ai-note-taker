@@ -1,30 +1,10 @@
 # GitLeaks configuration for AI Note Taker
 # https://gitleaks.io/
 
-[allowlist]
-  description = "Global allow list for known false positives"
-  paths = [
-    '''backend/.env.example''',
-    '''backend/tests/test_.*\.py$''',
-    '''\.devsecops/.*$''',
-  ]
-
-  regexes = [
-    '''admin123''',                    # Default test password (only in test fixtures)
-    '''postgres:postgres''',            # Default local DB credentials
-    '''localhost:\d+''',               # Local service URLs
-    '''127\.0\.0\.1:\d+''',            # Local service URLs
-    '''your-32-char-encryption-key''',  # Placeholder in .env.example
-    '''your-ollama-cloud-api-key''',   # Placeholder in .env.example
-    '''sk-\.\.\.''',                   # Masked API key placeholders
-    '''sk-YOUR-OPENAI-API-KEY-HERE''', # .env.example placeholder
-    '''sk-ant-YOUR-ANTHROPIC-API-KEY-HERE''', # .env.example placeholder
-    '''YOUR-GOOGLE-API-KEY-HERE''',    # .env.example placeholder
-    '''YOUR-GROQ-API-KEY-HERE''',      # .env.example placeholder
-    '''YOUR-GITHUB-TOKEN-HERE''',      # .env.example placeholder
-    '''AIza\.\.\.''',                  # Masked Google API key placeholders
-    '''ghp_\.\.\.''',                  # Masked GitHub token placeholders
-  ]
+# Keep the maintained default detectors. Exact reviewed false-positive
+# fingerprints belong in .gitleaksignore; do not exempt whole test directories.
+[extend]
+useDefault = true
 
 [[rules]]
   id = "ollama-cloud-api-key"

@@ -1,0 +1,26 @@
+/* These document pages use the app's dark palette on an opaque surface. */
+:root {
+  color-scheme: dark;
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #141828;
+  --bg-tertiary: #1e2337;
+  --text-primary: var(--text-main);
+  --text-secondary: #b9bbc7;
+  --border-color: var(--line-bright);
+  --danger-text: #fca5a5;
+  --accent-text: #c4b5fd;
+}
+body { background: var(--bg-primary); }
+.resume-page { height: 100dvh; min-height: 0; overflow: hidden; }
+.resume-content { min-height: 0; overflow-y: auto; }
+.file-info { flex-wrap: wrap; }
+.file-info-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.file-remove-btn { color: var(--danger-text); background: var(--danger-dim); border: 1px solid currentColor; padding: 4px 8px; border-radius: var(--radius-sm); min-height: var(--size-target-min); cursor: pointer; }
+.keyword-pill.missing, .keyword-pill.kw-missing { color: var(--danger-text); }
+#semanticFit { color: var(--accent-text); }
+.resume-page :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 101; padding: 10px; background: var(--bg-primary); color: var(--text-main); transform: translateY(-200%); }
+.skip-link:focus { transform: translateY(0); outline: 2px solid var(--focus-ring); }
+@media (prefers-reduced-motion: reduce) {
+  .resume-page *, .resume-page *::before, .resume-page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

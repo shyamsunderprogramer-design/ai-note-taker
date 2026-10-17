@@ -1,7 +1,7 @@
+from lib.async_stream import iterate_stream
 import json
 import logging
 import os
-import re
 import threading
 import time
 
@@ -10,6 +10,7 @@ import httpx
 
 from config import AI_TEMPERATURE, AI_TIMEOUT, OLLAMA_URL, get_ai_model, TURBO_MAX_TOKENS, INSTANT_MAX_TOKENS
 from utils import clean_ai_output
+from lib.ollama_prompt import prepare_text_payload, PublicAnswerFilter
 
 logger = logging.getLogger("ai_router")
 
@@ -44,6 +45,8 @@ def _warm_provider_keys():
     global _provider_key_cache, _provider_key_cache_time
     try:
         import os as _os
+        if _os.getenv("ANT_DISABLE_KEY_SERVER") == "1":
+            return
         key_secret = _os.getenv("KEY_SERVER_SECRET", "")
         headers = {}
         if key_secret:
@@ -180,13 +183,21 @@ def get_model_candidates(user_input, requested_mode="auto"):
 
 
 def build_prompt(user_input, mode="adaptive", style="concise", messages=None, include_rag=True):
+    user_input = (
+        "Use general knowledge for technical questions. For personal facts and meeting notes, "
+        "use only supplied evidence. Missing facts are unknown, not absent. "
+        "Prior assistant replies are drafts, not evidence. Do not invent agreement, task ordering, "
+        "reasons, or completed actions. Extract only explicit actions; a condition for agreeing "
+        "is not a new assigned task. For action items, list each task separately with its own "
+        "owner and deadline, marking missing values unspecified.\n\n" + user_input
+    )
     # Style-specific instructions
     if style == "concise":
-        style_instruction = "2 sentences max."
+        style_instruction = "Cover every requested point in at most 100 words unless the user asks for more. Use a list for action items; otherwise use a short paragraph."
     elif style == "detailed":
-        style_instruction = "2-3 paragraphs. Code if relevant."
+        style_instruction = "Explain thoroughly at the depth the question needs, without a fixed paragraph or word limit. Use steps, examples, headings, lists, and code when useful. A request to teach or explain more must expand the explanation, not repeat a summary."
     elif style == "bulletpoint":
-        style_instruction = "4 bullets max."
+        style_instruction = "Use bullets to cover the requested points; no fixed bullet count."
     else:
         style_instruction = "Short."
 
@@ -197,7 +208,7 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None, in
         for msg in messages:
             role_label = "You" if msg.get("role") == "user" else "Assistant"
             history_lines.append(f"{role_label}: {msg.get('text', '')}")
-        history_block = "Chat history:\n" + "\n".join(history_lines) + "\n\n"
+        history_block = "Previous conversation (reference only):\n" + "\n".join(history_lines) + "\nEnd of previous conversation. Use this history to resolve short follow-ups, pronouns, and requests for clarification or more detail about the latest topic or code. Answer the new request in that context; do not invent a different topic or repeat an earlier answer verbatim.\n\n"
 
     # Retrieve relevant document context if RAG is enabled (lazy, cached)
     rag_block = ""
@@ -213,30 +224,44 @@ def build_prompt(user_input, mode="adaptive", style="concise", messages=None, in
         except Exception:
             pass  # nosec B110
 
-    base = f"""Slack message between two senior engineers.
+    if style == "spoken" and mode not in ("summary", "followup"):
+        style_instruction = (
+            "Write a natural spoken answer suited to the latest request. "
+            "Use everyday words and explain technical terms briefly. Start with a direct answer, "
+            "then explain how or why in 2–3 short paragraphs, usually 60–110 words. "
+            "No title, tables, numbered sections, TL;DR, or code unless the latest question explicitly requests code. "
+            "For definitions, explain the idea first and give one practical example. "
+            "For experience questions, describe an approach in first person without claiming invented past work. "
+            "Never invent personal tools, projects, achievements, percentages, schedules, or résumé details. "
+            "Only claim past experience when the supplied résumé explicitly supports it. "
+            "Use 'I would' for an approach that is not evidenced. "
+            "A screenshot is context, not a request for a long implementation guide. The actual spoken or typed question takes priority over unrelated screen content. For a technical knowledge question, explain the technology directly; do not claim personal experience. Never invent an expansion for a garbled or unfamiliar acronym. Use explicit corrections and relevant recent conversation to interpret speech; state an assumption when needed, or answer the clear part and ask one brief clarification. "
+            "If the question is broad, state a reasonable scope briefly instead of covering every platform. "
+            "Follow an explicit request for more depth while keeping the wording easy to speak."
+        )
+        return f"""You help with conversations, meetings, interviews, and technical tasks without requiring a mode switch.
+{style_instruction}
 
-FORBIDDEN:
-- No headers/titles (=== or #)
-- No tables
-- No bullet lists
-- No numbered lists
-- No emojis
-- No code blocks unless asked
-- No "Here's" or "Sure" intros
+{history_block}{rag_block}Question: {user_input}
+Answer:"""
 
-Write like a text message. Plain paragraphs only.
+    base = f"""You are ANT, an assistant for meeting notes and interview preparation.
+Follow the user's requested task and format. Use only the supplied facts for summaries
+and action items; mark missing owners or deadlines as unspecified. Give the final
+answer directly, without analysis or thinking tags.
+Default style when the user has not requested a format: {style_instruction}
 
 {history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "code":
-        return f"""Senior engineer. Code when asked. Plain text only.
+        return f"""Senior engineer. Code when asked. {style_instruction}
 
 {history_block}{rag_block}Question: {user_input}
 Answer:"""
 
     if mode == "reasoning":
-        return f"""Senior engineer thinking. Plain text.
+        return f"""Senior engineer. Give the answer, not internal reasoning. {style_instruction}
 
 {history_block}{rag_block}Question: {user_input}
 Answer:"""
@@ -259,7 +284,7 @@ A:"""
 Answer:"""
 
     if mode == "interview":
-        return f"""Senior engineer. Technical. Plain text.
+        return f"""Interview preparation. {style_instruction}
 
 {history_block}{rag_block}Question: {user_input}
 Answer:"""
@@ -273,31 +298,14 @@ Answer:"""
     if mode == "summary":
         return f"""You are a meeting notes assistant. Read the conversation transcript below and produce a structured summary.
 
-STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS (use the same markdown formatting):
-
-# [Topic / Title from conversation]
-
-## Overview
-[Brief 1-2 sentence overview of what this conversation was about]
-
-## Key Points
-[3-5 bullet points of the most important things discussed]
-* bullet one
-* bullet two
-* ...
-
-## Next Steps / Action Items
-[Any tasks, follow-ups, or action items mentioned]
-* action item one
-* action item two
-* ...
-
-## Details
-[Additional important details, definitions, or context that came up]
-- detail one
-- detail two
-
-Do not mention that you are an AI or that you received a transcript. Just produce the summary directly.
+Use a short title and these sections only when the transcript supports them:
+Overview, Key Points, Next Steps / Action Items, and Details.
+Do not pad sections to a fixed number of bullets. Omit unsupported sections.
+For every action use: Task | Owner | Deadline. Write unspecified for missing
+owners or deadlines. Preserve the original task's tense and status. A request
+is not a completed action or an agreement. Do not infer dependencies, reasons,
+participants, or follow-up meetings. Keep the summary no longer than needed.
+Return the summary directly.
 Conversation transcript:
 {user_input}
 """
@@ -310,7 +318,8 @@ The email should:
 - Thank the participants for their time
 - Summarize key discussion points (2-3 bullets)
 - List action items and owners
-- Propose next steps or a follow-up meeting
+- Include only next steps or follow-up meetings stated in the supplied summary
+- Do not invent agreement, owners, deadlines, or completed work
 - Be professional but warm
 
 Meeting summary:
@@ -323,26 +332,34 @@ Meeting summary:
 def ask_ollama(prompt, mode=AI_MODE, model_name=None, style="concise"):
     try:
         final_prompt = build_prompt(prompt, mode, style)
+        model = model_name or get_ai_model(mode)
 
         response = sync_client.post(
             f"{OLLAMA_URL}/api/generate",
             skip_ssrf_check=True,  # internal Ollama service
-            json={
-                "model": model_name or get_ai_model(mode),
+            json=prepare_text_payload({
+                "model": model,
                 "prompt": final_prompt,
                 "stream": False,
+                "think": False,  # qwen3.5:9b / lfm2.5 put content in `thinking` field; force `response` field
                 "options": {
-                    "temperature": AI_TEMPERATURE
+                    "temperature": AI_TEMPERATURE,
+                    "num_ctx": 8192 if "[Resume answer context]" in prompt else 2048,
+                    "num_predict": 2000 if style == "detailed" else 300
                 }
-            },
+            }, sync_client, OLLAMA_URL),
             timeout=AI_TIMEOUT
         )
 
         if response.status_code != 200:
+            if response.status_code == 404:
+                return f"Model '{model}' not installed. Run: ollama pull {model}"
             return "AI service unavailable."
 
         data = response.json()
-        return data.get("response", "").strip()
+        answer_filter = PublicAnswerFilter()
+        answer = (answer_filter.feed(data.get("response", "")) + answer_filter.finish()).strip()
+        return answer or "The model returned no final answer. Try a different model."
 
     except Exception as e:
         logger.error("ask_ollama error: %s", str(e))
@@ -358,23 +375,29 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
 
         final_prompt = build_prompt(prompt, mode, style, messages)
 
-        # Cloud models like qwen3.5:397b-cloud and minimax-m2.7:cloud are more capable
+        # Cloud models like qwen3.5:397b-cloud and gpt-oss:20b-cloud are more capable
         # and produce better responses, so give them more tokens
         is_cloud_model = model_name and (":cloud" in str(model_name) or "-cloud" in str(model_name))
         is_turbo = mode == "turbo"
         is_instant = mode == "instant"
-        num_predict = INSTANT_MAX_TOKENS if is_instant else (TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else (2000 if style == "detailed" else 500))))
+        num_predict = 2000 if style == "detailed" else (max(INSTANT_MAX_TOKENS, 200) if is_instant else (TURBO_MAX_TOKENS if is_turbo else (2000 if is_cloud_model else (300 if style == "concise" else 500))))
+        if style == "spoken":
+            num_predict = max(num_predict, 768)
 
-        import os as _os, psutil
+        import psutil
         cpu_count = psutil.cpu_count(logical=True) or 4
         ram_gb = psutil.virtual_memory().total / (1024 ** 3)
         # Low-end systems: small context window + all CPU threads for speed
-        num_ctx = 2048 if ram_gb < 8 else 4096
+        num_ctx = 2048 if ram_gb < 32 else 4096
+        if '[Resume answer context]' in prompt:
+            num_ctx = max(num_ctx, 8192)
 
         payload = {
             "model": model_name or get_ai_model(mode),
             "prompt": final_prompt,
             "stream": True,
+            "keep_alive": "30m",
+            "think": False,  # qwen3.5:9b / lfm2.5 put content in `thinking` field; force `response` field
             "options": {
                 "temperature": temperature if temperature is not None else AI_TEMPERATURE,
                 "num_predict": num_predict,
@@ -383,17 +406,48 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
             }
         }
 
+        payload = prepare_text_payload(payload, sync_client, OLLAMA_URL)
         with sync_client.stream("POST", f"{OLLAMA_URL}/api/generate", json=payload, timeout=AI_TIMEOUT, skip_ssrf_check=True) as response:
             if response.status_code != 200:
+                model_display = model_name or get_ai_model(mode)
+                # Ollama returns 404 with a JSON body like {"error":"model 'X' not found"} —
+                # surface that with a runnable fix instead of the generic HTTP code.
+                if response.status_code == 404:
+                    err_body = ""
+                    try:
+                        err_body = response.read().decode("utf-8", errors="ignore")[:200]
+                    except Exception:
+                        pass  # A failed error-body read must still yield the actionable model-not-installed response.
+                    logger.error("Ollama 404 for model %s: %s", model_display, err_body)
+                    yield _make_error(
+                        f"Model '{model_display}' not installed. Run: ollama pull {model_display}"
+                    )
+                    return
+                if response.status_code in (402, 410, 429):
+                    reason = {
+                        402: "Provider billing or quota prevents this request. Check the provider account or choose an installed local model.",
+                        410: "This model endpoint is no longer available. Choose a currently available model.",
+                        429: "The provider rate limit was reached. Wait or choose an installed local model.",
+                    }[response.status_code]
+                    yield _make_error(f"{model_display}: {reason}")
+                    return
                 logger.error("Ollama service returned status %d", response.status_code)
                 yield _make_error(f"AI service unavailable (HTTP {response.status_code}).")
                 return
 
             model_display = model_name or get_ai_model(mode)
             yield _make_meta(model_display, "ollama")
+            from lib.sse_helpers import _frame
+            yield _frame("limits", {"model": model_display, "context_tokens": payload["options"].get("num_ctx"),
+                                    "output_tokens": payload["options"].get("num_predict")})
 
+            answer_filter = PublicAnswerFilter()
             chunk_count = 0
+            line_count = 0
+            completed = False
+            truncated = False
             for line in response.iter_lines():
+                line_count += 1
                 if not line:
                     continue
 
@@ -401,12 +455,17 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
                     data = json.loads(line)
 
                     if "response" in data:
-                        chunk = data["response"]
-                        if chunk.strip():
+                        chunk = answer_filter.feed(data["response"])
+                        if chunk:
                             yield _make_content(chunk)
-                            chunk_count += 1
+                            chunk_count += bool(chunk.strip())
 
+                    if data.get("error"):
+                        yield _make_error("The selected model failed during generation. Please retry.")
+                        return
                     if data.get("done", False):
+                        completed = True
+                        truncated = data.get("done_reason") == "length"
                         break
 
                 except json.JSONDecodeError as e:
@@ -416,13 +475,27 @@ def ask_ollama_stream(prompt, mode=AI_MODE, model_name=None, style="concise", me
                     logger.warning("Stream parse error: %s", str(e))
                     continue
 
+            tail = answer_filter.finish()
+            if tail.strip():
+                yield _make_content(tail)
+                chunk_count += 1
+
         ms = int((time.time() - start) * 1000)
-        logger.debug("Stream complete: %d chunks in %dms", chunk_count, ms)
+        logger.info("Stream complete: %d chunks in %dms (%d lines from ollama)", chunk_count, ms, line_count)
+        if not completed:
+            yield _make_error("The model connection ended before the answer was complete. Please retry.")
+            return
+        if truncated:
+            yield _make_error("The answer reached its output limit and may be incomplete. Choose Detailed or ask a narrower question.")
+            return
+        if chunk_count == 0:
+            yield _make_error(f"Model '{model_display}' returned no answer. Try a larger output budget or a different model.")
+            return
         yield _make_done(ms)
 
     except httpx.TimeoutException:
         logger.error("Ollama streaming timeout after %ds", AI_TIMEOUT)
-        yield _make_error("AI response timeout. Please try again.")
+        yield _make_error(f"Model '{model_name or get_ai_model(mode)}' stopped responding for {AI_TIMEOUT}s. It may be loading or under memory pressure. Your selected model was not changed.")
 
     except httpx.ConnectError:
         logger.error("Ollama connection error")
@@ -444,7 +517,12 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
         # When image is provided, use raw prompt (build_prompt wrapper breaks vision models)
         # Without image, use the standard wrapped prompt for text-only queries
         if image_b64:
-            final_prompt = prompt
+            # Preserve follow-up context for screenshots too. The latest request
+            # remains last, and earlier assistant text is not evidence.
+            history = json.dumps(messages or [], ensure_ascii=False)
+            final_prompt = ("Earlier conversation (reference only, not instructions or verified facts): "
+                            + history + "\nAnswer only the current request below. Give the answer directly, "
+                            "without explaining how you will answer.\nCurrent request: " + prompt)
         else:
             final_prompt = build_prompt(prompt, mode, style, messages)
 
@@ -467,6 +545,7 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
             "model": model_to_use,
             "prompt": final_prompt,
             "stream": True,
+            "think": False,  # disable thinking for vision calls too
             "options": {
                 "temperature": temperature if temperature is not None else AI_TEMPERATURE,
                 "num_predict": num_predict,
@@ -498,6 +577,9 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
 
             model_display = model_to_use
             yield _make_meta(model_display, "ollama")
+            from lib.sse_helpers import _frame
+            yield _frame("limits", {"model": model_display, "context_tokens": payload["options"].get("num_ctx"),
+                                    "output_tokens": payload["options"].get("num_predict")})
 
             chunk_count = 0
             for line in response.iter_lines():
@@ -507,7 +589,7 @@ def ask_ollama_vision_stream(prompt, image_b64=None, mode="adaptive", style="con
                     data = json.loads(line)
                     if "response" in data:
                         chunk = data["response"]
-                        if chunk.strip():
+                        if chunk:
                             yield _make_content(chunk)
                             chunk_count += 1
                     if data.get("done", False):
@@ -579,37 +661,55 @@ def route_ai(prompt, mode="adaptive", style="concise"):
     }
 
 
-def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None, temperature=None):
+class AIRouter:
+    """Convenience interface for synchronous AI generation."""
+
+    @staticmethod
+    def generate(prompt: str, mode: str = "fast", style: str = "concise") -> str:
+        res = route_ai(prompt, mode=mode, style=style)
+        if isinstance(res, dict):
+            return res.get("response", "")
+        return str(res)
+
+
+ai_router = AIRouter()
+
+
+async def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama", messages=None, temperature=None):
     """
-    Yields SSE event strings (meta, content, done, error).
+    Async generator that yields SSE event strings (meta, content, done, error).
     Cloud providers yield their own SSE strings directly.
     Ollama falls through to ask_ollama_stream().
+
+    Provider iterators are adapted locally; synchronous reads run in workers.
     """
     # Check if provider is an Ollama Cloud model (has :cloud suffix)
-    # e.g. "minimax-m2.7:cloud", "qwen3.5:397b-cloud"
-    is_ollama_cloud = provider and provider.endswith(":cloud")
+    # e.g. "gpt-oss:20b", "qwen3.5:397b-cloud"
+    is_ollama_cloud = provider and provider.endswith((":cloud", "-cloud"))
 
     if is_ollama_cloud:
         # Ollama Cloud model — use cloud_providers module
         if not _has_provider_key_fast("ollama-cloud"):
-            logger.info("[route_ai_stream] Ollama Cloud model '%s' selected but no key — falling back to local Ollama", provider)
-            # Fall through to local Ollama below
+            yield _make_error("Selected Ollama Cloud model requires a configured API key")
+            return
         else:
             try:
-                from cloud_providers import ask_ollama_cloud_stream
-                for event in ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages, temperature=temperature):
+                # Adapt provider streams locally without changing their public protocol.
+                from modules.platform.cloud_providers import ask_ollama_cloud_stream
+                async for event in iterate_stream(ask_ollama_cloud_stream(prompt, model=provider, mode=mode, style=style, messages=messages, temperature=temperature)):
                     yield event
                 return
             except Exception as e:
                 logger.error("Ollama Cloud stream error: %s", str(e))
-                # Fall through to local Ollama instead of hard error
+                yield _make_error(f"Selected Ollama Cloud model failed: {e}")
+                return
 
     # Check if provider looks like a local Ollama model name (contains colon)
     # e.g. "qwen2.5:1.5b", "deepseek-r1:8b"
     if provider and ":" in provider and not is_ollama_cloud:
         # This is a local Ollama model — use Ollama streaming directly
         try:
-            for event in ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages, temperature=temperature):
+            async for event in iterate_stream(ask_ollama_stream(prompt, mode=mode, model_name=provider, style=style, messages=messages, temperature=temperature)):
                 yield event
             return
         except Exception as e:
@@ -617,50 +717,62 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
             yield _make_error(f"Ollama error: {e}")
             return
 
-    # "auto" mode — race available cloud providers for fastest response
+    # Auto tries configured clouds before local fallback. Once an answer starts,
+    # a failure is surfaced instead of replacing it with another model's text.
     if provider == "auto":
-        try:
-            from cloud_providers import PROVIDER_MODEL_MAP, get_stream_fn
-            import os as _os
-            # Speed priority: groq > google > openai > anthropic
-            SPEED_PRIORITY = [
-                "groq-llama-3-3-70b", "google-gemini-2-0-flash",
-                "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku",
-            ]
-            # Find first fast cloud provider that has a stream function and API key (cached, zero HTTP calls)
-            for fast_model in SPEED_PRIORITY:
-                if fast_model in PROVIDER_MODEL_MAP:
-                    provider_prefix, model_name = PROVIDER_MODEL_MAP[fast_model]
-                    stream_fn = get_stream_fn(provider_prefix)
-                    if stream_fn and _has_provider_key_fast(provider_prefix):
-                        logger.info("[route_ai_stream] auto → %s (%s)", fast_model, provider_prefix)
-                        for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
+        from lib.sse_helpers import has_answer_content
+        from modules.platform.cloud_providers import PROVIDER_MODEL_MAP, get_stream_fn
+        preferred = ["groq-gpt-oss-120b", "google-gemini-3-8-flash",
+                     "openai-gpt-4o-mini", "anthropic-claude-3-5-haiku", "ollama-cloud"]
+        for candidate in preferred:
+            resolved = PROVIDER_MODEL_MAP.get(candidate)
+            if not resolved or not _has_provider_key_fast(resolved[0]):
+                continue
+            stream_fn = get_stream_fn(candidate)
+            if not stream_fn:
+                continue
+            answered = False
+            metadata = None
+            try:
+                async for event in iterate_stream(stream_fn(prompt, model=resolved[1], mode=mode,
+                                             style=style, messages=messages, temperature=temperature)):
+                    if "event: error" in event:
+                        if answered:
                             yield event
-                        return
-            logger.info("[route_ai_stream] auto → no paid cloud keys found, trying Ollama Cloud")
-            # Try free Ollama Cloud (gemma3) as fallback
-            if _has_provider_key_fast("ollama-cloud"):
-                try:
-                    from cloud_providers import ask_ollama_cloud_stream
-                    logger.info("[route_ai_stream] auto → Ollama Cloud (gemma3:cloud)")
-                    for event in ask_ollama_cloud_stream(prompt, model="gemma3:cloud", mode=mode, style=style, messages=messages, temperature=temperature):
-                        yield event
+                            return
+                        break
+                    if not answered:
+                        if "event: meta" in event:
+                            metadata = event
+                        if not has_answer_content(event):
+                            continue
+                        answered = True
+                        if metadata:
+                            yield metadata
+                    yield event
+                if answered:
                     return
-                except Exception:
-                    pass  # nosec B110
-            logger.info("[route_ai_stream] auto → no Ollama Cloud key, falling back to local Ollama")
-        except Exception as e:
-            logger.error("[route_ai_stream] auto cloud race error: %s", str(e))
+            except Exception:
+                if answered:
+                    yield _make_error("The selected provider could not finish its answer. Please retry.")
+                    return
+        logger.info("[route_ai_stream] configured clouds unavailable; using local fallback")
 
     # Cloud providers (OpenAI, Anthropic, Google, etc.) — use cloud_providers module
     if provider and provider != "ollama" and "-" in provider:
         try:
-            from cloud_providers import get_stream_fn, PROVIDER_MODEL_MAP
+            # Absolute import — see comment at line 628. This is the
+            # path the user hit as "Cloud AI error: 'async for' requires
+            # an object with __aiter__ method, got generator".
+            from modules.platform.cloud_providers import get_stream_fn, PROVIDER_MODEL_MAP
             stream_fn = get_stream_fn(provider)
+            if stream_fn is None:
+                yield _make_error(f"Unknown model selection: {provider}. Choose an available model.")
+                return
             if stream_fn:
                 resolved = PROVIDER_MODEL_MAP.get(provider, ("openai", "gpt-4o-mini"))
                 model_name = resolved[1]
-                for event in stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature):
+                async for event in iterate_stream(stream_fn(prompt, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)):
                     yield event
                 return
         except Exception as e:
@@ -674,7 +786,7 @@ def route_ai_stream(prompt, mode="adaptive", style="concise", provider="ollama",
     for candidate_mode, model_name in candidates:
         try:
             accumulated = []
-            for event in ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages, temperature=temperature):
+            async for event in iterate_stream(ask_ollama_stream(prompt, mode=candidate_mode, model_name=model_name, style=style, messages=messages, temperature=temperature)):
                 accumulated.append(event)
                 # Check for error early
                 if event.startswith("event: error"):

@@ -1,7 +1,7 @@
 """AI-selected highlight reel generator — identifies key moments in conversations."""
 import logging
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 logger = logging.getLogger("modules.ai.highlight_reel")
 

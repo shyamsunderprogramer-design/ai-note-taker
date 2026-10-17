@@ -27,43 +27,7 @@ terraform {
     }
   }
 
-  backend "gcs" {
-    bucket = "ant-tf-state"
-    prefix = "terraform/state"
-  }
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Variables
-# ─────────────────────────────────────────────────────────────────────────────
-variable "environment" {
-  description = "Deployment environment"
-  type        = string
-  default     = "production"
-}
-
-variable "image_tag" {
-  description = "Docker image tag to deploy"
-  type        = string
-  default     = "latest"
-}
-
-variable "project" {
-  description = "GCP Project ID"
-  type        = string
-  default     = "your-project-id"
-}
-
-variable "region" {
-  description = "GCP Region"
-  type        = string
-  default     = "us-central1"
-}
-
-variable "zone" {
-  description = "GCP Zone"
-  type        = string
-  default     = "us-central1-a"
+  # Backend configuration lives in backend.tf (moved in Fix #24).
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -152,12 +116,12 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 # GKE Cluster
 # ─────────────────────────────────────────────────────────────────────────────
 resource "google_container_cluster" "main" {
-  name                       = "ant-gke-${var.environment}"
-  location                   = var.zone
-  remove_default_node_pool   = true
-  initial_node_count         = 1
-  network                    = google_compute_network.main.name
-  subnetwork                 = google_compute_subnetwork.main.name
+  name                     = "ant-gke-${var.environment}"
+  location                 = var.zone
+  remove_default_node_pool = true
+  initial_node_count       = 1
+  network                  = google_compute_network.main.name
+  subnetwork               = google_compute_subnetwork.main.name
 
   enable_intranode_visibility = true
   enable_shielded_nodes       = true
@@ -168,7 +132,7 @@ resource "google_container_cluster" "main" {
   }
 
   private_cluster_config {
-    enable_private_nodes   = true
+    enable_private_nodes    = true
     enable_private_endpoint = false
     master_ipv4_cidr_block  = "10.6.0.0/28"
   }
@@ -180,7 +144,9 @@ resource "google_container_cluster" "main" {
   }
 
   security_posture_config {
-    mode = "ENABLED"
+    # Fix #24: `ENABLED` was a valid value in 4.x; 5.x accepts only
+    # DISABLED / BASIC / ENTERPRISE. `BASIC` is the equivalent of ENABLED.
+    mode = "BASIC"
   }
 
   workload_identity_config {
@@ -190,8 +156,9 @@ resource "google_container_cluster" "main" {
   ip_allocation_policy {
     cluster_secondary_range_name  = "pods"
     services_secondary_range_name = "services"
-    stack_type                   = "IPV4_IPV6"
-    dual_stack_type              = "IPV4_IPV6"
+    # Fix #24: removed `dual_stack_type` (deprecated in google provider 5.x;
+    # `stack_type = "IPV4_IPV6"` already enables dual-stack).
+    stack_type = "IPV4_IPV6"
   }
 
   release_channel {
@@ -234,8 +201,8 @@ resource "google_container_node_pool" "backend" {
     machine_type    = "n2-standard-2"
     service_account = google_service_account.backend.email
 
-    preemptible  = var.environment != "production"
-    spot         = var.environment != "production"
+    preemptible = var.environment != "production"
+    spot        = var.environment != "production"
 
     disk_size_gb = 50
     disk_type    = "pd-ssd"
@@ -316,8 +283,9 @@ data "google_project" "number" {
 }
 
 resource "google_artifact_registry_repository" "main" {
-  location      = var.region
-  name          = "ant-docker"
+  location = var.region
+  # Fix #24: `name` is computed by the provider from `repository_id`; setting
+  # it explicitly triggers "value will be decided automatically" on apply.
   repository_id = "ant-docker"
   description   = "ANT Docker repository"
   format        = "DOCKER"
@@ -326,7 +294,9 @@ resource "google_artifact_registry_repository" "main" {
 
   mode = "STANDARD_REPOSITORY"
 
-  encryption_kms_key_name = google_kms_crypto_key.artifact_registry.id
+  # Fix #24: the original attribute was `encryption_kms_key_name` (4.x).
+  # Renamed to `kms_key_name` in google provider 5.x — same CMEK behavior.
+  kms_key_name = google_kms_crypto_key.artifact_registry.id
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -335,17 +305,18 @@ resource "google_artifact_registry_repository" "main" {
 resource "google_sql_database_instance" "main" {
   name             = "ant-postgres-${var.environment}"
   database_version = "POSTGRES_17"
-  region          = var.region
+  region           = var.region
 
-  deletion_protection  = var.environment == "production"
-  enable_binary_logging = var.environment == "production"
+  deletion_protection = var.environment == "production"
+  # Fix #24: removed `enable_binary_logging` (deprecated; moved to
+  # `settings.backup_configuration.binary_log_enabled`).
 
   settings {
     tier              = var.environment == "production" ? "db-n1-standard-2" : "db-f1-micro"
     availability_type = var.environment == "production" ? "REGIONAL" : "ZONAL"
-    disk_type        = "PD_SSD"
-    disk_size        = 100
-    disk_autoresize  = true
+    disk_type         = "PD_SSD"
+    disk_size         = 100
+    disk_autoresize   = true
 
     ip_configuration {
       ipv4_enabled    = false
@@ -443,9 +414,9 @@ resource "google_sql_database_instance" "main" {
 
     insights_config {
       query_insights_enabled  = true
-      query_string_length      = 1024
-      record_application_tags  = true
-      record_client_address    = false
+      query_string_length     = 1024
+      record_application_tags = true
+      record_client_address   = false
     }
   }
 
@@ -496,8 +467,10 @@ resource "google_compute_security_policy" "main" {
   description = "ANT Security Policy"
 
   adaptive_protection_config {
-    layer7_ddos_defense_config {
-      enable = var.environment == "production"
+    # Fix #24: renamed `layer7_ddos_defense_config` → `layer_7_ddos_defense_config`
+    # (google provider 5.x follows the newer Compute API naming).
+    layer_7_ddos_defense_config {
+      enable          = var.environment == "production"
       rule_visibility = "STANDARD"
     }
   }
@@ -540,7 +513,10 @@ resource "google_compute_security_policy" "main" {
 # Kubernetes Provider
 # ─────────────────────────────────────────────────────────────────────────────
 provider "kubernetes" {
-  host                   = "https://${var.zone}/${google_container_cluster.main.id}"
+  # Fix #24: was `host = "https://${var.zone}/${google_container_cluster.main.id}"`
+  # which is wrong — .id is the project-scoped resource ID, not the control
+  # plane URL. Use .endpoint (the actual control plane IP/hostname).
+  host                   = google_container_cluster.main.endpoint
   token                  = data.google_client_config.default.access_token
   cluster_ca_certificate = base64decode(google_container_cluster.main.master_auth[0].cluster_ca_certificate)
 }
@@ -550,7 +526,8 @@ provider "kubernetes" {
 # ─────────────────────────────────────────────────────────────────────────────
 provider "helm" {
   kubernetes {
-    host                   = "https://${var.zone}/${google_container_cluster.main.id}"
+    # Fix #24: same change as the kubernetes provider above.
+    host                   = google_container_cluster.main.endpoint
     token                  = data.google_client_config.default.access_token
     cluster_ca_certificate = base64decode(google_container_cluster.main.master_auth[0].cluster_ca_certificate)
   }
@@ -562,10 +539,10 @@ data "google_client_config" "default" {}
 # Helm Release - Backend
 # ─────────────────────────────────────────────────────────────────────────────
 resource "helm_release" "ant_backend" {
-  name       = "ant-backend"
-  repository = "file://../../k8s/helm/backend"
-  chart      = "ant-backend"
-  namespace  = "ant"
+  name             = "ant-backend"
+  repository       = "file://../../k8s/helm/backend"
+  chart            = "ant-backend"
+  namespace        = "ant"
   create_namespace = true
 
   values = [

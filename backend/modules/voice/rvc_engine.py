@@ -10,7 +10,20 @@ import time
 import asyncio
 import concurrent.futures
 import re
+from pathlib import Path
 from typing import Optional, Dict
+
+
+def _default_voice_storage_dir() -> str:
+    """Canonical voice-clone storage: backend/data/voice_models/.
+
+    See voice_clone_agent.py for rationale. Single source of truth.
+    """
+    env_override = os.environ.get("ANT_VOICE_STORAGE_DIR")
+    if env_override:
+        return env_override
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    return str(backend_root / "data" / "voice_models")
 
 logger = logging.getLogger("rvc_engine")
 
@@ -47,7 +60,7 @@ def detect_device() -> str:
             logger.info("[RVCEngine] Using DirectML (GPU acceleration) for inference")
             return "dml"
     except ImportError:
-        pass
+        pass  # ONNX Runtime is optional; report and select the CPU fallback below.
     logger.info("[RVCEngine] Using CPU for inference")
     return "cpu"
 
@@ -58,12 +71,12 @@ class RVCEngine:
     Manages model loading, device selection, and inference.
     """
 
-    def __init__(self, storage_dir: str = "data/voice_models"):
-        self.storage_dir = storage_dir
+    def __init__(self, storage_dir: str = None):
+        self.storage_dir = storage_dir or _default_voice_storage_dir()
         self.device = detect_device()
         self._loaded_models: Dict[str, object] = {}
-        os.makedirs(os.path.join(storage_dir, "audio"), exist_ok=True)
-        os.makedirs(os.path.join(storage_dir, "_tmp"), exist_ok=True)
+        os.makedirs(os.path.join(self.storage_dir, "audio"), exist_ok=True)
+        os.makedirs(os.path.join(self.storage_dir, "_tmp"), exist_ok=True)
 
     def is_available(self) -> bool:
         """Check if RVC engine is functional."""

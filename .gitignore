@@ -1,82 +1,9 @@
-# ============================================
-# AI NOTE TAKER - PRODUCTION GITIGNORE
-# ============================================
+# ─────────────────────────────────────────────────────────────────
+# ANT (AI Note Taker) — Root .gitignore
+# Generated 2026-06-05 from project audit
+# ─────────────────────────────────────────────────────────────────
 
-# =========================
-# PYTHON / BACKEND
-# =========================
-# Virtual environments
-AINT_Venv/
-venv/
-env/
-ENV/
-.venv/
-pythonenv*
-
-# Python cache
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-*.egg
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Pytest / coverage
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-*.cover
-*.py,cover
-.hypothesis/
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# =========================
-# NODE / FRONTEND
-# =========================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# Build outputs
-apps/*/dist/
-apps/*/build/
-electron/dist/
-electron/build/
-electron/out/
-electron/release/
-electron/dist-electron/
-
-# =========================
-# IDE / EDITOR
-# =========================
-.vscode/
-.idea/
-*.iml
-*.sublime-project
-*.sublime-workspace
-*.swp
-*.swo
-*~
-
-# =========================
-# OS FILES
-# =========================
+# ── OS noise ─────────────────────────────────────────────────────
 .DS_Store
 .DS_Store?
 ._*
@@ -84,164 +11,304 @@ electron/dist-electron/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
 
-# =========================
-# LOGS
-# =========================
-*.log
-logs/
-*.log.*
-server.log
-celery.log
-apps/*/server.log
-
-# =========================
-# TEMPORARY / RUNTIME FILES
-# =========================
-temp_audio/
-temp_audio_test/
-electron/temp_audio/
-backend/temp_audio/
-*.tmp
-*.temp
-*.wav
-*.mp3
-cache/
-.cache/
-*.pid
-*.seed
-*.pid.lock
-electron-data/
-
-# =========================
-# DATABASE / DATA
-# =========================
-# Local development databases
-data/*.db
-data/*.sqlite
-data/*.sqlite3
-backend/*.db
-
-# User data (do not commit)
-data/users.json
-data/conversations/
-data/voice_models/
-data/user_keys/
-data/meeting_templates/
-data/
-
-# Backend data
-backend/data/
-backend/uploads/
-backend/temp/
-
-# =========================
-# ENVIRONMENT / SECRETS
-# =========================
+# ── Secrets & env ────────────────────────────────────────────────
 .env
-.env.local
-.env.development
-.env.production
-.env.test
-.env.*.local
-
-# Secrets
+.env.*
+!.env.example
 *.pem
 *.key
 *.crt
-*.p12
-*.pfx
 secrets/
-config/secrets/
+secrets.*.yaml
 
-# API Keys (never commit)
-*api_key*
-*apikey*
-*.apikey
-openai_key
-gemini_key
-cohere_key
-deepseek_key
+# ── Python ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
 
-# =========================
-# DOCKER
-# =========================
-.dockerignore
-docker-compose.override.yml
+# BUT: backend/lib/ is real source code (SSE helpers + HTTP client),
+# not a Python virtualenv's site-packages. Un-ignore it.
+!backend/lib/
 
-# =========================
-# INFRASTRUCTURE
-# =========================
+# Same for electron/lib/ (logger.js, paths.js, crypto.js). Without
+# this, electron-builder honors the `lib/` rule above and omits the
+# directory from the asar — main.js then throws MODULE_NOT_FOUND for
+# require("./lib/logger") and the app silently hangs on launch.
+!electron/lib/
+
+# Root package-lock.json is NOT used by the release CI — only
+# electron/package-lock.json is. If a root lockfile exists it tends to
+# drag in @rollup/rollup-{darwin-arm64,win32-x64,...} transitive deps
+# from a single-platform `npm install`, which then fail EBADPLATFORM on
+# the other 2 matrix runners. The root package.json has no real deps
+# (only eslint in devDependencies; all installable workspaces carry
+# their own lockfile).
+package-lock.json
+var/
+wheels/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+
+# Virtual environments
+AINT_Venv/
+AINT_Venv*/
+.venv/
+venv/
+venv*/
+backend/venv/
+env/
+ENV/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+pyright/
+.dmypy.json
+dmypy.json
+*.cover
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+profile_default/
+
+# ── Node / JS ────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.cache/
+.next/
+.nuxt/
+.svelte-kit/
+.vite/
+.webpack/
+.turbo/
+.netlify/
+.vercel/
+
+# Bun
+bun.lockb
+bun.lock
+
+# ── Databases & runtime data ─────────────────────────────────────
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# User / auth data
+users.json
+users.json.backup
+users.json.backup-*
+
+# Audit logs (contain user actions — never commit)
+audit.jsonl
+audit_logs/
+audit.log
+*.log
+
+# Recordings / audio
+recordings/
+temp_audio/
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+*.aac
+voice_models/audio/
+voice_models/*/audio/
+voice_models/_tmp/
+
+# Conversation data
+conversations/
+
+# Meeting templates (auto-generated)
+meeting_templates/
+
+# User keys (encrypted API keys per user)
+user_keys/
+
+# Vector stores / embeddings
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.faiss
+*.index
+*.ann
+
+# Documents storage
+documents/
+vectors/
+
+# ── Build artifacts ──────────────────────────────────────────────
+# Frontend dist (Vite/webpack output)
+apps/web/dist/
+apps/landing/dist/
+apps/web/dev-dist/    # Vite preview cache
+apps/web/.vite/      # Vite cache
+apps/web/.vercel/    # Vercel CLI cache
+
+# Backend distributables
+backend/build/
+backend/dist/
+backend/*.egg-info/
+
+# Electron builds
+electron/dist/
+electron/out/
+electron/build/
+
+# Extension builds
+chrome-extension/dist/
+browser-extension/dist/
+
+# Helm / k8s rendered output
+k8s/**/charts/
+k8s/**/*.tgz
+
 # Terraform
-infrastructure/terraform/.terraform/
-infrastructure/terraform/*.tfstate
-infrastructure/terraform/*.tfstate.*
-infrastructure/terraform/*.tfvars
-infrastructure/terraform/crash.log
-infrastructure/terraform/override.tf
-infrastructure/terraform/*_override.tf
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
-# K8s secrets
-k8s/secrets/
-k8s/*/secrets/
-*.secret.yml
-*.secret.yaml
+# ── IDE / editor ─────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
 
-# Ansible
-*.retry
+# ── Media (large binaries) ───────────────────────────────────────
+# assets/design/source/ holds source design files (Gemini outputs,
+# debug frames, video exports). The *.mp4 / *.gif / etc. patterns
+# below catch all video files; Gemini PNGs and other large generated
+# assets are listed under "Project-specific" below.
+*.mp4
+*.mov
+*.avi
+*.webm
+*.gif
 
-# =========================
-# TEST FILES
-# =========================
-test_output/
-test-results/
-playwright-report/
-playwright/.cache/
+# ── Project-specific ─────────────────────────────────────────────
+# Local test databases
+data/ainotetaker.db
+backend/data/ainotetaker.db
+backend/core/data/ainotetaker.db
+
+# One-shot migration markers (created by Alembic / DataMigrator runs).
+# Each machine writes one; never commit.
+*.migrated_to_sql
+backend/data/.migrated_to_sql
+
+# Test outputs
+backups/
+backup-*.db
+*.dump
+*.bak
+
+# SSL generated for local dev
+ssl/
+*.local.pem
+localhost.pem
+
+# ── Design assets (large binaries) ───────────────────────────────
+# assets/design/source/ holds source design files. The *.mp4 / *.gif
+# / *.webm patterns in the Media section already catch all videos.
+# Only the large Gemini-generated PNGs (8 files, ~50MB total) need
+# explicit paths because *.png is otherwise allowed.
+assets/design/source/Gemini_Generated_Image_*.png
+
+# ── Coverage / test reports ──────────────────────────────────────
 coverage/
+*.lcov
+.nyc_output/
 
-# =========================
-# DOCUMENTATION (BUILD)
-# =========================
-docs/_build/
-site/
+# ── Misc ─────────────────────────────────────────────────────────
+*.pid
+*.seed
+*.pid.lock
+lib-cov
+*.pidfile
 
-# =========================
-# EXTENSIONS
-# =========================
-# Chrome Extension
-chrome-extension/*.zip
-chrome-extension/*.crx
-chrome-extension/build/
-chrome-extension/node_modules/
+# Local development flags
+.flag
+.flags/
 
-# VS Code Extension
-vscode-extension/out/
-vscode-extension/*.vsix
-vscode-extension/node_modules/
+# Serverless / function output
+.serverless/
+.netlify/
+.zeabur_output/
 
-# =========================
-# NEO4J (LOCAL DATA)
-# =========================
-neo4j/data/
-neo4j/logs/
-neo4j/run/
-neo4j/plugins/
-neo4j/neo4j-community/data/
-neo4j/neo4j-community/logs/
-neo4j/neo4j-community/run/
+# ── Re-include patterns ──────────────────────────────────────────
+# Allow these even if a parent pattern is ignored
+!.gitkeep
+!.gitignore
+!.dockerignore
+!.editorconfig
+!README.md
+!LICENSE
+!CHANGELOG.md
 
-# =========================
-# AI ASSISTANT
-# =========================
-.claude/
-
-# =========================
-# ARCHIVED / UNWANTED FILES
-# =========================
-_archive/
-
-# =========================
-# GARBLED FILES
-# =========================
-*rendererstyle.css
-EOF
+# Relocatable runtime generated for desktop releases
+/AINT_Python/

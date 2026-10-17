@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/png" href="favicon.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume Review V2 - AI-Powered Analysis | Free Forever</title>
     <link rel="stylesheet" href="style.css?v=25">
     <style>
+        .hidden { display: none !important; }
         /* Resume Review V2 Styles */
         :root {
             --score-excellent: #10b981;
@@ -1141,11 +1143,13 @@
             .quality-metrics { flex-direction: column; gap: 20px; }
         }
     </style>
+    <link rel="stylesheet" href="resume-review-common.css">
 </head>
 <body>
+    <a class="skip-link" href="#resumeMain">Skip to résumé workspace</a>
     <div class="resume-page">
         <header class="resume-header-fixed">
-            <button class="resume-back-arrow" onclick="window.location.href='index.html'">←</button>
+            <button class="resume-back-arrow" aria-label="Back to app" onclick="window.location.href='index.html'">←</button>
             <div class="resume-header-content">
                 <h1 class="resume-header-title">AI Resume Review V2</h1>
                 <div class="header-subtitle">Recruiter scan • ATS check • Interview prep
@@ -1154,7 +1158,7 @@
             </div>
         </header>
 
-        <main class="resume-content">
+        <main class="resume-content" id="resumeMain" tabindex="-1">
             <div class="resume-container">
                 <!-- Input Section -->
                 <div class="input-section">
@@ -1162,8 +1166,8 @@
 
                     <!-- File Upload -->
                     <div class="form-group">
-                        <label>Upload Resume (PDF, DOCX, TXT)</label>
-                        <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('resumeFile').click()">
+                        <label for="resumeFile">Upload Resume (PDF, DOCX, TXT)</label>
+                        <div class="file-upload-area" id="fileUploadArea" role="button" tabindex="0" aria-label="Upload résumé file" onclick="document.getElementById('resumeFile').click()">
                             <input type="file" id="resumeFile" accept=".pdf,.docx,.doc,.txt,.md,.rtf" style="display: none;" onchange="resumeReviewV2.handleFileUpload(this)">
                             <div class="file-upload-icon">📄</div>
                             <div class="file-upload-text">Click to upload or drag & drop</div>
@@ -1176,12 +1180,12 @@
 
                     <!-- Text Input -->
                     <div class="form-group">
-                        <label>Paste Resume Text</label>
+                        <label for="resumeInput">Paste Resume Text</label>
                         <textarea id="resumeInput" placeholder="Paste your resume content here..."></textarea>
                     </div>
 
                     <div class="form-group">
-                        <label>🎯 Job Description (optional but recommended)</label>
+                        <label for="jobInput">🎯 Job Description (optional but recommended)</label>
                         <textarea id="jobInput" rows="5" placeholder="Paste job description for tailored keyword matching and interview prep..."></textarea>
                     </div>
 
@@ -1301,6 +1305,7 @@
     </div>
 
     <script src="js/core/config.js"></script>
+    <script src="js/core/auth-helper.js"></script>
     <script src="js/core/window-controls.js"></script>
     <script src="resume-review-v2.js"></script>
 </body>

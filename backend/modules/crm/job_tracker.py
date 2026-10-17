@@ -174,7 +174,7 @@ class JobTracker:
             from cognitive_graph import cognitive_graph
             self.cognitive_graph = cognitive_graph
         except ImportError:
-            pass
+            pass  # The optional graph stays disabled when its dependency is not installed.
 
     def create_application(
         self,

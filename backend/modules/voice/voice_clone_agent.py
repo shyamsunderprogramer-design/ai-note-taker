@@ -7,15 +7,28 @@ Uses RVC (Retrieval-based Voice Conversion) + TTS
 import os
 import json
 import time
+from pathlib import Path
 from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 
-logger = None
-try:
-    import logging
-    logger = logging.getLogger("voice_clone")
-except ImportError:
-    pass
+
+def _default_voice_storage_dir() -> str:
+    """Canonical voice-clone storage: backend/data/voice_models/.
+
+    Resolved relative to *this* file (modules/voice/) so the path is
+    stable regardless of the server's CWD. Overridable via constructor
+    argument or the ANT_VOICE_STORAGE_DIR env var.
+    """
+    env_override = os.environ.get("ANT_VOICE_STORAGE_DIR")
+    if env_override:
+        return env_override
+    # backend/modules/voice/voice_clone_agent.py -> backend/data/voice_models/
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    return str(backend_root / "data" / "voice_models")
+
+import logging
+
+logger = logging.getLogger("voice_clone")
 
 
 @dataclass
@@ -34,20 +47,25 @@ class VoiceModel:
     f0_method: str = "rmvpe"       # Pitch extraction method
     edge_voice: str = ""           # Edge TTS voice name override
     training_progress: float = 0.0 # 0.0 - 1.0
+    reference_audio: str = ""    # Embedded clone engine reference
+    reference_text: str = ""     # Transcript matching reference audio
     training_error: str = ""       # Error message if status == "error"
 
 
 class VoiceCloneManager:
     """Manages voice cloning for interview practice"""
 
-    def __init__(self, storage_dir: str = "data/voice_models"):
-        self.storage_dir = storage_dir
+    def __init__(self, storage_dir: str = None):
+        # Use absolute path derived from this file's location so voice-clone
+        # data lives in the same place regardless of server CWD. Pass an
+        # explicit `storage_dir` to override (e.g. in tests).
+        self.storage_dir = storage_dir or _default_voice_storage_dir()
         self.models: Dict[str, VoiceModel] = {}
         self.current_model: Optional[str] = None
         self._rvc_engine = None
         self._rvc_trainer = None
 
-        os.makedirs(storage_dir, exist_ok=True)
+        os.makedirs(self.storage_dir, exist_ok=True)
         self._load_existing_models()
 
     @property
@@ -274,6 +292,21 @@ class VoiceCloneManager:
         if model.status != "ready":
             return {"error": "Model not ready", "status": model.status}
 
+        if model.source == "qwen_local":
+            from modules.voice.local_clone_engine import get_local_clone_engine
+            try:
+                output = await get_local_clone_engine(self.storage_dir).synthesize(
+                    model.reference_audio, model.reference_text, text, Path(self.storage_dir) / "audio",
+                )
+                return {"status": "completed", "source": "qwen_local", "text": text,
+                        "model_id": model_id, "voice_name": model.name,
+                        "output_file": str(output), "audio_url": f"/voice-clone/audio/{output.name}",
+                        "file_size": output.stat().st_size}
+            except Exception as exc:
+                if logger:
+                    logger.warning("[VoiceClone] Local synthesis failed: %s", exc)
+                return {"error": "Local voice generation failed: " + str(exc)[-500:], "source": "qwen_local"}
+
         # Try RVC pipeline first
         if self.rvc_engine and model_id in self.rvc_engine._loaded_models:
             try:
@@ -316,7 +349,6 @@ class VoiceCloneManager:
             seen = set()
             voices_to_try = [v for v in voices_to_try if v not in seen and not seen.add(v)]
 
-            last_error = None
             for try_voice in voices_to_try:
                 try:
                     communicate = edge_tts.Communicate(text, try_voice)
@@ -340,7 +372,6 @@ class VoiceCloneManager:
                             "status": "completed",
                         }
                     else:
-                        last_error = f"Voice {try_voice} produced no output"  # lgtm[py/multiple-definition]
                         if logger:
                             logger.warning("[VoiceClone] Voice %s produced no output, trying next", try_voice)
                         # Clean up empty file
@@ -350,7 +381,6 @@ class VoiceCloneManager:
                             except OSError:
                                 pass  # nosec B110
                 except Exception as e:
-                    last_error = str(e)  # lgtm[py/multiple-definition]
                     if logger:
                         logger.warning("[VoiceClone] Voice %s failed: %s, trying next", try_voice, str(e))
                     # Clean up partial file
@@ -360,6 +390,8 @@ class VoiceCloneManager:
                         except OSError:
                             pass  # nosec B110
                     continue
+
+            return {"error": "Speech generation failed for the available voices"}
 
         except ImportError:
             return {

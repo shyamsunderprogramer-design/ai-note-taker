@@ -11,14 +11,15 @@ import json
 import logging
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from lib.storage_paths import storage_path
+from typing import Dict, List
 
 import numpy as np
 
 logger = logging.getLogger("semantic_search")
 
 # Persistence path
-EMBEDDINGS_DIR = Path(__file__).parent.parent / "platform" / "data" / "vectors"
+EMBEDDINGS_DIR = storage_path(Path(__file__).parent.parent / "platform" / "data" / "vectors", "documents", "vectors")
 GRAPH_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "graph_embeddings.json"
 
 

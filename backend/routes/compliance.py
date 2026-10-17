@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from security import get_current_user, log_audit_event
+from security import log_audit_event
 from security.auth import User
 
 logger = logging.getLogger("routes.compliance")
@@ -32,23 +32,7 @@ async def get_token(
     return None
 
 
-async def require_authentication(
-    token: Optional[str] = Depends(get_token),
-) -> User:
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user = get_current_user(token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
+from routes.deps import require_authentication
 
 
 async def require_admin(user: User = Depends(require_authentication)) -> User:
@@ -613,10 +597,8 @@ async def record_ai_consent(
     )
 
     logger.info(  # lgtm[py/log-injection]
-        "[COMPLIANCE] AI consent %s for user %s: %s",
+        "[COMPLIANCE] AI consent %s",
         "granted" if body.granted else "revoked",
-        user.id,
-        body.consent_type,
     )
 
     return {

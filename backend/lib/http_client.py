@@ -1,194 +1,135 @@
 """
-Shared async HTTP client for the ANT backend.
-Replaces synchronous `requests` calls with async `httpx.AsyncClient` to avoid
-blocking the asyncio event loop.
+Shared synchronous HTTP client for the ANT backend.
+Reuses connection pools for synchronous routes. Async callers must offload
+requests from the event loop; ``close_client`` offloads socket cleanup.
 
 Usage:
-    from lib.http_client import http_client, get_client
+    from lib.http_client import sync_client
 
-    # In async context:
-    resp = await http_client.post(url, json=data)
+    # In any context (sync wrapper for non-async routes):
+    resp = sync_client.get(url, timeout=10)
 
-    # For SSE streaming (returns async iterator):
-    async with http_client.stream("POST", url, json=data) as resp:
-        async for line in resp.aiter_lines():
-            ...
+    # Async-safe shutdown:
+    from lib.http_client import close_client
+    await close_client()
+
+The ``sync_client`` is a process-wide synchronous wrapper around ``httpx.Client``
+used by non-async routes (e.g. Ollama listing, model pulls). It enforces
+an SSRF guard: requests to private/loopback/link-local IP ranges are blocked
+unless the caller explicitly passes ``skip_ssrf_check=True`` (used for the
+local Ollama endpoint, which is by design on 127.0.0.1).
 """
 
-import httpx
-import ipaddress
+import asyncio
 import logging
-from typing import Optional
-from urllib.parse import urlparse
+import threading
 
-logger = logging.getLogger("http_client")
+import httpx
+from lib.public_network import check_public_url, PublicTransport
 
-# ---------------------------------------------------------------------------
-# SSRF protection — validate URLs before making outbound requests
-# ---------------------------------------------------------------------------
+logger = logging.getLogger("lib.http_client")
 
-# Schemes that are allowed for outbound HTTP requests
-_ALLOWED_SCHEMES = {"http", "https"}
+def validate_url(url: str, skip_ssrf_check: bool = False) -> None:
+    """Raise ValueError if ``url`` points at a private IP range.
 
-# Private/internal IP ranges that must never be reached from user-supplied URLs
-_PRIVATE_NETWORKS = [
-    # IPv4 loopback
-    ipaddress.ip_network("127.0.0.0/8"),
-    # IPv4 link-local
-    ipaddress.ip_network("169.254.0.0/16"),
-    # IPv4 RFC1918 private ranges
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    # IPv4 unspecified / "this network"
-    ipaddress.ip_network("0.0.0.0/8"),
-    # IPv6 loopback and link-local
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fe80::/10"),
-]
-
-
-def validate_url(url: str) -> str:
-    """Validate a URL to prevent SSRF attacks.
-
-    Ensures the URL:
-    - Uses http:// or https:// scheme
-    - Does not resolve to a private/internal IP address
-    - Does not use dangerous schemes like file://, ftp://, etc.
-
-    Returns the validated URL string.
-    Raises ValueError if the URL is invalid or points to a private network.
+    Used by ``SyncHTTPClient`` to block SSRF attempts unless the caller
+    explicitly opts out (local Ollama).
     """
-    if not isinstance(url, str) or not url.strip():
-        raise ValueError("URL must be a non-empty string")
+    if not skip_ssrf_check:
+        check_public_url(url)
 
-    parsed = urlparse(url.strip())
-
-    # Check scheme
-    if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
-        raise ValueError(
-            "URL scheme is not allowed. Only http:// and https:// are permitted."
-        )
-
-    # Must have a hostname
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError("URL must contain a valid hostname")
-
-    # SECURITY: Block credential injection attempts (user@host patterns)
-    if "@" in url.strip():
-        raise ValueError("URLs containing credentials are not allowed")
-
-    # Block obvious localhost variations
-    hostname_lower = hostname.lower()
-    if hostname_lower in ("localhost", "localhost.localdomain", "0.0.0.0", "::"):
-        raise ValueError("Requests to localhost are not allowed")
-
-    # SECURITY: Resolve the hostname to detect private IP addresses
-    # This prevents SSRF attacks where an attacker uses a domain that resolves
-    # to internal addresses like 169.254.169.254 (cloud metadata)
-    import socket
-    try:
-        # getaddrinfo resolves DNS and returns all IP addresses
-        port = parsed.port
-        if port is None:
-            port = 443 if parsed.scheme == "https" else 80
-        # Validate port is within valid range
-        if not isinstance(port, int) or port < 1 or port > 65535:
-            raise ValueError("Invalid port number")
-        addr_infos = socket.getaddrinfo(hostname, port)
-        for family, _type, _proto, _canon, sockaddr in addr_infos:
-            ip_str = sockaddr[0]
-            try:
-                ip = ipaddress.ip_address(ip_str)
-            except ValueError:
-                # If it's not a valid IP (e.g. Unix socket path), block it
-                raise ValueError(f"URL hostname resolves to invalid address: {ip_str}")
-            for private_net in _PRIVATE_NETWORKS:
-                if ip in private_net:
-                    raise ValueError(
-                        f"URL resolves to private/internal IP address {ip_str}, which is not allowed"
-                    )
-    except socket.gaierror:
-        # DNS resolution failed — could be a bad domain, let it through
-        # (the HTTP request will fail anyway)
-        pass
-
-    return url
-
-# Singleton async client — created on first use, lives for the process lifetime.
-# Connection pooling and keep-alive are handled automatically.
-_client: Optional[httpx.AsyncClient] = None
-
-
-async def get_client() -> httpx.AsyncClient:
-    """Get or create the shared async HTTP client."""
-    global _client
-    if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0),
-            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-            follow_redirects=True,
-        )
-    return _client
-
-
-async def close_client():
-    """Gracefully close the shared client (call on app shutdown)."""
-    global _client
-    if _client and not _client.is_closed:
-        await _client.aclose()
-        _client = None
 
 
 class SyncHTTPClient:
-    """Synchronous wrapper for contexts where async is not available (e.g., non-async functions).
+    """Thin wrapper around ``httpx.Client`` that adds an SSRF guard.
 
-    For new code, prefer using `await get_client()` directly.
-    This exists as a bridge during the migration from `requests` to `httpx`.
+    Exposes ``get``, ``post``, ``delete``, ``stream``, and ``close`` —
+    the subset used by ``core/main.py`` and ``modules/platform/cloud_providers.py``.
     """
 
     def __init__(self):
-        self._client: Optional[httpx.Client] = None
+        self._lock = threading.Lock()
+        self._client = httpx.Client(timeout=httpx.Timeout(30.0), transport=PublicTransport(), trust_env=False)
+        self._local_client = httpx.Client(timeout=httpx.Timeout(30.0), trust_env=False)
 
-    def _get(self) -> httpx.Client:
-        if self._client is None:
-            self._client = httpx.Client(
-                timeout=httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0),
-                limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
-                follow_redirects=True,
-            )
-        return self._client
+    def _get_client(self, local: bool) -> httpx.Client:
+        # Keep this wrapper's identity stable for modules that import it directly.
+        # Reopen a pool only when a later application lifespan makes a request.
+        with self._lock:
+            if local:
+                if self._local_client is None:
+                    self._local_client = httpx.Client(timeout=httpx.Timeout(30.0), trust_env=False)
+                return self._local_client
+            if self._client is None:
+                self._client = httpx.Client(timeout=httpx.Timeout(30.0), transport=PublicTransport(), trust_env=False)
+            return self._client
 
-    def post(self, url: str, *, skip_ssrf_check: bool = False, **kwargs):
-        # SECURITY: Validate URL to prevent SSRF attacks
-        # nosec B611: SSRF validation performed by validate_url() when skip_ssrf_check=False
-        validated_url = url if skip_ssrf_check else validate_url(url)
-        return self._get().post(validated_url, **kwargs)
+    def _check(self, url: str, skip_ssrf_check: bool) -> None:
+        validate_url(url, skip_ssrf_check=skip_ssrf_check)
 
-    def get(self, url: str, *, skip_ssrf_check: bool = False, **kwargs):
-        # SECURITY: Validate URL to prevent SSRF attacks
-        # nosec B611: SSRF validation performed by validate_url() when skip_ssrf_check=False
-        validated_url = url if skip_ssrf_check else validate_url(url)
-        return self._get().get(validated_url, **kwargs)
+    def get(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
+        self._check(url, skip_ssrf_check)
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
+        return client.get(url, **kwargs)
 
-    def delete(self, url: str, *, skip_ssrf_check: bool = False, **kwargs):
-        # SECURITY: Validate URL to prevent SSRF attacks
-        # nosec B611: SSRF validation performed by validate_url() when skip_ssrf_check=False
-        validated_url = url if skip_ssrf_check else validate_url(url)
-        return self._get().delete(validated_url, **kwargs)
+    def post(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
+        self._check(url, skip_ssrf_check)
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
+        streaming = kwargs.pop("stream", False)
+        if streaming:
+            request = client.build_request("POST", url, **kwargs)
+            return client.send(request, stream=True)
+        return client.post(url, **kwargs)
+
+    def delete(self, url: str, *, skip_ssrf_check: bool = False, **kwargs) -> httpx.Response:
+        self._check(url, skip_ssrf_check)
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
+        return client.delete(url, **kwargs)
 
     def stream(self, method: str, url: str, *, skip_ssrf_check: bool = False, **kwargs):
-        # SECURITY: Validate URL to prevent SSRF attacks
-        # nosec B611: SSRF validation performed by validate_url() when skip_ssrf_check=False
-        validated_url = url if skip_ssrf_check else validate_url(url)
-        return self._get().stream(method, validated_url, **kwargs)
+        self._check(url, skip_ssrf_check)
+        if kwargs.get("follow_redirects"):
+            raise ValueError("Automatic redirects are disabled")
+        client = self._get_client(skip_ssrf_check)
+        return client.stream(method, url, **kwargs)
 
-    def close(self):
-        if self._client:
-            self._client.close()
-            self._client = None
+    def close(self) -> None:
+        with self._lock:
+            clients = (self._client, self._local_client)
+            self._client = self._local_client = None
+        for client in clients:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    # One failed pool must not prevent cleanup of the other.
+                    logger.warning("HTTP connection pool cleanup failed")
 
 
-# Module-level sync client for legacy code
-sync_client = SyncHTTPClient()
+# Process-wide synchronous client. Instantiated at module import — call sites
+# do ``sync_client.get(...)``, not ``sync_client().get(...)``.
+sync_client: SyncHTTPClient = SyncHTTPClient()
+
+
+def get_client() -> SyncHTTPClient:
+    """Return the process-wide synchronous client."""
+    return sync_client
+
+
+async def close_client() -> None:
+    """Async-safe shutdown hook. Called from the FastAPI lifespan exit.
+
+    The wrapper remains shared by all importers. It creates fresh connection
+    pools on the next request, without opening unused pools during shutdown.
+    Synchronous socket cleanup runs off the event loop.
+    """
+    try:
+        await asyncio.to_thread(sync_client.close)
+    except Exception:  # pragma: no cover - best-effort cleanup
+        logger.warning("Shared HTTP client cleanup failed")

@@ -1,9 +1,8 @@
 /**
  * Push notification service for interview reminders.
  */
-import { Platform } from "react-native"
 
-class NotificationService {
+export class NotificationService {
   async requestPermissions() {
     // In a real app, integrate react-native-push-notification or
     // @react-native-firebase/messaging here.

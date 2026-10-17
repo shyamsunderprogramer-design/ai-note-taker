@@ -1,25 +1,27 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell } = require("electron")
+const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell, screen } = require("electron")
+const {configureRuntimePrivacy} = require("./lib/runtime-privacy")
+const runtimePrivacy = configureRuntimePrivacy({app, inspector:require("node:inspector")})
+const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
 const path = require("path")
 const { spawn } = require("child_process")
-const os = require("os")
+
 const stealth = require("./stealth")
+app.on("browser-window-created", (_event, window) => stealth.registerWindow(window))
 const { OverlayAdapter } = require("./features/overlay-adapter")
 const { ScreenRecorder } = require("./features/screen-recorder")
-const log = require("electron-log/main")
+const { PLATFORM, isPortableMode, initializeAppPaths } = require("./lib/paths")
+const cryptoLib = require("./lib/crypto")
+const { SystemAudioCapture } = require("./lib/system-audio")
 const Store = require("electron-store")
 const { autoUpdater } = require("electron-updater")
 const fs = require("fs")
 const crypto = require("crypto")
 
-log.initialize()
-log.transports.file.level = "info"
-log.transports.console.level = "debug"
-log.transports.file.maxSize = 5 * 1024 * 1024
+const captureScreenContext = require("./lib/screen-context").createScreenCapture({ BrowserWindow, desktopCapturer, screen,
+  nativeCapture: process.platform === "darwin" ? require("./lib/native-screen-capture").captureNativeScreen : null
+})
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SPEED OPTIMIZATIONS - Disable unused Chromium features
-// ═══════════════════════════════════════════════════════════════════════════════
-// Reduce memory and startup time by disabling unnecessary features
+// Speed optimizations below (must run before app.whenReady())
 app.commandLine.appendSwitch("disable-features",
   "HttpsUpgrades,HttpsFirstModeV2,HttpsFirstBalancedMode," +
   "MediaRouter,TabHoverCardImages,ReadAnything," +
@@ -61,11 +63,8 @@ app.commandLine.appendSwitch("unsafely-treat-insecure-origin-as-secure", "http:/
 // Disable file logging in production for stealth mode
 // Logs only go to console (memory), not to disk
 if (app.isPackaged) {
-  log.transports.file.level = false
+  configureLoggerForProduction()
 }
-
-const PLATFORM = process.platform  // 'win32' | 'darwin' | 'linux'
-const logger = log
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AUTOSTART CONFIGURATION
@@ -99,15 +98,6 @@ function getAutoStartStatus() {
   return app.getLoginItemSettings()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PORTABLE MODE DETECTION
-// ═══════════════════════════════════════════════════════════════════════════════
-function isPortableMode() {
-  // Check for portable mode flag file or command line arg
-  const portableFlagPath = path.join(process.resourcesPath, "PORTABLE")
-  return process.argv.includes("--portable") || fs.existsSync(portableFlagPath)
-}
-
 function getAppDataPath() {
   if (isPortableMode()) {
     // In portable mode, store data next to executable
@@ -123,28 +113,19 @@ function getAppDataPath() {
 // appData path is cross-platform via Electron API
 // IMPORTANT: Set userData BEFORE creating Store instances so they read/write
 // from the correct location.
-const _origUserData = app.getPath("userData")
-const appDataDir = path.join(_origUserData, "ai-note-taker-data")
-app.setPath("userData", appDataDir)
-app.setPath("sessionData", appDataDir)
-
-// Migrate config from old userData location if new location doesn't have it yet
-const _newConfigPath = path.join(appDataDir, "config.json")
-const _oldConfigPath = path.join(_origUserData, "config.json")
-if (!fs.existsSync(_newConfigPath) && fs.existsSync(_oldConfigPath)) {
-  try {
-    fs.copyFileSync(_oldConfigPath, _newConfigPath)
-    logger.info("[Migration] Copied config from old userData to new location")
-  } catch (e) {
-    logger.warn("[Migration] Could not migrate config: %s", e.message)
-  }
+const { appDataDir } = initializeAppPaths()
+const { initializeConversationStorage } = require("./lib/conversation-storage")
+const conversationStorage = initializeConversationStorage(app.getPath("appData"), appDataDir)
+const conversationsDir = conversationStorage.conversationsDir
+for (const failure of conversationStorage.errors) {
+  logger.warn("[Conversation migration] %s: %s", failure.file, failure.message)
 }
 
 const store = new Store()
 
 // Secure API key storage - encrypted using machine-specific key derived with
 // full 32-byte key (not sliced down). Uses unique salt per app instance.
-const _keyDeriveSalt = crypto.scryptSync(app.getPath("userData") + ":ant-key-store", "ai-note-taker-salt-v2", 32)
+const _keyDeriveSalt = cryptoLib.deriveApiKeySalt()
 let apiKeyStore
 try {
   apiKeyStore = new Store({
@@ -155,51 +136,22 @@ try {
   // If the store can't be loaded (e.g., old encryption key no longer matches),
   // delete the corrupted file and recreate with the new key.
   logger.warn("[API Key Store] Failed to load encrypted store, resetting: %s", e.message)
-  const keyFilePath = path.join(app.getPath("userData"), "secure-api-keys.json")
-  try { fs.unlinkSync(keyFilePath) } catch {}
-  // Also clean up old key file from before the userData path change
-  try {
-    const _oldUserData = path.join(app.getPath("home") || os.homedir(), "AppData", "Roaming", "ai-note-taker")
-    const oldFile = path.join(_oldUserData, "secure-api-keys.json")
-    if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile)
-  } catch {}
+  cryptoLib.resetApiKeyStoreFile(logger)
   apiKeyStore = new Store({
     name: "secure-api-keys",
     encryptionKey: _keyDeriveSalt.toString("hex")
   })
 }
 
-const conversationsDir = path.join(appDataDir, "conversations")
-
-function ensureConversationsDir() {
-  if (!fs.existsSync(conversationsDir)) {
-    fs.mkdirSync(conversationsDir, { recursive: true })
-  }
-}
-
 // T4: AES-256 encryption for conversation files at rest
-const _convoKey = crypto.scryptSync(app.getPath("userData") + ":ant-conversations", "ai-note-taker-convo-salt-v1", 32)
+const _convoKey = require("./lib/conversation-storage").conversationKey(conversationStorage.dataDir)
 
 function _encryptConversation(plainText) {
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv("aes-256-cbc", _convoKey, iv)
-  let encrypted = cipher.update(plainText, "utf8", "hex")
-  encrypted += cipher.final("hex")
-  return JSON.stringify({ iv: iv.toString("hex"), data: encrypted })
+  return cryptoLib.encryptConversation(plainText, _convoKey)
 }
 
 function _decryptConversation(cipherText) {
-  try {
-    const parsed = JSON.parse(cipherText)
-    if (!parsed.iv || !parsed.data) return cipherText // plaintext fallback
-    const decipher = crypto.createDecipheriv("aes-256-cbc", _convoKey, Buffer.from(parsed.iv, "hex"))
-    let decrypted = decipher.update(parsed.data, "hex", "utf8")
-    decrypted += decipher.final("utf8")
-    return decrypted
-  } catch (e) {
-    // Fallback: may be old plaintext
-    return cipherText
-  }
+  return cryptoLib.decryptConversation(cipherText, _convoKey)
 }
 
 let win
@@ -210,9 +162,15 @@ let backendProcess = null
 let backendStopped = false  // true if user/App Quit initiated the stop — don't restart
 let backendRestartAttempts = 0
 let backendHealthCheckInterval = null
+let backendHealthCheckInFlight = false
+let backendHealthFailures = 0
+let backendHealthGeneration = 0
 let backendStatus = "unknown" // "unknown" | "starting" | "ready" | "error" | "dead"
 const MAX_BACKEND_RESTART_ATTEMPTS = 5
 const BACKEND_RESTART_BASE_DELAY_MS = 1000
+
+// Track if app is quitting to prevent close event interference
+app.isQuitting = false
 
 // Splash visibility timing — ensures splash is visible for at least 2 seconds
 let _mainWindowReady = false
@@ -261,7 +219,7 @@ function ensureTopmost(w) {
 // ======================================
 let screenshotBuffer = []        // ring buffer of base64 PNGs
 const SCREENSHOT_BUFFER_MAX = 5
-let autoScreenshotEnabled = true
+let autoScreenshotEnabled = false
 let autoScreenshotInterval = null
 
 process.on("uncaughtException", (err) => {
@@ -279,11 +237,19 @@ process.on("unhandledRejection", (reason) => {
 // ==============================
 // WINDOW STATE
 // ==============================
-const DEFAULT_BOUNDS = { width: 420, height: 320, x: undefined, y: undefined }
+// Minimum dimensions chosen so the rich UI (hero banner 180px + header 50px +
+// controls strip ~80px + input row ~60px + response area header 30px + chat
+// area ≥ 200px) fits comfortably without the shell itself scrolling.
+const MIN_WIDTH = 560
+const MIN_HEIGHT = 600
+// Reasonable default for first-run / when saved bounds are off-screen.
+// 960x720 gives the welcome state + suggestion cards full breathing room and
+// also fits 1366x768 minimum laptops without feeling cramped.
+const DEFAULT_BOUNDS = { width: 960, height: 720, x: undefined, y: undefined }
 
 function validateBounds(bounds) {
-  if (!bounds.width || bounds.width < 360) bounds.width = DEFAULT_BOUNDS.width
-  if (!bounds.height || bounds.height < 280) bounds.height = DEFAULT_BOUNDS.height
+  if (!bounds.width || bounds.width < MIN_WIDTH) bounds.width = DEFAULT_BOUNDS.width
+  if (!bounds.height || bounds.height < MIN_HEIGHT) bounds.height = DEFAULT_BOUNDS.height
 
   const { screen } = require("electron")
   const displays = screen.getAllDisplays()
@@ -305,6 +271,12 @@ function validateBounds(bounds) {
   if (bounds.x === undefined || bounds.y === undefined || !onScreen) {
     const primary = screen.getPrimaryDisplay()
     const { width: screenWidth, height: screenHeight } = primary.workAreaSize
+    // Clamp to primary work area so very large saved bounds (e.g. from a
+    // 4K display) don't push the window off a smaller secondary monitor.
+    const targetW = Math.min(bounds.width, Math.round(screenWidth * 0.85))
+    const targetH = Math.min(bounds.height, Math.round(screenHeight * 0.85))
+    bounds.width = Math.max(MIN_WIDTH, targetW)
+    bounds.height = Math.max(MIN_HEIGHT, targetH)
     bounds.x = Math.round((screenWidth - bounds.width) / 2)
     bounds.y = Math.round((screenHeight - bounds.height) / 2)
   }
@@ -312,7 +284,9 @@ function validateBounds(bounds) {
   return bounds
 }
 
+let conversationExpandedBounds = null
 function saveBounds() {
+  if (conversationExpandedBounds) return
   if (win && !win.isMaximized() && !win.isMinimized()) {
     store.set("windowBounds", win.getBounds())
   }
@@ -335,6 +309,7 @@ function createSplashScreen() {
     center: true,
     show: true,
     webPreferences: {
+      devTools: runtimePrivacy.localQA,
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js")
@@ -397,8 +372,8 @@ async function createWindow() {
     height: bounds.height,
     x: bounds.x,
     y: bounds.y,
-    minWidth: 360,
-    minHeight: 280,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     show: false,
     frame: false,
     transparent: true,
@@ -406,6 +381,7 @@ async function createWindow() {
     skipTaskbar: true,
     resizable: true,
     webPreferences: {
+      devTools: runtimePrivacy.localQA,
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
@@ -414,10 +390,14 @@ async function createWindow() {
     }
   }
 
-  // titleBarStyle only works on macOS
+  // titleBarStyle only works on macOS.
+  // Native macOS traffic lights are pushed off-screen so the custom HTML
+  // traffic lights in apps/web/index.html are the only ones the user sees.
+  // We use a generous negative offset so they stay hidden regardless of
+  // DPI / multi-monitor scaling.
   if (PLATFORM === "darwin") {
     windowOpts.titleBarStyle = "hidden"
-    windowOpts.trafficLightPosition = { x: 12, y: 12 }
+    windowOpts.trafficLightPosition = { x: -100, y: -100 }
   }
 
   // Generate a new CSP nonce for this window
@@ -430,6 +410,16 @@ async function createWindow() {
   // Show window only when content is ready AND minimum splash time elapsed
   win.once("ready-to-show", () => {
     logger.info(`[Window] ready-to-show: title="${win?.getTitle()}"`)
+    _mainWindowReady = true
+    _tryShowMain()
+  })
+
+  // Also fire on real first paint (did-finish-load) so the splash can be
+  // dismissed as soon as signin.html or index.html is fully loaded, without
+  // waiting the full 2s splash minimum. The ready-to-show event sometimes
+  // fires before the renderer has actually painted the first frame.
+  win.webContents.once("did-finish-load", () => {
+    logger.info(`[Window] did-finish-load: title="${win?.getTitle()}"`)
     _mainWindowReady = true
     _tryShowMain()
   })
@@ -479,7 +469,7 @@ async function createWindow() {
   // (Global shortcut conflicts on Windows, so we use in-app listener)
   win.webContents.on("before-input-event", (event, input) => {
     const isCtrl = input.control || input.meta
-    if (isCtrl && input.shift && input.key.toLowerCase() === "i") {
+    if (runtimePrivacy.localQA && isCtrl && input.shift && input.key.toLowerCase() === "i") {
       event.preventDefault()
       if (win.webContents.isDevToolsOpened()) {
         win.webContents.closeDevTools()
@@ -554,6 +544,22 @@ async function createWindow() {
     }
   })
 
+  // On macOS the native traffic lights are pushed off-screen (see
+  // trafficLightPosition above) — close is triggered by the custom
+  // HTML close button (via window.api.closeWindow) or by Cmd+Q / dock
+  // Quit. In all cases we want to fully quit the app, not just close
+  // the window, since Electron on darwin otherwise keeps the process
+  // alive with no visible UI.
+  let closeHandlerFired = false
+  win.on("close", (event) => {
+    if (PLATFORM === "darwin" && !app.isQuitting && !closeHandlerFired) {
+      closeHandlerFired = true
+      event.preventDefault()
+      logger.info("[Main] Close requested on macOS, quitting app")
+      app.quit()
+    }
+  })
+
   // Set up window state tracking
   // Note: Window is already set to always-on-top, no need for aggressive re-assertion
   stealth.init(win)
@@ -569,17 +575,21 @@ async function createWindow() {
 // ======================================
 async function captureAutoScreenshot() {
   try {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: { width: 1280, height: 720 }
-    })
-    if (sources && sources.length > 0) {
-      const b64 = sources[0].thumbnail.toPNG().toString("base64")
+    const b64 = await captureScreenContext()
+    if (b64) {
       screenshotBuffer.push(b64)
       if (screenshotBuffer.length > SCREENSHOT_BUFFER_MAX) {
         screenshotBuffer.shift()
       }
-      logger.info("[AutoScreenshot] Captured, buffer size: %d", screenshotBuffer.length)
+      logger.info("[AutoScreenshot] Captured (JPEG), buffer size: %d", screenshotBuffer.length)
+    } else {
+      // Empty result on macOS = missing Screen Recording permission
+      // (getSources returns [] rather than throwing). Log once per minute.
+      const now = Date.now()
+      if (now - (captureAutoScreenshot._lastEmptyLog || 0) > 60000) {
+        logger.warn("[AutoScreenshot] getSources returned 0 sources — likely missing macOS Screen Recording permission. Grant it in System Settings → Privacy & Security → Screen Recording.")
+        captureAutoScreenshot._lastEmptyLog = now
+      }
     }
   } catch (e) {
     logger.warn("[AutoScreenshot] Capture failed:", e.message)
@@ -609,7 +619,7 @@ async function isBackendRunning() {
   try {
     const http = require("http")
     return await new Promise((resolve) => {
-      const req = http.get("http://127.0.0.1:8000/health", (res) => resolve(res.statusCode === 200))
+      const req = http.get("http://127.0.0.1:8000/health", (res) => { res.resume(); resolve(res.statusCode === 200) })
       req.on("error", () => resolve(false))
       req.setTimeout(1000, () => { req.destroy(); resolve(false) })
     })
@@ -630,9 +640,19 @@ function notifyRendererBackendStatus(status, data = {}) {
 function startHealthCheck() {
   if (backendHealthCheckInterval) return
   backendHealthCheckInterval = setInterval(async () => {
-    if (backendStopped) return
-    const isHealthy = await isBackendRunning()
-    if (!isHealthy && backendStatus === "ready") {
+    if (backendStopped || backendHealthCheckInFlight) return
+    const generation = backendHealthGeneration
+    backendHealthCheckInFlight = true
+    let isHealthy
+    try { isHealthy = await isBackendRunning() }
+    finally { if (generation === backendHealthGeneration) backendHealthCheckInFlight = false }
+    if (backendStopped || !backendHealthCheckInterval || generation !== backendHealthGeneration) return
+    backendHealthFailures = isHealthy ? 0 : backendHealthFailures + 1
+    if (!isHealthy && backendHealthFailures < 2) {
+      if (backendStatus === "ready") notifyRendererBackendStatus("checking")
+      return
+    }
+    if (!isHealthy && (backendStatus === "ready" || backendStatus === "checking")) {
       logger.warn("[Backend] Health check failed - backend appears down")
       notifyRendererBackendStatus("error", { reason: "health_check_failed" })
       // Trigger restart
@@ -657,6 +677,9 @@ function startHealthCheck() {
 }
 
 function stopHealthCheck() {
+  backendHealthGeneration++
+  backendHealthCheckInFlight = false
+  backendHealthFailures = 0
   if (backendHealthCheckInterval) {
     clearInterval(backendHealthCheckInterval)
     backendHealthCheckInterval = null
@@ -676,44 +699,12 @@ async function restartBackend() {
 }
 
 function getPythonExecutable() {
-  const isProd = app.isPackaged
-
-  // In dev mode, try common venv paths for current platform
-  if (!isProd) {
-    const devPaths = [
-      // Windows dev
-      path.join(__dirname, "..", "AINT_Venv", "Scripts", "python.exe"),
-      // macOS/Linux dev (relative)
-      path.join(__dirname, "..", "AINT_Venv", "bin", "python"),
-      // Parent-relative Windows
-      path.join(__dirname, "..", "..", "AINT_Venv", "Scripts", "python.exe"),
-      // Parent-relative macOS/Linux
-      path.join(__dirname, "..", "..", "AINT_Venv", "bin", "python"),
-    ]
-    for (const p of devPaths) {
-      try {
-        fs.accessSync(p, fs.constants.X_OK)
-        return p
-      } catch { /* try next */ }
-    }
-  }
-
-  // In production, look in extraResources (process.resourcesPath)
-  if (isProd) {
-    const venvBin = PLATFORM === "win32" ? "Scripts" : "bin"
-    const candidates = [
-      path.join(process.resourcesPath, "AINT_Venv", venvBin, PLATFORM === "win32" ? "python.exe" : "python"),
-    ]
-    for (const p of candidates) {
-      try {
-        fs.accessSync(p, fs.constants.X_OK)
-        return p
-      } catch { /* try next */ }
-    }
-  }
-
-  // Fallback to system python
-  return PLATFORM === "win32" ? "python" : "python3"
+  return require("./lib/python-runtime").pythonExecutable({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appDirectory: __dirname,
+    platform: PLATFORM
+  })
 }
 
 async function startBackend() {
@@ -732,11 +723,20 @@ async function startBackend() {
 
   if (await isBackendRunning()) {
     logger.info("[Backend] Already running on port 8000, skipping spawn")
+    notifyRendererBackendStatus("ready")
+    startHealthCheck()
     backendRestartAttempts = 0
     return
   }
 
-  const pythonExe = getPythonExecutable()
+  let pythonExe
+  try {
+    pythonExe = getPythonExecutable()
+  } catch {
+    logger.error("[Backend] Bundled Python runtime is missing; reinstall this release")
+    notifyRendererBackendStatus("error", { reason: "missing_runtime" })
+    return
+  }
   const isProd = app.isPackaged
   const backendDir = isProd
     ? path.join(process.resourcesPath, "backend")
@@ -752,13 +752,23 @@ async function startBackend() {
     return
   }
 
+  const workingDir = isProd ? path.join(getAppDataPath(), "backend") : backendDir
+  fs.mkdirSync(workingDir, { recursive: true })
+  const dataDir = path.join(workingDir, "data")
   const env = {
     ...process.env,
-    PYTHONPATH: backendDir
+    PYTHONPATH: backendDir,
+    ...(isProd ? {
+      ANT_DATA_DIR: dataDir,
+      ANT_VOICE_STORAGE_DIR: path.join(dataDir, "voice_models"),
+      ANT_MEETING_TEMPLATES_DIR: path.join(dataDir, "meeting_templates"),
+      PYTHONDONTWRITEBYTECODE: "1",
+      PYTHONNOUSERSITE: "1"
+    } : {})
   }
 
   const spawnOpts = {
-    cwd: backendDir,
+    cwd: workingDir,
     env: env,
     stdio: ["ignore", "pipe", "pipe"]
   }
@@ -779,7 +789,8 @@ async function startBackend() {
     "-m", "uvicorn", uvicornModule,
     "--host", "127.0.0.1",
     "--port", "8000",
-    "--log-level", "info"
+    "--log-level", process.env.ANT_DIAGNOSTICS === "1" ? "info" : "warning",
+    "--no-access-log"
   ], {
     ...spawnOpts,
     env: {
@@ -857,7 +868,7 @@ ipcMain.handle("store:get", (_event, key) => store.get(key))
 ipcMain.handle("store:set", (_event, key, value) => { store.set(key, value) })
 
 ipcMain.handle("conversation:save", (_event, conversation) => {
-  ensureConversationsDir()
+  fs.mkdirSync(conversationsDir, { recursive: true })
   const id = conversation.id || crypto.randomUUID()
   const now = Date.now()
   const record = {
@@ -890,7 +901,7 @@ ipcMain.handle("conversation:load", (_event, id) => {
 })
 
 ipcMain.handle("conversation:list", () => {
-  ensureConversationsDir()
+  fs.mkdirSync(conversationsDir, { recursive: true })
   return fs.readdirSync(conversationsDir)
     .filter(f => f.endsWith(".json"))
     .map(f => {
@@ -904,6 +915,8 @@ ipcMain.handle("conversation:list", () => {
           pinned: data.pinned || false,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
+          preview: (data.messages?.find(m => m.role === "user")?.text || data.messages?.[0]?.text || "").slice(0, 180),
+          mode: data.mode || "adaptive",
           messageCount: data.messages ? data.messages.length : 0
         }
       } catch (e) {
@@ -931,18 +944,10 @@ ipcMain.handle("conversation:delete", (_event, id) => {
 ipcMain.handle("window:minimize", () => {
   const w = BrowserWindow.getFocusedWindow() || win
   if (w) {
-    // Complete stealth minimize - no tray, no traces
-    w.setSkipTaskbar(true)
-    w.hide()
-    // Destroy tray if exists to remove from system tray
-    stealth.destroyTray()
-    // Clear screenshot buffer for privacy
-    screenshotBuffer = []
-    // Stop auto-screenshot while minimized
-    if (autoScreenshotInterval) {
-      clearInterval(autoScreenshotInterval)
-      autoScreenshotInterval = null
-    }
+    // Use native minimize (yellow traffic light behavior on macOS)
+    w.minimize()
+    // Note: We don't hide from taskbar or destroy tray on normal minimize
+    // That behavior is only for stealth mode (Alt+D)
   }
 })
 
@@ -972,8 +977,26 @@ ipcMain.handle("window:is-maximized", () => {
 })
 
 ipcMain.handle("window:close", () => {
-  const w = BrowserWindow.getFocusedWindow() || win
-  if (w) w.close()
+  // Quit the app entirely (triggers will-quit which kills backend, etc.)
+  logger.info("[Main] window:close called, quitting app")
+  app.quit()
+})
+
+ipcMain.handle("window:conversation-collapsed", (event, collapsed, height) => {
+  if (!win || event.sender !== win.webContents) return
+  if (collapsed) {
+    if (!conversationExpandedBounds) conversationExpandedBounds = {...win.getBounds(), wasMaximized: win.isMaximized()}
+    if (win.isMaximized()) win.unmaximize()
+    win.setMinimumSize(MIN_WIDTH, 240)
+    const target = Math.max(240, Math.min(560, Number(height) || 400))
+    win.setSize(win.getBounds().width, Math.round(target))
+  } else if (conversationExpandedBounds) {
+    const bounds = conversationExpandedBounds
+    win.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
+    win.setSize(bounds.width, Math.max(MIN_HEIGHT, bounds.height))
+    conversationExpandedBounds = null
+    if (bounds.wasMaximized) win.maximize()
+  }
 })
 
 ipcMain.handle("window:resize", (_event, width, height) => {
@@ -1016,7 +1039,7 @@ ipcMain.handle("window:restore", () => {
   w.focus()
   ensureTopmost(w)
   // Restart auto-screenshot if it was enabled
-  const savedAutoSS = store.get("autoScreenshotEnabled", true)
+  const savedAutoSS = store.get("autoScreenshotEnabled", false)
   if (savedAutoSS && !autoScreenshotInterval) {
     const interval = store.get("autoScreenshotInterval", 3000)
     startAutoScreenshot(interval)
@@ -1034,9 +1057,12 @@ ipcMain.handle("window:force-top", () => {
 ipcMain.handle("window:set-stealth-mode", (_event, enabled) => {
   if (enabled) stealth.enable()
   else stealth.disable()
+  store.set("stealthState", stealth.isEnabled())
   // Return both stealth mode AND capture protection state so renderer can sync accurately
-  return { enabled: stealth.isEnabled(), undetectable: stealth.isUndetectable() }
+  return stealth.getProtectionState()
 })
+
+ipcMain.handle("window:get-stealth-state", () => stealth.getProtectionState())
 
 ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   stealth.setUndetectable(enabled)
@@ -1048,25 +1074,17 @@ ipcMain.handle("window:set-undetectable", (_event, enabled) => {
   return { undetectable: stealth.isUndetectable() }
 })
 
+ipcMain.handle("window:capture-screenshot-context", async () => {
+  try { return await captureScreenContext({ includeMetadata: true }) }
+  catch (error) {
+    logger.error("[Screenshot] context capture failed:", error)
+    return { image: null, status: "failed", capturedAt: Date.now() }
+  }
+})
+
 ipcMain.handle("window:capture-screenshot", async () => {
   try {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: { width: 1920, height: 1080 }
-    })
-    if (!sources || sources.length === 0) {
-      logger.warn("[Screenshot] No screen sources found")
-      return null
-    }
-    // Get the primary screen (first source)
-    const primarySource = sources[0]
-    if (!primarySource.thumbnail || primarySource.thumbnail.isEmpty()) {
-      logger.warn("[Screenshot] Screen capture returned empty thumbnail")
-      return null
-    }
-    const base64 = primarySource.thumbnail.toPNG().toString("base64")
-    logger.info("[Screenshot] Captured screen, size: %d bytes", base64.length)
-    return base64
+    return await captureScreenContext()
   } catch (e) {
     logger.error("[Screenshot] error:", e)
     return null
@@ -1108,7 +1126,7 @@ ipcMain.handle("updater:install", () => {
 
 // File save dialog
 ipcMain.handle("dialog:save-file", async (_event, { defaultPath, filters, content, encryptionKey }) => {
-  const { dialog, BrowserWindow: BW } = require("electron")
+  const { dialog } = require("electron")
 
   let dataToSave = content
   let actualFilters = filters
@@ -1222,19 +1240,18 @@ ipcMain.handle("file:drop", async (_event, filePath) => {
 
 // Read file contents for the renderer
 ipcMain.handle("file:read", async (_event, filePath) => {
+  const fs = require("fs")
+  let fd
   try {
-    const fs = require("fs")
-    if (!fs.existsSync(filePath)) {
-      return { error: "File not found" }
-    }
-
-    const stats = fs.statSync(filePath)
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0))
+    const stats = fs.fstatSync(fd)
+    if (!stats.isFile()) return { error: "Not a regular file" }
     const ext = path.extname(filePath).toLowerCase()
 
     // For text/code files, read contents
     const textExts = [".txt", ".md", ".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml"]
     if (textExts.includes(ext) && stats.size < 1024 * 1024) { // Max 1MB
-      const content = fs.readFileSync(filePath, "utf-8")
+      const content = fs.readFileSync(fd, "utf-8")
       return {
         name: path.basename(filePath),
         content,
@@ -1246,7 +1263,8 @@ ipcMain.handle("file:read", async (_event, filePath) => {
     // For images, return base64
     const imageExts = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]
     if (imageExts.includes(ext)) {
-      const buffer = fs.readFileSync(filePath)
+      if (stats.size > 10 * 1024 * 1024) return { error: "Image exceeds 10 MB limit" }
+      const buffer = fs.readFileSync(fd)
       const base64 = buffer.toString("base64")
       const mimeType = ext === ".png" ? "image/png" :
                        ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
@@ -1269,7 +1287,9 @@ ipcMain.handle("file:read", async (_event, filePath) => {
     }
   } catch (err) {
     logger.error("[File] Read error:", err.message)
-    return { error: err.message }
+    return { error: "Could not read the selected file" }
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd)
   }
 })
 
@@ -1313,8 +1333,10 @@ function _updateBackendEnv(key, value) {
 // SECURE API KEY STORAGE (P1 Privacy)
 // ======================================
 // Store API keys encrypted. Optionally sync to backend/.env for standalone usage.
-ipcMain.handle("apiKey:save", (_event, { provider, apiKey, syncToEnv }) => {
+ipcMain.handle("apiKey:save", async (_event, { provider, apiKey, syncToEnv }) => {
   try {
+    const validation = await require("./lib/provider-key-validation").validateProviderKey(provider, apiKey)
+    if (!validation.success) return validation
     apiKeyStore.set(`apiKey.${provider}`, apiKey)
     logger.info(`[API Key] Saved encrypted key for provider: ${provider}`)
     if (syncToEnv) {
@@ -1361,12 +1383,12 @@ const http = require("http")
 const API_KEY_SERVER_PORT = 18000 // Separate port for secure key exchange
 
 // Throttle key server logging — only log once per provider per minute
-const _keyLogTimestamps = {}
+const _keyLogTimestamps = new Map()
 function _shouldLogKeyRequest(provider) {
   const now = Date.now()
-  const lastLog = _keyLogTimestamps[provider] || 0
+  const lastLog = _keyLogTimestamps.get(provider) || 0
   if (now - lastLog > 60000) { // 1 minute throttle
-    _keyLogTimestamps[provider] = now
+    _keyLogTimestamps.set(provider, now)
     return true
   }
   return false
@@ -1470,6 +1492,81 @@ function startApiKeyServer() {
 // Start the secure key server when app is ready
 app.whenReady().then(() => {
   startApiKeyServer()
+  // Only explicitly opted-in diagnostics write the bounded crash log.
+  // Needs app.getPath() so we wait until whenReady. Subsequent
+  // logger.error(...) calls land in backend-crash.log automatically.
+  configureBackendCrashLog()
+
+  // Dual-channel live assist (2026-09-11): the renderer's getDisplayMedia()
+  // call for the interviewer (system-audio) channel must not open a picker
+  // dialog mid-interview — auto-approve and pick the primary screen. The
+  // video track is never rendered; only its audio feeds the assist.
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ["screen"] }).then((sources) => {
+      if (sources.length) callback({ source: sources[0] })
+      else callback({})
+    }).catch(() => callback({}))
+  })
+})
+
+// ======================================
+// INTERVIEWER CHANNEL (SYSTEM AUDIO)
+// ======================================
+// The interviewer's voice is whatever the meeting app plays through the
+// speakers. Capturing it as a separate stream is what lets the assist answer
+// THEIR questions without the candidate's own speech polluting the input —
+// and it is the only way to hear them at all when headphones are worn.
+let systemAudioCapture = null
+
+ipcMain.handle("system-audio:start", (event) => {
+  if (systemAudioCapture && systemAudioCapture.isActive()) {
+    return { ok: true, alreadyRunning: true }
+  }
+  systemAudioCapture?.stop()
+  const wc = event.sender
+  const capture = new SystemAudioCapture({ sampleRate: 16000, chunkDuration: 0.1 })
+  const stopOwnerCapture = () => {
+    capture.stop()
+    if (systemAudioCapture === capture) systemAudioCapture = null
+  }
+  wc.once("did-start-loading", stopOwnerCapture)
+  wc.once("destroyed", stopOwnerCapture)
+  capture.once("stop", () => {
+    wc.removeListener("did-start-loading", stopOwnerCapture)
+    wc.removeListener("destroyed", stopOwnerCapture)
+  })
+  const send = (channel, payload) => {
+    if (systemAudioCapture === capture && !wc.isDestroyed()) wc.send(channel, payload)
+  }
+
+  systemAudioCapture = capture
+  systemAudioCapture.on("data", (chunk) => send("system-audio:data", chunk))
+  systemAudioCapture.on("silent", () => {
+    logger.warn(
+      "[SystemAudio] no audio detected in the first four seconds. Play audio to test capture; " +
+      "if it remains silent during playback, check Screen & System Audio Recording permission."
+    )
+    send("system-audio:silent")
+  })
+  systemAudioCapture.on("signal", () => {
+    logger.info("[SystemAudio] audio signal detected — capture is receiving audio")
+  })
+  systemAudioCapture.on("error", (err) => {
+    logger.error("[SystemAudio] " + err.message)
+    send("system-audio:error", err.message)
+  })
+
+  const ok = systemAudioCapture.start()
+  logger.info("[SystemAudio] interviewer channel start requested: ok=" + ok)
+  return { ok }
+})
+
+ipcMain.handle("system-audio:stop", () => {
+  if (systemAudioCapture) {
+    systemAudioCapture.stop()
+    systemAudioCapture = null
+  }
+  return { ok: true }
 })
 
 // ======================================
@@ -1622,11 +1719,13 @@ app.whenReady().then(async () => {
       // Show splash first, then create main window
       createSplashScreen()
       createWindow()
-      // Keep splash visible for at least 2 seconds before showing main window
+      // Brief splash minimum (800ms) so the user perceives the splash —
+      // but never wait longer than that. The window shows as soon as
+      // ready-to-show + did-finish-load both fire.
       setTimeout(() => {
         _splashMinTimeDone = true
         _tryShowMain()
-      }, 2000)
+      }, 800)
       resolve(null)
     }
   })
@@ -1688,7 +1787,7 @@ app.whenReady().then(async () => {
   if (savedStealthState) stealth.enable()
 
   // Restore auto-screenshot setting
-  const savedAutoSS = store.get("autoScreenshotEnabled", true)
+  const savedAutoSS = store.get("autoScreenshotEnabled", false)
   if (savedAutoSS) {
     const interval = store.get("autoScreenshotInterval", 3000)
     startAutoScreenshot(interval)
@@ -1721,10 +1820,7 @@ app.whenReady().then(async () => {
         ensureTopmost(win)
       }
     }
-    if (win?.webContents) win.webContents.send("stealth:state-changed", {
-      enabled: stealth.isEnabled(),
-      undetectable: stealth.isUndetectable()
-    })
+    if (win?.webContents) win.webContents.send("stealth:state-changed", stealth.getProtectionState())
   })
 
   // Alt+Space — hide/show (stealth toggle)
@@ -1750,7 +1846,7 @@ app.whenReady().then(async () => {
       win.focus()
       ensureTopmost(win)
       // Restart auto-screenshot if enabled
-      const savedAutoSS = store.get("autoScreenshotEnabled", true)
+      const savedAutoSS = store.get("autoScreenshotEnabled", false)
       if (savedAutoSS && !autoScreenshotInterval) {
         const interval = store.get("autoScreenshotInterval", 3000)
         startAutoScreenshot(interval)
@@ -1785,13 +1881,23 @@ app.whenReady().then(async () => {
   })
 
   // F12 — toggle Developer Tools (Ctrl+Shift+I conflicts on some platforms)
-  registerShortcut("F12", "toggle devtools", () => {
+  if (runtimePrivacy.localQA) registerShortcut("F12", "toggle devtools", () => {
     if (win?.webContents) {
       if (win.webContents.isDevToolsOpened()) {
         win.webContents.closeDevTools()
       } else {
         win.webContents.openDevTools({ mode: "detach" })
       }
+    }
+  })
+
+  // CommandOrControl+, — open Settings (global; works when window is unfocused)
+  registerShortcut("CommandOrControl+,", "open settings", () => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+      win.webContents.send("open-settings", {})
     }
   })
 
@@ -1819,6 +1925,7 @@ app.whenReady().then(async () => {
       resizable: true,
       hasShadow: false,
       webPreferences: {
+      devTools: runtimePrivacy.localQA,
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, "preload.js"),
@@ -1835,7 +1942,7 @@ app.whenReady().then(async () => {
       captionWindow.setAlwaysOnTop(true, "monitor", 2147483647)
     }
 
-    const captionPath = isProd
+    const captionPath = app.isPackaged
       ? path.join(process.resourcesPath, "renderer", "caption-overlay.html")
       : path.join(__dirname, "..", "apps", "web", "caption-overlay.html")
 
@@ -1883,6 +1990,152 @@ app.whenReady().then(async () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // INTERVIEW OVERLAY WINDOW
+  // ═══════════════════════════════════════════════════════════════════════════════
+  let interviewOverlayWindow = null
+
+  function createInterviewOverlayWindow() {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
+      interviewOverlayWindow.show()
+      interviewOverlayWindow.focus()
+      return interviewOverlayWindow
+    }
+
+    interviewOverlayWindow = new BrowserWindow({
+      width: 380,
+      height: 420,
+      x: 60,
+      y: 60,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: true,
+      hasShadow: false,
+      backgroundColor: "#00000000",
+      webPreferences: {
+      devTools: runtimePrivacy.localQA,
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, "preload.js"),
+      },
+    })
+
+    // CSP nonce
+    const ioNonce = crypto.randomBytes(16).toString("base64")
+    interviewOverlayWindow.cspNonce = ioNonce
+    _cspNonceMap.set(interviewOverlayWindow.webContents.id, ioNonce)
+    interviewOverlayWindow.webContents.on("destroyed", () => { _cspNonceMap.delete(interviewOverlayWindow.webContents.id) })
+
+    if (PLATFORM === "win32") {
+      interviewOverlayWindow.setAlwaysOnTop(true, "monitor", 2147483647)
+    }
+
+    const ioPath = app.isPackaged
+      ? path.join(process.resourcesPath, "renderer", "interview-overlay.html")
+      : path.join(__dirname, "..", "apps", "web", "interview-overlay.html")
+
+    interviewOverlayWindow.loadFile(ioPath).catch(() => {
+      interviewOverlayWindow.loadURL(`http://127.0.0.1:8000/apps/web/interview-overlay.html`).catch(() => {})
+    })
+
+    interviewOverlayWindow.on("closed", () => {
+      interviewOverlayWindow = null
+    })
+
+    return interviewOverlayWindow
+  }
+
+  ipcMain.handle("interview-overlay:show", () => {
+    createInterviewOverlayWindow()
+    return true
+  })
+
+  ipcMain.handle("interview-overlay:hide", () => {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
+      interviewOverlayWindow.hide()
+    }
+    return true
+  })
+
+  ipcMain.handle("interview-overlay:toggle", () => {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed() && interviewOverlayWindow.isVisible()) {
+      interviewOverlayWindow.hide()
+      return false
+    } else {
+      createInterviewOverlayWindow()
+      return true
+    }
+  })
+
+  ipcMain.handle("interview-overlay:click-through", (event, enabled) => {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
+      interviewOverlayWindow.setIgnoreMouseEvents(enabled, { forward: true })
+    }
+  })
+
+  ipcMain.handle("interview-overlay:opacity", (event, delta) => {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
+      const current = interviewOverlayWindow.getOpacity()
+      const next = Math.max(0.3, Math.min(1.0, current + delta))
+      interviewOverlayWindow.setOpacity(next)
+      return next
+    }
+    return null
+  })
+
+  // Forward hotkey events from interview overlay to main window
+  ipcMain.on("hotkey-toggle-mic", () => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("hotkey-toggle-mic")
+    }
+  })
+
+  ipcMain.on("hotkey-stealth-answer", () => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("trigger-ai-screen")
+    }
+  })
+
+  // Interview overlay context sync
+  let _interviewOverlayContext = { company: "", role: "", skills: [], experience: "" }
+
+  function sendInterviewContext(ctx) {
+    _interviewOverlayContext = { ..._interviewOverlayContext, ...ctx }
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
+      interviewOverlayWindow.webContents.send("interview:context", _interviewOverlayContext)
+    }
+  }
+
+  ipcMain.on("interview-overlay:ready", () => {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed()) {
+      interviewOverlayWindow.webContents.send("interview:context", _interviewOverlayContext)
+    }
+  })
+
+  ipcMain.on("main:focus", () => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
+  })
+
+  ipcMain.handle("interview-overlay:set-context", (_event, ctx) => {
+    sendInterviewContext(ctx)
+    return true
+  })
+
+  // Hotkey: Ctrl+Shift+I to toggle interview overlay
+  globalShortcut.register("CommandOrControl+Shift+I", () => {
+    if (interviewOverlayWindow && !interviewOverlayWindow.isDestroyed() && interviewOverlayWindow.isVisible()) {
+      interviewOverlayWindow.hide()
+    } else {
+      createInterviewOverlayWindow()
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // OVERLAY HOTKEYS
   // ═══════════════════════════════════════════════════════════════════════════════
   if (overlayAdapter) {
@@ -1900,11 +2153,20 @@ app.whenReady().then(async () => {
   })
 })
 
+app.on("before-quit", () => { app.isQuitting = true })
+
 app.on("will-quit", () => {
+  systemAudioCapture?.stop()
+  systemAudioCapture = null
+  app.isQuitting = true
+  logger.info("[Main] will-quit event triggered")
   globalShortcut.unregisterAll()
   backendStopped = true  // prevent crash-restart loop during shutdown
   stopHealthCheck()
-  if (backendProcess) backendProcess.kill()
+  if (backendProcess) {
+    logger.info("[Main] Killing backend process")
+    backendProcess.kill()
+  }
   if (overlayAdapter) overlayAdapter.destroy()
   if (screenRecorder) screenRecorder.destroy()
 })

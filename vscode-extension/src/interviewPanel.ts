@@ -229,7 +229,7 @@ export class InterviewPanel implements vscode.WebviewViewProvider {
 
                     switch (message.type) {
                         case 'loading':
-                            responseDiv.innerHTML = '<div class="loading">' + message.message + '</div>';
+                            responseDiv.innerHTML = '<div class="loading">' + escapeHtml(message.message) + '</div>';
                             break;
                         case 'response':
                             responseDiv.innerHTML = '<strong>Q: ' + escapeHtml(message.question) + '</strong><br><br>' +

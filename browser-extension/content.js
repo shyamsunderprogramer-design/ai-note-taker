@@ -19,18 +19,18 @@
     let board = null;
     let pageType = 'detail';
 
-    // Detect board and page type (broader matching)
-    if (url.includes('linkedin.com')) {
+    // Match the parsed hostname, never text in a path/query or a lookalike host.
+    if (jobBoardHostMatches(url, 'linkedin.com')) {
         board = 'linkedin';
         if (url.includes('/jobs/') || url.includes('/job/')) {
             pageType = 'job';
         }
-    } else if (url.includes('indeed.com')) {
+    } else if (jobBoardHostMatches(url, 'indeed.com')) {
         board = 'indeed';
         if (url.includes('/viewjob') || url.includes('jk=')) {
             pageType = 'job';
         }
-    } else if (url.includes('glassdoor.com')) {
+    } else if (jobBoardHostMatches(url, 'glassdoor.com')) {
         board = 'glassdoor';
         if (url.includes('savedJobActivity') || url.includes('savedJob')) {
             pageType = 'saved-list';
@@ -41,21 +41,21 @@
         } else if (url.includes('/Job/')) {
             pageType = 'job';
         }
-    } else if (url.includes('icims.com')) {
+    } else if (jobBoardHostMatches(url, 'icims.com')) {
         board = 'icims';
         if (url.includes('/jobs/') || url.includes('mode=submit_apply')) {
             pageType = 'job';
         }
-    } else if (url.includes('greenhouse.io')) {
+    } else if (jobBoardHostMatches(url, 'greenhouse.io')) {
         board = 'greenhouse';
         pageType = 'job';
-    } else if (url.includes('lever.co')) {
+    } else if (jobBoardHostMatches(url, 'lever.co')) {
         board = 'lever';
         pageType = 'job';
-    } else if (url.includes('workday.com') || url.includes('myworkday')) {
+    } else if (jobBoardHostMatches(url, 'workday.com') || jobBoardHostMatches(url, 'myworkday.com')) {
         board = 'workday';
         pageType = 'job';
-    } else if (url.includes('ashbyhq.com')) {
+    } else if (jobBoardHostMatches(url, 'ashbyhq.com')) {
         board = 'ashby';
         pageType = 'job';
     } else {

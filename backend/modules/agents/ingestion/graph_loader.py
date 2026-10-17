@@ -10,8 +10,8 @@ import hashlib
 import time
 import os
 import logging
-from typing import List, Dict, Optional
-from dataclasses import dataclass, field
+from typing import List, Dict
+from dataclasses import dataclass
 
 logger = logging.getLogger("agents.ingestion.graph_loader")
 
@@ -112,7 +112,7 @@ class GraphLoader:
         Returns:
             LoadStats with loading statistics
         """
-        from agents.ingestion.markdown_parser import ParsedQA
+        from modules.agents.ingestion.markdown_parser import ParsedQA
 
         stats = LoadStats(total_pairs=len(qa_pairs))
         start_time = time.time()
@@ -328,7 +328,7 @@ class GraphLoader:
         logger.info(f"[GraphLoader] Loading {len(cached_items)} cached Q&A pairs")
 
         # Convert cache items to ParsedQA-like objects and load them
-        from agents.ingestion.markdown_parser import ParsedQA
+        from modules.agents.ingestion.markdown_parser import ParsedQA
 
         qa_pairs = []
         for item in cached_items:

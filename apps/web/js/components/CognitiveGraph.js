@@ -5,7 +5,8 @@
 
 import { State } from '../core/state.js';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = window.API_BASE || 'http://127.0.0.1:8000';
+const DEFAULT_USER_ID = 'default';
 
 class CognitiveGraph {
   constructor() {
@@ -31,6 +32,7 @@ class CognitiveGraph {
   async checkConnection() {
     try {
       const r = await fetch(`${API_BASE}/cognitive-graph/status`);
+      if (!r.ok) throw new Error(`Graph unavailable (${r.status})`);
       const d = await r.json();
       this.isConnected = d.connected !== false && d.available !== false;
       this.backend = d.backend || 'unknown';

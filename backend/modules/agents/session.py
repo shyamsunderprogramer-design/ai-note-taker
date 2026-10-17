@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from agents.base import TranscriptSegment, is_question
+from modules.agents.base import TranscriptSegment, is_question
 
 logger = logging.getLogger("agents.session")
 
@@ -34,7 +34,7 @@ class AgentSessionManager:
         """Lazy-check if database is available."""
         if self._has_db is None:
             try:
-                from database import HAS_SQLALCHEMY
+                from core.database import HAS_SQLALCHEMY
                 self._has_db = HAS_SQLALCHEMY
             except (ImportError, Exception):
                 self._has_db = False
@@ -184,7 +184,7 @@ class AgentSessionManager:
                 started_dt = datetime.fromisoformat(started)
                 session["duration_seconds"] = int((datetime.utcnow() - started_dt).total_seconds())
             except (ValueError, TypeError):
-                pass
+                pass  # Legacy sessions may lack a valid start time; leave their duration unset.
 
         await self.save_session(session)
         self._invalidate_cache(session_id)
@@ -319,7 +319,7 @@ class AgentSessionManager:
     async def _db_create(self, session_data: Dict):
         """Create session row in database."""
         try:
-            from database import get_async_session, AgentSession as AgentSessionModel
+            from core.database import get_async_session, AgentSession as AgentSessionModel
             async with get_async_session() as db:
                 db_session = AgentSessionModel(
                     id=session_data["id"],
@@ -346,7 +346,7 @@ class AgentSessionManager:
     async def _db_get(self, session_id: str) -> Optional[Dict]:
         """Get session from database by ID."""
         try:
-            from database import get_async_session, AgentSession as AgentSessionModel
+            from core.database import get_async_session, AgentSession as AgentSessionModel
             from sqlalchemy import select
             async with get_async_session() as db:
                 result = await db.execute(
@@ -363,7 +363,7 @@ class AgentSessionManager:
     async def _db_update(self, session: Dict):
         """Update session row in database."""
         try:
-            from database import get_async_session, AgentSession as AgentSessionModel
+            from core.database import get_async_session, AgentSession as AgentSessionModel
             from sqlalchemy import select
             async with get_async_session() as db:
                 result = await db.execute(
