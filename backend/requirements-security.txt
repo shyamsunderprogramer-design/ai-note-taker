@@ -11,7 +11,7 @@ pyopenssl>=23.0.0
 cryptography>=41.0.0
 
 # Rate limiting
-slowapi>=0.1.9
+slowapi>=0.1.10
 
 # Input validation and sanitization
 bleach>=6.0.0

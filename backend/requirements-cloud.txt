@@ -33,7 +33,7 @@ bcrypt<4.1
 cryptography>=41.0.0
 pycparser==3.0
 cffi==2.0.0
-slowapi>=0.1.9
+slowapi>=0.1.10
 bleach>=6.0.0
 
 # ── Config & utilities ──
