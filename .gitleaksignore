@@ -18,3 +18,7 @@ bbf3c55aaf047db49b319bc50c70696d33c9fa10:electron-data/Local State:generic-api-k
 # These are NOT false positives. Only these exact historical instances are ignored.
 d854fcbe98d3358b74f80ee9b0247737f8906580:backend/.env:gcp-api-key:12
 d854fcbe98d3358b74f80ee9b0247737f8906580:backend/.env:github-pat:15
+
+# Real historical Ollama credential; user confirmed revocation on 2026-10-17.
+# User confirmation, not independent provider validation; exact instance only.
+d854fcbe98d3358b74f80ee9b0247737f8906580:backend/.env:generic-api-key:10
