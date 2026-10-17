@@ -16,9 +16,9 @@ Local speech-to-text, local and cloud AI models, floating overlay UI, screen cap
 
 ## Download
 
-**Testing release: [v2.3.0-rc.1](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.3.0-rc.1).** Download your platform's file below. This candidate includes the updated live assistant, conversation history, authentication fixes and a bundled Python runtime.
+**Latest release: [v2.3.0-rc.1](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest).** Download your platform's file below. This testing candidate includes the updated live assistant, conversation history, authentication fixes and a bundled Python runtime.
 
-**Stable release: [v2.2.0](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.2.0).** GitHub's right-hand **Latest** box shows the stable release; testing releases are also listed under [all releases](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases).
+GitHub's right-hand **Latest** box now shows **v2.3.0-rc.1**. It remains a release candidate with the [testing limits described in its release notes](docs/releases/2.3.0-rc.1.md). The previous stable release, [v2.2.0](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.2.0), remains available under [all releases](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases).
 
 | Platform | Installer | Notes |
 |---|---|---|
