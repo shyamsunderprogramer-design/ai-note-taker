@@ -4,57 +4,43 @@
 
 Local speech-to-text, local and cloud AI models, floating overlay UI, screen capture protection, and real-time transcription — packaged as an Electron desktop app, a web SPA, a React Native mobile app, and a Chrome extension, all backed by a FastAPI Python backend.
 
-[![Release v2.1.0](https://img.shields.io/github/v/release/shyamsunderprogramer-design/ai-note-taker?include_prereleases&sort=semver)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest)
+[![Testing release v2.3.0-rc.1](https://img.shields.io/badge/Testing-v2.3.0--rc.1-orange)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.3.0-rc.1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS · Linux · Windows](https://img.shields.io/badge/Platform-macOS%20·%20Linux%20·%20Windows-lightgrey.svg)](#download)
+
+> **New testing release: [ANT v2.3.0-rc.1](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.3.0-rc.1)** — published October 17, 2026.
+>
+> **[Download for Windows, macOS or Linux](#download)** · [Release notes](docs/releases/2.3.0-rc.1.md)
 
 ---
 
 ## Download
 
-> **Latest stable: [v2.1.0](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest)** — released 2026-06-23. Closes out the Fix #35 series (full-fidelity users.json → SQL migration, AI race stream hardening).
+**Testing release: [v2.3.0-rc.1](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.3.0-rc.1).** Download your platform's file below. This candidate includes the updated live assistant, conversation history, authentication fixes and a bundled Python runtime.
+
+**Stable release: [v2.2.0](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/tag/v2.2.0).** GitHub's right-hand **Latest** box shows the stable release; testing releases are also listed under [all releases](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases).
 
 | Platform | Installer | Notes |
 |---|---|---|
-| **Windows 10/11 (x64)** | [`ANT (AI Note Taker)-Setup-2.1.0-win-x64.exe`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | NSIS installer (recommended) + portable .exe. Unsigned — SmartScreen will warn; click "More info" → "Run anyway". |
-| **macOS (Apple Silicon)** | [`ANT (AI Note Taker)-2.1.0-mac-arm64.dmg`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | Drag-to-Applications. Unsigned — first launch needs right-click → Open, or `xattr -d com.apple.quarantine /Applications/ANT.app`. |
-| **macOS (Intel)** | [`ANT (AI Note Taker)-2.1.0-mac-x64.dmg`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | Same as above for older Macs. |
-| **Linux (x64)** | [`ANT (AI Note Taker)-2.1.0-linux-x64.AppImage`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | `chmod +x *.AppImage && ./ANT*.AppImage`. No install needed. |
-| **Linux (Debian/Ubuntu)** | [`ANT (AI Note Taker)-2.1.0-linux-x64.deb`](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest) | `sudo dpkg -i ant*.deb && sudo apt -f install` to pull any missing deps. |
+| **Windows 10/11 (x64)** | [Windows installer (.exe)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-Setup-2.3.0-rc.1-win-x64.exe) | Install ANT with the setup wizard. |
+| **Windows 10/11 (x64), portable** | [Portable Windows app (.exe)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-win-x64.exe) | Run without the setup wizard. |
+| **macOS (Apple Silicon)** | [Apple Silicon Mac (.zip)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-mac-arm64.zip) | macOS 14 or newer; extract and move the app to Applications. |
+| **macOS (Intel)** | [Intel Mac (.zip)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-mac-x64.zip) | macOS 14 or newer; extract and move the app to Applications. |
+| **Linux (x64)** | [Linux AppImage](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-linux-x86_64.AppImage) | Make the downloaded file executable, then run it. |
+| **Linux (Debian/Ubuntu, x64)** | [Debian package (.deb)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-linux-amd64.deb) | Install with your package manager. |
 
-All installers are built by electron-builder per `electron/package.json` → `build`. On first launch the app auto-migrates any existing `data/users.json` into the SQLAlchemy users table (no operator action required).
+**Verify your download:** download [SHA256SUMS.txt](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/SHA256SUMS.txt) and compare your file's SHA-256 with its entry. Use `shasum -a 256 <downloaded-file>` on macOS/Linux or `certutil -hashfile ANT-Setup-2.3.0-rc.1-win-x64.exe SHA256` on Windows.
 
-**Verify your download:** each release on GitHub includes `SHA256SUMS.txt` next to the installers — `shasum -a 256 -c SHA256SUMS.txt` (macOS/Linux) or `certutil -hashfile ANT-Setup-2.1.0-win-x64.exe SHA256` (Windows).
+Back up existing application data before testing. This candidate does not automatically move data from an older installation's internal resources. Local AI models and API credentials are not included. See the [release notes and testing limits](docs/releases/2.3.0-rc.1.md).
 
-### First-launch notes (unsigned builds)
+### First launch
 
-ANT's CI builds are **unsigned** to keep the project free-to-distribute. Operating systems will warn on first install — here's what to do on each platform:
+These builds have no Windows publisher certificate or Apple Developer ID notarization; macOS binaries are signed ad hoc. Your operating system may require explicit approval for an unverified developer.
 
-**Windows (SmartScreen)**
-1. Double-click `ANT (AI Note Taker)-Setup-2.1.0-win-x64.exe`.
-2. SmartScreen shows "Windows protected your PC" → click **More info**.
-3. Click **Run anyway**. The warning is permanent until the project signs with a code-signing certificate.
-
-**macOS (Gatekeeper)**
-
-Easiest path (v2.1.8+): **double-click `INSTALL.command`** in the mounted DMG window. It copies the app to `/Applications`, strips the quarantine attribute, and launches the app — all in one Terminal window.
-
-Manual path:
-1. Open the `.dmg` and drag `ANT.app` to `/Applications`.
-2. **Don't** double-click `ANT.app` from the DMG or Launchpad. Instead, **right-click (or Control-click) → Open** from Finder.
-3. Click **Open** in the dialog that warns "Apple could not verify...". macOS remembers your decision for this app on this machine.
-4. After the first open, double-click works normally.
-
-   **Alternative (terminal):** strip the quarantine attribute:
-   ```bash
-   xattr -dr com.apple.quarantine "/Applications/ANT (AI Note Taker).app"
-   ```
-
-> **If the app appears to "crash on launch"** (icon bounces in the Dock for a few seconds then disappears, no crash report), the cause is Gatekeeper — `syspolicyd` is silently terminating the unsigned process before any user code runs. Run `INSTALL.command` from the DMG (or use the manual right-click → Open path). This is not a real crash and is fixed by the steps above.
-
-**Linux**
-- **AppImage:** `chmod +x ANT*.AppImage && ./ANT*.AppImage` — no install needed.
-- **Debian/Ubuntu:** `sudo dpkg -i ant*.deb && sudo apt -f install` if missing deps.
+- **Windows:** run `ANT-Setup-2.3.0-rc.1-win-x64.exe`, or use the portable `.exe`.
+- **macOS:** extract the `.zip` for your processor and move the app into Applications before opening it.
+- **Linux AppImage:** run `chmod +x ANT-2.3.0-rc.1-linux-x86_64.AppImage`, then `./ANT-2.3.0-rc.1-linux-x86_64.AppImage`.
+- **Debian/Ubuntu:** run `sudo apt install ./ANT-2.3.0-rc.1-linux-amd64.deb` from the download directory.
 
 ---
 
