@@ -10,7 +10,7 @@ pydantic_core==2.41.5
 starlette==1.7.0
 python-dotenv==1.2.2
 python-multipart==0.0.31
-anyio==4.14.2
+anyio==4.15.1
 httpx==0.28.1
 # Starlette 1.x TestClient; application transports still use httpx above.
 httpx2==2.13.1
