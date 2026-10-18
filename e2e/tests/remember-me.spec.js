@@ -11,7 +11,7 @@ for(const remember of [true,false]) {
     expect(registered.ok()).toBeTruthy();
     await page.locator('#siUser').fill(username);
     await page.locator('#siPass').fill(password);
-    if(remember){await page.getByRole('checkbox',{name:'Remember me'}).focus();await page.keyboard.press('Space')}
+    if(remember){await page.getByRole('checkbox',{name:'Remember me'}).focus();await page.keyboard.press('Space');}
     await page.locator('#siPass').press('Enter');
     await expect(page).toHaveURL(/index\.html$/);
     await page.evaluate(()=>{const s=AuthHelper.getSession();AuthHelper.setSession({...s,expires_at:1},s.remember)});
@@ -31,7 +31,7 @@ for(const remember of [true,false]) {
         await expect(reopened.locator('#siBtn')).toBeVisible();
         expect(await reopened.evaluate(()=>AuthHelper.getToken())).toBeNull();
       }
-    }finally{await next.close()}
+    }finally{await next.close();}
   });
 }
 

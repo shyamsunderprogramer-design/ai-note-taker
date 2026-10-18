@@ -78,7 +78,7 @@ const AuthHelper = {
     })();
     this._refreshing = refresh;
     try { return await refresh; }
-    finally { if (this._refreshing === refresh) this._refreshing = null; }
+    finally { this._refreshing = null; }
   },
 
   async getValidToken() {
