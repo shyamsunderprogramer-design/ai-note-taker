@@ -1,6 +1,6 @@
 {
   "name": "ant-monorepo",
-  "version": "2.3.0-rc.1",
+  "version": "2.3.0-rc.2",
   "private": true,
   "description": "ANT (AI Note Taker) \u2014 multi-platform monorepo. Privacy-first AI notepad with Electron desktop, web SPA, mobile (React Native), Chrome/browser extensions, all backed by a FastAPI Python backend.",
   "license": "MIT",

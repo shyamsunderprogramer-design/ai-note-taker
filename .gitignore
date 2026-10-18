@@ -312,3 +312,6 @@ lib-cov
 
 # Relocatable runtime generated for desktop releases
 /AINT_Python/
+
+# Native helpers are compiled per architecture during packaging.
+electron/native/

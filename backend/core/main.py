@@ -641,6 +641,12 @@ async def auth_enforcement_middleware(request: Request, call_next):
     - In development: Auth is optional, user is set in request.state if token present
     - Always enforces auth on BYOK and auth-me endpoints
     """
+    # Browser preflight carries no bearer token. Let CORSMiddleware validate
+    # the origin, method and headers before the browser sends the real request.
+    if (request.method == "OPTIONS" and request.headers.get("origin")
+            and request.headers.get("access-control-request-method")):
+        return await call_next(request)
+
     path = request.url.path
     auth_header = request.headers.get("authorization", "")
 

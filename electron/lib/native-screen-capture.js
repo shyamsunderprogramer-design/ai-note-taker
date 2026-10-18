@@ -6,7 +6,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const execute = promisify(execFile);
 let binaryPromise;
-async function getBinary() {
+async function getBinary({isPackaged = false, resourcesPath} = {}) {
+  if (isPackaged) {
+    const binary = path.join(resourcesPath, 'ant-screen-capture');
+    const stat = await fs.lstat(binary);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Invalid bundled screen capture helper');
+    await fs.access(binary, fs.constants.X_OK);
+    return binary;
+  }
   if (!binaryPromise) {
     binaryPromise = (async () => {
       const source = path.join(__dirname, 'screen-capture.swift');
@@ -28,8 +35,8 @@ async function getBinary() {
   }
   return binaryPromise;
 }
-async function captureNativeScreen(displayId, excludedPid = process.pid) {
-  const binary = await getBinary();
+async function captureNativeScreen(displayId, excludedPid = process.pid, options = {}) {
+  const binary = await getBinary(options);
   const { stdout } = await execute(binary, [String(excludedPid), String(displayId)], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024, timeout: 15000 });
   if (!stdout.length) throw new Error('Screen capture returned an empty image');
   return stdout.toString('base64');

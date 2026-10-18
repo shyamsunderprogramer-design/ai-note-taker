@@ -15,6 +15,10 @@ from pathlib import Path
 
 
 def verify(resources):
+    if sys.platform == "darwin":
+        helper = resources / "ant-screen-capture"
+        subprocess.run([str(helper), "--self-test"], check=True, timeout=15)
+        subprocess.run(["/usr/bin/codesign", "--verify", "--strict", str(helper)], check=True, timeout=15)
     runtime = resources / "python"
     executable = runtime / ("python.exe" if sys.platform == "win32" else "bin/python3")
     import_check = (
@@ -23,7 +27,7 @@ def verify(resources):
         "assert Path(sys.prefix).resolve() == Path(sys.argv[1]).resolve(); "
         "print('Packaged runtime imports passed')"
     )
-    subprocess.run([str(executable), "-I", "-c", import_check, str(runtime)], check=True)
+    subprocess.run([str(executable), "-I", "-B", "-c", import_check, str(runtime)], check=True)
     with tempfile.TemporaryDirectory(prefix="ant-package-smoke-") as temporary:
         user_dir = Path(temporary)
         data = user_dir / "data"
@@ -53,7 +57,7 @@ def verify(resources):
 
         log_path = user_dir / "backend.log"
         with log_path.open("w+") as log:
-            server = subprocess.Popen([str(executable), "-m", "uvicorn", "core.main:app",
+            server = subprocess.Popen([str(executable), "-B", "-m", "uvicorn", "core.main:app",
                                        "--host", "127.0.0.1", "--port", str(port), "--no-access-log"],
                                       cwd=user_dir, env=environment, stdout=log, stderr=log)
             try:

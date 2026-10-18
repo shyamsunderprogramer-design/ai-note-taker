@@ -20,7 +20,23 @@ test('an attached screenshot takes priority over fresh capture',async()=>{
  const s=setup();s.scope.pendingOcrScreenshot='attached';s.scope.pendingOcrText='Attached text';await s.run('getQuestionScreenContext().then(c=>answerWithScreenContext("Question",c))');assert.equal(s.calls.length,1);assert.match(s.calls[0],/Attached text/);
 });
 test('capture failure cannot silently answer without requested context',async()=>{
- const s=setup();s.scope.window.api.captureScreenshot=async()=>null;await assert.rejects(s.run('getQuestionScreenContext()'),/capture failed/);assert.equal(s.calls.length,0);
+ const s=setup();s.scope.window.api.captureScreenshot=async()=>null;await assert.rejects(s.run('getQuestionScreenContext(null,true)'),/capture failed/);assert.equal(s.calls.length,0);
+});
+test('automatic capture failure still answers a typed question with an explicit notice',async()=>{
+ const s=setup();const notices=[];s.scope.showToast=text=>notices.push(text);
+ s.scope.window.api.captureScreenshot=async()=>null;
+ await s.run('getQuestionScreenContext().then(c=>answerWithScreenContext("Hello? Who are you?",c))');
+ assert.deepEqual(s.calls,['Hello? Who are you?']);assert.match(notices[0],/text only/);
+});
+test('screen-specific question cannot use optional capture fallback to invent screen contents',async()=>{
+ const s=setup();s.scope.window.api.captureScreenshot=async()=>{throw Error('Permission denied')};
+ await assert.rejects(s.run('getQuestionScreenContext().then(c=>answerWithScreenContext("Read the question on screen",c))'),/Permission denied/);
+ assert.equal(s.calls.length,0);
+});
+test('OCR failure retains the captured image for a vision request',async()=>{
+ const s=setup();s.scope.runOcr=async()=>{throw Error('OCR unavailable')};
+ await s.run('getQuestionScreenContext().then(c=>answerWithScreenContext("Describe this picture",c))');
+ assert.equal(s.calls[1].image,'fresh-screen');
 });
 
 test('a question ticket does not turn a text-only question into a screenshot request',async()=>{
