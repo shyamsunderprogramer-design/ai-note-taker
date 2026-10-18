@@ -8,7 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 Testing prerelease with the verified live-assistant and security fixes, native desktop builds, a self-contained Python runtime, and writable packaged storage. See [release notes](docs/releases/2.3.0-rc.1.md) for validation and known limitations.
 
-## [Unreleased] — 2026-06-11
+## [Unreleased]
+
+### Fixed — macOS distribution signing
+
+- Require Developer ID signing, Hardened Runtime and Apple notarization for future Mac release builds, including the bundled Python runtime and native audio helper.
+- Verify the signature, stapled ticket, Gatekeeper acceptance and runtime from the actual release ZIP before uploading it. Missing credentials or failed verification stop the release. Existing `v2.3.0-rc.1` archives remain unnotarized.
 
 This release adds the **role-based ownership refactor**. It is split into
 5 sequential PRs (PR 1 through PR 5); PRs 1, 2, 3, 4, and 5 are in this

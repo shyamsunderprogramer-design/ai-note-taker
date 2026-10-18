@@ -28,6 +28,8 @@ desktop.ini
 *.pem
 *.key
 *.crt
+*.p12
+*.p8
 secrets/
 secrets.*.yaml
 

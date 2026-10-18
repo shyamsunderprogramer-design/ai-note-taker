@@ -259,6 +259,8 @@ Use `electron:build:win` or `electron:build:linux` on the corresponding host. Ou
 
 The [release workflow](.github/workflows/release.yml) is the reference for the four native build targets, bundled-runtime audits, packaged sign-in checks and checksums. macOS output is ZIP; Windows output is installer and portable EXE; Linux output is AppImage and DEB.
 
+Future macOS release builds require [Developer ID signing and Apple notarization](docs/devops/deployment/MACOS_SIGNING.md). Local builds remain ad-hoc signed. This pipeline change does not notarize the existing `v2.3.0-rc.1` downloads.
+
 ## Project layout
 
 ```text

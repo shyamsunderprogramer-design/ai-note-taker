@@ -23,7 +23,7 @@ def verify(resources):
         "assert Path(sys.prefix).resolve() == Path(sys.argv[1]).resolve(); "
         "print('Packaged runtime imports passed')"
     )
-    subprocess.run([str(executable), "-I", "-c", import_check, str(runtime)], check=True)
+    subprocess.run([str(executable), "-I", "-B", "-c", import_check, str(runtime)], check=True)
     with tempfile.TemporaryDirectory(prefix="ant-package-smoke-") as temporary:
         user_dir = Path(temporary)
         data = user_dir / "data"
@@ -53,7 +53,7 @@ def verify(resources):
 
         log_path = user_dir / "backend.log"
         with log_path.open("w+") as log:
-            server = subprocess.Popen([str(executable), "-m", "uvicorn", "core.main:app",
+            server = subprocess.Popen([str(executable), "-B", "-m", "uvicorn", "core.main:app",
                                        "--host", "127.0.0.1", "--port", str(port), "--no-access-log"],
                                       cwd=user_dir, env=environment, stdout=log, stderr=log)
             try:
