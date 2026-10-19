@@ -10,24 +10,133 @@ const AuthHelper = {
   TOKEN_KEY: 'ainotetaker_auth_token',
   _authRequired: null, // cached auth status
 
-  /** Get the stored auth token */
-  getToken() {
-    return localStorage.getItem(this.TOKEN_KEY);
+  SESSION_KEY: 'ainotetaker_session_v2',
+  _refreshing: null,
+  _epoch: 0,
+
+  getSession() {
+    if (window.api?.getAuthSession) return window.api.getAuthSession();
+    for (const storage of [sessionStorage, localStorage]) {
+      const raw = storage.getItem(this.SESSION_KEY);
+      if (raw) {
+        try { return JSON.parse(raw); } catch { storage.removeItem(this.SESSION_KEY); }
+      }
+    }
+    // An old checkbox only remembered a username, so it is not consent to
+    // persist a new long-lived session. Require one fresh login on upgrade.
+    localStorage.removeItem(this.TOKEN_KEY);
+    return null;
   },
 
-  /** Store auth token */
-  setToken(token) {
-    localStorage.setItem(this.TOKEN_KEY, token);
-  },
+  getToken() { return this.getSession()?.access_token || null; },
 
-  /** Clear auth token */
-  clearToken() {
+  setSession(data, remember = false) {
+    const session = { access_token: data.access_token, refresh_token: data.refresh_token || null,
+      expires_at: data.expires_at || Date.now() + (Number(data.expires_in) || 86400) * 1000,
+      remember: remember === true };
+    if (window.api?.setAuthSession) window.api.setAuthSession(session);
+    else {
+      // Write first, so quota/storage errors do not silently lose a login.
+      const storage = remember ? localStorage : sessionStorage;
+      storage.setItem(this.SESSION_KEY, JSON.stringify(session));
+      (remember ? sessionStorage : localStorage).removeItem(this.SESSION_KEY);
+    }
     localStorage.removeItem(this.TOKEN_KEY);
   },
 
-  /** Check if user is authenticated */
-  isAuthenticated() {
-    return !!this.getToken();
+  setToken(token) { this.setSession({access_token: token}); },
+
+  clearToken() {
+    this._epoch++;
+    if (window.api?.clearAuthSession) window.api.clearAuthSession();
+    localStorage.removeItem(this.TOKEN_KEY);
+    localStorage.removeItem(this.SESSION_KEY);
+    sessionStorage.removeItem(this.SESSION_KEY);
+  },
+
+  isAuthenticated() { return !!this.getToken(); },
+
+  async refreshSession() {
+    if (window.api?.refreshAuthSession) return window.api.refreshAuthSession();
+    if (this._refreshing) return this._refreshing;
+    const previous = this.getSession();
+    if (!previous?.refresh_token) return false;
+    const epoch = this._epoch;
+    const refresh = (async () => {
+      const body = new FormData();
+      body.append('refresh_token', previous.refresh_token);
+      const response = await this._doFetch(`${API_BASE}/auth/refresh`, {method:'POST', body, signal:AbortSignal.timeout(10000)});
+      const current = this.getSession();
+      if (epoch !== this._epoch || current?.refresh_token !== previous.refresh_token) return false;
+      if (response.status === 401 || response.status === 403) { this.clearToken(); return false; }
+      if (!response.ok) throw new Error('Could not renew your login. Try again shortly.');
+      const data = await response.json();
+      if (epoch !== this._epoch || this.getSession()?.refresh_token !== previous.refresh_token) return false;
+      if (!data.access_token) throw new Error('The login renewal response was incomplete.');
+      this.setSession({...data, refresh_token:previous.refresh_token}, previous.remember);
+      return true;
+    })();
+    this._refreshing = refresh;
+    try { return await refresh; }
+    finally { this._refreshing = null; }
+  },
+
+  async getValidToken() {
+    const session = this.getSession();
+    if (session?.refresh_token && session.expires_at <= Date.now() + 30000) await this.refreshSession();
+    return this.getToken();
+  },
+
+  async logout() {
+    let token;
+    try { token = await this.getValidToken(); }
+    catch { token = this.getToken(); }
+    finally { this.clearToken(); }
+    if (token) {
+      try { await this._doFetch(`${API_BASE}/auth/logout`, {method:'POST', headers:{Authorization:`Bearer ${token}`}, signal:AbortSignal.timeout(5000)}); }
+      catch { /* Local sign-out must still work while offline. */ }
+    }
+  },
+
+  isApiUrl(input) {
+    try {
+      const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, window.location.href);
+      const base = new URL(API_BASE, window.location.href);
+      return url.origin === base.origin && (base.pathname === '/' || url.pathname.startsWith(base.pathname.replace(/\/$/, '') + '/'));
+    } catch { return false; }
+  },
+
+  async request(input, options = {}) {
+    if (!this.isApiUrl(input)) return _originalFetch(input, options);
+    const hadSession = !!this.getToken();
+    await this.getValidToken();
+    const initial = new Request(input, options);
+    // Retain a clone for a single retry; uploads and streaming responses use
+    // the same auth path without leaking tokens to other origins.
+    const attempt = token => {
+      const request = initial.clone();
+      const headers = new Headers(request.headers);
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      else headers.delete('Authorization');
+      return _originalFetch(new Request(request, {headers}));
+    };
+    let token = this.getToken();
+    let response = await attempt(token);
+    if (response.status !== 401) return response;
+    if (!token) {
+      if (hadSession && !this.getToken()) this.showLoginOverlay();
+      return response;
+    }
+    const currentToken = this.getToken();
+    if ((currentToken && currentToken !== token) || await this.refreshSession()) {
+      token = this.getToken();
+      response = await attempt(token);
+    }
+    if (response.status === 401 && (!this.getToken() || this.getToken() === token)) {
+      this.clearToken();
+      this.showLoginOverlay();
+    }
+    return response;
   },
 
   /**
@@ -68,15 +177,14 @@ const AuthHelper = {
       this._authRequired = data.auth_required !== false;
       return this._authRequired;
     } catch (e) {
-      // Backend not ready yet — assume auth not required for dev
-      console.warn('[AuthHelper] Backend not ready, assuming auth disabled');
-      this._authRequired = false;
-      return false;
+      // An unavailable backend is not evidence that authentication is disabled.
+      return true;
     }
   },
 
   /** Login and store token */
-  async login(username, password) {
+  async login(username, password, remember = false) {
+    const epoch = ++this._epoch;
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
@@ -84,9 +192,10 @@ const AuthHelper = {
     const res = await this._doFetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
     if (!res.ok) throw new Error('Login failed');
     const data = await res.json();
-    if (data.access_token) {
-      this.setToken(data.access_token);
-    }
+    if (epoch !== this._epoch) throw new Error('Sign-in was cancelled.');
+    if (!data.access_token) throw new Error('The login response was incomplete.');
+    try { this.setSession(data, remember); }
+    catch (error) { error.kind = 'session_storage'; throw error; }
     return data;
   },
 
@@ -173,23 +282,9 @@ const AuthHelper = {
 
   /** Authenticated fetch wrapper - includes token and handles 401 */
   async authFetch(url, options = {}) {
-    const token = this.getToken();
-    if (token) {
-      options.headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${token}`,
-      };
-    } else {
-      console.warn('[AuthHelper] authFetch called with no token for:', url);
-    }
-    const res = await this._doFetch(url, options);
-
-    // If token expired, clear it and try re-auth
-    if (res.status === 401) {
-      this.clearToken();
-      throw new Error('Authentication required. Please log in again.');
-    }
-    return res;
+    const response = await this.request(url, options);
+    if (response.status === 401) throw new Error('Authentication required. Please log in again.');
+    return response;
   },
 
   /** Redirect to dedicated sign-in page or show overlay on standalone pages */
@@ -590,36 +685,7 @@ const _originalFetch = window.fetch.bind(window);
 /**
  * Patch global fetch to automatically include auth token on API calls.
  */
-window.fetch = function patchedFetch(url, options = {}) {
-  // Only inject auth header for our API calls
-  if (typeof url === 'string' && (url.includes('127.0.0.1:8000') || url.includes('localhost:8000') || url.startsWith('/'))) {
-    const token = localStorage.getItem(AuthHelper.TOKEN_KEY);
-    if (token) {
-      options.headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${token}`,
-      };
-    }
-  }
-  // Don't set Content-Type for FormData (browser sets it automatically with boundary)
-  if (options.body instanceof FormData && options.headers) {
-    delete options.headers['Content-Type'];
-  }
-  return _originalFetch(url, options).then(response => {
-    // Auto-reauth on 401: clear stale token and trigger re-login
-    if (response.status === 401 && typeof url === 'string' &&
-        (url.includes('127.0.0.1:8000') || url.includes('localhost:8000'))) {
-      AuthHelper.clearToken();
-      // Check if auth is actually required before showing login
-      AuthHelper.isAuthRequired().then(required => {
-        if (required) {
-          AuthHelper.showLoginOverlay();
-        }
-      });
-    }
-    return response;
-  });
-};
+window.fetch = (url, options) => AuthHelper.request(url, options);
 
 // Make available globally
 if (typeof window !== 'undefined') {
@@ -627,6 +693,7 @@ if (typeof window !== 'undefined') {
 
   // Auto-check auth on load: skip login if auth disabled
   document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.pathname.endsWith('/signin.html')) return;
     if (!AuthHelper.isAuthenticated()) {
       AuthHelper.ensureAuth();
     }

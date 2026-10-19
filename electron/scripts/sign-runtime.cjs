@@ -29,4 +29,5 @@ exports.default = async function signRuntime(context) {
   }
   visit(path.join(resources, 'python'));
   signFile(path.join(resources, 'audiotee'));
+  signFile(path.join(resources, 'ant-screen-capture'));
 };

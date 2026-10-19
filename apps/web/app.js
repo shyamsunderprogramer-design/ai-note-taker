@@ -66,7 +66,6 @@ let isProcessing = false  // true while AI is streaming a response
 let recordingQuestionHandled = false
 let mediaRecorder = null
 let mediaStream = null
-let audioChunks = []
 let latestBotMessage = null
 let currentConversationId = null
 let currentMessages = []
@@ -355,7 +354,7 @@ resumeFileInput?.addEventListener("change", async () => {
     const body = new FormData()
     body.append("file", file)
     const headers = {}
-    const token = localStorage.getItem('ainotetaker_auth_token')
+    const token = window.AuthHelper?.getToken()
     if (token) headers.Authorization = `Bearer ${token}`
     const response = await fetch(`${API_BASE}/resume/context`, {method: "POST", body, headers})
     const result = await response.json()
@@ -1881,7 +1880,7 @@ function scrollChat(smooth = false, force = false) {
 
 function renderCaptureMetadata(label, capture) {
   if (capture) {
-    label.textContent += capture.status === "failed" ? " · Screen capture failed" : " · Screen context"
+    label.textContent += capture.status === "failed" ? " · Screen capture failed" : capture.status === "unavailable" ? " · Text only (screen unavailable)" : " · Screen context"
     const capturedAt = Number(capture.capturedAt)
     label.title = capture.status === "failed" ? "No screen image was used" : [
       Number.isFinite(capturedAt) ? new Date(capturedAt).toLocaleString() : "Attached screenshot",
@@ -2630,7 +2629,7 @@ async function streamRecoveringAnswer(query, image = null, ticket = null) {
     if (!candidates.length) throw new Error('No enabled provider or installed local model is available.')
     const context = getContextMessages()
     const headers = {'Content-Type':'application/json'}
-    const token = localStorage.getItem('ainotetaker_auth_token')
+    const token = window.AuthHelper?.getToken()
     if (token) headers.Authorization = `Bearer ${token}`
     const followup = ticket.followupOf ? '\n\n[Panel follow-up]\nOriginal question (reference data): ' + JSON.stringify(ticket.followupOf)
       + '\nThe new question interrupts an ongoing answer. Give a short, natural bridge that addresses the new question while continuing the original answer. Avoid restarting or repeating the whole answer. Keep relevant candidate speech and the original question in context; do not invent speaker identities or personal experience.' : ''
@@ -2972,7 +2971,7 @@ async function submitAudio(blob, screenshotB64 = null) {
   // Add auth headers explicitly (belt-and-suspenders with patchedFetch)
   const transcribeHeaders = {}
   try {
-    const token = localStorage.getItem('ainotetaker_auth_token')
+    const token = window.AuthHelper?.getToken()
     if (token) transcribeHeaders['Authorization'] = `Bearer ${token}`
   } catch {}
 
@@ -3085,6 +3084,7 @@ async function startListeningSession() {
       })
     }
 
+    await window.AuthHelper?.getValidToken()
     recordingQuestionHandled = false
     setListeningUI(true)
 
@@ -3104,44 +3104,54 @@ async function startListeningSession() {
       return
     }
 
-    mediaRecorder = new MediaRecorder(mediaStream)
-    audioChunks = []
+    const recordingStream = mediaStream
+    const recorder = new MediaRecorder(recordingStream)
+    const chunks = []
+    const startedAt = Date.now()
+    mediaRecorder = recorder
 
     // Setup waveform visualization (reuses prewarmed AudioContext if available)
     startWaveform(mediaStream)
 
-    mediaRecorder.addEventListener("dataavailable", (e) => {
+    recorder.addEventListener("dataavailable", (e) => {
       if (e.data && e.data.size > 0) {
-        audioChunks.push(e.data)
-        if (window.unifiedSessionActive && audioChunks.length > 30) audioChunks.shift()
+        chunks.push(e.data)
+        if (window.unifiedSessionActive && chunks.length > 30) chunks.shift()
       }
     })
 
-    mediaRecorder.addEventListener("stop", () => {
-      const audioBlob = new Blob(audioChunks, { type: "audio/webm" })
+    recorder.addEventListener("stop", () => {
+      const audioBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" })
+      chunks.length = 0
+      recordingStream.getTracks().forEach(track => track.stop())
+      // A late stop event from the previous recording must not stop or submit
+      // the new recording, nor read its chunks or shared completion flags.
+      if (mediaRecorder !== recorder) return
       mediaRecorder = null
-      audioChunks = []
-      stopTracks()
-
-      console.log("[mediaRecorder] stop event fired, audioBlob size:", audioBlob.size)
-
-      if (recordingQuestionHandled || window.unifiedSessionActive) return
-
+      if (mediaStream === recordingStream) { mediaStream = null; stopWaveform() }
+      if (recorder.discard || recordingQuestionHandled || window.unifiedSessionActive) return
       if (audioBlob.size < 256) {
-        addErrorMessage("No audio was recorded. Check your microphone input in macOS Sound settings, then record again.")
+        showToast(Date.now() - startedAt < 1000
+          ? "Recording was too short. Start recording, speak, then stop."
+          : "No microphone audio arrived. Check your selected input in Sound settings, then try again.")
         setListeningUI(false)
         setProcessingUI(false)
         return
       }
-
-      // Use attached context, or a fresh screen when screen context is enabled.
       submitAudio(audioBlob).catch(error => {
         addErrorMessage(error.message || "Recording processing failed")
         setProcessingUI(false)
       })
     })
+    recorder.addEventListener("error", () => {
+      recorder.discard = true
+      if (mediaRecorder !== recorder) return
+      stopListening()
+      showToast("The microphone recording stopped unexpectedly. Reconnect your input device and try again.")
+      setProcessingUI(false)
+    })
 
-    mediaRecorder.start(1000)
+    recorder.start(250)
 
     // Start real-time streaming transcription pipeline
     startStreamingTranscription()
@@ -3162,6 +3172,7 @@ async function startListeningSession() {
 }
 
 function stopListening() {
+  if (mediaRecorder) mediaRecorder.discard = mediaRecorder.discard || recordingQuestionHandled || !!window.unifiedSessionActive
   // Update UI immediately so user feels instant response
   setListeningUI(false)
   autoGenerateMeetingNotes()
@@ -3231,7 +3242,7 @@ function startStreamingTranscription() {
   // Pass auth token in WebSocket URL so backend auth succeeds immediately
   let wsUrl = API_BASE.replace('http', 'ws') + "/ws/transcribe?assist=true&questions_only=true&model=" + encodeURIComponent(modelSelect?.value || "auto")
   try {
-    const token = localStorage.getItem('ainotetaker_auth_token')
+    const token = window.AuthHelper?.getToken()
     if (token) wsUrl += "&token=" + encodeURIComponent(token)
   } catch {}
 
@@ -3402,7 +3413,7 @@ async function findSystemAudioDevice() {
 function openSystemAudioSocket() {
   let wsUrl = API_BASE.replace('http', 'ws') + "/ws/transcribe?source=system&assist=true&questions_only=true&model=" + encodeURIComponent(modelSelect?.value || "auto")
   try {
-    const token = localStorage.getItem('ainotetaker_auth_token')
+    const token = window.AuthHelper?.getToken()
     if (token) wsUrl += "&token=" + encodeURIComponent(token)
   } catch {}
   const ws = new WebSocket(wsUrl)
@@ -4386,12 +4397,14 @@ async function getQuestionScreenContext(image = null, forceCapture = false) {
   image = image || (forceCapture ? null : pendingOcrScreenshot)
   let metadata = image ? { source: "attachment", status: "attached" } : null
   let text = image === pendingOcrScreenshot ? pendingOcrText : null
+  try {
   if (!image && window.api?.captureScreenshot && (forceCapture || window.api?.autoScreenshotGetStatus)) {
     const status = forceCapture ? { enabled: true } : await window.api.autoScreenshotGetStatus()
     if (status.enabled) {
       if (window.api.captureScreenshotContext) {
         const captured = await window.api.captureScreenshotContext()
         image = captured?.image
+        if (!image && captured?.error) throw new Error(captured.error)
         metadata = { source: "fresh", status: image ? "captured" : "failed", capturedAt: captured?.capturedAt, displayId: captured?.displayId }
       } else {
         image = await window.api.captureScreenshot()
@@ -4400,7 +4413,14 @@ async function getQuestionScreenContext(image = null, forceCapture = false) {
       if (!image) throw new Error("Screen context is enabled but capture failed. Check screen-recording permission or disable screen context.")
     }
   }
-  if (image && !text) text = (await runOcr(image)).text || ""
+  } catch (error) {
+    if (forceCapture) throw error
+    return {image:null, text:null, metadata:{source:"screen", status:"unavailable", message:error.message}}
+  }
+  if (image && !text) {
+    try { text = (await runOcr(image)).text || "" }
+    catch { text = "" } // The captured image can still be used by a vision model.
+  }
   if (metadata) metadata.ocrReadable = !!text?.trim()
   return { image, text, metadata }
 }
@@ -4416,8 +4436,9 @@ function screenQuestionClarification(question, text) {
 async function answerWithScreenContext(question, context, ticket = null) {
   const asksForScreen = /\b(?:on (?:the )?screen|on-screen|screenshot|visible questions?)\b/i.test(question)
   if (asksForScreen && !context.image && !context.text?.trim()) {
-    throw new Error("No screen context is attached. Enable screen context or attach a screenshot, then ask again.")
+    throw new Error(context.metadata?.message || "No screen context is attached. Enable screen context or attach a screenshot, then ask again.")
   }
+  if (context.metadata?.status === "unavailable") showToast("Screen unavailable — answering your text only. Attach a screenshot to include it.")
   const clarification = screenQuestionClarification(question, context.text)
   if (clarification) {
     if (ticket && !isCurrentQuestion(ticket)) return
@@ -4797,7 +4818,7 @@ appMenu.addEventListener("click", async (e) => {
   }
   else if (action === "signout") {
     if (window.AuthHelper) {
-      AuthHelper.clearToken()
+      await AuthHelper.logout()
       showToast("Signed out")
       setTimeout(() => { AuthHelper.showLoginOverlay() }, 400)
     }
@@ -5675,7 +5696,7 @@ async function loadLocalOllamaModels() {
   try {
     const headers = {}
     try {
-      const token = localStorage.getItem('ainotetaker_auth_token')
+      const token = window.AuthHelper?.getToken()
       if (token) headers['Authorization'] = `Bearer ${token}`
     } catch {}
     const response = await fetch(`${API_BASE}/ollama/models`, { headers })
@@ -7941,7 +7962,7 @@ init = async function() {
     try {
       await _originalFetch(`${API_BASE}/health`)
       // health doesn't need auth, but let's test an auth-required endpoint
-      const authTest = await _originalFetch(`${API_BASE}/ollama/models`, {
+      const authTest = await fetch(`${API_BASE}/auth/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (authTest.status === 401) {

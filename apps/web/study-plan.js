@@ -19,7 +19,7 @@ class StudyPlanManager {
 
   _userKey() {
     try {
-      const token = localStorage.getItem('ainotetaker_auth_token');
+      const token = window.AuthHelper?.getToken();
       const payload = token && JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
       return encodeURIComponent(payload?.sub || 'local');
     } catch { return 'local'; }

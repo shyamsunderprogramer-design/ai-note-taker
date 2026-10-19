@@ -1,6 +1,6 @@
 {
   "name": "ai-note-taker",
-  "version": "2.3.0-rc.1",
+  "version": "2.3.0-rc.2",
   "private": true,
   "description": "AI-powered voice note taker with stealth mode",
   "main": "main.js",
@@ -93,6 +93,10 @@
         {
           "from": "../node_modules/audiotee/bin/audiotee",
           "to": "audiotee"
+        },
+        {
+          "from": "native/${arch}/ant-screen-capture",
+          "to": "ant-screen-capture"
         }
       ],
       "signIgnore": [
@@ -211,7 +215,8 @@
       "preload.js",
       "stealth.js"
     ],
-    "afterPack": "scripts/sign-runtime.cjs"
+    "afterPack": "scripts/sign-runtime.cjs",
+    "beforePack": "scripts/build-screen-capture.cjs"
   },
   "dependencies": {
     "audiotee": "^0.0.7",

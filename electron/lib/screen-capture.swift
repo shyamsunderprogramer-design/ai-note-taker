@@ -11,6 +11,12 @@ struct CaptureScreen {
             guard #available(macOS 14.0, *) else {
                 throw NSError(domain: "ANTCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "Screen capture requires macOS 14 or later."])
             }
+            // Packaging checks can load the executable and its frameworks
+            // without taking a screenshot or asking for capture permission.
+            if CommandLine.arguments == [CommandLine.arguments[0], "--self-test"] {
+                print("ANT screen capture helper ready")
+                return
+            }
             guard CommandLine.arguments.count == 3,
                   let excludedPID = Int32(CommandLine.arguments[1]),
                   let displayID = UInt32(CommandLine.arguments[2]) else {

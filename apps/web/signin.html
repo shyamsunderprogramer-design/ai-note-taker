@@ -303,7 +303,7 @@
       </div>
       <div class="field-row">
         <label class="checkbox-label">
-          <input type="checkbox" id="siRemember"> Remember me
+          <input type="checkbox" id="siRemember" title="Keep me signed in on this device"> Remember me
         </label>
       </div>
       <div class="error-msg" id="siError"></div>
@@ -549,12 +549,18 @@
 
     // Check if already authenticated — only redirect if token is valid
     async function checkAuth() {
-      const token = localStorage.getItem('ainotetaker_auth_token');
-      if (!token) return;
       try {
-        const test = await fetch(`${API_BASE}/providers`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const token = AuthHelper.getToken();
+        if (!token) return;
+        const test = await fetch(`${API_BASE}/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (test.ok) window.location.href = 'index.html';
-      } catch {}
+      } catch (error) {
+        if (error.kind !== 'backend_offline') {
+          const message = document.getElementById('siError');
+          message.textContent = error.message || 'Sign in to continue.';
+          message.style.display = 'block';
+        }
+      }
     }
     checkAuth();
 
@@ -595,21 +601,17 @@
       errEl.style.display = 'none';
       if (!user || !pass) { errEl.textContent = 'Username and password are required'; errEl.style.display = 'block'; return; }
 
-      // Remember me
-      if (document.getElementById('siRemember').checked) {
-        localStorage.setItem('ainotetaker_remember_user', user);
-      } else {
-        localStorage.removeItem('ainotetaker_remember_user');
-      }
-
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>Signing in...';
 
       try {
-        await AuthHelper.login(user, pass);
+        const remember = document.getElementById('siRemember').checked;
+        await AuthHelper.login(user, pass, remember);
+        if (remember) localStorage.setItem('ainotetaker_remember_user', user);
+        else localStorage.removeItem('ainotetaker_remember_user');
         window.location.href = 'index.html';
       } catch (e) {
-        if (e?.kind === 'backend_offline') {
+        if (e?.kind === 'backend_offline' || e?.kind === 'session_storage') {
           errEl.textContent = e.message;
         } else {
           errEl.textContent = 'Invalid username or password';

@@ -253,7 +253,7 @@ class APIClient {
 
   /** Build auth headers from stored token */
   _authHeaders() {
-    const token = localStorage.getItem('ainotetaker_auth_token');
+    const token = window.AuthHelper?.getToken();
     return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
 }

@@ -251,10 +251,10 @@ async def refresh_access_token(refresh_token: str = Form(...)):
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     user = await user_manager.get_user(token_data.username)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    if not user or not user.is_active or str(user.id) != token_data.user_id:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
 
-    if token_data.jti and user.active_session_id and token_data.jti != user.active_session_id:
+    if not token_data.jti or not user.active_session_id or token_data.jti != user.active_session_id:
         log_audit_event(
             "auth_session_invalidated", user.username,
             "refresh_rejected_session_rotated",

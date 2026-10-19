@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell, screen } = require("electron")
+const { app, BrowserWindow, globalShortcut, ipcMain, session, desktopCapturer, shell, screen, safeStorage, systemPreferences } = require("electron")
 const {configureRuntimePrivacy} = require("./lib/runtime-privacy")
 const runtimePrivacy = configureRuntimePrivacy({app, inspector:require("node:inspector")})
 const { logger, configureForProduction: configureLoggerForProduction, configureBackendCrashLog } = require("./lib/logger")
@@ -18,7 +18,7 @@ const fs = require("fs")
 const crypto = require("crypto")
 
 const captureScreenContext = require("./lib/screen-context").createScreenCapture({ BrowserWindow, desktopCapturer, screen,
-  nativeCapture: process.platform === "darwin" ? require("./lib/native-screen-capture").captureNativeScreen : null
+  nativeCapture: process.platform === "darwin" ? id => require("./lib/native-screen-capture").captureNativeScreen(id, process.pid, {isPackaged:app.isPackaged, resourcesPath:process.resourcesPath}) : null
 })
 
 // Speed optimizations below (must run before app.whenReady())
@@ -122,6 +122,10 @@ for (const failure of conversationStorage.errors) {
 }
 
 const store = new Store()
+const { backendSigningSecret, createAuthSessionStore, registerAuthSessionIPC } = require("./lib/auth-session")
+const authSessionStore = createAuthSessionStore({directory: path.join(getAppDataPath(), "auth"), safeStorage})
+registerAuthSessionIPC({ipcMain, sessionStore: authSessionStore,
+  rendererDirectory: app.isPackaged ? path.join(process.resourcesPath, "renderer") : path.resolve(__dirname, "../apps/web")})
 
 // Secure API key storage - encrypted using machine-specific key derived with
 // full 32-byte key (not sliced down). Uses unique salt per app instance.
@@ -759,6 +763,7 @@ async function startBackend() {
     ...process.env,
     PYTHONPATH: backendDir,
     ...(isProd ? {
+      JWT_SECRET_KEY: backendSigningSecret(dataDir, process.env.JWT_SECRET_KEY),
       ANT_DATA_DIR: dataDir,
       ANT_VOICE_STORAGE_DIR: path.join(dataDir, "voice_models"),
       ANT_MEETING_TEMPLATES_DIR: path.join(dataDir, "meeting_templates"),
@@ -1078,7 +1083,9 @@ ipcMain.handle("window:capture-screenshot-context", async () => {
   try { return await captureScreenContext({ includeMetadata: true }) }
   catch (error) {
     logger.error("[Screenshot] context capture failed:", error)
-    return { image: null, status: "failed", capturedAt: Date.now() }
+    const denied = process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") === "denied"
+    return { image: null, status: "failed", capturedAt: Date.now(),
+      error: denied ? "Allow ANT in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen ANT." : "Screen capture is unavailable. Try again or attach a screenshot." }
   }
 })
 

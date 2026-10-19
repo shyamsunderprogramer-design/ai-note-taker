@@ -141,7 +141,7 @@
       const candidates = await recoveryCandidates(modelSelect?.value || 'auto', null)
       if (controller.signal.aborted || generation !== epoch) return
       const headers = {'Content-Type':'application/json'}
-      const token = localStorage.getItem('ainotetaker_auth_token')
+      const token = window.AuthHelper?.getToken()
       if (token) headers.Authorization = `Bearer ${token}`
       const response = await fetch(`${API_BASE}/stream-recover`, {
         method:'POST', headers, signal:controller.signal,

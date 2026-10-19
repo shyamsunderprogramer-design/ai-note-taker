@@ -530,6 +530,8 @@ async def verify_token(token: str) -> Optional[TokenData]:
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") == "refresh":
+            return None
         token_data = TokenData(
             user_id=payload.get("sub"),
             username=payload.get("username"),
