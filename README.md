@@ -10,22 +10,24 @@ A floating workspace for voice notes, screen-aware questions, and interview prep
 
 ## Download
 
-**[ANT v2.3.0-rc.1](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest)** is the current download, published October 17, 2026. It appears in GitHub's **Latest** box and remains a release candidate for testing. Read the [release notes and known limits](docs/releases/2.3.0-rc.1.md) before upgrading. [Previous releases](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases) remain available.
+**[ANT v2.3.0-rc.2](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest)** is the current download. It fixes remembered logins, microphone recordings, and optional screen-capture failures. It appears in GitHub's **Latest** box and remains a release candidate for testing. Read the [release notes and known limits](docs/releases/2.3.0-rc.2.md) before upgrading. [Previous releases](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases) remain available.
 
-The desktop packages include Electron and a standalone Python runtime. You do **not** need to install Python or Node.js to use them. AI model downloads, Ollama for local AI, and cloud provider credentials are separate.
+The desktop packages include Electron and a standalone Python runtime. Mac downloads also include the screen-capture helper; Xcode is not required. You do **not** need to install Python or Node.js to use them. AI model downloads, Ollama for local AI, and cloud provider credentials are separate.
 
 | Platform | Installer | Notes |
 |---|---|---|
-| **Windows 10/11 (x64)** | [Windows installer (.exe)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-Setup-2.3.0-rc.1-win-x64.exe) | Install ANT with the setup wizard. |
-| **Windows 10/11 (x64), portable** | [Portable Windows app (.exe)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-win-x64.exe) | Run without the setup wizard. |
-| **macOS (Apple Silicon)** | [Apple Silicon Mac (.zip)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-mac-arm64.zip) | macOS 14 or newer; extract and move the app to Applications. |
-| **macOS (Intel)** | [Intel Mac (.zip)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-mac-x64.zip) | macOS 14 or newer; extract and move the app to Applications. |
-| **Linux (x64)** | [Linux AppImage](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-linux-x86_64.AppImage) | Make the downloaded file executable, then run it. |
-| **Linux (Debian/Ubuntu, x64)** | [Debian package (.deb)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/ANT-2.3.0-rc.1-linux-amd64.deb) | Install with your package manager. |
+| **Windows 10/11 (x64)** | [Windows installer (.exe)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/ANT-Setup-2.3.0-rc.2-win-x64.exe) | Install ANT with the setup wizard. |
+| **Windows 10/11 (x64), portable** | [Portable Windows app (.exe)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/ANT-2.3.0-rc.2-win-x64.exe) | Run without the setup wizard. |
+| **macOS (Apple Silicon)** | [Apple Silicon Mac (.zip)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/ANT-2.3.0-rc.2-mac-arm64.zip) | macOS 14 or newer; extract and move the app to Applications. |
+| **macOS (Intel)** | [Intel Mac (.zip)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/ANT-2.3.0-rc.2-mac-x64.zip) | macOS 14 or newer; extract and move the app to Applications. |
+| **Linux (x64)** | [Linux AppImage](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/ANT-2.3.0-rc.2-linux-x86_64.AppImage) | Make the downloaded file executable, then run it. |
+| **Linux (Debian/Ubuntu, x64)** | [Debian package (.deb)](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/ANT-2.3.0-rc.2-linux-amd64.deb) | Install with your package manager. |
 
-**Verify the file:** compare `shasum -a 256 <downloaded-file>` on macOS/Linux, or `certutil -hashfile <downloaded-file> SHA256` on Windows, with the matching entry in [SHA256SUMS.txt](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.1/SHA256SUMS.txt).
+**Verify the file:** compare `shasum -a 256 <downloaded-file>` on macOS/Linux, or `certutil -hashfile <downloaded-file> SHA256` on Windows, with the matching entry in [SHA256SUMS.txt](https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/download/v2.3.0-rc.2/SHA256SUMS.txt).
 
 ### First launch
+
+Quit ANT before replacing the app. Sign in once after upgrading and check **Remember me** if you want the login restored after quitting. Microphone and screen recording still need permission in macOS **System Settings → Privacy & Security**.
 
 Back up existing data: this candidate does not automatically migrate data out of an older installation's internal resources. Windows builds have no publisher certificate and may display a publisher warning. On Linux, make the AppImage executable or install the `.deb` with your package manager.
 
@@ -243,7 +245,7 @@ cd backend
 python -m pytest core/test_startup.py tests/ --tb=short
 ```
 
-[CI](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/ci.yml) runs backend, desktop, web and mobile checks, browser tests, workflow validation and security checks. [CodeQL](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/codeql.yml) runs separately. Passing checks do not establish that every optional integration or target-device audio workflow has been tested; see the [release limits](docs/releases/2.3.0-rc.1.md).
+[CI](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/ci.yml) runs backend, desktop, web and mobile checks, browser tests, workflow validation and security checks. [CodeQL](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/codeql.yml) runs separately. Passing checks do not establish that every optional integration or target-device audio workflow has been tested; see the [release limits](docs/releases/2.3.0-rc.2.md).
 
 ### Build a desktop package
 
@@ -296,7 +298,7 @@ See the [troubleshooting guide](docs/devops/development/TROUBLESHOOTING.md) for 
 
 - [Documentation index](docs/README.md)
 - [Architecture diagram and source map](docs/architecture/README.md)
-- [Current release notes](docs/releases/2.3.0-rc.1.md) and [changelog](CHANGELOG.md)
+- [Current release notes](docs/releases/2.3.0-rc.2.md) and [changelog](CHANGELOG.md)
 - [Detailed installation](docs/devops/development/INSTALL.md)
 - [Environment template](.env.example)
 - [Cognitive Graph setup](docs/backend/setup/SETUP_COGNITIVE_GRAPH.md)
