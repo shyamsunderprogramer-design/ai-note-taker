@@ -4,6 +4,10 @@ All notable changes to ANT (AI Note Taker) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+- Add the ANT product website with interactive workflow examples, features, privacy choices, architecture, release downloads and FAQ. Serve it at the Vercel homepage while preserving the browser application at `/app`.
+
 ## [2.3.0-rc.2] - 2026-10-18
 
 Fix remembered desktop logins, session renewal and browser sign-in validation.

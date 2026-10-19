@@ -100,3 +100,21 @@ test('token injection uses the exact API origin, never a hostname substring',asy
   assert.equal(calls[0][1].headers,undefined);
   assert.equal(s.auth.isApiUrl('http://127.0.0.1:80000/path'),false);
 });
+
+
+test('hosted app and legacy entry use the dedicated sign-in page', () => {
+  for (const path of ['/app', '/index.html', '/']) {
+    const s = setup();
+    s.window.location.pathname = path;
+    s.auth.showLoginOverlay();
+    assert.equal(s.window.location.href, 'signin.html');
+  }
+});
+test('clean and legacy sign-in routes never create a second login overlay', () => {
+  for (const path of ['/signin', '/signin.html']) {
+    const s = setup();
+    s.window.location.pathname = path;
+    assert.doesNotThrow(() => s.auth.showLoginOverlay());
+    assert.equal(s.window.location.href, 'https://ant.test/signin.html');
+  }
+});

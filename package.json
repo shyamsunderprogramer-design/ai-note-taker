@@ -41,7 +41,9 @@
     "lint": "npm run mobile:lint && npm run extension:lint",
     "test": "npm run e2e:test",
     "build": "npm run web:build && npm run electron:build",
-    "test:security": "node --test qa/security/*.test.cjs"
+    "test:security": "node --test qa/security/*.test.cjs",
+    "site:build": "npm run web:build && node scripts/build-site.mjs",
+    "site:preview": "node scripts/preview-site.mjs"
   },
   "devDependencies": {
     "eslint": "^8.56.0"

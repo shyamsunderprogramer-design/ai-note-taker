@@ -289,14 +289,14 @@ const AuthHelper = {
 
   /** Redirect to dedicated sign-in page or show overlay on standalone pages */
   showLoginOverlay() {
-    // If on index.html, redirect to signin.html
+    // The hosted /app alias uses the same dedicated sign-in page as index.html.
     const page = window.location.pathname.split('/').pop() || 'index.html';
-    if (page === 'index.html') {
+    if (page === 'index.html' || page === 'app') {
       window.location.href = 'signin.html';
       return;
     }
     // Already on dedicated sign-in page — no overlay needed
-    if (page === 'signin.html') {
+    if (page === 'signin.html' || page === 'signin') {
       return;
     }
     // Don't create duplicate overlays
@@ -693,7 +693,7 @@ if (typeof window !== 'undefined') {
 
   // Auto-check auth on load: skip login if auth disabled
   document.addEventListener('DOMContentLoaded', () => {
-    if (window.location.pathname.endsWith('/signin.html')) return;
+    if (/\/signin(?:\.html)?$/.test(window.location.pathname)) return;
     if (!AuthHelper.isAuthenticated()) {
       AuthHelper.ensureAuth();
     }
