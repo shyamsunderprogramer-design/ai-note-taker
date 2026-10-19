@@ -59,3 +59,24 @@ candidate. Signing improvements remain in separate draft PR #55.
 Native Windows, Linux, Intel Mac and Apple Silicon installer verification is
 performed by the Release workflow before assets are published. These local
 results alone do not certify all native installers or every optional provider.
+
+## Native release verification
+
+PR [#56](https://github.com/shyamsunderprogramer-design/ai-note-taker/pull/56)
+merged at `2af16d5df1d565c22e915cdd5c531c6d538f0473`; tag `v2.3.0-rc.2`
+points to that commit. The merged commit's [CI run](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/runs/39192614687)
+passed. Code scanning on the PR reported no open findings after review fixes.
+
+The four native build jobs in [Release run 39192656794](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/runs/39192656794)
+passed dependency audits, native packaging, and actual bundled-runtime health,
+registration and login. Both Mac builds also checked the bundled capture helper.
+
+The Apple Silicon artifact was downloaded and independently checked locally:
+
+- `ANT-2.3.0-rc.2-mac-arm64.zip`: 284,409,226 bytes.
+- SHA-256: `08d143c2bbafbe222c93d1d0c8f4b05db9c1f8011703ebb87a7f29d790af1ba3`.
+- Bundle version `2.3.0-rc.2`; bundled screen helper architecture `arm64`.
+- `codesign --verify --deep --strict` passed before and after the packaged Python
+  smoke test, confirming that verification did not alter the signed resources.
+- Bundled backend health, registration, login and disposable user-data storage
+  passed. The capture helper's `--self-test` passed without capturing a screen.
