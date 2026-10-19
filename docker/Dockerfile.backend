@@ -4,7 +4,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: Builder - Compile dependencies
 # ─────────────────────────────────────────────────────────────────────────────
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Production runtime
 # ─────────────────────────────────────────────────────────────────────────────
-FROM python:3.11-slim-bookworm AS production
+FROM python:3.14-slim-bookworm AS production
 
 # Security: Non-root user
 RUN groupadd --gid 1000 appgroup && \
