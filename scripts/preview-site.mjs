@@ -1,6 +1,7 @@
 /** Local static preview of the Vercel website routes; no backend or credentials. */
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve, extname, sep } from "node:path";
 
@@ -40,9 +41,22 @@ const server = createServer(async (request, response) => {
     }
     pathname = config.rewrites.find((rule) => rule.source === pathname)?.destination || pathname;
     const path = resolve(output, "." + pathname);
-    if (!path.startsWith(output + sep) || !(await stat(path)).isFile()) {
+    if (!path.startsWith(output + sep)) {
       response.writeHead(404).end("Not found");
       return;
+    }
+    // Inspect and read the same open file so a concurrent rebuild cannot
+    // substitute a different file between a path-based stat and read.
+    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    let body;
+    try {
+      if (!(await file.stat()).isFile()) {
+        response.writeHead(404).end("Not found");
+        return;
+      }
+      if (request.method !== "HEAD") body = await file.readFile();
+    } finally {
+      await file.close();
     }
     const headers = Object.fromEntries(
       config.headers
@@ -54,7 +68,7 @@ const server = createServer(async (request, response) => {
       "Content-Type": mime[extname(path)] || "application/octet-stream",
       "Cache-Control": "no-cache",
     });
-    response.end(request.method === "HEAD" ? undefined : await readFile(path));
+    response.end(body);
   } catch (error) {
     response.writeHead(error instanceof URIError ? 400 : 404).end("Not found");
   }

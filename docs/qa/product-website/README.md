@@ -15,6 +15,10 @@ The new homepage introduces ANT and links to the existing browser application at
 
 These checks verify the website and its routing. They do not constitute a fresh desktop-release certification or a screen-reader user study. The current release's existing limits are shown beside the downloads and in the FAQ.
 
+## Preview-server follow-up — 2026-10-20
+
+GitHub CodeQL identified a path-based file check/read race in the local preview server. The server now opens the file once, checks and reads the same handle, rejects final-component symlinks, and closes the handle in a `finally` block. Both-browser smoke checks passed again after this change. The preview server is local tooling, not the Vercel production server.
+
 ## Visual references
 
 [Desktop](desktop.png) · [Mobile](mobile.png)
