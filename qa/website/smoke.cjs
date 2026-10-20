@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const path = require("node:path");
+const { readFileSync } = require("node:fs");
 const { chromium, firefox } = require("playwright");
 const root = path.resolve(__dirname, "../..");
 const port = Number(process.env.ANT_SITE_TEST_PORT || 4186);
@@ -19,6 +20,15 @@ const { version } = require("../../electron/package.json");
   });
   let browser;
   try {
+    // Check the actual entry files: Vercel serves the filesystem before rewrites.
+    assert.match(
+      readFileSync(path.join(root, "apps/web/dist/index.html"), "utf8"),
+      /data-ant-product-site/,
+    );
+    assert.match(
+      readFileSync(path.join(root, "apps/web/dist/browser-app.html"), "utf8"),
+      /js\/core\/auth-helper.js/,
+    );
     await Promise.race([
       once(server.stdout, "data"),
       once(server, "exit").then(([code]) => {

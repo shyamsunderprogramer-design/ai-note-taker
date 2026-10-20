@@ -3,8 +3,7 @@
   "buildCommand": "npm run site:build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    { "source": "/", "destination": "/product.html" },
-    { "source": "/app", "destination": "/index.html" },
+    { "source": "/app", "destination": "/browser-app.html" },
     { "source": "/caption-overlay", "destination": "/caption-overlay.html" },
     { "source": "/cognitive-graph", "destination": "/cognitive-graph.html" },
     { "source": "/interview-overlay", "destination": "/interview-overlay.html" },

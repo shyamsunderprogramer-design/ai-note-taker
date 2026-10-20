@@ -6,7 +6,14 @@ import { resolve } from "node:path";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const source = resolve(root, "apps/landing");
 const output = resolve(root, "apps/web/dist");
-await access(resolve(output, "index.html"));
+const entry = resolve(output, "index.html");
+const appEntry = resolve(output, "browser-app.html");
+const originalEntry = await readFile(entry, "utf8");
+// Vercel serves existing files before applying rewrites. Make the marketing
+// page the real index and preserve the built application under its own name.
+// Re-running this composer must never replace the app with the marketing page.
+if (originalEntry.includes("data-ant-product-site")) await access(appEntry);
+else await writeFile(appEntry, originalEntry);
 const { version } = JSON.parse(await readFile(resolve(root, "electron/package.json"), "utf8"));
 if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version))
   throw new Error("Invalid desktop release version");
@@ -16,6 +23,7 @@ const html = (await readFile(resolve(source, "index.html"), "utf8"))
   .replaceAll("{{RELEASE_BASE}}", releaseBase);
 if (/\{\{[^}]+\}\}/.test(html)) throw new Error("Unresolved website template value");
 await mkdir(resolve(output, "site/assets"), { recursive: true });
+await writeFile(entry, html);
 await writeFile(resolve(output, "product.html"), html);
 for (const file of [
   "style.css",

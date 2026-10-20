@@ -19,6 +19,10 @@ These checks verify the website and its routing. They do not constitute a fresh 
 
 GitHub CodeQL identified a path-based file check/read race in the local preview server. The server now opens the file once, checks and reads the same handle, rejects final-component symlinks, and closes the handle in a `finally` block. Both-browser smoke checks passed again after this change. The preview server is local tooling, not the Vercel production server.
 
+## Vercel entry-file follow-up — 2026-10-20
+
+Live verification caught Vercel serving the existing `index.html` before the root rewrite. The website composer now preserves the built application as `browser-app.html` and places the marketing page at the actual deployed index. The preview server models filesystem precedence, and the smoke test checks both physical entry files. `web:build` and the source renderer remain independent.
+
 ## Visual references
 
 [Desktop](desktop.png) · [Mobile](mobile.png)
