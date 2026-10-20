@@ -1,9 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run web:build",
+  "buildCommand": "npm run site:build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
+    { "source": "/", "destination": "/product.html" },
+    { "source": "/app", "destination": "/index.html" },
     { "source": "/caption-overlay", "destination": "/caption-overlay.html" },
     { "source": "/cognitive-graph", "destination": "/cognitive-graph.html" },
     { "source": "/interview-overlay", "destination": "/interview-overlay.html" },
@@ -17,6 +18,9 @@
     { "source": "/splash", "destination": "/splash.html" },
     { "source": "/study-plan", "destination": "/study-plan.html" },
     { "source": "/analytics-dashboard", "destination": "/analytics-dashboard.html" }
+  ],
+  "redirects": [
+    { "source": "/index.html", "destination": "/app", "permanent": false }
   ],
   "headers": [
     {

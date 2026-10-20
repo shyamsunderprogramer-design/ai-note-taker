@@ -71,8 +71,8 @@ jobs:
           npm --workspace ai-note-taker test
           npm --workspace ant-web test
           npm --workspace ant-mobile test -- --runInBand --watchman=false
-      - name: Build web application
-        run: npm run web:build
+      - name: Build product website and browser application
+        run: npm run site:build
 
   e2e:
     name: E2E (Playwright)
@@ -100,6 +100,10 @@ jobs:
         run: |
           npm ci
           npm --workspace ant-e2e-tests run install:browsers -- --with-deps
+      - name: Verify product website and app routes
+        run: |
+          npm run site:build
+          node qa/website/smoke.cjs
       - name: Run browser tests
         working-directory: e2e
         env:

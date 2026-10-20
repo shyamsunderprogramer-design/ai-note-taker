@@ -3,7 +3,7 @@
  * Provides offline capability and caching
  */
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = 'ant-cache-' + CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',
@@ -53,7 +53,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  const isStatic = STATIC_ASSETS.includes(url.pathname) ||
+  const isStatic = url.pathname === '/app' || STATIC_ASSETS.includes(url.pathname) ||
     /^\/(?:assets|js|css)\/.*\.(?:js|css|png|jpe?g|svg|webp|woff2?|ttf)$/.test(url.pathname);
   if (request.method !== 'GET' || url.origin !== self.location.origin ||
       request.headers.has('Authorization') || !isStatic) return;
@@ -95,7 +95,7 @@ self.addEventListener('push', (event) => {
     badge: '/icon-72x72.png',
     vibrate: [100, 50, 100],
     data: {
-      url: '/'
+      url: '/index.html'
     }
   };
 
@@ -108,6 +108,6 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
-    clients.openWindow(event.notification.data?.url || '/')
+    clients.openWindow(event.notification.data?.url || '/index.html')
   );
 });

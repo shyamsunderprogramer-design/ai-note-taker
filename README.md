@@ -6,7 +6,7 @@ A floating workspace for voice notes, screen-aware questions, and interview prep
 [![CI](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**[Download](#download) · [Features](#features) · [Architecture](#architecture) · [Source setup](#run-from-source) · [Troubleshooting](#troubleshooting) · [Documentation](#documentation)**
+**[Product website](https://ai-note-taker-five.vercel.app) · [Browser app](https://ai-note-taker-five.vercel.app/app) · [Download](#download) · [Features](#features) · [Architecture](#architecture) · [Source setup](#run-from-source) · [Troubleshooting](#troubleshooting) · [Documentation](#documentation)**
 
 ## Download
 
@@ -64,6 +64,8 @@ The diagram shows the default local setup. Electron starts the Python backend on
 Whisper turns audio into text. The AI router sends the selected conversation and image context to local Ollama or configured cloud providers. SQLite and local files store application data; Electron also saves its own conversation JSON and settings. A remotely hosted backend moves the corresponding processing and data to that server.
 
 [Architecture guide and source map](docs/architecture/README.md) · [Editable SVG](docs/architecture/overview.svg)
+
+The public product website is maintained in [`apps/landing/`](apps/landing/README.md). Vercel serves it at `/` and the existing browser application at `/app`.
 
 ## Run from source
 

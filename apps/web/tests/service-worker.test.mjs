@@ -10,7 +10,7 @@ function worker({ offline = false, cached, cacheControl = '' } = {}) {
   const cache = { match: async () => cached, put: async (...args) => writes.push(args) };
   vm.runInNewContext(source, {
     self: { location: { origin: 'https://ant.test' }, addEventListener: (name, handler) => { handlers[name] = handler; }, clients: { claim() {} } },
-    caches: { open: async () => cache, keys: async () => ['ant-cache-v3', 'ant-cache-v4', 'unrelated'], delete: async name => deleted.push(name) },
+    caches: { open: async () => cache, keys: async () => ['ant-cache-v3', 'ant-cache-v4', 'ant-cache-v5', 'unrelated'], delete: async name => deleted.push(name) },
     fetch: async () => { if (offline) throw new Error('offline'); return fresh; },
     URL, Response, console,
   });
@@ -61,5 +61,13 @@ test('activation preserves unrelated caches', async () => {
   let completion;
   sw.handlers.activate({ waitUntil: value => { completion = value; } });
   await completion;
-  assert.deepEqual(sw.deleted, ['ant-cache-v3']);
+  assert.deepEqual(sw.deleted, ['ant-cache-v3', 'ant-cache-v4']);
+});
+
+test('hosted app entry refreshes online and uses its cached HTML offline', async () => {
+  const online = worker();
+  assert.equal(await online.request('/app'), online.fresh);
+  assert.equal(online.writes.length, 1);
+  const cached = { body: '<main>ANT browser workspace</main>' };
+  assert.equal(await worker({ offline: true, cached }).request('/app'), cached);
 });
