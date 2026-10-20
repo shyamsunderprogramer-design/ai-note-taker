@@ -22,6 +22,16 @@ const mime = {
   ".xml": "application/xml",
 };
 const port = Number(process.env.PORT || 4178);
+async function openAsset(pathname) {
+  const path = resolve(output, "." + pathname);
+  if (!path.startsWith(output + sep)) return null;
+  try {
+    return { path, file: await open(path, constants.O_RDONLY | constants.O_NOFOLLOW) };
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
+    throw error;
+  }
+}
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, "http://127.0.0.1");
@@ -32,22 +42,29 @@ const server = createServer(async (request, response) => {
     }
     const redirect = config.redirects?.find((rule) => rule.source === pathname);
     if (redirect) {
-      response.writeHead(redirect.permanent ? 308 : 307, { Location: redirect.destination + url.search }).end();
+      response
+        .writeHead(redirect.permanent ? 308 : 307, { Location: redirect.destination + url.search })
+        .end();
       return;
     }
     if (pathname !== "/" && pathname.endsWith("/")) {
       response.writeHead(308, { Location: pathname.replace(/\/+$/, "") + url.search }).end();
       return;
     }
-    pathname = config.rewrites.find((rule) => rule.source === pathname)?.destination || pathname;
-    const path = resolve(output, "." + pathname);
-    if (!path.startsWith(output + sep)) {
+    // Match Vercel: redirects first, then files, then rewrites. In particular,
+    // the root's real index.html takes precedence over a rewrite for '/'.
+    let asset = await openAsset(pathname === "/" ? "/index.html" : pathname);
+    if (!asset) {
+      const destination = config.rewrites.find((rule) => rule.source === pathname)?.destination;
+      if (destination) asset = await openAsset(destination);
+    }
+    if (!asset) {
       response.writeHead(404).end("Not found");
       return;
     }
     // Inspect and read the same open file so a concurrent rebuild cannot
     // substitute a different file between a path-based stat and read.
-    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const { file, path } = asset;
     let body;
     try {
       if (!(await file.stat()).isFile()) {
