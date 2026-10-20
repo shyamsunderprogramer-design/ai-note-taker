@@ -40,7 +40,7 @@ python-multipart==0.0.31
 PyYAML==6.0.3
 requests==2.33.0
 rich==14.3.3
-setuptools==83.0.0
+setuptools==84.2.0
 shellingham==1.5.4
 soundfile==0.13.1
 starlette==1.7.0
