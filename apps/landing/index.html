@@ -30,7 +30,7 @@
       content="ANT — Stay in the conversation. Keep the important parts. Local transcription, AI notes and your choice of models."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" href="/site/assets/logo.svg" type="image/svg+xml" />
+    <link rel="icon" href="/site/assets/ant-mark-light.png" type="image/png" />
     <link
       rel="preload"
       href="/assets/fonts/Inter-Latin.woff2"
@@ -92,9 +92,10 @@
     <header class="site-header">
       <div class="container nav-shell">
         <a class="wordmark" href="/" aria-current="page"
-          ><img src="/site/assets/logo.svg" width="32" height="32" alt="" /><span translate="no"
-            >ANT <span class="wordmark-caption">AI Note Taker</span></span
-          ></a
+          ><picture class="brand-mark">
+            <source media="(prefers-color-scheme: dark)" srcset="/site/assets/ant-mark-light.png" />
+            <img src="/site/assets/ant-mark.png" width="36" height="36" alt="" /> </picture
+          ><span translate="no">ANT <span class="wordmark-caption">AI Note Taker</span></span></a
         >
         <button
           class="menu-toggle"
@@ -154,181 +155,25 @@
             >
           </div>
         </div>
-        <div class="hero-visual" id="examples">
-          <div class="example-intro">
-            <span class="small-label">A little workspace. A clearer head.</span
-            ><span class="example-label">Interactive example</span>
-          </div>
-          <div class="example-tabs" role="tablist" aria-label="Explore ANT examples">
-            <button
-              id="tab-meeting"
-              role="tab"
-              type="button"
-              aria-selected="true"
-              aria-controls="example-meeting"
-              data-example="meeting"
-            >
-              Meeting notes
-            </button>
-            <button
-              id="tab-screen"
-              role="tab"
-              type="button"
-              aria-selected="false"
-              aria-controls="example-screen"
-              tabindex="-1"
-              data-example="screen"
-            >
-              Screen questions
-            </button>
-            <button
-              id="tab-practice"
-              role="tab"
-              type="button"
-              aria-selected="false"
-              aria-controls="example-practice"
-              tabindex="-1"
-              data-example="practice"
-            >
-              Interview prep
-            </button>
-          </div>
-          <div class="example-stage">
-            <div class="context-sheet" aria-hidden="true">
-              <span class="sheet-label">YOUR DAY, IN FOCUS</span>
-              <div class="sheet-title">Good conversations.<br />Fewer loose ends.</div>
-              <div class="sheet-rule"></div>
-              <div class="sheet-line"></div>
-              <div class="sheet-line short"></div>
-              <div class="sheet-line"></div>
-              <span class="sheet-bottom">Make room for the next idea.</span>
-            </div>
-            <div class="workspace">
-              <div class="workspace-header">
-                <span class="workspace-brand"
-                  ><img src="/site/assets/logo.svg" alt="" width="24" height="24" />ANT
-                  <span>Live workspace</span></span
-                ><span class="workspace-dots" aria-hidden="true">•••</span>
-              </div>
-              <div
-                id="example-meeting"
-                class="example-panel"
-                role="tabpanel"
-                aria-labelledby="tab-meeting"
-                tabindex="0"
-              >
-                <div class="sample-transcript">
-                  <span class="sample-label"
-                    ><svg class="icon" aria-hidden="true"><use href="#i-mic" /></svg>From the
-                    conversation</span
-                  >
-                  <p>
-                    “Let’s simplify onboarding. I’ll send the revised draft on Thursday, then we can
-                    review it together.”
-                  </p>
-                  <div class="waveform" aria-hidden="true">
-                    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
-                    ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
-                    ><i></i><i></i><i></i><i></i><i></i><i></i>
-                  </div>
-                </div>
-                <div class="sample-result">
-                  <span class="sample-label"
-                    ><svg class="icon" aria-hidden="true"><use href="#i-note" /></svg>Your meeting,
-                    distilled</span
-                  >
-                  <h2>A simpler first experience</h2>
-                  <p>The team agreed to simplify onboarding before the next review.</p>
-                  <div class="sample-action">
-                    <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
-                    ><span>Share the revised draft <strong>Thursday</strong></span>
-                  </div>
-                </div>
-                <div class="workspace-footer">
-                  <span><span class="status-dot"></span>Local transcription</span
-                  ><span>Notes you can revisit</span>
-                </div>
-              </div>
-              <div
-                id="example-screen"
-                class="example-panel"
-                role="tabpanel"
-                aria-labelledby="tab-screen"
-                tabindex="0"
-                hidden
-              >
-                <div class="sample-transcript">
-                  <span class="sample-label"
-                    ><svg class="icon" aria-hidden="true"><use href="#i-screen" /></svg>With a
-                    screenshot attached</span
-                  >
-                  <p>“What does this error mean, and what should I try next?”</p>
-                  <div class="sample-code">Connection refused<br /><span>127.0.0.1:8000</span></div>
-                </div>
-                <div class="sample-result">
-                  <span class="sample-label"
-                    ><svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>An answer with
-                    context</span
-                  >
-                  <h2>Check the local server</h2>
-                  <p>
-                    The app couldn’t reach the backend at this address. Confirm the server is
-                    running, then try the request again.
-                  </p>
-                  <div class="sample-action">
-                    <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
-                    ><span>Keep the question and image together</span>
-                  </div>
-                </div>
-                <div class="workspace-footer">
-                  <span>Screen permission required</span><span>Use a vision model</span>
-                </div>
-              </div>
-              <div
-                id="example-practice"
-                class="example-panel"
-                role="tabpanel"
-                aria-labelledby="tab-practice"
-                tabindex="0"
-                hidden
-              >
-                <div class="sample-transcript">
-                  <span class="sample-label"
-                    ><svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>A practice
-                    conversation</span
-                  >
-                  <p>“Help me explain a time I made a difficult technical trade-off.”</p>
-                  <div class="sample-tag">Context: your experience + target role</div>
-                </div>
-                <div class="sample-result">
-                  <span class="sample-label"
-                    ><svg class="icon" aria-hidden="true"><use href="#i-note" /></svg>Find the shape
-                    of your answer</span
-                  >
-                  <h2>Make your reasoning visible</h2>
-                  <p>
-                    Describe the constraint, the alternatives you considered, and why you chose that
-                    approach. Finish with what you learned.
-                  </p>
-                  <div class="sample-action">
-                    <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
-                    ><span>Practice, reflect, and try again</span>
-                  </div>
-                </div>
-                <div class="workspace-footer">
-                  <span>Preparation on your terms</span><span>Save useful answers</span>
-                </div>
-              </div>
-            </div>
-            <div class="floating-note">
-              <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg
-              ><span>Your workspace.<strong>Your choice of models.</strong></span>
-            </div>
-          </div>
-          <p class="example-disclaimer">
-            Illustrative examples, not a live recording or AI response.
-          </p>
-        </div>
+        <figure class="hero-artwork">
+          <img
+            class="brand-artwork"
+            src="/site/assets/ant-queen-1280.webp"
+            srcset="/site/assets/ant-queen-640.webp 640w, /site/assets/ant-queen-1280.webp 1280w"
+            sizes="(max-width: 850px) 92vw, 46vw"
+            width="2990"
+            height="1408"
+            fetchpriority="high"
+            decoding="async"
+            alt="ANT AI Note Taker: a crowned ant in iridescent blue and green with gold details."
+          />
+          <figcaption>
+            <span>Your everyday AI workspace.</span>
+            <a class="text-link" href="#examples" data-show-example="meeting">
+              Explore an example <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+          </figcaption>
+        </figure>
       </section>
       <section class="benefits container" aria-label="Why ANT">
         <article>
@@ -373,23 +218,173 @@
                 Turn a conversation into an overview, key points, and action items. Revisit the
                 details without starting from scratch.
               </p>
-              <a class="text-link" href="#examples" data-show-example="meeting"
-                >Explore a meeting example
-                <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg
-              ></a>
-              <div class="note-preview" aria-label="Illustrative meeting note">
-                <div class="note-heading">
-                  <svg class="icon" aria-hidden="true"><use href="#i-note" /></svg>Product planning
+              <div class="workspace-example" id="examples">
+                <div class="example-intro">
+                  <span class="small-label">A little workspace. A clearer head.</span
+                  ><span class="example-label">Interactive example</span>
                 </div>
-                <p class="note-subtitle">The next step is clear.</p>
-                <div class="note-task">
-                  <span class="note-check" aria-hidden="true"></span>Simplify the onboarding flow
+                <div class="example-tabs" role="tablist" aria-label="Explore ANT examples">
+                  <button
+                    id="tab-meeting"
+                    role="tab"
+                    type="button"
+                    aria-selected="true"
+                    aria-controls="example-meeting"
+                    data-example="meeting"
+                  >
+                    Meeting notes
+                  </button>
+                  <button
+                    id="tab-screen"
+                    role="tab"
+                    type="button"
+                    aria-selected="false"
+                    aria-controls="example-screen"
+                    tabindex="-1"
+                    data-example="screen"
+                  >
+                    Screen questions
+                  </button>
+                  <button
+                    id="tab-practice"
+                    role="tab"
+                    type="button"
+                    aria-selected="false"
+                    aria-controls="example-practice"
+                    tabindex="-1"
+                    data-example="practice"
+                  >
+                    Interview prep
+                  </button>
                 </div>
-                <div class="note-task">
-                  <span class="note-check" aria-hidden="true"></span>Share the revised draft on
-                  Thursday
+                <div class="example-stage">
+                  <div class="workspace">
+                    <div class="workspace-header">
+                      <span class="workspace-brand"
+                        ><img
+                          src="/site/assets/ant-mark-light.png"
+                          alt=""
+                          width="24"
+                          height="24"
+                        />ANT <span>Live workspace</span></span
+                      ><span class="workspace-dots" aria-hidden="true">•••</span>
+                    </div>
+                    <div
+                      id="example-meeting"
+                      class="example-panel"
+                      role="tabpanel"
+                      aria-labelledby="tab-meeting"
+                      tabindex="0"
+                    >
+                      <div class="sample-transcript">
+                        <span class="sample-label"
+                          ><svg class="icon" aria-hidden="true"><use href="#i-mic" /></svg>From the
+                          conversation</span
+                        >
+                        <p>
+                          “Let’s simplify onboarding. I’ll send the revised draft on Thursday, then
+                          we can review it together.”
+                        </p>
+                        <div class="waveform" aria-hidden="true">
+                          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                          ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                          ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                        </div>
+                      </div>
+                      <div class="sample-result">
+                        <span class="sample-label"
+                          ><svg class="icon" aria-hidden="true"><use href="#i-note" /></svg>Your
+                          meeting, distilled</span
+                        >
+                        <h4>A simpler first experience</h4>
+                        <p>The team agreed to simplify onboarding before the next review.</p>
+                        <div class="sample-action">
+                          <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
+                          ><span>Share the revised draft <strong>Thursday</strong></span>
+                        </div>
+                      </div>
+                      <div class="workspace-footer">
+                        <span><span class="status-dot"></span>Local transcription</span
+                        ><span>Notes you can revisit</span>
+                      </div>
+                    </div>
+                    <div
+                      id="example-screen"
+                      class="example-panel"
+                      role="tabpanel"
+                      aria-labelledby="tab-screen"
+                      tabindex="0"
+                      hidden
+                    >
+                      <div class="sample-transcript">
+                        <span class="sample-label"
+                          ><svg class="icon" aria-hidden="true"><use href="#i-screen" /></svg>With a
+                          screenshot attached</span
+                        >
+                        <p>“What does this error mean, and what should I try next?”</p>
+                        <div class="sample-code">
+                          Connection refused<br /><span>127.0.0.1:8000</span>
+                        </div>
+                      </div>
+                      <div class="sample-result">
+                        <span class="sample-label"
+                          ><svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>An
+                          answer with context</span
+                        >
+                        <h4>Check the local server</h4>
+                        <p>
+                          The app couldn’t reach the backend at this address. Confirm the server is
+                          running, then try the request again.
+                        </p>
+                        <div class="sample-action">
+                          <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
+                          ><span>Keep the question and image together</span>
+                        </div>
+                      </div>
+                      <div class="workspace-footer">
+                        <span>Screen permission required</span><span>Use a vision model</span>
+                      </div>
+                    </div>
+                    <div
+                      id="example-practice"
+                      class="example-panel"
+                      role="tabpanel"
+                      aria-labelledby="tab-practice"
+                      tabindex="0"
+                      hidden
+                    >
+                      <div class="sample-transcript">
+                        <span class="sample-label"
+                          ><svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>A
+                          practice conversation</span
+                        >
+                        <p>“Help me explain a time I made a difficult technical trade-off.”</p>
+                        <div class="sample-tag">Context: your experience + target role</div>
+                      </div>
+                      <div class="sample-result">
+                        <span class="sample-label"
+                          ><svg class="icon" aria-hidden="true"><use href="#i-note" /></svg>Find the
+                          shape of your answer</span
+                        >
+                        <h4>Make your reasoning visible</h4>
+                        <p>
+                          Describe the constraint, the alternatives you considered, and why you
+                          chose that approach. Finish with what you learned.
+                        </p>
+                        <div class="sample-action">
+                          <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
+                          ><span>Practice, reflect, and try again</span>
+                        </div>
+                      </div>
+                      <div class="workspace-footer">
+                        <span>Preparation on your terms</span><span>Save useful answers</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <span class="note-example">Example summary</span>
+                <p class="example-disclaimer">
+                  Illustrative examples, not a live recording or AI response.
+                </p>
               </div>
             </div>
             <div class="feature-list">
@@ -737,23 +732,41 @@
         </div>
       </section>
       <section class="closing container" aria-labelledby="closing-title">
+        <img
+          class="brand-artwork"
+          src="/site/assets/ant-knowledge-1280.webp"
+          srcset="
+            /site/assets/ant-knowledge-640.webp   640w,
+            /site/assets/ant-knowledge-1280.webp 1280w
+          "
+          sizes="(max-width: 850px) 92vw, 46vw"
+          width="2990"
+          height="1408"
+          loading="lazy"
+          decoding="async"
+          alt="ANT AI Note Taker — Knowledge Archived. A crystalline ant surrounded by wings, books and science motifs."
+        />
         <div>
           <p class="eyebrow">Small workspace. Useful possibilities.</p>
           <h2 id="closing-title">Bring your attention.<br />Let ANT help with the notes.</h2>
+          <a class="button" href="#download"
+            >Get ANT for your computer
+            <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg
+          ></a>
         </div>
-        <a class="button" href="#download"
-          >Get ANT for your computer
-          <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg
-        ></a>
       </section>
     </main>
     <footer class="site-footer">
       <div class="container footer-top">
         <div>
           <a class="wordmark" href="/"
-            ><img src="/site/assets/logo.svg" width="32" height="32" alt="" /><span translate="no"
-              >ANT <span class="wordmark-caption">AI Note Taker</span></span
-            ></a
+            ><picture class="brand-mark">
+              <source
+                media="(prefers-color-scheme: dark)"
+                srcset="/site/assets/ant-mark-light.png"
+              />
+              <img src="/site/assets/ant-mark.png" width="36" height="36" alt="" /> </picture
+            ><span translate="no">ANT <span class="wordmark-caption">AI Note Taker</span></span></a
           >
           <p>A little more clarity in your day.</p>
         </div>

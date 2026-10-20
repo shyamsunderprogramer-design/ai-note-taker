@@ -50,10 +50,19 @@ const { version } = require("../../electron/package.json");
       "/sw.js",
       "/site/assets/architecture.svg",
       "/site/assets/social-preview.png",
+      "/site/assets/ant-mark.png",
+      "/site/assets/ant-mark-light.png",
       "/robots.txt",
       "/sitemap.xml",
     ];
     for (const route of requests) assert.equal((await fetch(base + route)).status, 200, route);
+    for (const name of ["ant-queen", "ant-knowledge"]) {
+      for (const width of [640, 1280]) {
+        const response = await fetch(`${base}/site/assets/${name}-${width}.webp`);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("content-type"), "image/webp");
+      }
+    }
     assert.equal(
       (await fetch(base + "/site/missing.js")).status,
       404,
@@ -92,6 +101,11 @@ const { version } = require("../../electron/package.json");
             if (!request.url().startsWith(base)) externalRequests.push(request.url());
           });
           await page.goto(base, { waitUntil: "networkidle" });
+          // The responsive hero and theme-specific original ant mark must decode
+          // from the built site, not silently render as broken image placeholders.
+          await page
+            .locator(".hero-artwork img, .site-header .brand-mark img")
+            .evaluateAll((images) => Promise.all(images.map((image) => image.decode())));
           assert.equal(await page.locator("h1").count(), 1);
           assert.equal(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -146,6 +160,9 @@ const { version } = require("../../electron/package.json");
             await page.keyboard.press("Enter");
             assert.equal(await summary.locator("..").getAttribute("open"), "");
           }
+          await page.locator(".closing img").scrollIntoViewIfNeeded();
+          await page.locator(".closing img").evaluate((image) => image.decode());
+          assert.deepEqual(failedAssets, []);
           if (width < 851) {
             const menu = page.getByRole("button", { name: "Menu", exact: true });
             await menu.click();

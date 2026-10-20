@@ -13,6 +13,8 @@ Open `http://127.0.0.1:4178`. `/` is the product website; `/app` is the existing
 
 Marketing sources live here. Shared fonts, brand primitives and the architecture SVG are reused from their source locations. Download links use the desktop version from `electron/package.json`; verify the six corresponding assets are published before deploying a new version. The release is currently a testing candidate, and the copy must change when that status changes.
 
+The homepage, closing section and social preview use the original ANT artwork. See [asset sources](assets/README.md) for the source files and export command. The build ships pre-exported images; it does not require an image editor or browser.
+
 The website has no tracking, backend calls, live recording or sign-in requirement. The examples contain explicitly labeled sample content. See [DESIGN.md](DESIGN.md) for design and QA decisions.
 
 Vercel previews come from pull requests. Merging to `main` updates Production. The optional AWS `CD` workflow is unrelated to this website.

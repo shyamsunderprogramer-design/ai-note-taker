@@ -29,7 +29,12 @@ for (const file of [
   "style.css",
   "tokens.css",
   "site.js",
-  "assets/logo.svg",
+  "assets/ant-mark.png",
+  "assets/ant-mark-light.png",
+  "assets/ant-queen-640.webp",
+  "assets/ant-queen-1280.webp",
+  "assets/ant-knowledge-640.webp",
+  "assets/ant-knowledge-1280.webp",
   "assets/social-preview.png",
 ]) {
   await copyFile(resolve(source, file), resolve(output, "site", file));
