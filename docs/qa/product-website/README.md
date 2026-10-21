@@ -28,3 +28,26 @@ Live verification caught Vercel serving the existing `index.html` before the roo
 [Desktop](desktop.png) · [Mobile](mobile.png)
 
 The product illustrations are explicitly labeled examples, not captures of a real user's meeting. The social sharing image's editable source is `apps/landing/assets/social-preview.svg`.
+
+## Original ANT artwork — 2026-10-20
+
+The hero and closing section now use the owner's existing ANT images. Navigation,
+footer, favicon and the interactive example use the original ant marks. The example
+has moved into the features section; its keyboard controls and deep links still work.
+The share image uses the same original assets. [Sources and export recipe](../../../apps/landing/assets/README.md).
+
+- Build and Chromium/Firefox smoke checks passed at 1440, 390 and 320 px in light/dark themes.
+- The smoke checks decode the responsive hero, themed logo and lazy closing image
+  from the built site, and verify both sizes of each artwork return WebP.
+- Four viewport/theme combinations inspected with reduced motion, including the
+  moved example and closing section. No horizontal overflow or browser errors.
+- Fourteen axe WCAG A/AA scans passed: all three example states in each viewport/theme
+  combination, plus expanded mobile navigation in both themes.
+- Hero WebP exports are 24,314 bytes (640 px) and 66,326 bytes (1280 px). Closing
+  exports are 39,750 and 107,596 bytes. The original source PNGs are unchanged.
+- Screenshots: [desktop](desktop.png), [mobile](mobile.png),
+  [mobile artwork](artwork-mobile.png), [dark desktop](artwork-dark.png),
+  [closing artwork](artwork-closing.png).
+
+These are browser/automated accessibility checks; a manual screen-reader study was
+not performed for this artwork update.
