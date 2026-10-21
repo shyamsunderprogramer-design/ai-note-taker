@@ -174,6 +174,32 @@ class TestExtractWithVisionModel:
 class TestExtractWithTesseract:
     """_extract_with_tesseract: pytesseract path."""
 
+    @pytest.mark.parametrize("image_format", ["PNG", "JPEG", "WEBP"])
+    def test_real_screenshot_decode_and_grayscale_conversion(self, image_format):
+        """Exercise the installed Pillow decoder; only the OCR binary is mocked."""
+        import base64
+        from io import BytesIO
+        from PIL import Image
+
+        encoded = BytesIO()
+        with Image.new("RGB", (48, 24), "white") as screenshot:
+            screenshot.save(encoded, format=image_format)
+        seen = {}
+
+        def recognize(image):
+            image.load()
+            seen.update(mode=image.mode, size=image.size, pixel=image.getpixel((0, 0)))
+            return "  Meeting notes  \n"
+
+        with patch.dict(sys.modules, {
+            "pytesseract": MagicMock(image_to_string=recognize),
+        }):
+            result = _extract_with_tesseract(
+                base64.b64encode(encoded.getvalue()).decode("ascii")
+            )
+        assert result == "Meeting notes"
+        assert seen == {"mode": "L", "size": (48, 24), "pixel": 255}
+
     def test_pytesseract_not_installed_returns_empty(self):
         """If pytesseract can't be imported, return empty without raising."""
         # Block imports of pytesseract and PIL

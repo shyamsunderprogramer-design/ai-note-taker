@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- Update certifi to 2026.10.19 and Pillow to 13.0.0 to resolve dependency-audit findings; cover real screenshot decoding in the OCR fallback.
 - Use the original ANT artwork and ant marks on the product website, including responsive hero/closing images and the social sharing preview.
 - Add the ANT product website with interactive workflow examples, features, privacy choices, architecture, release downloads and FAQ. Serve it at the Vercel homepage while preserving the browser application at `/app`.
 
