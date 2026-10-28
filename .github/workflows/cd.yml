@@ -192,7 +192,7 @@ jobs:
           version: '3.14.0'
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
 
       - name: Configure Kubeconfig (AWS EKS)
         env:
