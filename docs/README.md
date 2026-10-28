@@ -1,86 +1,52 @@
-# ANT Documentation
+# ANT documentation
 
-> **Reorganized 2026-06-11** to a per-role layout. Pick your
-> role below, or browse by topic.
+Start with the [project README](../README.md) to install ANT and use its desktop or browser interface. This index gives each subject one maintained guide. Original research, plans, and implementation reports are grouped by topic in the [historical references](archive/README.md).
 
-This is the docs home for the ANT (AI Note Taker) monorepo.
-The repo itself is split across `backend/`, `electron/`, `apps/`,
-`mobile/`, `e2e/`, `qa/`, `agents/`, and several config files
-at the root. The role-ownership model that determines who edits
-what lives in `OWNERS.*.md` at the repo root and is enforced by
-[`.github/CODEOWNERS`](../.github/CODEOWNERS).
+## Setup and everyday use
 
-This README points at the per-role docs subfolders. Each
-subfolder has its own README that goes deeper.
+| What you want to do | Read this |
+| --- | --- |
+| Install, configure, and launch ANT | [Setup and usage](../README.md#set-up-from-source) |
+| Choose local AI or add cloud credentials | [Local AI and API keys](business/BYOK.md) |
+| Review a resume or personalize answers | [Resume tools and job context](business/resume-builder/README.md) |
+| Save jobs and use the extension | [Job workflow](business/JOB_APPLICATION_WORKFLOW.md) |
+| Resolve setup or runtime errors | [Troubleshooting](devops/development/TROUBLESHOOTING.md) |
+| Set up the mobile app | [Mobile setup](../mobile/README.md) |
+| Enable the optional knowledge graph | [Cognitive Graph setup](backend/setup/SETUP_COGNITIVE_GRAPH.md) |
 
----
+## Build and maintain
 
-## By role
+| Topic | Maintained document |
+| --- | --- |
+| Development workflow | [Development guide](devops/development/DEVELOPMENT.md) |
+| API routes and request contracts | [API reference](backend/api/API_REFERENCE.md) |
+| Architecture and data flow | [Technical specification](backend/architecture/TECHNICAL_SPECIFICATION.md) |
+| Repository structure | [Project structure](backend/architecture/PROJECT_STRUCTURE.md) |
+| Graph data model | [Neo4j schema](backend/database/SCHEMA.md) |
+| Relational database changes | [Migrations](devops/development/MIGRATIONS.md) |
+| Entity extraction | [Extraction guide](business/ENTITY_EXTRACTION.md) |
+| Testing | [Test strategy](qa/test-strategy.md) and [manual checks](qa/DIY_TEST_GUIDE.md) |
+| Performance | [Measurement and optimization](business/PERFORMANCE.md) |
+| Cloud deployment | [Deployment guide](devops/deployment/DEPLOYMENT_GUIDE.md) |
+| Release acceptance and packaging | [Release checklist](devops/deployment/RELEASE_CHECKLIST.md) |
+| Running a deployment | [Operations runbook](devops/operations/OPERATIONS.md) |
+| Containers | [Docker setup](../docker/README.md) |
+| Security | [Security index](devsecops/README.md) |
+| UI foundations | [UI index](uiux/README.md) |
 
-- [Backend dev](backend/README.md) — FastAPI, services, DB,
-  AI integration, Neo4j cognitive graph
-- [UI/UX dev](uiux/README.md) — Web SPA, mobile, Chrome
-  extension, Electron UI, design system
-- [Devops / release](devops/README.md) — Deploy, runtime shell,
-  CI, infra, Docker, mobile-native build pipelines
-- [QA / testing](qa/README.md) — Test strategy, test
-  environment, troubleshooting
-- [DevSecOps / security](devsecops/README.md) — Threat model,
-  supply chain, compliance, audit log policy
+## Product and research
 
-## By topic
+- [Product roadmap](business/ROADMAP.md) — dependency order and planning context.
+- [Competitive research](competitive/README.md) — comparison criteria and product priorities.
+- [Pluely adaptation](competitive/pluely/README.md) — desktop architecture tradeoffs and verification.
+- [Research index](research/README.md) — distinct competitor records and historical assignments.
+- [Interview question catalogue report](business/QUESTION_DATABASE_SUMMARY.md) — dated catalogue details.
+- [June project audit](shared/AUDIT_2026-06-05_Project_Audit.md) — historical audit evidence.
 
-- [Shared](shared/README.md) — Cross-cutting docs (project
-  audit, comprehensive guide, production deep-dive)
-- [Business / product](business/README.md) — BYOK, job tools,
-  resume builder, plans, speed optimization history
-- [Competitive analysis](competitive/README.md) — Competitor
-  matrix, Pluely deep-dive
-- [Research](research/) — Time-bounded research artifacts
-  (kept as-is from before the reorganization)
-- [Archive](archive/) — Superseded docs
+## Keep the documentation clear
 
----
+Update the existing topic guide when behavior changes. Put setup commands in the project README, API contracts in the running schema and API guide, and release evidence in the candidate's validation record. Do not copy a guide into the docs root or publish another overlapping “complete” report.
 
-## Per-role charter links
+Historical reference records retain unique examples and proposals with their original context. Their completion claims, prices, timelines, and benchmarks are not current guarantees. See the [consolidation map](CONSOLIDATION.md) to find a document by its previous path.
 
-Each role has a charter at the repo root:
-
-- [`OWNERS.backend.md`](../OWNERS.backend.md)
-- [`OWNERS.uiux.md`](../OWNERS.uiux.md)
-- [`OWNERS.devops.md`](../OWNERS.devops.md)
-- [`OWNERS.qa.md`](../OWNERS.qa.md)
-- [`OWNERS.devsecops.md`](../OWNERS.devsecops.md)
-
-And an AI-agent scope definition in `agents/`:
-
-- [`agents/backend/AGENTS.md`](../agents/backend/AGENTS.md)
-- [`agents/uiux/AGENTS.md`](../agents/uiux/AGENTS.md)
-- [`agents/devops/AGENTS.md`](../agents/devops/AGENTS.md)
-- [`agents/qa/AGENTS.md`](../agents/qa/AGENTS.md)
-- [`agents/devsecops/AGENTS.md`](../agents/devsecops/AGENTS.md)
-
----
-
-## How to find a specific doc
-
-If you know the doc filename, use GitHub's search (it indexes
-all of `docs/`). If you don't:
-
-- **API endpoint** → `backend/api/API_REFERENCE.md`
-- **Database schema** → `backend/database/SCHEMA.md`
-- **Deploy** → `devops/deployment/DEPLOYMENT_GUIDE.md`
-- **Install** → `devops/development/INSTALL.md`
-- **Browser extension security** →
-  `devsecops/security/BROWSER_EXTENSION_SAFETY.md`
-- **Audit log** → `devsecops/compliance/audit-log-policy.md`
-- **Test strategy** → `qa/test-strategy.md`
-- **Threat model** → `devsecops/security/threat-model.md`
-- **Dependabot policy** → `devsecops/supply-chain/dependabot-policy.md`
-- **Resume builder** → `business/resume-builder/`
-- **Pluely comparison** → `competitive/pluely/`
-- **Public security policy** → `devsecops/compliance/SECURITY.md`
-
----
-
-*Last Updated: 2026-06-11 — created as part of the role-ownership refactor*
+For ownership and specialist navigation: [backend](backend/README.md), [UI](uiux/README.md), [operations](devops/README.md), [QA](qa/README.md), and [security](devsecops/README.md). Ownership charters remain in `OWNERS.*.md` at the repository root.

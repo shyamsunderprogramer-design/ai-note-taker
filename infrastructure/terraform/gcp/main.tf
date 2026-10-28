@@ -65,10 +65,17 @@ resource "google_compute_network" "main" {
 }
 
 resource "google_compute_subnetwork" "main" {
-  name          = "ant-subnet-${var.environment}"
-  network       = google_compute_network.main.id
-  ip_cidr_range = "10.0.0.0/24"
-  region        = var.region
+  name                     = "ant-subnet-${var.environment}"
+  network                  = google_compute_network.main.id
+  ip_cidr_range            = "10.0.0.0/24"
+  region                   = var.region
+  private_ip_google_access = true
+
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
 
   secondary_ip_range = [
     {
@@ -270,6 +277,9 @@ resource "google_kms_crypto_key" "artifact_registry" {
   rotation_period = "7776000s" # 90 days
 
   destroy_scheduled_duration = "1209600s"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_kms_crypto_key_iam_member" "artifact_registry" {
@@ -355,15 +365,15 @@ resource "google_sql_database_instance" "main" {
     }
     database_flags {
       name  = "log_min_messages"
-      value = "WARNING"
+      value = "warning"
     }
     database_flags {
       name  = "log_min_duration_statement"
-      value = "1000"
+      value = "-1"
     }
     database_flags {
       name  = "log_min_error_statement"
-      value = "ERROR"
+      value = "error"
     }
     database_flags {
       name  = "log_temp_files"
@@ -502,10 +512,13 @@ resource "google_compute_security_policy" "main" {
     priority = 1002
     match {
       expr {
-        expression = "evaluatePreconfiguredExpr('cve-2021-44228')"
+        # 'cve-canary' matched nothing (canary test ruleset); use the
+        # real preconfigured RCE set, which covers Log4Shell and JNDI
+        # injection (CVE-2021-44228 and related).
+        expression = "evaluatePreconfiguredWaf('rce-v33-stable')"
       }
     }
-    description = "Block Log4j CVE-2021-44228"
+    description = "Block Log4j CVE-2021-44228 and other RCE injection"
   }
 }
 

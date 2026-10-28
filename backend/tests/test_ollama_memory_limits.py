@@ -97,3 +97,23 @@ def test_incomplete_generation_cannot_report_success(monkeypatch, lines, message
     assert events[-1]['type'] == 'error'
     assert message in events[-1]['message']
     assert not any(event['type'] == 'done' for event in events)
+
+def test_reported_limits_match_final_request_after_template_adjustments(monkeypatch):
+    import ai_router
+    import json
+    from contextlib import contextmanager
+    calls=[]
+    monkeypatch.setattr(ai_router,'build_prompt',lambda *a,**k:'question')
+    def prepare(payload,*args):
+        payload['options'].update(num_ctx=4096,num_predict=1536)
+        return payload
+    monkeypatch.setattr(ai_router,'prepare_text_payload',prepare)
+    @contextmanager
+    def stream(*args,**kwargs):
+        calls.append(kwargs['json'])
+        yield SimpleNamespace(status_code=200,iter_lines=lambda:iter(['{"response":"Done.","done":true}']))
+    monkeypatch.setattr(ai_router.sync_client,'stream',stream)
+    events=[json.loads(line[5:]) for frame in ai_router.ask_ollama_stream('question',model_name='qa:small') for line in frame.splitlines() if line.startswith('data:')]
+    limits=next(e for e in events if e['type']=='limits')
+    assert limits['context_tokens']==calls[0]['options']['num_ctx']==4096
+    assert limits['output_tokens']==calls[0]['options']['num_predict']==1536

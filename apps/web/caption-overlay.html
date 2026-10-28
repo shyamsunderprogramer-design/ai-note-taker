@@ -152,9 +152,9 @@
   </div>
 
   <script src="js/core/config.js"></script>
+  <script src="js/core/overlay-connection.js"></script>
   <script>
     const MAX_LINES = 15;
-    let ws = null;
     let paused = false;
 
     const captionsEl = document.getElementById('captions');
@@ -198,45 +198,20 @@
       return div.innerHTML;
     }
 
-    function setStatus(status) {
+    function setStatus(status, message) {
       statusDot.className = 'status-dot ' + status;
-      statusText.textContent = status === 'connected' ? 'Live' :
-                               status === 'connecting' ? 'Connecting...' : 'Disconnected';
+      statusText.textContent = message || (status === 'connected' ? 'Live' :
+                               status === 'connecting' ? 'Connecting...' : 'Disconnected');
     }
 
-    function connect() {
-      const url = new URL((window.API_BASE || 'http://127.0.0.1:8000') + '/ws/transcribe');
-      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = url.toString();
-      setStatus('connecting');
-
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        setStatus('connected');
-        addCaptionLine('Connected — start speaking to see live captions', null, false);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'partial') {
-            addCaptionLine(data.text, data.speaker || null, true);
-          } else if (data.type === 'final') {
-            addCaptionLine(data.text, data.speaker || null, false);
-          }
-        } catch (e) { /* ignore parse errors */ }
-      };
-
-      ws.onclose = () => {
-        setStatus('disconnected');
-        setTimeout(connect, 3000);
-      };
-
-      ws.onerror = () => {
-        setStatus('disconnected');
-      };
-    }
+    const connection = createOverlayConnection({
+      onStatus: setStatus,
+      onMessage(data) {
+        if (data.type === 'partial' || data.type === 'final') {
+          addCaptionLine(data.text, data.speaker || null, data.type === 'partial');
+        }
+      }
+    });
 
     // Controls
     document.getElementById('btnClear').addEventListener('click', () => {
@@ -250,12 +225,12 @@
         statusDot.style.background = '#f59e0b';
         statusText.textContent = 'Paused';
       } else {
-        setStatus(ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected');
+        setStatus(connection.socket && connection.socket.readyState === WebSocket.OPEN ? 'connected' : 'disconnected');
       }
     });
 
     // Auto-connect
-    connect();
+    connection.connect();
   </script>
 </body>
 </html>

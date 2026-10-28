@@ -1,0 +1,53 @@
+{
+  "conditions": "Production local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "samples": [
+    {
+      "model": "qwen3.5:9b",
+      "case": "missing_fact",
+      "first_seconds": 2.825776042009238,
+      "total_seconds": 3.0059780000010505,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting",
+      "first_seconds": 2.6033115420141257,
+      "total_seconds": 3.4898306250106543,
+      "answer": "- Send project summary by Friday (owner: unspecified)\n- Review budget (owner: Maya, deadline: unspecified)\n- Schedule next meeting (owner: Daniel, deadline: unspecified)",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical",
+      "first_seconds": 0.4361589169711806,
+      "total_seconds": 2.468284541973844,
+      "answer": "In Kubernetes, readiness probes determine if a pod can receive traffic; failures remove the pod from service endpoints but do not restart the container. Liveness probes detect application hangs; failures trigger a container restart to recover from errors. Memory limits are enforced by the Linux cgroup subsystem (specifically `memory.limit_in_bytes`), which kills the container process once usage exceeds the set limit, causing an OOMKilled event and subsequent restart.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting_status",
+      "first_seconds": 0.43414391699479893,
+      "total_seconds": 1.2030405839905143,
+      "answer": "Decisions: None.\nAction Items:\n- Owner: unspecified; Deadline: unspecified; Task: Omar to obtain test results before agreeing to the release move.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting_owners",
+      "first_seconds": 0.43371925002429634,
+      "total_seconds": 1.447460790979676,
+      "answer": "- Action: Send invoice | Owner: Elena | Deadline: Tuesday\n- Action: Check contract | Owner: Marcus | Deadline: unspecified\n- Action: Update launch checklist | Owner: unspecified | Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical_restart",
+      "first_seconds": 0.4361328750383109,
+      "total_seconds": 2.698544666985981,
+      "answer": "No, a liveness probe failure is not required for a container to restart after an OOMKilled event. When Kubernetes marks a container as OOMKilled, the kubelet immediately kills the process and sets its state to `OOMKilled`. The pod's restart policy (typically `Always`) then triggers a new container start without waiting for or checking liveness probes. Liveness probes only influence restarts caused by application hangs or deadlocks, not memory exhaustion events.",
+      "errors": []
+    }
+  ]
+}

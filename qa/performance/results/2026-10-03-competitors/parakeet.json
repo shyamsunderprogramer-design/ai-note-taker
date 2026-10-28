@@ -1,0 +1,632 @@
+{
+  "name": "parakeet",
+  "url": "https://www.parakeet-ai.com/",
+  "title": "ParakeetAI - #1 Real-Time AI Call Assistant",
+  "text": "Call Assistant\nFeatures\nReviews\nPrivacy\nPricing\nPrepare\nAll Prepare tools\nQuestion Bank\nBrowse the questions real candidates were asked, company by company, ranked by how often they come up.\nMock Interviews\nPractice out loud against an AI interviewer that answers back, then read the transcript. Your first mock is free.\nResume Maker\nBuild a resume tailored to the role you're chasing, so the call starts from the right story.\nHeadshots\nTurn one photo into studio-quality headshots for LinkedIn and your resume. Same face, your pick of look.\nSign in\nTry for Free\nNo. 1 Viral App\nin United States 🇺🇸\nTrusted by\n1.5M+\npeople\n4.86 - from 340K+ reviews\n#1 AI Interview Assistant\non SimilarWeb\nYour Real-Time AI Call Assistant\n\nGet the right answer while you're still talking, through interviews, sales calls, client meetings, or any conversation where freezing up isn't an option.\n\nTry for Free\nDemo Video\nWorkspace\nCall Sessions\nCall Live\nResumes\nDocuments\nSupport\nTutorials\nSupport Chat\nFree Plan\n\nStart a 10 min free session or buy credits for full-length calls.\n\nUpgrade\nTheme\nLight\nOpen Desktop App\nLog Out\nAC\nAlex Cooper\nalex.cooper@gmail.com\nCall Sessions\nPrepare for calls and review past sessions.\nCreate Session\nAll\nActive\nEnded\n11 Sessions\nSearch by title or description\nSession\tMode\tDuration\tCredits Used\tCreated\tSave Transcript\tState\t\n\nAnthropic\nSoftware Developer\n\tInterview\t11 mins 23 secs\tFree\tMay 12, 2026\tYes\t\nLive\n\t\nJoin Session\n\n\nMicrosoft\nSoftware Developer\n\tInterview\t—\t—\tJun 3, 2026\tYes\t\nReady to Start\n\t\nStart Session\n\n\nApple\nSystems Architect\n\tInterview\t—\t—\tJun 3, 2026\tYes\t\nReady to Start\n\t\nStart Session\n\n\nOpenAI\nMachine Learning Engineer\n\tInterview\t28 mins 12 secs\t0.5\tMay 28, 2026\tYes\t\nEnded\n\t\nView Transcript\n\n\nGoogle\nBackend Engineer\n\tInterview\t37 mins 41 secs\t1.3\tMay 15, 2026\tNo\t\nEnded\n\t\nView Transcript\n\n\nMeta\nFull Stack Developer\n\tInterview\t46 mins 5 secs\t2.5\tApr 28, 2026\tYes\t\nEnded\n\t\nView Transcript\n\n\nSumo Logic\nDevOps Engineer\n\tRegular\t59 mins 38 secs\t4\tApr 17, 2026\tYes\t\nEnded\n\t\nView Transcript\n\n\nStripe\nPayments Engineer\n\tInterview\t32 mins 9 secs\t1.1\tApr 9, 2026\tYes\t\nEnded\n\t\nView Transcript\n\n\nNVIDIA\nGPU Systems Engineer\n\tInterview\t41 mins 27 secs\t2\tMar 30, 2026\tYes\t\nEnded\n\t\nView Transcript\n\n\nAirbnb\nProduct Designer\n\tRegular\t24 mins 46 secs\t0.8\tMar 22, 2026\tNo\t\nEnded\n\t\nView Transcript\n\n\nDatadog\nSite Reliability Engineer\n\tInterview\t52 mins 14 secs\t3.2\tMar 14, 2026\tYes\t\nEnded\n\t\nView Transcript\nAnswer\nScreenshot\nChat\nEnd\nHow would you\ndesign a rate\nlimiter for a\npublic API?\nClear\nClear\nAnswer\n·\n15:28\nQuestion Bank\n\nBrowse the questions real candidates were asked, company by company, ranked by how often they come up.\n\nLearn more\nMock Interviews\n\nPractice out loud against an AI interviewer that answers back, then read the transcript. Your first mock is free.\n\nLearn more\nResume Maker\n\nBuild a resume tailored to the role you're chasing, so the call starts from the right story.\n\nLearn more\nHeadshots\n\nTurn one photo into studio-quality headshots for LinkedIn and your resume. Same face, your pick of look.\n\nLearn more\nEverything You Need, Mid-Conversation\n\nCode, speech, and answers, handled live while the call is still happening.\n\nconst solve = (arr) => {...}\nO(log n)\n// edge cases\nTime: O(1) Space: O(1)\ndef longest_unique(s):\n    seen, start, best = {}, 0, 0\n    for i, ch in enumerate(s):\n        if ch in seen and seen[ch] >= start:\n            start = seen[ch] + 1\n        seen[ch] = i\n        best = max(best, i - start + 1)\n    return best\nProgramming\nFull Coding Support\n\nYou can use ParakeetAI for technical calls. It listens for coding questions and reads code shared on your screen, then talks the approach through with you while the call is still going.\n\nLearn More\nWalk\nme\nthrough\nyour\napproach\n124ms\nSpeech Recognition\nBlazing Fast Transcription\n\nWe use a state-of-the-art transcription model that provides\na highly accurate model in recent breaking speed.\n\nAI Answers\n100% Accurate Responses\n\nWe chose between the best LLMs available to provide\nthe most accurate answers.\n\nTry for Free\nNo credit card required\nYour 100% Private Advantage\n\nGet real-time answers without distraction or judgment. Completely undetectable, completely yours.\n\n01\nSee more\nInvisible on Screen Share\n\nShare your screen while ParakeetAI stays completely invisible to others.\n\nSee Video\n02\nSee more\nInvisible in Dock\n\nThe app stays hidden from the Dock, with no icon or activity indicator.\n\nSee Video\n03\nSee more\nInvisible in Activity Monitor\n\nThe process has no visible name or icon in Activity Monitor.\n\nSee Video\n04\nSee more\nInvisible to Tab Switching\n\nSwitch tabs or windows without platforms detecting that you moved away.\n\nSee Video\n05\nSee more\nCursor Undetectability\n\nYour cursor stays unchanged when hovering, clicking, or adjusting settings.\n\nSee Video\nSee Privacy Tutorial\nWe check it stays invisible on every one of these\n·\nChecked 44 days ago\nZoom\nVerified\nMicrosoft Teams\nVerified\nGoogle Meet\nVerified\nWebex\nVerified\nLark\nVerified\nAmazon Chime\nVerified\nCoderPad\nVerified\nHackerRank\nVerified\n\nOpen one to watch that test yourself.\n\nPeople Trust & Love ParakeetAI\n\nReal people. Real conversations. Real confidence.\n\nPlay customer video\nJD\nJane D.\nJan 17, 2025\n\nIf I'm honest, there were absolutely zero faults. It is really a game changer.\n\nI've already recommended it to all my friends and family.\n\nThank you for creating such an amazing app!\n\nPlay customer video\nPlay customer video\nRS\nRahul S.\nApr 29, 2025\n\nI had no issues during the call. The app was straightforward and easy to use.\n\nIt is well-designed, and there is no need to make any changes to it.\n\nPlay customer video\nPlay customer video\nJD\nJane D.\nJan 17, 2025\n\nIf I'm honest, there were absolutely zero faults. It is really a game changer.\n\nI've already recommended it to all my friends and family.\n\nThank you for creating such an amazing app!\n\nPlay customer video\nPlay customer video\nRS\nRahul S.\nApr 29, 2025\n\nI had no issues during the call. The app was straightforward and easy to use.\n\nIt is well-designed, and there is no need to make any changes to it.\n\nPlay customer video\nBefore, During, And After The Call.\n\nParakeetAI runs in the background, knows your material, and handles the call from start to notes.\n\nLanguage\nEnglish\nAuto Answer\nEdit session\n01\nAuto Answer\n\nDetects questions live and suggests answers, so you're never caught blank.\n\nMeeting Started?\nGoogle Meet\nStart Session\nMeeting Started?\nMicrosoft Teams\nStart Session\n02\nAuto-detect meetings\n\nSpots meetings as they start and asks if you want to join, with no setup mid-call.\n\nFeb 02, 2026\nSystem Design Notes\nUploaded\nDOCX\n680 KB\nJan 21, 2026\nSales Bible\nUploaded\nPDF\n2.4 MB\nMar 14, 2026\nReact TLDR\nUploaded\nPDF\n1.1 MB\n03\nDocuments\n\nUpload briefs, notes, or playbooks to reference live during your call.\n\nNorthwind Logistics\nQ3 Renewal\nAI Notes\nTranscript\nAsk AI\nCall Details\nGive Feedback\nReport a bug\nAI Notes\nClear Notes\nCall Details\n\nThis call was with Northwind Logistics, about Q3 Renewal.\n\nSummary\n\nThe call covered how the team routes overnight freight today and where the manual handoffs cost them time. They walked through their current tooling, the two integrations that matter most, and the timeline they are working against.\n\nQuestions\nHow does the routing process work end to end today?\nWhich integrations would you need live on day one?\nWhat does the rollout timeline look like on your side?\nWho else signs off before this moves forward?\nHow are you measuring success after the first quarter?\nNext Steps\n\nPricing and a rollout plan go over before the end of the week.\n\n04\nAI Notes\n\nKey points, action items, and decisions, summarized after every call.\n\nReal Session\n\nConnect to your actual call by sharing the call tab.\n\nSelect Real\nMock Session\n\nPractice against an AI interviewer instead of a Real Session.\n\nSelect Mock\n05\nMock Interview\n\nJoin a real call, or practice against an AI interviewer. Your first mock interview is free.\n\nTry for Free\nNo credit card required\nTransparent Pricing Options\n\nSubscribe for unlimited peace of mind, pick just the Prepare tools you need, or buy credits and use them whenever.\n\nUnlimited\nCredits\nCustom\nUnlimited\nRecommended\n\nStop counting. Everything covered, for as long as you need it.\n\nTotal\nPer month\nPer call\nMonthly\nMost popular\n$149.90\n/ Month\nYearly\nBest value\n$49.99\n/ Month\n$599.90 / Year\nUnlimited call sessions (& mock)\nFull privacy mode\nUnlimited resume PDF downloads\nUnlimited headshots\nFull Question Bank access\nGo Unlimited · Monthly $149.90\nor, only need a week?\nWeekly plan for $78.00 / week\nTop Models\nFrom OpenAI, Anthropic & Google\nRefund policy\nLearn more\nHow do credits work?\nSee video\nPay with\nVISA\nAMEX\nPay\nPay\nUPI\nपे\nPhonePe\nYour Advantage, Anywhere\n\nDesktop app, web, or mobile. Same powerful answers, wherever you are.\n\nAnswer\nScreenshot\nChat\nEnd\nClear\nClear\nAnswer\n·\n15:28\nNative Desktop App\n\nThe desktop app runs quietly in the background, listening to your call and surfacing the best answers in real time. No switching windows.\n\nDownload for Desktop\nWorks directly on\nYour Browser\n\nAccess ParakeetAI instantly from your browser. Same answers, zero setup.\n\nTry for Free\nWeb vs App\nFullscreen\nChange Tab\nStop\nClear\nEnglish\nListening...\n12m\nEnd\nNo messages yet.\nClick \"Answer\" to start!\nAuto Answer On\nType a manual message...\nSend\nAnswer\nScreenshot\nWorks on Your Phone\n\nSame web app, works just as well on iOS and Android.\n\nTry for Free\nMobile vs App\n12m\nListening...\nAuto Answer On\nClear\nAnswer\nFrequently Asked\nQuestions\nFeatures\n8\nPrivacy\n5\nBilling\n4\n\nCouldn't find what you were looking for?\nTalk to us here\n\nWhat languages does ParakeetAI support?\n\nParakeetAI supports 50+ languages — you'll find the full list in the language dropdown when you start a session. It listens for one language at a time, so if you switch languages mid-call, update the session language to match.\n\nDoes ParakeetAI support coding calls?\n\nYes. ParakeetAI offers full coding support, including code suggestions and explanations, and it works in both interviews and regular calls.\n\nCan I give ParakeetAI instructions to follow during the call?\n\nParakeetAI uses your uploaded CV or resume, any documents you've added, and anything you type into the Instructions field when you create a session. You can paste a lot in there — an entire job description or document is fine. You can also send ParakeetAI messages during the call itself.\n\nCan I use ParakeetAI for a phone call?\n\nYes. ParakeetAI supports phone calls over Google Voice. Start a session in the browser and click the phone icon for setup instructions.\n\nDoes ParakeetAI have a mobile app?\n\nA native ParakeetAI mobile app is on its way to the App Store and Google Play, but it isn't available to download just yet. In the meantime, use the mobile-optimized version directly in your browser: no download needed. Visit parakeet-ai.com on your phone and sign in.\n\nWhat operating systems does the ParakeetAI desktop app support?\n\nThe desktop app runs on Windows and macOS; in a browser, ParakeetAI needs desktop Chrome, which is also the way to use it on Linux. Other browsers aren't supported for live sessions, and the desktop app works whatever your default browser is.\n\nWhich AI model does ParakeetAI use?\n\nYou can choose the AI model when you create or edit a session, from the model dropdown. Options include several Gemini, GPT, and Claude models, with a fast default selected for you. Lighter models respond faster; larger models can give more detailed answers. If your remembered model ever changes on its own, an app update either reset it to the current default or moved a retired model to its replacement (Claude 4.5 Sonnet now runs as Claude Sonnet 5, and GPT-5.6 Sol as GPT-5.6 Terra) — just pick your model again.\n\nCan I use ParakeetAI for meetings or online exams, not just interviews?\n\nYes. When you create a session you choose the mode — interview, or regular call for meetings and other conversations. It also works during online exams. Interview mode additionally uses your uploaded CV or resume; regular call mode doesn't, since it's built for conversations where that isn't relevant. Everything else — documents, instructions, transcripts, notes — works the same in both.\n\nParakeetAI is built for conversations where AI assistance is permitted. Sales calls, internal meetings, mock calls, language practice, self-study. Check the rules first. If your company, school, or caller says no, respect it. And if an employer wants us gone, we enforce it for them.\n\nWe honor blocklist requests from any employer. Send us your domain or hiring process to compliance@parakeet-ai.com and we will blacklist it.\n\nRequest a blocklist\nReady To Answer\nEvery Question?\n\nJoin 1.5M+ users. No credit card required.\n\nTry for Free\nOur other projects\nKismo\n\n© 2026, ParakeetAI d.o.o. All rights reserved.\n\nFeatures\nPrivacy\nPricing\nSupport\nCreator Program\nComparisons\nBlog\nPrivacy Policy\nTerms of Service\nRefund Policy\nCookie Settings",
+  "controls": [
+    {
+      "tag": "A",
+      "text": "Call Assistant",
+      "href": "https://www.parakeet-ai.com/#top",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Features",
+      "href": "https://www.parakeet-ai.com/#features",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Reviews",
+      "href": "https://www.parakeet-ai.com/#reviews",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy",
+      "href": "https://www.parakeet-ai.com/#privacy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://www.parakeet-ai.com/#pricing",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Prepare",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "All Prepare tools",
+      "href": "https://www.parakeet-ai.com/#prepare",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Question Bank\nBrowse the questions real candidates were asked, company by company, ranked by how often they come up.",
+      "href": "https://www.parakeet-ai.com/question-bank",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mock Interviews\nPractice out loud against an AI interviewer that answers back, then read the transcript. Your first mock is free.",
+      "href": "https://www.parakeet-ai.com/mock-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Resume Maker\nBuild a resume tailored to the role you're chasing, so the call starts from the right story.",
+      "href": "https://www.parakeet-ai.com/resume-maker",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Headshots\nTurn one photo into studio-quality headshots for LinkedIn and your resume. Same face, your pick of look.",
+      "href": "https://www.parakeet-ai.com/headshots",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Sign in",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Call Assistant",
+      "href": "https://www.parakeet-ai.com/#top",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Features",
+      "href": "https://www.parakeet-ai.com/#features",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Reviews",
+      "href": "https://www.parakeet-ai.com/#reviews",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy",
+      "href": "https://www.parakeet-ai.com/#privacy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://www.parakeet-ai.com/#pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "All Prepare tools",
+      "href": "https://www.parakeet-ai.com/#prepare",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Question Bank",
+      "href": "https://www.parakeet-ai.com/question-bank",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mock Interviews",
+      "href": "https://www.parakeet-ai.com/mock-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Resume Maker",
+      "href": "https://www.parakeet-ai.com/resume-maker",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Headshots",
+      "href": "https://www.parakeet-ai.com/headshots",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Sign in",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Demo Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Demo Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Join Session",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "End",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Question Bank\n\nBrowse the questions real candidates were asked, company by company, ranked by how often they come up.\n\nLearn more",
+      "href": "https://www.parakeet-ai.com/question-bank",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mock Interviews\n\nPractice out loud against an AI interviewer that answers back, then read the transcript. Your first mock is free.\n\nLearn more",
+      "href": "https://www.parakeet-ai.com/mock-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Resume Maker\n\nBuild a resume tailored to the role you're chasing, so the call starts from the right story.\n\nLearn more",
+      "href": "https://www.parakeet-ai.com/resume-maker",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Headshots\n\nTurn one photo into studio-quality headshots for LinkedIn and your resume. Same face, your pick of look.\n\nLearn more",
+      "href": "https://www.parakeet-ai.com/headshots",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Learn More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "See Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "See Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "See Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "See Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "See Video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "See Privacy Tutorial",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Zoom\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Microsoft Teams\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Google Meet\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Webex\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Lark\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Amazon Chime\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "CoderPad\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "HackerRank\nVerified",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Play customer video",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Unlimited",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Credits",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Custom",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Total",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Per month",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Per call",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Monthly\nMost popular\n$149.90\n/ Month",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Yearly\nBest value\n$49.99\n/ Month\n$599.90 / Year",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Go Unlimited · Monthly $149.90",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Weekly plan for $78.00 / week",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Total",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Per credit",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "3 Credits$19.67/ credit$59.00 total",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "6 Credits+2 free8 total credits$14.75/ credit$118.00 total",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "9 Credits+6 free15 total credits$11.80/ credit$177.00 total",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Choose a credit pack",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "1 credit for $38.00",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "1 Month",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "3 Months · Save 50%",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Resume MakerUnlimited resume PDF downloads$22.90/ Month",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "HeadshotsUnlimited AI headshots$22.90/ Month",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Question BankEvery company's interview questions$22.90/ Month",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Get Custom · $68.70 / month",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Refund policy\nLearn more",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "How do credits work?\nSee video",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Download for Desktop",
+      "href": "https://www.parakeet-ai.com/auth/desktop",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Web vs App",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Mobile vs App",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Features\n8",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Privacy\n5",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Billing\n4",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Talk to us here",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "What languages does ParakeetAI support?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Does ParakeetAI support coding calls?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Can I give ParakeetAI instructions to follow during the call?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Can I use ParakeetAI for a phone call?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Does ParakeetAI have a mobile app?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "What operating systems does the ParakeetAI desktop app support?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Which AI model does ParakeetAI use?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Can I use ParakeetAI for meetings or online exams, not just interviews?",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "compliance@parakeet-ai.com",
+      "href": "mailto:compliance@parakeet-ai.com",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Request a blocklist",
+      "href": "mailto:compliance@parakeet-ai.com?subject=Blocklist%20request",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Try for Free",
+      "href": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Kismo",
+      "href": "https://kismo.app/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Features",
+      "href": "https://www.parakeet-ai.com/#features",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy",
+      "href": "https://www.parakeet-ai.com/#privacy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://www.parakeet-ai.com/#pricing",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Support",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Creator Program",
+      "href": "https://www.megasheet.app/parakeet-ai",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Comparisons",
+      "href": "https://www.parakeet-ai.com/compare",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://blog.parakeet-ai.com/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://www.parakeet-ai.com/privacy-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms of Service",
+      "href": "https://www.parakeet-ai.com/terms-and-conditions",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Refund Policy",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Cookie Settings",
+      "type": "button"
+    }
+  ]
+}

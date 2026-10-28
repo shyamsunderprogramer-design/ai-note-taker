@@ -1,41 +1,42 @@
-# Competitive Analysis
+# Competitive research and product priorities
 
-> **Audience:** product / business
-> **Owner:** product (no single dev role)
+The earlier competitive documents repeat market matrices, architecture comparisons, gap rankings, and production roadmaps. This is their single topic guide. The underlying research was written in April 2026 and does not establish today's competitor features, pricing, or ANT readiness.
 
----
+## The product picture
 
-## What's in this folder
+ANT combines a desktop overlay, local transcription, local or cloud AI, screen context, saved conversations, and preparation tools. The useful comparison is whether these workflows work reliably for a user's actual setup.
 
-All competitive analysis docs, consolidated. These are
-time-bounded — a `2026_PRODUCTION_UPGRADE.md` from 2026-06 is
-"current", but a `2026-04-11` is "historical" and may be
-superseded by a later doc in the same folder.
+| Comparison area | What to evaluate |
+| --- | --- |
+| Meeting tools | Transcription, summaries, export, speaker handling, and integrations |
+| Interview tools | Question capture, useful answers, follow-up context, screen input, and practice |
+| Local / open-source tools | Installation, hardware needs, model choice, data control, and maintenance |
+| Hosted tools | Account setup, service availability, provider costs, collaboration, and data handling |
+| Architecture | Startup, resource use, capture permissions, recovery, and deployment complexity |
 
-| File | What | Date |
-|---|---|---|
-| [COMPETITIVE_ANALYSIS_2026_PRODUCTION_UPGRADE.md](COMPETITIVE_ANALYSIS_2026_PRODUCTION_UPGRADE.md) | Production upgrade view (moved from `docs/`) | 2026-04 |
-| [COMPETITIVE_ANALYSIS_COMPLETE_2026.md](COMPETITIVE_ANALYSIS_COMPLETE_2026.md) | Complete 2026 analysis (moved from `docs/`) | 2026 |
-| [COMPETITIVE_ARCHITECTURE_COMPARISON_2026.md](COMPETITIVE_ARCHITECTURE_COMPARISON_2026.md) | Architecture comparison (moved from `docs/`) | 2026 |
-| [COMPETITIVE_DEEP_DIVE_2026.md](COMPETITIVE_DEEP_DIVE_2026.md) | Deep dive (moved from `docs/`) | 2026 |
-| [COMPETITIVE_GAP_ANALYSIS_2026-04-11.md](COMPETITIVE_GAP_ANALYSIS_2026-04-11.md) | Gap analysis (moved from `docs/`) | 2026-04-11 |
-| [COMPETITIVE_GAP_ANALYSIS_UPDATED_APRIL_2026.md](COMPETITIVE_GAP_ANALYSIS_UPDATED_APRIL_2026.md) | Updated gap analysis (moved from `docs/`) | 2026-04 |
-| [pluely/](pluely/) | The 4 PLUELY_*.md docs (Pluely is a specific competitor) | |
+## Priorities drawn from the research
 
----
+1. Make installation, authentication, transcription, routing, and saved conversations dependable.
+2. Verify answers, screenshots, follow-up context, and recovery with representative tasks.
+3. Measure latency and resources on a stated environment.
+4. Validate each integration and multi-user data boundary before presenting it as available.
+5. Evaluate new features against demonstrated demand and maintenance cost.
 
-## When to add a doc here
+Use the [release checklist](../devops/deployment/RELEASE_CHECKLIST.md) for readiness, [performance guide](../business/PERFORMANCE.md) for measurements, and [roadmap](../business/ROADMAP.md) for proposals. A feature table or a dated completion report does not replace validation.
 
-Add a doc here when:
+## Specialist references
 
-- You're starting a new competitive analysis (new competitor,
-  new quarter, new feature area)
-- You're updating an existing analysis (prefer to update the
-  existing file in place rather than creating a duplicate)
+- [Pluely comparison and desktop adaptation](pluely/README.md)
+- [Resume-tool research and implementation](../business/resume-builder/README.md)
+- [Historical model and task-assignment exercises](../research/model-comparisons-2026-04/README.md)
+- Competitor-specific research: [Cluely](../research/COMPETITOR_CLUELY.md), [FinalRound](../research/COMPETITOR_FINALROUND_AI.md), [Interview Coder](../research/COMPETITOR_INTERVIEW_CODER.md), [LockedIn](../research/COMPETITOR_LOCKEDIN_AI.md), and [meeting tools](../research/COMPETITOR_MEETING_TOOLS.md).
 
-If an analysis is no longer relevant (e.g., a competitor shut
-down), move the file to `../archive/` rather than deleting it.
+Competitor-specific records remain separate because they contain distinct source research. Treat them as historical references until their claims are checked again.
 
----
+## Maintain this topic
 
-*Last Updated: 2026-06-11 — created as part of the role-ownership refactor*
+Update this guide when a comparison changes the product decision. Record the date, source, tested workflow, and evidence. Keep old research in the linked record instead of starting another overlapping “complete” or “updated” comparison.
+
+## Historical references
+
+The overlapping source documents are preserved in one [dated reference record](../archive/competitive-research.md). Use that record for original technical examples and planning context, not current setup or status.

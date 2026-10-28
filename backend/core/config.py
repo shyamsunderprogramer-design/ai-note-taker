@@ -1,11 +1,16 @@
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 # ==============================
 # 🔐 LOAD ENV VARIABLES
 # ==============================
 # Loads variables from .env file into environment
-load_dotenv()
+if os.getenv("TESTING", "").lower() != "true":
+    _backend_env = Path(__file__).resolve().parent.parent / ".env"
+    if _backend_env.exists():
+        load_dotenv(_backend_env)
+    load_dotenv()
 
 
 # ==============================

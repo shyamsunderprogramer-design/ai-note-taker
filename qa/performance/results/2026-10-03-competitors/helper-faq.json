@@ -1,0 +1,139 @@
+{
+  "name": "helper-faq",
+  "url": "https://interviewhelper.ai/faq",
+  "text": "Skip to content\nHome\nProduct\nPricing\nFAQ\nChangelog\nDocs\nContact\nDownload\nFrequently Asked Questions\nWhat happens if I click “Start Listening”?\nWhat happens if I click “Start Capturing”?\nWhy paste as keystrokes versus pasting from the clipboard?\nWill this app provide answers to problems from LeetCode, HackerRank, CoderPad, etc.?\nCan I change the interview voice and tone?\nDoes the app record system audio?\nWhere do screenshots or audio go?\nHow do I trigger screenshot capture manually?\nWhat about API keys and cost control?\nDoes it work offline?\nProduct\nPractice\nAssist\nHow it works\nFeatures\nCompany\nPricing\nFAQ\nChangelog\nContact\nResources\nDocs\nKeyboard shortcuts\nRelease notes\nLegal\nPrivacy\nTerms\n© 2026 Interview Helper AI. All rights reserved.",
+  "controls": [
+    {
+      "tag": "A",
+      "text": "Skip to content",
+      "href": "https://interviewhelper.ai/faq#main",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Home",
+      "href": "https://interviewhelper.ai/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Product",
+      "href": "https://interviewhelper.ai/product",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://interviewhelper.ai/faq",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Changelog",
+      "href": "https://interviewhelper.ai/changelog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Docs",
+      "href": "https://interviewhelper.ai/docs",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact",
+      "href": "https://interviewhelper.ai/contact",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download",
+      "href": "https://interviewhelper.ai/faq#download",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Practice",
+      "href": "https://interviewhelper.ai/#practice",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Assist",
+      "href": "https://interviewhelper.ai/#assist",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "How it works",
+      "href": "https://interviewhelper.ai/#how",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Features",
+      "href": "https://interviewhelper.ai/#features",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://interviewhelper.ai/faq",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Changelog",
+      "href": "https://interviewhelper.ai/changelog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact",
+      "href": "https://interviewhelper.ai/contact",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Docs",
+      "href": "https://interviewhelper.ai/docs",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Keyboard shortcuts",
+      "href": "https://interviewhelper.ai/keyboard-shortcuts",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Release notes",
+      "href": "https://interviewhelper.ai/release-notes",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy",
+      "href": "https://interviewhelper.ai/privacy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms",
+      "href": "https://interviewhelper.ai/terms",
+      "type": ""
+    }
+  ]
+}

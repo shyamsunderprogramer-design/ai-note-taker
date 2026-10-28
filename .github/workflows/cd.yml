@@ -146,6 +146,10 @@ jobs:
         working-directory: infrastructure/terraform/aws
 
       - name: Terraform Apply
+        # Deny-by-default: production infrastructure is planned and uploaded
+        # for review, but never auto-applied. Pair with a required-reviewers
+        # protection rule on the GitHub 'production' environment.
+        if: needs.pre-deploy.outputs.environment != 'production'
         run: terraform apply -auto-approve tfplan
         working-directory: infrastructure/terraform/aws
 
@@ -200,10 +204,9 @@ jobs:
 
       - name: Verify OPA Gatekeeper constraints
         run: |
-          # Check that OPA Gatekeeper is enforcing policies
-          kubectl get constrainttemplates.gatekeeper.sh -o wide || echo "Gatekeeper not installed (optional)"
-          kubectl get constraints -o wide || echo "No constraints found"
-        continue-on-error: true
+          # Fail the deploy if Gatekeeper is not enforcing policies.
+          kubectl get constrainttemplates.gatekeeper.sh -o wide
+          kubectl get constraints -o wide
 
       # ─── Backend Deployment ────────────────────────────────────────────
       - name: Deploy Backend Helm Chart
@@ -227,10 +230,12 @@ jobs:
         env:
           IMAGE_TAG: ${{ needs.pre-deploy.outputs.image_tag }}
         run: |
-          # Use Argo Rollouts for canary deployment
+          # Use Argo Rollouts for canary deployment. If Argo is unavailable
+          # the requested canary strategy cannot happen — fail loudly rather
+          # than silently deploying with Helm defaults.
           kubectl argo rollouts set image ant-backend \
             "ant-backend=$REGISTRY/$IMAGE_NAME_BACKEND:$IMAGE_TAG" \
-            --namespace ant 2>/dev/null || echo "Argo Rollouts not available, using Helm deployment"
+            --namespace ant
 
           # Monitor rollout progress
           kubectl argo rollouts get rollout ant-backend \
@@ -250,11 +255,14 @@ jobs:
               -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "localhost")
           fi
 
-          # Health check
+          # Health check — the deploy is not healthy unless this passes
           echo "Testing health endpoint at https://$BACKEND_URL/health"
-          curl -sf --max-time 30 "https://$BACKEND_URL/health" || \
-          curl -sf --max-time 30 "http://$BACKEND_URL:8000/health" || \
-          echo "Warning: Could not reach health endpoint (may be internal only)"
+          if ! curl -sf --max-time 30 "https://$BACKEND_URL/health"; then
+            if ! curl -sf --max-time 30 "http://$BACKEND_URL:8000/health"; then
+              echo "::error::Health endpoint unreachable at $BACKEND_URL"
+              exit 1
+            fi
+          fi
 
       # ─── Verify Deployment Health ──────────────────────────────────────
       - name: Verify Deployment Health

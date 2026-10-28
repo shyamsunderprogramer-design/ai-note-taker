@@ -1,0 +1,57 @@
+[
+  {
+    "name": "chrome-extension",
+    "status": "failed",
+    "checks": [],
+    "errors": [],
+    "inventory": [],
+    "error": "Original extension did not load in Chromium; no matching installed entry."
+  },
+  {
+    "name": "browser-extension",
+    "status": "failed",
+    "checks": [
+      "Original manifest installed",
+      "Popup opened with real extension APIs and stubbed network",
+      "Real extension storage round trip",
+      "Supported page extraction via real extension scripting API",
+      "Empty capture form rejected"
+    ],
+    "errors": [],
+    "inventory": [
+      {
+        "id": "nkgggjlkgdgblkpnhlcmjlickofdleap",
+        "name": "ANT Job Capture",
+        "errors": []
+      }
+    ],
+    "popupTitle": "",
+    "protectedTabErrors": [
+      "Cannot read properties of undefined (reading 'includes')"
+    ],
+    "detectedCompany": "Synthetic Labs",
+    "detectedRole": "Python engineer",
+    "error": "Protected/unavailable tab crashes popup: Cannot read properties of undefined (reading 'includes')"
+  },
+  {
+    "name": "chrome-extension-diagnostic",
+    "status": "passed",
+    "checks": [
+      "Original manifest installed",
+      "Popup opened with real extension APIs and stubbed network",
+      "Real extension storage round trip",
+      "Background recording state is idle"
+    ],
+    "errors": [],
+    "scope": "Temporary diagnostic copy removes only careers.*.com wildcard; original product remains unchanged",
+    "inventory": [
+      {
+        "id": "gipenlifakaboeidpeblnbdffmakmfpk",
+        "name": "ANT - Productivity Helper",
+        "errors": []
+      }
+    ],
+    "popupTitle": "",
+    "recordingState": "idle"
+  }
+]

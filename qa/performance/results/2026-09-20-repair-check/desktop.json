@@ -1,0 +1,87 @@
+[
+  {
+    "name": "microphone-cycle-1",
+    "started": {
+      "listening": true,
+      "recorder": "recording",
+      "tracks": [
+        {
+          "state": "live",
+          "enabled": true
+        }
+      ]
+    },
+    "preview": "Please send the project summary by Friday.",
+    "stopState": {
+      "listening": false
+    },
+    "postStopSeconds": 4.353,
+    "totalSeconds": 11.42,
+    "chat": "YOU\n\nPlease send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.\n\nAI[QWEN3.5:9B]2.8S\n\nThe team has agreed that the project summary must be sent by Friday to keep the timeline on track. Maya is responsible for reviewing the budget as part of this process, ensuring all financial details are accurate before final submission.\n\nDaniel will handle scheduling the next meeting once the summary is ready and the budget review is complete. These tasks are coordinated to ensure a smooth progression of the project without delays or miscommunication among team members.\n\nCopy\nRead"
+  },
+  {
+    "name": "microphone-cycle-2",
+    "started": {
+      "listening": true,
+      "recorder": "recording",
+      "tracks": [
+        {
+          "state": "live",
+          "enabled": true
+        }
+      ]
+    },
+    "preview": "",
+    "stopState": {
+      "listening": false,
+      "recorder": "inactive"
+    },
+    "postStopSeconds": 5.254,
+    "totalSeconds": 12.41,
+    "chat": "YOU\n\nPlease send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.\n\nAI[QWEN3.5:9B]2.8S\n\nThe team has agreed that the project summary must be sent by Friday to keep the timeline on track. Maya is responsible for reviewing the budget as part of this process, ensuring all financial details are accurate before final submission.\n\nDaniel will handle scheduling the next meeting once the summary is ready and the budget review is complete. These tasks are coordinated to ensure a smooth progression of the project without delays or miscommunication among team members.\n\nCopy\nRead\nYOU\n\nPlease send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.\n\nAI[QWEN3.5:9B]3.1S\n\nThe team has agreed that the project summary must be sent by Friday to keep the timeline on track. Maya is responsible for reviewing the budget as part of this process, ensuring all financial details are accurate before final submission.\n\nDaniel will handle scheduling the next meeting once the summary is ready and the budget review is complete. These tasks are coordinated to ensure a smooth progression of the project without delays or miscommunication among team members.\n\nCopy\nRead"
+  },
+  {
+    "name": "protection-on",
+    "label": "Protection off",
+    "nativeState": {
+      "enabled": false,
+      "undetectable": false
+    }
+  },
+  {
+    "name": "protection-off",
+    "label": "Protection on",
+    "nativeState": {
+      "enabled": true,
+      "undetectable": true
+    }
+  },
+  {
+    "name": "screenshot-attachment",
+    "badge": "Interviewer Copilot For typing. For searching. For writing. For abiding by rules...",
+    "visible": true
+  },
+  {
+    "name": "overlays",
+    "overlays": [
+      {
+        "kind": "showCaptionOverlay",
+        "result": true,
+        "pages": [
+          "index.html",
+          "interview-overlay.html",
+          "caption-overlay.html"
+        ]
+      },
+      {
+        "kind": "showInterviewOverlay",
+        "result": true,
+        "pages": [
+          "index.html",
+          "interview-overlay.html",
+          "caption-overlay.html"
+        ]
+      }
+    ]
+  }
+]

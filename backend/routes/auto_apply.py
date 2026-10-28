@@ -277,14 +277,14 @@ async def apply_to_specific_job(
         job_entry["status"] = "applied"
         job_entry["applied_at"] = application_result["applied_at"]
 
-        logger.info("[AutoApply] Operation completed")
+        logger.info("[Auto_Apply] Operation completed")
 
         return application_result
 
     except Exception as e:
         job_entry["status"] = "failed"
         job_entry["error"] = str(e)
-        logger.error("[AutoApply] Operation failed")
+        logger.error("[Auto_Apply] Operation failed")
         return error_response(ErrorCode.INTERNAL_ERROR, "Application failed", status_code=500)  # lgtm[py/information-exposure-through-exception]
 
 
@@ -340,7 +340,7 @@ async def stop_auto_apply_session(
     jobs_failed = sum(1 for j in session["jobs"] if j["status"] == "failed")
     jobs_skipped = sum(1 for j in session["jobs"] if j["status"] == "skipped")
 
-    logger.info("[AutoApply] Operation completed")
+    logger.info("[Auto_Apply] Operation completed")
 
     return {
         "session_id": session_id,

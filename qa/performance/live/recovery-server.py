@@ -1,4 +1,7 @@
 """Isolated loopback fault-injection server; no user database or microphone."""
+import os
+os.environ["TESTING"] = "true"
+os.environ["ANT_DISABLE_KEY_SERVER"] = "1"
 import asyncio
 import sys
 from pathlib import Path
@@ -16,6 +19,7 @@ events=[]
 async def fake_provider(model, prompt, history, **kwargs):
     events.append({'event':'start','model':model,'question':next((tag for tag in ['slow question','partial question','quota question','exhausted question'] if tag in prompt),'other')})
     try:
+        yield _frame('limits', {'context_tokens':4096,'output_tokens':300})
         if 'slow question' in prompt:
             yield make_content('Old partial answer.')
             await asyncio.sleep(20)

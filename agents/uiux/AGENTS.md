@@ -33,7 +33,7 @@ The agent may read for **API contract verification only**:
 
 - `backend/routes/`
 - `docs/backend/api/API_REFERENCE.md`
-- `docs/backend/api/API_REFERENCE_PHASE2.md`
+- `docs/backend/api/API_REFERENCE.md`
 
 The agent may NOT modify backend files. If the agent needs an API
 change, it opens a code-review comment in the PR for the `backend` role.

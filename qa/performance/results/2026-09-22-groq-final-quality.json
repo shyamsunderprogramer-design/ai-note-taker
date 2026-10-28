@@ -1,0 +1,118 @@
+{
+  "conditions": "Local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "missing_fact",
+      "first_seconds": 1.2854646249907091,
+      "total_seconds": 1.338826292019803,
+      "answer": "The resume does not provide any information about AWS certifications, so the specific certifications you hold and the dates you earned them are unknown.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting",
+      "first_seconds": 1.3468815420055762,
+      "total_seconds": 1.4573257500305772,
+      "answer": "- Send the project summary \u2013 Owner: **unspecified**, Deadline: **Friday**  \n- Review the budget \u2013 Owner: **Maya**, Deadline: **unspecified**  \n- Schedule the next meeting \u2013 Owner: **Daniel**, Deadline: **unspecified**",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical",
+      "first_seconds": 3.0111498340265825,
+      "total_seconds": 3.2813638750230893,
+      "answer": "Readiness probes affect a pod\u2019s Service visibility: the kubelet runs the probe; on failure the pod is marked\u202fNotReady, the endpoints controller removes its IP from Service endpoints, so traffic stops while the container keeps running. Liveness probes affect container lifecycle: the kubelet runs the probe; on failure it kills the container, which the kubelet restarts according to the pod\u2019s\u202frestartPolicy. Memory limits affect the container\u2019s resource usage: the kubelet sets cgroup limits, and the Linux kernel (via cgroups and the OOM killer) enforces the limit, terminating the container if exceeded; the kubelet may then restart it per the restartPolicy.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_status",
+      "first_seconds": 2.920981958974153,
+      "total_seconds": 3.287717458966654,
+      "answer": "**Decisions**\n- None.\n\n**Proposals**\n- Priya proposed moving the release to Monday (owner: Priya, deadline: unspecified).\n\n**Blockers**\n- Omar requires test results before agreeing to the release change (owner: unspecified, deadline: unspecified).\n\n**Completed work**\n- Lee sent the draft (owner: Lee).\n\n**Pending actions**\n- None.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_owners",
+      "first_seconds": 1.043812291987706,
+      "total_seconds": 1.1243956669932231,
+      "answer": "- Send invoice \u2013 Owner: Elena \u2013 Deadline: Tuesday  \n- Check contract \u2013 Owner: Marcus \u2013 Deadline: unspecified  \n- Update launch checklist \u2013 Owner: unspecified \u2013 Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_restart",
+      "first_seconds": 1.9930822500027716,
+      "total_seconds": 2.223755416984204,
+      "answer": "**Affected resource:** the container that was OOM\u2011killed.  \n**Enforcing mechanism:** the kubelet (via the container runtime) detects the OOMKill exit (signal\u202f9, exit\u202f137) and reports the container as terminated.  \n**Policy that decides the outcome:** the pod\u2019s `restartPolicy` (e.g.,\u202f`Always` for Deployments, `OnFailure` for Jobs, `Never` for static pods). If the policy permits a restart, the kubelet will recreate the container automatically. A liveness probe is unrelated; it only triggers a restart when it fails, not when the container is OOM\u2011killed.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_no_tasks",
+      "first_seconds": 1.403474249993451,
+      "total_seconds": 1.4277027919888496,
+      "answer": "Decisions: None.\n\nPending Action Items:\n- None",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_unassigned",
+      "first_seconds": 1.639418124977965,
+      "total_seconds": 1.6675022909766994,
+      "answer": "- Certificate renewal \u2013 Owner: unspecified \u2013 Deadline: June\u202f12",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_correction",
+      "first_seconds": 0.8680084999650717,
+      "total_seconds": 0.9257871659938246,
+      "answer": "- **Email contract** \u2013 Owner: Nina \u2013 Deadline: Tuesday  \n- **Review quote** \u2013 Owner: Arun \u2013 Deadline: Wednesday",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "resume_boundary",
+      "first_seconds": 4.0328607090050355,
+      "total_seconds": 4.0822059999918565,
+      "answer": "The resume does not mention any management responsibilities or team size, so the number of engineers you managed is unknown.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_sql",
+      "first_seconds": 2.428640666999854,
+      "total_seconds": 2.649624500016216,
+      "answer": "No. An index can speed up reads that match its columns (point lookups, range scans) but it adds overhead to writes because each INSERT/UPDATE/DELETE must also modify the index, and it consumes storage. The optimizer evaluates the cost of using the index versus a full scan; if the index is low\u2011selectivity, requires extra lookups, or the planner estimates a higher cost, it will ignore it. Thus an index does not guarantee every query runs faster, nor must the planner use it.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_python",
+      "first_seconds": 3.225543792010285,
+      "total_seconds": 3.448061333037913,
+      "answer": "No, adding threads does not always speed up CPU\u2011bound Python code. The resource is the CPU core; the GIL (enforcing mechanism) allows only one thread to execute Python bytecode at a time, so the policy is that threads serialize CPU work, causing no speedup and possible slowdown. For I/O\u2011bound code, threads release the GIL while waiting, letting other threads run, so throughput can improve. Using separate processes gives each its own interpreter and GIL, allowing true parallel CPU execution.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_retry",
+      "first_seconds": 3.4699662910425104,
+      "total_seconds": 3.7165533330407925,
+      "answer": "No, it\u2019s not safe to retry blindly; the timeout only shows the client didn\u2019t receive a response, not that the server didn\u2019t process the POST. The affected resource is the order record; the enforcing mechanism is the client\u2011side timeout and the server\u2019s request handling. The policy is the server\u2019s idempotency logic\u2014whether it accepts duplicate requests. Prevent duplicates by making the operation idempotent: send a client\u2011generated idempotency key or unique order ID, have the server check for existing keys, and enforce a unique constraint in the database.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_kubernetes_policy",
+      "first_seconds": 4.166114750027191,
+      "total_seconds": 4.4316127500496805,
+      "answer": "Affected resource: the container\u2019s process.  \nEnforcing mechanism: the Linux OOM killer (triggered when the container exceeds its cgroup memory limit) terminates the process and marks the container status as\u202fOOMKilled.  \nPolicy: pod.spec.restartPolicy\u202f=\u202fNever tells the kubelet not to restart the container; the pod remains in a terminated (Failed) state.  \n\nA higher\u2011level controller (e.g., Deployment, Job) may notice the pod\u2019s termination and, according to its own spec, create a new pod to replace it. That replacement is a new pod, not a restart of the original container.",
+      "errors": []
+    }
+  ]
+}

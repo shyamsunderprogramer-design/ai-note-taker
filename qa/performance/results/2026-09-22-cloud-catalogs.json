@@ -1,0 +1,30 @@
+[
+  {
+    "provider": "openai",
+    "configured": true,
+    "status": 401
+  },
+  {
+    "provider": "google",
+    "configured": true,
+    "status": 403
+  },
+  {
+    "provider": "groq",
+    "configured": true,
+    "status": 200,
+    "models": [
+      "allam-2-7b",
+      "canopylabs/orpheus-arabic-saudi",
+      "canopylabs/orpheus-v1-english",
+      "meta-llama/llama-prompt-guard-2-22m",
+      "meta-llama/llama-prompt-guard-2-86m",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "openai/gpt-oss-safeguard-20b",
+      "qwen/qwen3.8-27b",
+      "whisper-large-v3",
+      "whisper-large-v3-turbo"
+    ]
+  }
+]

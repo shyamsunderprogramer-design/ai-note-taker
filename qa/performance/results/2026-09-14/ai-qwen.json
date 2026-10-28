@@ -1,0 +1,40 @@
+{
+  "model": "qwen3.5:9b",
+  "input": "Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Notes: Please send the project summary by Friday. Maya will review the budget. Daniel will schedule the next meeting.",
+  "gates": {
+    "nonempty_responses": true,
+    "warm_first_content_under_2s": true,
+    "event_loop_lag_under_100ms": true,
+    "factual_coverage": true
+  },
+  "samples": [
+    {
+      "run": 1,
+      "first_content_seconds": 3.3685453749931185,
+      "total_seconds": 4.346246832996258,
+      "max_event_loop_lag_seconds": 0.0013342080096481364,
+      "response": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified).",
+      "errors": [],
+      "required_facts_present": true
+    },
+    {
+      "run": 2,
+      "first_content_seconds": 0.05034012500254903,
+      "total_seconds": 1.0602422079973621,
+      "max_event_loop_lag_seconds": 0.0011195830052020024,
+      "response": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified).",
+      "errors": [],
+      "required_facts_present": true
+    },
+    {
+      "run": 3,
+      "first_content_seconds": 0.044067499999073334,
+      "total_seconds": 1.0385662499902537,
+      "max_event_loop_lag_seconds": 0.001110207992023788,
+      "response": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified).",
+      "errors": [],
+      "required_facts_present": true
+    }
+  ],
+  "limits": "Local synthetic prompt, RAG disabled, first run may include model load. Fact matching is not a human quality evaluation. No HTTP frontend or auth included."
+}

@@ -324,29 +324,11 @@ from routes.voice_agent import router as voice_agent_router
 from routes.mcp import router as mcp_router
 
 # ---------------------------------------------------------------------------
-# Route migration status (Fix #4, audit 2026-06-05)
+# Route ownership
 # ---------------------------------------------------------------------------
-# 28 routers are registered below, each handling its own endpoints.  15 of
-# those routers (Phase 1-4) were previously commented out — Fix #4 uncommented
-# them.  The route module handlers register BEFORE the inline @app.X
-# decorators further down in this file, so they own the matching (method,
-# path) keys and shadow 162 duplicate inline handlers here.
-#
-# What remains in this file:
-#   - 162 dead @app.X handlers — unreachable (route modules win), but kept
-#     as a safety net so we can roll back the migration if needed.
-#   - 13 HTTP + 1 WS endpoint that are unique to main.py and have no
-#     equivalent in any route module: /auth/{debug/users, status,
-#     forgot-password, set-security-question}, /health/{config,
-#     db-debug}, /mcp/{resources, status, tools, tools/{tool_name}},
-#     /voice-agent/{start, stop, status}, /ws/voice-agent.
-#
-# Next steps (optional, not in audit priority list):
-#   1. Move the 14 unique endpoints into routes/_main_unique.py.
-#   2. Strip the 162 dead @app.X handlers + their body functions from
-#      this file (saves ~200KB; the file is currently 277KB).
-#   3. Once main.py is just app + middleware + startup, the file can
-#      shrink to ~10KB.
+# Route modules own migrated endpoints. Legacy helper bodies below remain
+# callable during extraction, but their duplicate HTTP decorators are removed.
+# test_route_ownership.py prevents runtime/OpenAPI contracts from diverging.
 # ---------------------------------------------------------------------------
 
 # Register in declaration order (matches original commented-out block
@@ -1113,7 +1095,6 @@ async def start_listener():
 # MIGRATED → routes/_main_unique.py:db_debug (Phase 4 cleanup, 2026-06-08)
 
 
-@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def list_providers(request: Request):
     """Returns which cloud providers have API keys configured (secure storage + env fallback)"""
@@ -1133,7 +1114,6 @@ async def list_providers(request: Request):
     }
 
 
-@app.get("/ollama/models")
 def list_ollama_models():
     """Proxy to Ollama's GET /api/tags — returns installed local models."""
     try:
@@ -1145,7 +1125,6 @@ def list_ollama_models():
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500, extra={"models": []})
 
 
-@app.post("/ollama/pull")
 def pull_ollama_model(model: str = Query(...)):
     """Trigger a model pull — runs async, returns immediately."""
     import threading
@@ -1171,7 +1150,6 @@ def pull_ollama_model(model: str = Query(...)):
     return {"status": "pull_started", "model": model}
 
 
-@app.delete("/ollama/models/{model_name}")
 def delete_ollama_model(model_name: str):
     """Delete a local Ollama model."""
     try:
@@ -1188,7 +1166,6 @@ def delete_ollama_model(model_name: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/ask-with-image")
 @rate_limit(requests_per_minute=20)  # Rate limit: 20 per minute (expensive operation)
 async def ask_with_image(
     request: Request,
@@ -1393,7 +1370,6 @@ async def ask_with_image(
         return JSONResponse({"error": "An internal error occurred"}, status_code=500)
 
 
-@app.get("/transcribe-stream")
 async def transcribe_stream(request: Request):
     """SSE stream of real-time transcription from always-on microphone.
 
@@ -1438,8 +1414,6 @@ async def transcribe_stream(request: Request):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@app.post("/ocr")
-@app.get("/providers")
 @rate_limit(requests_per_minute=30)
 async def ocr_image(request: Request):
     """Extract text from a base64-encoded image using OCR.
@@ -1458,8 +1432,6 @@ async def ocr_image(request: Request):
         return JSONResponse({"text": "", "method": "none", "error": "An internal error occurred"}, status_code=500)
 
 
-@app.post("/overlay-ask")
-@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # Rate limit: 30 per minute
 async def overlay_ask(
     request: Request,
@@ -1484,8 +1456,7 @@ async def overlay_ask(
                 if not model_name:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
-                # ask_ollama_vision_stream is patched to be an async generator
-                # at the top of this file, so `async for` works directly.
+                # Adapt provider streams locally without changing their public protocol.
                 async for event in iterate_stream(ai_router.ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
@@ -1505,7 +1476,6 @@ async def overlay_ask(
     return StreamingResponse(generator(), media_type="text/event-stream")
 
 
-@app.post("/set-always-on-mic")
 async def set_always_on_mic(enabled: bool = Form(...)):
     """Enable or disable the always-on microphone.
 
@@ -1528,7 +1498,6 @@ async def set_always_on_mic(enabled: bool = Form(...)):
     return {"enabled": enabled}
 
 
-@app.post("/configure")
 async def configure_provider(body: dict):
     """API key configuration endpoint — DISABLED.
 
@@ -1546,13 +1515,11 @@ async def configure_provider(body: dict):
     }
 
 
-@app.get("/health")
 def health():
     from routes.health import health_check
     return health_check()
 
 
-@app.get("/health/database")
 async def health_database():
     """T16: Check PostgreSQL database connectivity"""
     if not DATABASE_AVAILABLE:
@@ -1581,7 +1548,6 @@ async def health_database():
         }
 
 
-@app.get("/health/modules")
 async def health_modules():
     """T13: Feature health dashboard - show which modules are available"""
     # Check Neo4j connection
@@ -1710,7 +1676,6 @@ async def health_modules():
 # T16: DATABASE ADMIN - Backup/Restore/Migration (Admin only)
 # ═══════════════════════════════════════════════════════════════════
 
-@app.post("/admin/backup")
 async def admin_create_backup(user: User = Depends(require_admin)):
     """T16: Create a full database backup as JSON - admin only"""
     if not DATABASE_AVAILABLE:
@@ -1729,7 +1694,6 @@ async def admin_create_backup(user: User = Depends(require_admin)):
         return error_response(ErrorCode.INTERNAL_ERROR, "Backup failed")
 
 
-@app.post("/admin/restore")
 async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depends(require_admin)):
     """T16: Restore database from JSON backup - admin only"""
     if not DATABASE_AVAILABLE:
@@ -1748,7 +1712,6 @@ async def admin_restore_backup(backup_data: Dict = Body(...), user: User = Depen
         return error_response(ErrorCode.INTERNAL_ERROR, "Restore failed")
 
 
-@app.post("/admin/migrate")
 async def admin_run_migration(user: User = Depends(require_admin)):
     """T16: Run JSON -> PostgreSQL migration - admin only"""
     if not DATABASE_AVAILABLE:
@@ -1780,7 +1743,6 @@ async def admin_run_migration(user: User = Depends(require_admin)):
 # MIGRATED → routes/_main_unique.py:debug_users (Phase 4 cleanup, 2026-06-08)
 
 
-@app.post("/auth/register")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def register_user(
     username: str = Form(..., min_length=3, max_length=30),
@@ -1829,7 +1791,6 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Registration failed; check your account details")
 
 
-@app.post("/auth/login")
 @rate_limit(requests_per_minute=5)  # T24: Slow brute-force attacks
 async def login_user(
     request: Request,
@@ -1874,7 +1835,6 @@ async def login_user(
     }
 
 
-@app.get("/auth/me")
 async def get_current_user_info(user: User = Depends(require_authentication)):
     """Get current authenticated user info"""
     return {
@@ -1889,7 +1849,6 @@ async def get_current_user_info(user: User = Depends(require_authentication)):
     }
 
 
-@app.post("/auth/logout")
 async def logout_user(user: User = Depends(require_authentication)):
     """Logout (client should delete token)"""
     log_audit_event("auth_logout", user.username, "user_logged_out", resource=f"user:{user.id}", success=True)
@@ -1897,7 +1856,6 @@ async def logout_user(user: User = Depends(require_authentication)):
     return {"status": "success", "message": "Logged out successfully"}
 
 
-@app.post("/auth/refresh")
 @rate_limit(requests_per_minute=10)
 async def refresh_token(request: Request):
     """Refresh access token using refresh token (legacy duplicate in
@@ -1960,7 +1918,6 @@ async def refresh_token(request: Request):
 # MIGRATED → routes/_main_unique.py:forgot_password (Phase 4 cleanup, 2026-06-08)
 
 
-@app.post("/auth/reset-password")
 @rate_limit(requests_per_minute=3)
 async def reset_password(
     username: str = Form(...),
@@ -1990,7 +1947,6 @@ async def reset_password(
 
 # MIGRATED → routes/_main_unique.py:set_security_question_endpoint (Phase 4 cleanup, 2026-06-08)
 
-@app.get("/audit/log")
 async def get_audit_log_endpoint(
     user: User = Depends(require_authentication),
     limit: int = Query(100, ge=1, le=1000),
@@ -2004,7 +1960,6 @@ async def get_audit_log_endpoint(
     return {"entries": entries, "count": len(entries)}
 
 
-@app.get("/audit/stats")
 async def get_audit_stats_endpoint(
     user: User = Depends(require_authentication),
 ):
@@ -2050,7 +2005,6 @@ except ImportError:
         return {}
 
 
-@app.get("/providers/byok/status")
 async def get_byok_status(user: User = Depends(require_authentication)):
     """Get user's BYOK status - which providers they have configured"""
     providers = get_available_providers(user.id)
@@ -2075,7 +2029,6 @@ async def get_byok_status(user: User = Depends(require_authentication)):
     }
 
 
-@app.post("/providers/byok/configure")
 async def configure_provider_key(
     user: User = Depends(require_authentication),
     provider: str = Form(...),
@@ -2111,7 +2064,6 @@ async def configure_provider_key(
         raise HTTPException(status_code=500, detail="Failed to save API key")
 
 
-@app.delete("/providers/byok/{provider}")
 async def delete_provider_key(
     provider: str,
     user: User = Depends(require_authentication)
@@ -2125,7 +2077,6 @@ async def delete_provider_key(
     }
 
 
-@app.get("/providers/byok/costs")
 async def get_provider_costs():
     """Get cost information for all providers (public endpoint)"""
     costs = {}
@@ -2143,7 +2094,6 @@ async def get_provider_costs():
     }
 
 
-@app.get("/providers/byok/test/{provider}")
 async def test_provider_key(
     provider: str,
     user: User = Depends(require_authentication)
@@ -2245,7 +2195,6 @@ async def test_provider_key(
     return test_result
 
 
-@app.get("/rate-limit/status")
 async def get_rate_limit_status(request: Request):
     """Get current rate limit status for the client"""
     client_id = request.client.host if request.client else "unknown"
@@ -2263,7 +2212,6 @@ async def get_rate_limit_status(request: Request):
     }
 
 
-@app.post("/set-mode")
 def set_mode(mode: str):
     # State is now in _state object
 
@@ -2274,7 +2222,6 @@ def set_mode(mode: str):
     return {"status": "mode updated", "mode": _state.current_mode}
 
 
-@app.post("/transcribe")
 async def transcribe_api(file: UploadFile = File(...)):
     """Fast audio transcription — returns text only. AI response handled by frontend."""
     _state.use_autonomous = False
@@ -2290,7 +2237,6 @@ async def transcribe_api(file: UploadFile = File(...)):
     return {"text": text or ""}
 
 
-@app.post("/transcribe-cloud")
 @rate_limit(requests_per_minute=20)  # T24: Expensive cloud transcription
 async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai", model: str = "gpt-4o-mini"):
     """Transcribe and route to a cloud AI provider."""
@@ -2352,7 +2298,6 @@ async def transcribe_cloud(file: UploadFile = File(...), provider: str = "openai
         return {"text": text, "response": "", "error": "An internal error occurred"}
 
 
-@app.get("/transcribe/languages")
 async def list_transcription_languages():
     """T22: List supported transcription languages."""
     try:
@@ -2362,7 +2307,6 @@ async def list_transcription_languages():
         return {"languages": {"en": "English"}, "note": "Whisper handler not available"}
 
 
-@app.get("/stream")
 def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str = "ollama", context: str = None):
     """SSE stream endpoint — yields event: meta/chunk/done/error"""
     async def generator():
@@ -2392,7 +2336,6 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
     return StreamingResponse(generator(), media_type="text/event-stream")
 
 
-@app.get("/stream-race")
 def stream_race(q: str, mode: str = "race", style: str = "concise", context: str = None, enabled: str = None):
     """
     Fire all configured providers in parallel. First to emit a meta/chunk event wins.
@@ -2649,7 +2592,6 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
     return StreamingResponse(race_generator(), media_type="text/event-stream")
 
 
-@app.get("/race-stats")
 def race_stats():
     """Return race performance statistics from recent races."""
     try:
@@ -2686,8 +2628,6 @@ def race_stats():
 # DOCUMENT UPLOAD & RAG ENDPOINTS
 # ==============================
 
-@app.post("/documents/upload")
-@app.get("/providers")
 @rate_limit(requests_per_minute=30)  # T24: Document upload
 async def upload_document(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Upload a document for RAG context retrieval."""
@@ -2704,7 +2644,6 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(req
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/documents")
 async def list_documents(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
     """List all uploaded documents with pagination."""
     from document_store import get_document_store
@@ -2719,7 +2658,6 @@ async def list_documents(limit: int = Query(50, ge=1, le=500), offset: int = Que
     }
 
 
-@app.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str, user: User = Depends(require_authentication)):
     """Delete a document from the store."""
     from document_store import get_document_store
@@ -2728,7 +2666,6 @@ async def delete_document(doc_id: str, user: User = Depends(require_authenticati
     return {"success": success}
 
 
-@app.post("/documents/retrieve")
 async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)):
     """Retrieve relevant document context for a query."""
     from document_store import get_document_store
@@ -2741,7 +2678,6 @@ async def retrieve_document_context(query: str = Form(...), top_k: int = Form(5)
 # SPEAKER DIARIZATION ENDPOINTS
 # ==============================
 
-@app.post("/transcribe-with-speakers")
 async def transcribe_with_speakers(file: UploadFile = File(...)):
     """
     Transcribe audio with speaker diarization.
@@ -2811,7 +2747,6 @@ async def transcribe_with_speakers(file: UploadFile = File(...)):
                 logger.warning("Could not remove a temporary speaker-transcription file")
 
 
-@app.get("/transcribe/{audio_id}/speakers")
 async def get_transcription_speakers(audio_id: str):
     """
     Get speaker information for a previously transcribed audio.
@@ -2844,7 +2779,6 @@ async def shutdown_event():
         logger.warning("[Shutdown] HTTP client cleanup failed")
 
 
-@app.websocket("/ws/transcribe")
 async def ws_transcribe(ws: WebSocket):
     """Stream audio from browser and receive real-time transcriptions.
 
@@ -3052,7 +2986,6 @@ async def ws_transcribe(ws: WebSocket):
 # EXPORT/IMPORT ENDPOINTS
 # ==============================
 
-@app.post("/conversations/export")
 async def export_conversation(body: dict, user: User = Depends(require_authentication)):
     """
     Export conversation in various formats.
@@ -3140,7 +3073,6 @@ async def export_conversation(body: dict, user: User = Depends(require_authentic
         return {"content": content, "filename": f"conversation-{date_str}.txt"}
 
 
-@app.post("/conversations/import")
 async def import_conversations(file: UploadFile = File(...), user: User = Depends(require_authentication)):
     """Import conversations from JSON file."""
     try:
@@ -3224,7 +3156,6 @@ OBJECTION_KEYWORDS = {
 }
 
 
-@app.post("/detect-objections")
 async def detect_objections(body: dict):
     """
     Detect sales objections in text.
@@ -3252,7 +3183,6 @@ async def detect_objections(body: dict):
 # ANALYTICS ENDPOINTS
 # ==============================
 
-@app.post("/analytics/record")
 async def record_analytics(body: dict, user: User = Depends(require_authentication)):
     """Record analytics for a conversation."""
     from analytics import get_analytics_store
@@ -3287,7 +3217,6 @@ async def record_analytics(body: dict, user: User = Depends(require_authenticati
     }}
 
 
-@app.get("/analytics/summary")
 async def get_analytics_summary(days: int = 30, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
     """Get analytics summary for the past N days (paginated)."""
     from analytics import get_analytics_store
@@ -3300,7 +3229,6 @@ async def get_analytics_summary(days: int = 30, limit: int = Query(100, ge=1, le
     return data
 
 
-@app.post("/analytics/export")
 async def export_analytics(body: dict):
     """Export analytics data."""
     from analytics import get_analytics_store
@@ -3313,7 +3241,6 @@ async def export_analytics(body: dict):
 # CRM INTEGRATION ENDPOINTS
 # ==============================
 
-@app.get("/crm/config")
 async def get_crm_config():
     """Get CRM configuration."""
     from crm_integration import get_crm
@@ -3321,7 +3248,6 @@ async def get_crm_config():
     return crm.get_config()
 
 
-@app.post("/crm/config")
 async def save_crm_config(body: dict, user: User = Depends(require_authentication)):
     """Save CRM configuration."""
     from crm_integration import get_crm
@@ -3330,7 +3256,6 @@ async def save_crm_config(body: dict, user: User = Depends(require_authenticatio
     return {"success": success}
 
 
-@app.post("/crm/webhook/{crm_type}/{event_type}")
 async def send_crm_webhook(crm_type: str, event_type: str, body: dict):
     """Send webhook to CRM."""
     from crm_integration import get_crm
@@ -3339,7 +3264,6 @@ async def send_crm_webhook(crm_type: str, event_type: str, body: dict):
     return {"success": result}
 
 
-@app.get("/crm/test")
 async def test_crm_connection():
     """Test CRM connection."""
     from crm_integration import get_crm
@@ -3347,7 +3271,6 @@ async def test_crm_connection():
     return crm.test_connection()
 
 
-@app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     # T3: WebSocket authentication — respect AUTH_REQUIRED setting (skip in dev mode)
     token = ws.query_params.get("token")
@@ -3778,7 +3701,6 @@ except ImportError as e:
     logger.warning("[Realtime] Module not available: %s", str(e))
 
 
-@app.post("/realtime/process")
 async def process_realtime_segment(
     text: str = Query(...),
     speaker: str = Query(...),  # "user" or "interviewer"
@@ -3813,7 +3735,6 @@ async def process_realtime_segment(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/realtime/command")
 async def process_voice_command_api(
     text: str = Query(...),
     conversation_id: Optional[str] = Query(None)
@@ -3841,7 +3762,6 @@ async def process_voice_command_api(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/realtime/suggestion-history")
 async def get_suggestion_history(
     limit: int = Query(50)
 ):
@@ -3868,7 +3788,6 @@ async def get_suggestion_history(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/realtime/configure")
 async def configure_suggestions(
     min_confidence: float = Query(0.6),
     cooldown_seconds: float = Query(10.0)
@@ -3889,7 +3808,6 @@ async def configure_suggestions(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/realtime/clear")
 async def clear_suggestion_state():
     """Clear buffer and suggestion history (call when starting new interview)"""
     if not REALTIME_AVAILABLE:
@@ -3915,7 +3833,6 @@ except ImportError as e:
     logger.warning("[Analyzer] Module not available: %s", str(e))
 
 
-@app.post("/analyze/conversation")
 async def analyze_conversation_api(
     conversation: Dict
 ):
@@ -3934,7 +3851,6 @@ async def analyze_conversation_api(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/analyze/batch")
 async def analyze_conversations_batch(
     conversations: List[Dict]
 ):
@@ -3962,7 +3878,6 @@ async def analyze_conversations_batch(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/analyze/types")
 async def get_conversation_types():
     """Get list of supported conversation types"""
     if not ANALYZER_AVAILABLE:
@@ -4006,7 +3921,6 @@ except ImportError as e:
     logger.warning("[PerformanceAnalyzer] Module not available: %s", str(e))
 
 
-@app.get("/analytics/skill-progression/{user_id}")
 async def get_skill_progression_api(
     user_id: str,
     skill: str = Query(...),
@@ -4023,7 +3937,6 @@ async def get_skill_progression_api(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/analytics/company-comparison")
 async def compare_companies(
     companies: List[str] = Query(...)
 ):
@@ -4038,7 +3951,6 @@ async def compare_companies(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/analytics/topic-network/{user_id}")
 async def get_topic_network_api(
     user_id: str,
     min_connections: int = Query(2)
@@ -4054,7 +3966,6 @@ async def get_topic_network_api(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/analytics/interview-calendar/{user_id}")
 async def get_interview_calendar_api(
     user_id: str,
     months: int = Query(6)
@@ -4070,7 +3981,6 @@ async def get_interview_calendar_api(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/analytics/performance-trends/{user_id}")
 async def get_performance_trends_api(
     user_id: str
 ):
@@ -4085,7 +3995,6 @@ async def get_performance_trends_api(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/analytics/dashboard/{user_id}")
 async def get_dashboard_summary_api(
     user_id: str
 ):
@@ -4105,7 +4014,6 @@ async def get_dashboard_summary_api(
 # Interview answer analysis and insights
 # ======================================
 
-@app.post("/performance/analyze")
 async def analyze_answer_performance(
     answer_text: str = Query(..., description="The answer text to analyze"),
     question_type: str = Query("behavioral", description="Type: behavioral, technical, system_design")
@@ -4122,7 +4030,6 @@ async def analyze_answer_performance(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/performance/analyze-batch")
 async def analyze_batch_answers(
     answers: List[dict]
 ):
@@ -4144,7 +4051,6 @@ async def analyze_batch_answers(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/performance/tiers")
 async def get_quality_tiers():
     """Get quality tier thresholds and descriptions"""
     return {
@@ -4155,7 +4061,6 @@ async def get_quality_tiers():
     }
 
 
-@app.get("/performance/checklist/{user_id}")
 async def get_personalized_checklist(
     user_id: str,
     question_type: str = Query("behavioral")
@@ -4212,7 +4117,6 @@ except ImportError as e:
     logger.warning("[StudyPlan] Module not available: %s", str(e))
 
 
-@app.post("/study-plan/generate")
 async def generate_study_plan(
     user_id: str = Query(..., description="User ID"),
     days: int = Query(30, description="Plan duration in days"),
@@ -4265,7 +4169,6 @@ class StudyPlanPersonalizedRequest(BaseModel):
     daily_minutes: int = 60
 
 
-@app.post("/study-plan/generate-personalized")
 async def generate_personalized_study_plan(
     request: StudyPlanPersonalizedRequest,
     user: User = Depends(require_authentication)
@@ -4349,7 +4252,6 @@ def _serialize_plan(plan) -> dict:
     return result
 
 
-@app.get("/study-plan/{user_id}")
 async def get_study_plan(user_id: str):
     """Get current study plan for user (generates new one if none exists)"""
     if not STUDY_PLAN_AVAILABLE:
@@ -4374,7 +4276,6 @@ async def get_study_plan(user_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/study-plan/{user_id}/complete-task")
 async def complete_study_task(
     user_id: str,
     task_id: str = Query(...),
@@ -4403,7 +4304,6 @@ async def complete_study_task(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/study-plan/{user_id}/today")
 async def get_today_session(user_id: str):
     """Get today's study session"""
     if not STUDY_PLAN_AVAILABLE:
@@ -4439,7 +4339,6 @@ async def get_today_session(user_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/study-plan/resources/{category}")
 async def get_study_resources(
     category: str,
     difficulty: str = Query("medium"),
@@ -4461,7 +4360,6 @@ async def get_study_resources(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/study-plan/{user_id}/export")
 async def export_study_plan(
     user_id: str,
     format: str = Query("json", description="Export format: json, ical, markdown")
@@ -4488,7 +4386,6 @@ async def export_study_plan(
 # Interview Simulator - Phase 3
 # ============================================================================
 
-@app.post("/interview-simulator/create")
 async def interview_simulator_create(
     company: str = Query(..., description="Target company name"),
     role: str = Query(None, description="Job role"),
@@ -4510,7 +4407,6 @@ async def interview_simulator_create(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/interview-simulator/{session_id}/question")
 async def interview_simulator_get_question(session_id: str):
     """
     Get the next question in the interview session.
@@ -4528,7 +4424,6 @@ async def interview_simulator_get_question(session_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/interview-simulator/{session_id}/answer")
 async def interview_simulator_submit_answer(
     session_id: str,
     transcript: str = Query(..., description="User's answer transcript"),
@@ -4548,7 +4443,6 @@ async def interview_simulator_submit_answer(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/interview-simulator/{session_id}/status")
 async def interview_simulator_status(session_id: str):
     """
     Get current session status.
@@ -4566,7 +4460,6 @@ async def interview_simulator_status(session_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/interview-simulator/{session_id}/finish")
 async def interview_simulator_finish(session_id: str):
     """
     Complete the interview and save to cognitive graph.
@@ -4586,7 +4479,6 @@ async def interview_simulator_finish(session_id: str):
 # Job Application Tracker - Phase 3
 # ============================================================================
 
-@app.post("/job-tracker/application")
 async def create_job_application(
     user_id: str = Query("default", description="User ID"),
     company: str = Query(..., description="Company name"),
@@ -4621,7 +4513,6 @@ async def create_job_application(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/applications")
 async def get_job_applications(
     user_id: str = Query("default", description="User ID"),
     status: str = Query(None, description="Filter by status"),
@@ -4652,7 +4543,6 @@ async def get_job_applications(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred")
 
 
-@app.get("/job-tracker/application/{app_id}")
 async def get_job_application(app_id: str):
     """
     Get a single job application.
@@ -4670,7 +4560,6 @@ async def get_job_application(app_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/status")
 async def update_job_status(
     app_id: str,
     status: str = Query(..., description="New status"),
@@ -4691,7 +4580,6 @@ async def update_job_status(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/interview")
 async def add_job_interview(
     app_id: str,
     interview_type: str = Query(..., description="Interview type"),
@@ -4715,7 +4603,6 @@ async def add_job_interview(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/offer")
 async def add_job_offer(
     app_id: str,
     salary: str = Query(..., description="Salary offer"),
@@ -4737,7 +4624,6 @@ async def add_job_offer(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/stats")
 async def get_job_tracker_stats(user_id: str = Query("default", description="User ID")):
     """
     Get job application pipeline statistics.
@@ -4753,7 +4639,6 @@ async def get_job_tracker_stats(user_id: str = Query("default", description="Use
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/upcoming-interviews")
 async def get_upcoming_job_interviews(
     user_id: str = Query("default", description="User ID"),
     days: int = Query(7, description="Number of days to look ahead")
@@ -4776,7 +4661,6 @@ async def get_upcoming_job_interviews(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/company/{company}")
 async def get_company_job_insights(company: str):
     """
     Get insights about a specific company from applications.
@@ -4792,7 +4676,6 @@ async def get_company_job_insights(company: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.delete("/job-tracker/application/{app_id}")
 async def delete_job_application(app_id: str, user: User = Depends(require_authentication)):
     """
     Delete a job application.
@@ -4808,7 +4691,6 @@ async def delete_job_application(app_id: str, user: User = Depends(require_authe
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/duplicates")
 async def find_job_duplicates(user_id: str = Query("default", description="User ID")):
     """
     Find duplicate applications (same company + role) for a user.
@@ -4824,7 +4706,6 @@ async def find_job_duplicates(user_id: str = Query("default", description="User 
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/duplicates/remove")
 async def remove_job_duplicates(
     user_id: str = Query("default", description="User ID"),
     keep: str = Query("latest", description="Which to keep: 'latest' or 'oldest'")
@@ -4846,7 +4727,6 @@ async def remove_job_duplicates(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/application/{app_id}/details")
 async def get_job_application_details(app_id: str):
     """
     Get detailed information about a specific application.
@@ -4865,7 +4745,6 @@ async def get_job_application_details(app_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/recruiter")
 async def add_recruiter_contact(
     app_id: str,
     name: str = Query(..., description="Recruiter name"),
@@ -4887,7 +4766,6 @@ async def add_recruiter_contact(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/communication")
 async def add_communication_log(
     app_id: str,
     comm_type: str = Query(..., description="Communication type: email, phone, message"),
@@ -4910,7 +4788,6 @@ async def add_communication_log(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/background-check")
 async def update_background_check_status(
     app_id: str,
     status: str = Query(..., description="Status: initiated, in_progress, completed, failed"),
@@ -4931,7 +4808,6 @@ async def update_background_check_status(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/drug-test")
 async def update_drug_test_status(
     app_id: str,
     status: str = Query(..., description="Status: scheduled, completed, passed, failed"),
@@ -4953,7 +4829,6 @@ async def update_drug_test_status(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/job-tracker/application/{app_id}/onboarding")
 async def add_onboarding_info(
     app_id: str,
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
@@ -4975,7 +4850,6 @@ async def add_onboarding_info(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/job-tracker/search")
 async def search_job_applications(
     user_id: str = Query("default", description="User ID"),
     query: str = Query(..., description="Search query"),
@@ -5076,7 +4950,6 @@ def extract_complexity_from_text(text: str) -> Dict:
     return results
 
 
-@app.post("/analysis/complexity")
 async def analyze_complexity(
     text: str = Query(..., description="Text to analyze for complexity")
 ):
@@ -5122,7 +4995,6 @@ async def analyze_complexity(
 # Resume Review - Phase 3
 # ============================================================================
 
-@app.post("/resume/analyze")
 async def analyze_resume_endpoint(
     resume_text: str = Query(..., description="Resume text content"),
     job_description: str = Query(None, description="Job description for comparison"),
@@ -5142,7 +5014,6 @@ async def analyze_resume_endpoint(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/resume/compare")
 async def compare_resume_to_job(
     resume_text: str = Query(..., description="Resume text content"),
     job_description: str = Query(..., description="Job description"),
@@ -5174,7 +5045,6 @@ async def compare_resume_to_job(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/resume/upload")
 async def upload_resume_file(
     file: UploadFile = File(...),
     job_description: Optional[str] = Form(None),
@@ -5297,7 +5167,6 @@ except ImportError as e:
     logger.warning("[ResumeReviewV2] Module not available: %s", str(e))
 
 
-@app.post("/resume/analyze-v2")
 async def analyze_resume_v2_endpoint(
     resume_text: Optional[str] = Form(None, description="Resume text content"),
     job_description: Optional[str] = Form(None, description="Job description for tailoring"),
@@ -5370,7 +5239,6 @@ async def analyze_resume_v2_endpoint(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/resume/tailor-v2")
 async def tailor_resume_v2(
     resume_text: str = Form(..., description="Resume text content"),
     job_description: str = Form(..., description="Job description"),
@@ -5408,7 +5276,6 @@ async def tailor_resume_v2(
 # WEB SEARCH INTEGRATION
 # ==============================
 
-@app.get("/search/web")
 async def web_search(
     query: str = Query(..., description="Search query"),
     limit: int = Query(5, ge=1, le=20, description="Number of results"),
@@ -5509,7 +5376,6 @@ async def web_search(
     }
 
 
-@app.get("/search/status")
 async def search_status():
     """Check if web search is configured and available."""
     import os
@@ -5541,7 +5407,6 @@ except ImportError as e:
     logger.warning("[MockLibrary] Library not available: %s", str(e))
 
 
-@app.get("/mock-interview/questions")
 async def get_mock_questions(
     role: str = Query(None, description="Filter by role (software_engineer, frontend_engineer, data_engineer)"),
     category: str = Query(None, description="Filter by category (technical, coding, system_design, behavioral)"),
@@ -5590,7 +5455,6 @@ async def get_mock_questions(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/mock-interview/question/random")
 async def get_random_mock_question(
     role: str = Query(None, description="Filter by role"),
     category: str = Query(None, description="Filter by category"),
@@ -5610,7 +5474,6 @@ async def get_random_mock_question(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/mock-interview/practice-set")
 async def get_practice_question_set(
     role: str = Query("software_engineer", description="Role for practice set"),
     num_questions: int = Query(5, description="Number of questions", ge=1, le=10)
@@ -5633,7 +5496,6 @@ async def get_practice_question_set(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/mock-interview/search")
 async def search_mock_questions(
     query: str = Query(..., description="Search query"),
     limit: int = Query(20, ge=1, le=500, description="Maximum results"),
@@ -5658,7 +5520,6 @@ async def search_mock_questions(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/mock-interview/stats")
 async def get_mock_library_stats():
     """Get library statistics."""
     if not MOCK_LIBRARY_AVAILABLE:
@@ -5671,7 +5532,6 @@ async def get_mock_library_stats():
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/mock-interview/companies")
 async def get_companies_with_questions():
     """Get list of companies that have specific questions."""
     if not MOCK_LIBRARY_AVAILABLE:
@@ -5712,7 +5572,6 @@ except ImportError as e:
     logger.warning("[VoiceClone] RVC gallery not available: %s", str(e))
 
 
-@app.post("/voice-clone/create")
 @rate_limit(requests_per_minute=10)  # T24: Voice clone creation is expensive
 async def create_voice_clone(
     name: str = Form(..., description="Name for this voice model"),
@@ -5763,7 +5622,6 @@ async def create_voice_clone(
 # NOTE: /voice-clone/models routes must come BEFORE /voice-clone/{model_id} routes
 # to avoid FastAPI matching "models" as a model_id parameter
 
-@app.get("/voice-clone/models")
 async def list_voice_clones(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
     """List all voice models with pagination."""
     if not VOICE_CLONE_AVAILABLE:
@@ -5783,7 +5641,6 @@ async def list_voice_clones(limit: int = Query(50, ge=1, le=500), offset: int = 
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred")
 
 
-@app.delete("/voice-clone/models/{model_id}")
 async def delete_voice_clone(model_id: str, user: User = Depends(require_authentication)):
     """Delete a voice model."""
     if not VOICE_CLONE_AVAILABLE:
@@ -5801,7 +5658,6 @@ async def delete_voice_clone(model_id: str, user: User = Depends(require_authent
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/voice-clone/{model_id}/status")
 async def get_voice_clone_status(model_id: str):
     """Get voice model training status."""
     if not VOICE_CLONE_AVAILABLE:
@@ -5814,7 +5670,6 @@ async def get_voice_clone_status(model_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/voice-clone/{model_id}/synthesize")
 async def synthesize_voice_clone(
     model_id: str,
     request: Request
@@ -5853,7 +5708,6 @@ async def synthesize_voice_clone(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/voice-clone/audio/{filename}")
 async def get_voice_audio(filename: str):
     """Serve generated TTS audio files."""
     from fastapi.responses import FileResponse
@@ -5879,7 +5733,6 @@ async def get_voice_audio(filename: str):
     return FileResponse(file_path, media_type="audio/mpeg", filename=safe_filename)
 
 
-@app.get("/voice-clone/gallery")
 async def voice_clone_gallery(category: str = None, gender: str = None):
     """List available pre-trained voice gallery models."""
     if not RVC_GALLERY_AVAILABLE:
@@ -5887,7 +5740,6 @@ async def voice_clone_gallery(category: str = None, gender: str = None):
     return {"voices": list_gallery(category=category, gender=gender)}
 
 
-@app.post("/voice-clone/gallery/{gallery_id}/install")
 async def install_gallery_voice(gallery_id: str):
     """Install a gallery voice as a voice model."""
     if not RVC_GALLERY_AVAILABLE:
@@ -5924,7 +5776,6 @@ async def install_gallery_voice(gallery_id: str):
     }
 
 
-@app.post("/voice-clone/create-rvc")
 @rate_limit(requests_per_minute=5)  # T24: RVC training is very expensive
 async def create_rvc_voice_model(
     name: str = Form(..., description="Name for this voice model"),
@@ -6008,7 +5859,6 @@ except ImportError as e:
     logger.warning("[Agents] Agent framework not available: %s", str(e))
 
 
-@app.post("/agents/sessions")
 async def create_agent_session(
     session_type: str = Query("meeting", description="Session type: interview, sales_call, meeting"),
     company: str = Query(None, description="Company name"),
@@ -6039,7 +5889,6 @@ async def create_agent_session(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/agents/sessions/{session_id}")
 async def get_agent_session(session_id: str):
     """Get agent session state."""
     if not AGENTS_AVAILABLE:
@@ -6051,7 +5900,6 @@ async def get_agent_session(session_id: str):
     return session
 
 
-@app.post("/agents/sessions/{session_id}/end")
 async def end_agent_session(session_id: str):
     """End an agent session."""
     if not AGENTS_AVAILABLE:
@@ -6063,7 +5911,6 @@ async def end_agent_session(session_id: str):
     return session
 
 
-@app.post("/agents/sessions/{session_id}/segment")
 async def process_agent_segment(
     session_id: str,
     text: str = Query(..., description="Transcript text"),
@@ -6085,7 +5932,6 @@ async def process_agent_segment(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/agents/sessions/{session_id}/stream")
 async def stream_agent_suggestions(
     session_id: str,
     text: str = Query(..., description="Transcript text"),
@@ -6107,7 +5953,6 @@ async def stream_agent_suggestions(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@app.post("/agents/sessions/{session_id}/agents")
 async def update_active_agents(
     session_id: str,
     active_agents: str = Query(..., description="Comma-separated agent types to activate"),
@@ -6135,7 +5980,6 @@ async def update_active_agents(
     return {"session_id": session_id, "active_agents": agents_list}
 
 
-@app.get("/agents/sessions/{session_id}/suggestions")
 async def get_agent_suggestions(session_id: str):
     """Get all suggestions generated in a session."""
     if not AGENTS_AVAILABLE:
@@ -6148,7 +5992,6 @@ async def get_agent_suggestions(session_id: str):
     return {"suggestions": session.get("suggestions", [])}
 
 
-@app.post("/agents/suggestions/{suggestion_id}/accept")
 async def accept_agent_suggestion(suggestion_id: str):
     """Accept an agent suggestion and record feedback for self-learning."""
     if not AGENTS_AVAILABLE:
@@ -6183,7 +6026,6 @@ async def accept_agent_suggestion(suggestion_id: str):
     return error_response(ErrorCode.NOT_FOUND, "Suggestion not found", status_code=404)
 
 
-@app.post("/agents/suggestions/{suggestion_id}/dismiss")
 async def dismiss_agent_suggestion(suggestion_id: str):
     """Dismiss an agent suggestion and record feedback for self-learning."""
     if not AGENTS_AVAILABLE:
@@ -6217,7 +6059,6 @@ async def dismiss_agent_suggestion(suggestion_id: str):
     return error_response(ErrorCode.NOT_FOUND, "Suggestion not found", status_code=404)
 
 
-@app.get("/agents/available")
 async def list_available_agents():
     """List all available agent types with descriptions."""
     if not AGENTS_AVAILABLE:
@@ -6226,7 +6067,6 @@ async def list_available_agents():
     return {"agents": orchestrator.get_available_agents()}
 
 
-@app.get("/agents/sessions/{session_id}/stats")
 async def get_agent_session_stats(session_id: str):
     """Get session statistics."""
     if not AGENTS_AVAILABLE:
@@ -6239,7 +6079,6 @@ async def get_agent_session_stats(session_id: str):
     return session_manager.get_stats(session)
 
 
-@app.get("/agents/cache/stats")
 async def get_cache_stats():
     """Get context cache statistics."""
     if not AGENTS_AVAILABLE:
@@ -6252,7 +6091,6 @@ async def get_cache_stats():
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cache module not available", status_code=503)
 
 
-@app.post("/agents/cache/cleanup")
 async def cleanup_cache():
     """Remove expired entries from the context cache."""
     if not AGENTS_AVAILABLE:
@@ -6266,7 +6104,6 @@ async def cleanup_cache():
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Cache module not available", status_code=503)
 
 
-@app.get("/agents/learning/stats")
 async def get_learning_stats(agent_type: Optional[str] = None):
     """Get self-learning performance statistics."""
     if not AGENTS_AVAILABLE:
@@ -6287,7 +6124,6 @@ logger.info("[Agents] Agent endpoints loaded")
 _ingestion_results = {}
 
 
-@app.post("/agents/ingestion")
 async def trigger_ingestion(request: Request):
     """Trigger data ingestion from GitHub repos or local directories.
 
@@ -6343,7 +6179,6 @@ async def trigger_ingestion(request: Request):
     return {"task_id": task_id, "status": "running"}
 
 
-@app.get("/agents/ingestion/status")
 async def get_ingestion_status(task_id: Optional[str] = None):
     """Get ingestion pipeline status, or poll a running task by task_id."""
     # If task_id provided, return that task's result
@@ -6390,7 +6225,6 @@ async def get_ingestion_status(task_id: Optional[str] = None):
     return result
 
 
-@app.post("/shadow/start")
 async def start_shadow_interview(
     company: str = Query(..., description="Company name"),
     role: str = Query(..., description="Role being interviewed for"),
@@ -6428,7 +6262,6 @@ async def start_shadow_interview(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/shadow/process")
 async def process_shadow_transcript(
     text: str = Query(..., description="Transcript text"),
     speaker: str = Query(..., description="Speaker (user/interviewer/other)")
@@ -6476,7 +6309,6 @@ async def process_shadow_transcript(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/shadow/suggestions")
 async def get_shadow_suggestions_list():
     """Get current shadow agent suggestions."""
     if not SHADOW_AGENT_AVAILABLE:
@@ -6489,7 +6321,6 @@ async def get_shadow_suggestions_list():
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/shadow/accept")
 async def accept_shadow_suggestion(suggestion_id: str = Query(...)):
     """Accept a suggestion."""
     if not SHADOW_AGENT_AVAILABLE:
@@ -6503,7 +6334,6 @@ async def accept_shadow_suggestion(suggestion_id: str = Query(...)):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/shadow/end")
 async def end_shadow_interview():
     """End shadow interview session."""
     if not SHADOW_AGENT_AVAILABLE:
@@ -6516,7 +6346,6 @@ async def end_shadow_interview():
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/shadow/stats")
 async def get_shadow_statistics():
     """Get shadow session statistics."""
     if not SHADOW_AGENT_AVAILABLE:
@@ -6552,7 +6381,6 @@ except ImportError as e:
     logger.warning("[Collaboration] Collaboration mode not available: %s", str(e))
 
 
-@app.post("/collaboration/create")
 async def create_collaboration(
     host_name: str = Body(..., description="Host name"),
     context: Optional[dict] = Body(default=None, description="Session context"),
@@ -6569,7 +6397,6 @@ async def create_collaboration(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/collaboration/join")
 async def join_collaboration_session(
     join_code: str = Query(..., description="6-digit join code"),
     name: str = Query(..., description="Your name")
@@ -6585,7 +6412,6 @@ async def join_collaboration_session(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/collaboration/message")
 async def send_collaboration_msg(
     session_id: str = Query(...),
     participant_id: str = Query(...),
@@ -6604,7 +6430,6 @@ async def send_collaboration_msg(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/collaboration/messages")
 async def get_collaboration_msgs(
     session_id: str = Query(...),
     participant_id: str = Query(...),
@@ -6627,7 +6452,6 @@ async def get_collaboration_msgs(
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/collaboration/status")
 async def get_collaboration_session_status(session_id: str = Query(...)):
     """Get collaboration session status."""
     if not COLLABORATION_AVAILABLE:
@@ -6641,7 +6465,6 @@ async def get_collaboration_session_status(session_id: str = Query(...)):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/collaboration/end")
 async def end_collaboration_session(
     session_id: str = Query(...),
     participant_id: str = Query(...)
@@ -6682,7 +6505,6 @@ except ImportError as e:
     logger.warning("[MeetingTemplates] Meeting templates not available: %s", str(e))
 
 
-@app.get("/meeting-templates")
 async def list_meeting_templates(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
     """Get all meeting templates with pagination."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6702,7 +6524,6 @@ async def list_meeting_templates(limit: int = Query(50, ge=1, le=500), offset: i
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/meeting-templates/categories")
 async def list_template_categories():
     """Get all template categories."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6716,7 +6537,6 @@ async def list_template_categories():
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/meeting-templates")
 async def create_meeting_template(body: dict, user: User = Depends(require_authentication)):
     """Create a custom meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6730,7 +6550,6 @@ async def create_meeting_template(body: dict, user: User = Depends(require_authe
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/meeting-templates/{template_id}")
 async def get_meeting_template(template_id: str):
     """Get a specific meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6746,7 +6565,6 @@ async def get_meeting_template(template_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.put("/meeting-templates/{template_id}")
 async def update_meeting_template(template_id: str, body: dict):
     """Update a custom meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6762,7 +6580,6 @@ async def update_meeting_template(template_id: str, body: dict):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.delete("/meeting-templates/{template_id}")
 async def delete_meeting_template(template_id: str):
     """Delete a custom meeting template."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6778,7 +6595,6 @@ async def delete_meeting_template(template_id: str):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.get("/meeting-templates/search")
 async def search_meeting_templates(query: str = Query(...)):
     """Search meeting templates."""
     if not MEETING_TEMPLATES_AVAILABLE:
@@ -6792,7 +6608,6 @@ async def search_meeting_templates(query: str = Query(...)):
         return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
 
 
-@app.post("/meeting-templates/{template_id}/generate")
 async def generate_meeting_notes(template_id: str, body: dict):
     """Generate meeting notes from template."""
     if not MEETING_TEMPLATES_AVAILABLE:

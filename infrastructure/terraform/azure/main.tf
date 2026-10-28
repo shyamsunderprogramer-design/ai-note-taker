@@ -64,14 +64,17 @@ resource "azurerm_kubernetes_cluster" "main" {
   dns_prefix          = "ant"
   sku_tier            = var.environment == "production" ? "Standard" : "Free"
 
-  kubernetes_version     = var.kubernetes_version
-  local_account_disabled = true
+  kubernetes_version        = var.kubernetes_version
+  local_account_disabled    = true
+  azure_policy_enabled      = true
+  automatic_channel_upgrade = "patch"
   # Fix #24: removed the made-up `aks_clusters_min_version` attribute
   # (never a real arg in azurerm; `kubernetes_version` is the only one).
 
   default_node_pool {
     name       = "default"
     node_count = 3
+    max_pods   = 50
     vm_size    = "Standard_DS2_v2"
     type       = "VirtualMachineScaleSets"
     # Fix #24: removed `availability_zones` from `default_node_pool` (gone in azurerm 3.x);
@@ -598,8 +601,25 @@ resource "azurerm_storage_account" "data" {
     type = "SystemAssigned"
   }
 
+  sas_policy {
+    expiration_period = "01.00:00:00"
+    expiration_action = "Log"
+  }
+
   blob_properties {
     versioning_enabled = true
+    delete_retention_policy { days = 14 }
+    container_delete_retention_policy { days = 14 }
+  }
+
+  queue_properties {
+    logging {
+      delete                = true
+      read                  = true
+      write                 = true
+      version               = "1.0"
+      retention_policy_days = 14
+    }
   }
 
   network_rules {
@@ -616,7 +636,7 @@ resource "azurerm_storage_account" "logs" {
   resource_group_name             = azurerm_resource_group.main.name
   location                        = var.location
   account_tier                    = "Standard"
-  account_replication_type        = "LRS"
+  account_replication_type        = "GRS"
   min_tls_version                 = "TLS1_2"
   https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
@@ -626,8 +646,25 @@ resource "azurerm_storage_account" "logs" {
     type = "SystemAssigned"
   }
 
+  sas_policy {
+    expiration_period = "01.00:00:00"
+    expiration_action = "Log"
+  }
+
   blob_properties {
     versioning_enabled = true
+    delete_retention_policy { days = 14 }
+    container_delete_retention_policy { days = 14 }
+  }
+
+  queue_properties {
+    logging {
+      delete                = true
+      read                  = true
+      write                 = true
+      version               = "1.0"
+      retention_policy_days = 14
+    }
   }
 
   network_rules {
@@ -654,8 +691,25 @@ resource "azurerm_storage_account" "backups" {
     type = "SystemAssigned"
   }
 
+  sas_policy {
+    expiration_period = "01.00:00:00"
+    expiration_action = "Log"
+  }
+
   blob_properties {
     versioning_enabled = true
+    delete_retention_policy { days = 14 }
+    container_delete_retention_policy { days = 14 }
+  }
+
+  queue_properties {
+    logging {
+      delete                = true
+      read                  = true
+      write                 = true
+      version               = "1.0"
+      retention_policy_days = 14
+    }
   }
 
   network_rules {
@@ -744,6 +798,7 @@ resource "azurerm_key_vault_access_policy" "storage_backups" {
 # ─────────────────────────────────────────────────────────────────────────────
 resource "azurerm_key_vault_secret" "database_url" {
   name            = "database-url"
+  content_type    = "application/vnd.ant.database-connection"
   value           = "postgresql://antadmin:${random_password.postgres.result}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/antdb?sslmode=require"
   key_vault_id    = azurerm_key_vault.main.id
   expiration_date = "2027-12-31T23:59:59Z"
@@ -902,7 +957,7 @@ resource "azurerm_monitor_diagnostic_setting" "postgresql_audit" {
 # App Service with TLS and Client Certificate Settings
 # ─────────────────────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────
-# Subscription activity logs and storage lifecycle retention
+# Subscription activity logs: diagnostic settings replace retired log profiles.
 # ─────────────────────────────────────────────────────────────────────
 # Forget the retired API resource without deleting its existing log storage.
 removed {
@@ -983,17 +1038,31 @@ resource "azurerm_linux_web_app" "main" {
   https_only          = true
 
   site_config {
-    minimum_tls_version      = "1.2"
-    ftps_state               = "Disabled"
-    http2_enabled            = true
-    scm_minimum_tls_version  = "1.2"
-    vnet_route_all_enabled   = true
-    remote_debugging_enabled = false
+    minimum_tls_version               = "1.2"
+    ftps_state                        = "Disabled"
+    http2_enabled                     = true
+    scm_minimum_tls_version           = "1.2"
+    vnet_route_all_enabled            = true
+    remote_debugging_enabled          = false
+    health_check_path                 = "/health"
+    health_check_eviction_time_in_min = 5
   }
 
   # Fix #24: azurerm 3.117+ made `client_certificate_mode` a top-level
   # attribute (it was in `site_config` in older versions).
-  client_certificate_mode = "Required"
+  client_certificate_mode    = "Required"
+  client_certificate_enabled = true
+
+  logs {
+    failed_request_tracing  = true
+    detailed_error_messages = false
+    http_logs {
+      file_system {
+        retention_in_days = 7
+        retention_in_mb   = 35
+      }
+    }
+  }
 
   identity {
     type = "SystemAssigned"

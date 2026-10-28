@@ -42,7 +42,7 @@ app, abstracted away from any specific component implementation.
   the scale and reference the rationale here.
 
 Do **not** add component-specific styles here. Those go in
-[`components/`](components/).
+[`components/`](../components/README.md).
 
 ---
 

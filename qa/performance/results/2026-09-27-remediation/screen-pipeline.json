@@ -1,0 +1,24 @@
+{
+  "scope": "Controlled browser screenshots, real OCR, real renderer and local Qwen; native OS capture not exercised",
+  "results": [
+    {
+      "question": "Answer all visible questions",
+      "answer": "1. 15\n2. Paris",
+      "passed": true
+    },
+    {
+      "question": "Answer the question on screen",
+      "answer": "I can see questions 1, 2. Which number should I answer? You can also ask me to answer all.",
+      "passed": true
+    },
+    {
+      "question": "Updated fixture: question 3",
+      "answer": "15",
+      "passed": true
+    },
+    {
+      "question": "Fresh capture metadata per question",
+      "passed": true
+    }
+  ]
+}

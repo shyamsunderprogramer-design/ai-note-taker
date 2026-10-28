@@ -66,11 +66,18 @@ jobs:
         run: npm run test:security
       - name: Audit JavaScript dependencies
         run: npm audit --audit-level=low
+      - name: Verify web build assets and performance budget
+        working-directory: apps/web
+        # A successful Vite build alone does not catch missing classic scripts.
+        # Unit tests themselves run in the workspace step below.
+        run: npm --prefix ../.. run benchmark:web
+
       - name: Verify desktop, web and mobile unit tests
         run: |
           npm --workspace ai-note-taker test
           npm --workspace ant-web test
           npm --workspace ant-mobile test -- --runInBand --watchman=false
+
       - name: Build product website and browser application
         run: npm run site:build
 
@@ -104,6 +111,10 @@ jobs:
         run: |
           npm run site:build
           node qa/website/smoke.cjs
+      - name: Verify production pages in Chromium
+        run: |
+          npm run web:build
+          npm run benchmark:browser
       - name: Run browser tests
         working-directory: e2e
         env:
@@ -128,6 +139,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Scan real commit diffs rather than treating a shallow snapshot as
+          # a new commit containing the entire repository.
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:

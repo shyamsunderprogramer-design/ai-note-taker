@@ -9,17 +9,17 @@ useDefault = true
 [[rules]]
   id = "ollama-cloud-api-key"
   description = "Ollama Cloud API Key"
-  regex = '''ollama_cloud_api_key\s*=\s*[a-zA-Z0-9]{20,}'''
+  regex = '''(?i)ollama[_-]?cloud[_-]?api[_-]?key\s*=\s*[a-zA-Z0-9]{20,}'''
   tags = ["key", "ollama"]
 
 [[rules]]
   id = "encryption-key"
   description = "Encryption Key"
-  regex = '''encryption_key\s*=\s*[a-zA-Z0-9]{32,}'''
+  regex = '''(?i)encryption[_-]?key\s*=\s*[a-zA-Z0-9]{32,}'''
   tags = ["key", "encryption"]
 
 [[rules]]
   id = "neo4j-password"
   description = "Neo4j Password"
-  regex = '''neo4j_password\s*=\s*[a-zA-Z0-9!@#$%^&*]{8,}'''
+  regex = '''(?i)neo4j[_-]?password\s*=\s*[a-zA-Z0-9!@#$%^&*]{8,}'''
   tags = ["key", "neo4j"]

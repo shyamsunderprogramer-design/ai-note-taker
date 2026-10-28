@@ -1,0 +1,395 @@
+{
+  "name": "finalround-download",
+  "url": "https://www.finalroundai.com/download",
+  "text": "Product\nFeatures\nExplore\nResources\nPricing\nHelp\nSign up - It's Free!\nStealth Interview Assistant\nFinal Round\nAI Stealth App\n\nInvisible AI support for live interviews — answer confidently and ace every interview.\n\nDetected: macOS\n\nDownload For Apple\nDownload For Windows\nProven Results\nwith Final Round AI\n\nUsed by candidates who want to perform better in interviews and convert opportunities into offers.\n\nStays hidden during\nscreen sharing\nThe app runs quietly in the background. Interviewers can't see it, even when you share your screen.\n\n\nNo browser tabs or distracting overlays.\nHelps you answer questions in real time\nGet clear suggestions for behavioral and technical questions while the interview is happening.\n\nExplains coding answers step by step, so you can talk through your thinking with confidence.\nclass Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        # Create a hash map to store numbers and their indices\n        num_map = {}\n        # Iterate through the array\n        for i, num in enumerate(nums):\n            # Calculate the complement needed to reach the target\n            complement = target - num\n            # If the complement exists in our hash map, we found our pair\n            if complement in num_map:\n                return [num_map[complement], i]\n            # Store the current number and its index\n            num_map[num] = i\n        # No solution found (but problem guarantees a solution exists)\n        return []\nclass Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        # Create a hash map to store numbers and their indices\n        num_map = {}\n        # Iterate through the array\n        for i, num in enumerate(nums):\n            # Calculate the complement needed to reach the target\n            complement = target - num\n            # If the complement exists in our hash map, we found our pair\n            if complement in num_map:\n                return [num_map[complement], i]\n            # Store the current number and its index\n            num_map[num] = i\n        # No solution found (but problem guarantees a solution exists)\n        return []\nclass Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        # Create a hash map to store numbers and their indices\n        num_map = {}\n        # Iterate through the array\n        for i, num in enumerate(nums):\n            # Calculate the complement needed to reach the target\n            complement = target - num\n            # If the complement exists in our hash map, we found our pair\n            if complement in num_map:\n                return [num_map[complement], i]\n            # Store the current number and its index\n            num_map[num] = i\n        # No solution found (but problem guarantees a solution exists)\n        return []\n...the complement of each number in the array...\nAI Suggestions\n\nCalculate the complement needed to reach the target value by subtracting the current number from the target.\n\ncomplement = target - num  # Calculate the value needed to reach the target\n\nBuilt for any online interviews\nGoogle Meet\nZoom\nMicrosoft Teams\nWorks smoothly with Zoom, Google Meet, Microsoft Teams, HackerRank, and LeetCode. Fast responses. No lag. No distractions.\nTestimonials\nProven Results\nwith Final Round AI\n\nUsed by candidates who want to perform better in interviews and convert opportunities into offers.\n\nManya Shree\nDec 29, 2025\n\nGreat tool for interview preparation\nI have used Final Round AI to prepare for my Cyber Security interviews.\n\nIt is honestly really good. The mock interview features candidate to prepare for technical and non technical interviews as well. And provide a detailed report based on your answers.\nGreat tool for every tech person looking out for interview preparations.\n\nI would give 11/10 – Must-Have for Modern Hiring.\n\nAug 14, 2025 • by Chandan G\n\nThe app isn't just innovative—it's inevitable. It bridges the gap between potential and presentation, making interviews smarter, faster, and more human.\nIt just gives real time answer within no time\n\nSunny\nJun 2, 2025\n\nIt's amazing. I was not sure whether to get it or no given the high subscription cost but just got it and I have to say I'm amazed. It's smooth and gets the job done.\n\nIt is the best one!\n\nAug 12, 2025 • by AJ\n\n...It is the best one it helped me a lot for the difficult questions and also solved the technical problems really fast\n\nTaught me where I go wrong\n\nDec 1, 2025 • by Kaustav Ghosh\n\nBest Learning experience to practice for interviews.\n\nRama Krishna • Data Engineer\n\nArush Sharma\nMar 24, 2025\n\nMy go-to for interview practice lately\nI've been using FinalRoundAI for a few weeks now, and honestly, it's been a game-changer for my interview prep. The mock interviews feel pretty realistic, and I like how it gives me feedback right after, especially on areas I tend to overlook (like rambling too much or missing structure). The questions are solid – feels like they actually pull from real interview trends, not just generic stuff.\n\nTechSlam\nNov 27, 2025\n\nThe mock interviews of final round ai is absolute gold.\nIt really help us to prepare for the interview and as we all know that most of the questions are similar to what we face in mock interviews, it's really help us structure well in live interviews as well.\nI just want the product to get more advance in order to support live interview help.\n\nRR\nRohit reddy\nAug 6, 2025\n\nThis is such great tool which reflects as a mirror of how you are performing in your interview.\n\nWith great Analysis on the interview helped me to over come the shortcomings I have.\n\nI give 120 out of 100. Great great tool\n\nEmily • Senior Software Engineer\n\nInourie • Senior Software Engineer\n\nJC\nJeffrey Cesari\nAug 6, 2025\n\nA great coaching tool!\nAfter a layoff, I've been having to interview for my next role. This technology has been allowing me to feel confident with my prepping for interviews and offers strong tips on how to better improve my style, area for improvement and celebrate my strengths. I would highly recommend Final Round AI for those interviewing for their next role.\n\nCan't believe what it did\n\nMar 26, 2025 • by Nelly\n\nI used this platform to clear the final round of an interview at a company where I honestly didn't think I stood a chance. And even though I eventually didn't accept their offer, just making it that far felt unreal to me.\n\n+10 million users enjoy FinalRound AI\n\nView more\nInstallation Overview\nI\n\nOpen FinalRoundAI.app from your Downloads folder\n\nWelcome To The Final Round\nTo install, drag the Final Round AI App to your Application folder\nI\nFinal Round AI\nApplications\n\nInstall and log in with your Final Round AI account.\n\nI\nFinal Round AI\n\nLaunch FinalRoundAI and start your interview prep\n\nCoPilot\n\n+10 million users enjoy FinalRound AI\n\nIf you have questions.\nWe've Got You Covered.\n\nStill curious? Reach out anytime at hi@finalroundai.com\n\nGet in Touch\nIs it really invisible in interviews?\nCan it help with coding interviews?\nDoes it work with Zoom, Teams, and HackerRank?\nStart Preparing Smarter\n\nReady to transform your interview performance. Download the Final Round AI Stealth App and unlock invisible, real-time AI support.\n\nGet Started\nCompany\nAbout\nContact Us\nReferral Program\nSpecial Discount\nCareers\nFAQ\nMedia Kit\nHow Final Round AI Works\nChangelog\nMore\nProducts\nInterview CoPilot™\nHow it works\nDownload Our App\nPricing\nMore\nFeatures\nLive Interview\nPractice Interview\nInterview Debrief\nScreen Help\nStealth Mode\nMore\nUse Cases\nFor Software Engineers\nFor Product Managers\nFor Consultants\nFor Data Scientists\nFor Finance Professionals\nFor Remote Jobs\nMore\nCareer Tools\nAI Salary Calculator\nResources\nBlog\nGlossary\nInternships\nGuide\nTech Layoffs\nArticles\nCompare\nFAQ\nMore\nRefund Policy\nPrivacy Policy\nTerms & Conditions\nSecurity\nDisclaimer: This platform provides guidance, resources, and support to enhance your job search. However, securing employment within 30 days depends on various factors beyond our control, including market conditions, individual effort, and employer decisions. We do not guarantee job placement within any specific timeframe. © 2026 Final Round AI, 188 King St, Unit 402 San Francisco, CA, 94107",
+  "controls": [
+    {
+      "tag": "BUTTON",
+      "text": "Product",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Product",
+      "href": "https://www.finalroundai.com/interview-copilot",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Features",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Explore",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Resources",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://www.finalroundai.com/subscription",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Help",
+      "href": "https://docs.finalroundai.com/",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Sign up - It's Free!",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Download For Apple",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Download For Windows",
+      "href": "https://releases.finalroundai.com/latest/latest.exe",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Rama Krishna • Data Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Emily • Senior Software Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Rama Krishna • Data Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Emily • Senior Software Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Rama Krishna • Data Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Emily • Senior Software Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Inourie • Senior Software Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Rama Krishna • Data Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Emily • Senior Software Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Inourie • Senior Software Engineer",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "View more",
+      "type": "submit"
+    },
+    {
+      "tag": "A",
+      "text": "Get in Touch",
+      "href": "mailto:hi@finalroundai.com",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Get in Touch",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Is it really invisible in interviews?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Can it help with coding interviews?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Does it work with Zoom, Teams, and HackerRank?",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Get Started",
+      "href": "https://www.finalroundai.com/dashboard",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "About",
+      "href": "https://www.finalroundai.com/about",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact Us",
+      "href": "https://www.finalroundai.com/contact",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Referral Program",
+      "href": "https://www.finalroundai.com/referral-program",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Special Discount",
+      "href": "https://www.finalroundai.com/special-discount",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Careers",
+      "href": "https://www.finalroundai.com/careers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://www.finalroundai.com/frequently-asked-questions",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Media Kit",
+      "href": "https://www.finalroundai.com/media-kit",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "How Final Round AI Works",
+      "href": "https://www.youtube.com/watch?v=nBoH3bjPLWQ",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Changelog",
+      "href": "https://www.finalroundai.com/updates",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Interview CoPilot™",
+      "href": "https://www.finalroundai.com/interview-copilot",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "How it works",
+      "href": "https://www.finalroundai.com/interview-copilot",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download Our App",
+      "href": "https://www.finalroundai.com/download?from=shared-marketing-footer",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://www.finalroundai.com/subscription",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Live Interview",
+      "href": "https://www.finalroundai.com/live-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Practice Interview",
+      "href": "https://www.finalroundai.com/ai-mock-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Interview Debrief",
+      "href": "https://www.finalroundai.com/interview-debrief",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Screen Help",
+      "href": "https://www.finalroundai.com/screen-help",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Stealth Mode",
+      "href": "https://www.finalroundai.com/stealth-mode",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "For Software Engineers",
+      "href": "https://www.finalroundai.com/use-cases/software-engineers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Product Managers",
+      "href": "https://www.finalroundai.com/use-cases/product-managers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Consultants",
+      "href": "https://www.finalroundai.com/use-cases/for-consultants",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Data Scientists",
+      "href": "https://www.finalroundai.com/use-cases/data-scientists",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Finance Professionals",
+      "href": "https://www.finalroundai.com/use-cases/finance-professionals",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Remote Jobs",
+      "href": "https://www.finalroundai.com/use-cases/remote-jobs",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "AI Salary Calculator",
+      "href": "https://www.finalroundai.com/ai-salary-calculator",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://www.finalroundai.com/blog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Glossary",
+      "href": "https://www.finalroundai.com/glossary",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Internships",
+      "href": "https://www.finalroundai.com/internships",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Guide",
+      "href": "https://www.finalroundai.com/guide",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Tech Layoffs",
+      "href": "https://www.finalroundai.com/tech-layoffs",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Articles",
+      "href": "https://www.finalroundai.com/articles",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Compare",
+      "href": "https://www.finalroundai.com/compare",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://www.finalroundai.com/frequently-asked-questions",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Refund Policy",
+      "href": "https://www.finalroundai.com/refund-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://www.finalroundai.com/privacy-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms & Conditions",
+      "href": "https://www.finalroundai.com/terms-of-use",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Security",
+      "href": "https://www.finalroundai.com/security",
+      "type": ""
+    }
+  ]
+}

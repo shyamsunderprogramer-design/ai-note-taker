@@ -1,0 +1,195 @@
+{
+  "name": "interviewhelper-ai",
+  "url": "https://interviewhelper.ai/",
+  "title": "Ace your interview with AI-powered practice",
+  "text": "Skip to content\nHome\nProduct\nPricing\nFAQ\nChangelog\nDocs\nContact\nDownload\nInterview Helper AI\nAce your next interview with\nAI-powered practice and on-screen help\n\nRun realistic mock interviews with adjustable voice and difficulty, or get instant answers from your screen and microphone.\n\nDownload\nSee pricing\nWindows\nWorks with Monaco editors\nMic & system audio\nScreenshots (3 modes)\nPractice Mode\nAdjustable difficulty (easy → hard)\nSerious or cheerful tone; male or female voice\nSpoken questions with live grading on your answer\nSerious\nCheerful\nMale\nFemale\nAssist Mode\nAnswers from screenshots and your mic\nKeystroke typing into editors (works with Monaco)\n3 capture modes: Watched folder, Hotkey, Periodic\nWatched folder\nHotkey\nPeriodic\nHow it works\n1\nCapture\n\nSpeak or screenshot.\n\n2\nUnderstand\n\nAI transcribes/reads and drafts the answer.\n\n3\nApply\n\nView in overlay or type into your editor.\n\nFeatures\nKeystroke Pasting\n\nTypes answers into Monaco editors with indentation options.\n\nVoice & Tone Controls\n\nChoose voice gender and tone to match the scenario.\n\nSystem Audio Support\n\nUse with Zoom or YouTube; captures system audio when needed.\n\nReal-time Transcription\n\nGet accurate live transcripts while you speak.\n\nOverlay Panel\n\nAlways-on-top panel for quick reference.\n\nLogging & Diagnostics\n\nUnderstand performance and troubleshoot easily.\n\nHotkeys\n\nSpeed up your flow with customizable shortcuts.\n\nPrivacy\n\nLocal settings; only sends what’s needed.\n\nPricing\nSee full pricing\nMonthly\n$19.99/mo\n\nOpenAI API included\n\nGet Monthly\nBest value\nYearly\n$199/yr\n\nOpenAI API included\n\nGet Yearly\nLifetime BYOK\n$79.99\n\nUse your own OpenAI API key\n\nGet Lifetime\n\nUse responsibly and follow the rules of your platform. Practice Mode is perfect for ethical prep.\n\nFAQ\nWhat happens if I click “Start Listening”?\nWhat happens if I click “Start Capturing”?\nWhy paste as keystrokes versus pasting from the clipboard?\nWill this app provide answers to problems from LeetCode, HackerRank, CoderPad, etc.?\nCan I change the interview voice and tone?\nDoes the app record system audio?\nSee all FAQs →\nWindows\nGet started\n\nPractice interviews with AI or get instant on‑screen assistance.\n\nDownload\nSee pricing\nProduct\nPractice\nAssist\nHow it works\nFeatures\nCompany\nPricing\nFAQ\nChangelog\nContact\nResources\nDocs\nKeyboard shortcuts\nRelease notes\nLegal\nPrivacy\nTerms\n© 2026 Interview Helper AI. All rights reserved.",
+  "controls": [
+    {
+      "tag": "A",
+      "text": "Skip to content",
+      "href": "https://interviewhelper.ai/#main",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Home",
+      "href": "https://interviewhelper.ai/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Product",
+      "href": "https://interviewhelper.ai/product",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://interviewhelper.ai/faq",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Changelog",
+      "href": "https://interviewhelper.ai/changelog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Docs",
+      "href": "https://interviewhelper.ai/docs",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact",
+      "href": "https://interviewhelper.ai/contact",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download",
+      "href": "https://interviewhelper.ai/#download",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download",
+      "href": "https://interviewhelper.ai/#download",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "See pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "See full pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Get Monthly",
+      "href": "https://interviewhelper.ai/checkout?plan=monthly",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Get Yearly",
+      "href": "https://interviewhelper.ai/checkout?plan=yearly",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Get Lifetime",
+      "href": "https://interviewhelper.ai/checkout?plan=lifetime-byok",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "See all FAQs →",
+      "href": "https://interviewhelper.ai/faq",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download",
+      "href": "https://download.interviewhelper.ai/latest/InterviewHelperAI.msi",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "See pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Practice",
+      "href": "https://interviewhelper.ai/#practice",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Assist",
+      "href": "https://interviewhelper.ai/#assist",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "How it works",
+      "href": "https://interviewhelper.ai/#how",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Features",
+      "href": "https://interviewhelper.ai/#features",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://interviewhelper.ai/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://interviewhelper.ai/faq",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Changelog",
+      "href": "https://interviewhelper.ai/changelog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact",
+      "href": "https://interviewhelper.ai/contact",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Docs",
+      "href": "https://interviewhelper.ai/docs",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Keyboard shortcuts",
+      "href": "https://interviewhelper.ai/keyboard-shortcuts",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Release notes",
+      "href": "https://interviewhelper.ai/release-notes",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy",
+      "href": "https://interviewhelper.ai/privacy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms",
+      "href": "https://interviewhelper.ai/terms",
+      "type": ""
+    }
+  ],
+  "errors": []
+}

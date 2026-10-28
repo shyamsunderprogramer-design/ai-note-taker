@@ -1,0 +1,65 @@
+{
+  "status": "Review complete \u2014 issues found; not release-certified",
+  "suites": [
+    {
+      "name": "Desktop (Electron unit tests)",
+      "result": "70 passed"
+    },
+    {
+      "name": "Web unit tests",
+      "result": "5 passed"
+    },
+    {
+      "name": "Mobile unit tests",
+      "result": "34 passed / 5 suites"
+    },
+    {
+      "name": "Full backend + startup",
+      "result": "1,173 passed; 49 failed; 61 skipped"
+    },
+    {
+      "name": "Focused backend recheck (overlaps full suite)",
+      "result": "68 passed; 1 failed; 2 skipped \u2014 confirms streaming tests depend on import order"
+    },
+    {
+      "name": "Live API integration (isolated backend)",
+      "result": "37 passed; 20 failed; 2 setup errors \u2014 replaces the 59 API skips with an actual run"
+    },
+    {
+      "name": "Existing Chromium + Firefox E2E suite",
+      "result": "16 passed; 28 failed; extensionless URL/404 problems in test server"
+    },
+    {
+      "name": "Built-web five-page smoke check",
+      "result": "Passed; no captured page errors"
+    },
+    {
+      "name": "Saved conversations browser acceptance",
+      "result": "Passed; synthetic search/sort/pagination/delete-confirmation scenarios"
+    },
+    {
+      "name": "Hands-free recovery browser acceptance",
+      "result": "Passed; partial preservation, provider attribution, cooldown, cancellation, local fallback and exhaustion"
+    },
+    {
+      "name": "Production web build",
+      "result": "Passed; existing classic-script bundling warnings remain"
+    },
+    {
+      "name": "Browser extension JavaScript syntax",
+      "result": "Passed; no actual extension installation/capture test"
+    }
+  ],
+  "issues": [
+    "The full test run is NOT all green. No product fixes were made during this review.",
+    "Desktop overlay error: file:// makes location.hostname empty; caption/interview overlays construct ws://:8000/ws/transcribe. One such error was observed during the tour; both pages share the URL construction.",
+    "Full backend tests mutate streaming functions when importing the app. Forty-eight full-suite stream tests fail after startup converts generators to async generators; the affected tests pass in the focused recheck.",
+    "A clean isolated backend lacks the expected data/recordings directory. The directory-existence test fails; two related checks skip. Existing personal recordings were intentionally excluded.",
+    "API integration: BYOK status returned 500; conversation list/create returned 404; multiple tests received 422 due to payload/contract mismatch; document list expects a list but receives a pagination object; mock interview requests/setup timed out. Individual failures are in the report.",
+    "The legacy E2E server serves plain files without extensionless routing. Many /feature paths return 404. Some shallow page tests even pass on error pages, so their pass count is not feature certification.",
+    "Isolated API logs also contain AuditLogRepository: NoneType object is not callable. This error was also seen earlier in the desktop logs; it needs investigation.",
+    "No real microphone/system-audio recording, paid-provider quota exhaustion, SSO, voice cloning, external integrations, outbound messages, or destructive operations on personal data were performed. Those workflows remain unverified in this final review.",
+    "Previous 30-minute interview run (separate evidence): 60/60 responses and 20/20 recoveries completed, but two numerical hallucinations and recurring cache/cash transcription errors affected quality.",
+    "Runtime model listings differ from the static HTML definitions. A listed model and a token-budget option do not guarantee provider availability or supported context size."
+  ]
+}

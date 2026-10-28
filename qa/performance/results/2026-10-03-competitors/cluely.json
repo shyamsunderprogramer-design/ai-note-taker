@@ -1,0 +1,361 @@
+{
+  "name": "cluely",
+  "url": "https://cluely.com/",
+  "title": "Cluely | Undetectable AI Notetaker & Meeting Assistant",
+  "text": "Cluely\nUndetectability\nMobile\nBlog\nGet for Mac\n#1 Undetectable AI for Meetings\nCluely takes perfect meeting notes and gives real-time answers, all while completely undetectable\nGet for Mac\nHide\nWhat should I say?\n\n“A discounted cash flow model values a company by projecting future free cash flows and discounting them to present value using the weighted average cost of capital.”\n\nAssist\nWhat should I say?\nFollow-up questions\nRecap\nAsk about your screen or conversation, or\n⌘\n↵\nfor Assist\nSmart\nHow Cluely helps during a meeting\nCluely \nlistens in to the conversation\n\nIt picks up the context of your meeting in real time, so it can help when you need it.\n\n00:00\nRecording\nAssist\nWhat should I say?\nFollow-up questions\nRecap\nAsk about your screen or conversation, or\n⌘\n↵\nfor Assist\nSmart\nWhen you need help, Cluely \nassists you instantly\n\nHit Cmd/Ctrl + Enter and Cluely helps you with AI in the moment.\n\nHide\nAssist\nViewed screen\n\nCluely is an AI meeting assistant that listens in real time, understands what’s being said, and gives you instant answers, notes, and next steps, all while staying completely undetectable on your screen.\n\nAssist\nWhat should I say?\nFollow-up questions\nRecap\nAsk about your screen or conversation, or\n⌘\n↵\nfor Assist\nSmart\nInstant meeting notes\n\nThe easiest way to get beautiful, shareable meeting notes.\n\nUndetectable in every way\n\nSuite of features to use Cluely without a trace.\n\nMeeting participants (4)\nNo bots detected\nGina Huels (You)\nginahue65@cluely.com\nOwner\nTodd Cremin\ntodd.cremin@cluely.com\nSpeaker\nHolly Gleason\nholly_gleaso1972@cluely.com\nSpeaker\nTomas Hansen\ntomas_hansen@cluely.com\nSpeaker\nCluely\n\nDoesn't join meetings.Cluely never joins your meetings, so there are no bots and no extra people on the guest list.\n\nInvisible to others\nVisible to you\nAI Response\nAdd a check for missinguserIdbefore calling the API.\nAlso handledata.name safely to avoid undefined.\n\nInvisible to screen share.Cluely never shows up in shared screens, recordings, or external meeting tools.\n\nAI Response\ncommand\n↑\n↑\n↑\n↑\n\nFollows your eyes.Cluely window is fully moveable so you can position it exactly where you're looking.\n\nCOMPATIBLE WITH EVERY TOOL\nZoom\nSlack\nWebex\nMicrosoft Teams\nGoogle Meet\nReal-time transcription\n12+\nLanguages\nWe support over 12 different languages, including English, Chinese, Spanish, and more.\n300ms\nResponse time\nWe have the fastest live transcription available.\nTest us against any other competitor.\n95%\nTranscription accuracy\nTrusted by many teams for reliable transcription.\nAll processed with industry-leading accuracy.\nFrequently asked questions\nWhy real-time vs. a regular AI notetaker?\nWho is Cluely for?\nIs Cluely free?\nHow is it undetectable in meetings?\nWhat languages and apps are supported?\nCan I talk to customer support?\nMeeting AI that helps during the call, not after.\n\nTry Cluely on your next meeting today.\n\nGet for Mac\nCluely\nProduct\nDownload\nPricing\nUndetectability\nCareers\nResources\nMobile\nNew\nBlog\nManifesto\nPress\nBug Bounty\nCompare\nCluely vs Otter\nCluely vs Granola\nOtter Alternatives\nWhat Is an AI Notetaker\nSupport\nPrivacy Policy\nTerms of Service\nHelp Center\nContact Us\nAll systems operational\n\n© 2026 Cluely. All rights reserved.\n\nFollow us on Twitter\nJoin us on Discord\nFollow us on Instagram\nFollow us on GitHub",
+  "controls": [
+    {
+      "tag": "A",
+      "text": "Cluely",
+      "href": "https://cluely.com/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Undetectability",
+      "href": "https://cluely.com/#undetectability",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mobile",
+      "href": "https://cluely.com/mobile",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://cluely.com/blog",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Get the desktop app",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Get for Mac",
+      "href": "https://api.v2.cluely.com/desktop-download/mac/latest.dmg?glass=bisect",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "TriggerOpen menu",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Get the desktop app",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Get for Mac",
+      "href": "https://api.v2.cluely.com/desktop-download/mac/latest.dmg?glass=bisect",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Hide",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Assist",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "What should I say?",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Follow-up questions",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Recap",
+      "type": "submit"
+    },
+    {
+      "tag": "INPUT",
+      "text": "",
+      "type": "text",
+      "placeholder": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Smart",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Assist",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "What should I say?",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Follow-up questions",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Recap",
+      "type": "submit"
+    },
+    {
+      "tag": "INPUT",
+      "text": "",
+      "type": "text",
+      "placeholder": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Smart",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Hide",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Assist",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "What should I say?",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Follow-up questions",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Recap",
+      "type": "submit"
+    },
+    {
+      "tag": "INPUT",
+      "text": "",
+      "type": "text",
+      "placeholder": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Smart",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "command",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "↑",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "↑",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "↑",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "↑",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Why real-time vs. a regular AI notetaker?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Who is Cluely for?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Is Cluely free?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "How is it undetectable in meetings?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "What languages and apps are supported?",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Can I talk to customer support?",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Get for Mac",
+      "href": "https://api.v2.cluely.com/desktop-download/mac/latest.dmg?glass=bisect",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Cluely",
+      "href": "https://cluely.com/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download",
+      "href": "https://cluely.com/download",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://cluely.com/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Undetectability",
+      "href": "https://cluely.com/undetectability",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Careers",
+      "href": "https://cluely.com/careers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mobile\nNew",
+      "href": "https://cluely.com/mobile",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://cluely.com/blog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Manifesto",
+      "href": "https://cluely.com/manifesto",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Press",
+      "href": "https://cluely.com/press",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Bug Bounty",
+      "href": "https://cluelyhq.notion.site/bugbounty",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Cluely vs Otter",
+      "href": "https://cluely.com/blog/cluely-vs-otter",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Cluely vs Granola",
+      "href": "https://cluely.com/blog/cluely-vs-granola",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Otter Alternatives",
+      "href": "https://cluely.com/blog/otter-ai-alternatives",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "What Is an AI Notetaker",
+      "href": "https://cluely.com/blog/ai-notetaker-guide",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://cluely.com/privacy-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms of Service",
+      "href": "https://cluely.com/terms",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Help Center",
+      "href": "https://support.cluely.com/en/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact Us",
+      "href": "mailto:help@cluely.com",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "All systems operational",
+      "href": "https://cluely.trust.pagerduty.com/posts/dashboard/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Follow us on Twitter",
+      "href": "https://x.com/cluely",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Join us on Discord",
+      "href": "https://discord.gg/cluely",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Follow us on Instagram",
+      "href": "https://www.instagram.com/cluely/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Follow us on GitHub",
+      "href": "https://github.com/cluely",
+      "type": ""
+    }
+  ]
+}

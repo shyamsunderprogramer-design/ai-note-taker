@@ -85,7 +85,7 @@ class APIClient {
    */
   async getConversations() {
     try {
-      const response = await fetch(`${API_BASE}/conversations`);
+      const response = await fetch(`${API_BASE}/conversations`, { headers: this._authHeaders() });
       return response.ok ? await response.json() : [];
     } catch {
       return [];
@@ -99,7 +99,7 @@ class APIClient {
    */
   async loadConversation(id) {
     try {
-      const response = await fetch(`${API_BASE}/conversations/${id}`);
+      const response = await fetch(`${API_BASE}/conversations/${encodeURIComponent(id)}`, { headers: this._authHeaders() });
       return response.ok ? await response.json() : null;
     } catch {
       return null;
@@ -115,7 +115,7 @@ class APIClient {
     try {
       const response = await fetch(`${API_BASE}/conversations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...this._authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(conversation)
       });
       return response.ok;

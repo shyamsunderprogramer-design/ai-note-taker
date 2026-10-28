@@ -1,0 +1,40 @@
+{
+  "model": "lfm2.5:latest",
+  "input": "Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Notes: Please send the project summary by Friday. Maya will review the budget. Daniel will schedule the next meeting.",
+  "gates": {
+    "nonempty_responses": true,
+    "warm_first_content_under_2s": true,
+    "event_loop_lag_under_100ms": false,
+    "factual_coverage": false
+  },
+  "samples": [
+    {
+      "run": 1,
+      "first_content_seconds": 2.426561209009378,
+      "total_seconds": 2.864076291996753,
+      "max_event_loop_lag_seconds": 2.8442937910044566,
+      "response": "<think>We need to produce a Slack message between two senior engineers. Constraints:\n\n- No headers/titles (=== or #)\n- No tables- No bullet lists, no numbered lists- No emojis- No code blocks unless asked- No \"Here's\" or \"Sure\"\n",
+      "errors": [],
+      "required_facts_present": false
+    },
+    {
+      "run": 2,
+      "first_content_seconds": 0.01553229198907502,
+      "total_seconds": 0.408192874994711,
+      "max_event_loop_lag_seconds": 0.3883377079950878,
+      "response": "<think>We need to produce a Slack message between two senior engineers. Constraints:\n\n- No headers/titles (=== or #)\n- No tables- No bullet lists, no numbered lists- No emojis- No code blocks unless asked- No \"Here's\" or \"Sure\"\n",
+      "errors": [],
+      "required_facts_present": false
+    },
+    {
+      "run": 3,
+      "first_content_seconds": 0.014090958997257985,
+      "total_seconds": 0.4174579590035137,
+      "max_event_loop_lag_seconds": 0.39757725000206845,
+      "response": "<think>We need to produce a Slack message between two senior engineers. Constraints:\n\n- No headers/titles (=== or #)\n- No tables- No bullet lists, no numbered lists- No emojis- No code blocks unless asked- No \"Here's\" or \"Sure\"\n",
+      "errors": [],
+      "required_facts_present": false
+    }
+  ],
+  "limits": "Local synthetic prompt, RAG disabled, first run may include model load. Fact matching is not a human quality evaluation. No HTTP frontend or auth included."
+}

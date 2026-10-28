@@ -105,6 +105,32 @@
       "models_used": [],
       "avg_response_time_seconds": null,
       "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1789184474.377971,
+      "end_time": 1789184474.377971,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
+    },
+    {
+      "conversation_id": null,
+      "start_time": 1789184624.09083,
+      "end_time": 1789184624.09083,
+      "duration_minutes": 0.0,
+      "message_count": 0,
+      "user_message_count": 0,
+      "ai_message_count": 0,
+      "modes_used": [],
+      "models_used": [],
+      "avg_response_time_seconds": null,
+      "total_tokens": 0
     }
   ],
   "daily": {
@@ -137,6 +163,18 @@
     "2026-06-07": {
       "date": "2026-06-07",
       "conversation_count": 1,
+      "total_duration_minutes": 0.0,
+      "total_messages": 0,
+      "messages_by_role": {
+        "user": 0,
+        "assistant": 0
+      },
+      "messages_by_mode": {},
+      "messages_by_model": {}
+    },
+    "2026-09-11": {
+      "date": "2026-09-11",
+      "conversation_count": 2,
       "total_duration_minutes": 0.0,
       "total_messages": 0,
       "messages_by_role": {

@@ -50,7 +50,7 @@ override (see `Phase 7 K8s + Docker polish` memory).
 
 - Base image pinned in `Dockerfile` (no `latest` tag).
 - `trivy-scan.sh` runs in CI; see
-  [`docs/devsecops/supply-chain/`](../devsecops/supply-chain/).
+  [`docs/devsecops/supply-chain/`](../../devsecops/supply-chain/README.md).
 - Multi-stage build keeps build-time deps out of the runtime
   image.
 

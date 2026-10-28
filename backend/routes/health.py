@@ -108,7 +108,7 @@ async def health_database():
 
 
 @router.get("/health/modules")
-async def health_modules():
+def health_modules():
     """Feature health dashboard - show which modules are available"""
     # Check Neo4j connection
     neo4j_connected = False
@@ -120,10 +120,20 @@ async def health_modules():
             neo4j_connected = False
 
     # Check encryption key
-    encryption_available = bool(os.getenv("ENCRYPTION_KEY"))
+    from security.encryption import is_encryption_available
+    encryption_available = is_encryption_available()
+    from routes.ollama import _probe_ollama
+    local_status = _probe_ollama()
+    try:
+        import whisper_handler
+        speech_ready = whisper_handler.model_ready.is_set() and bool(whisper_handler.models)
+    except ImportError:
+        speech_ready = False
 
     # Check AI providers
     def has_provider_key(provider, env_var):
+        if os.getenv("ANT_DISABLE_KEY_SERVER") == "1":
+            return bool(os.getenv(env_var, "").strip())
         try:
             from lib.http_client import sync_client
             headers = {}
@@ -148,7 +158,7 @@ async def health_modules():
         "anthropic": has_provider_key("anthropic", "ANTHROPIC_API_KEY"),
         "google": has_provider_key("google", "GOOGLE_API_KEY"),
         "groq": has_provider_key("groq", "GROQ_API_KEY"),
-        "ollama": has_provider_key("ollama", "OLLAMA_API_KEY"),
+        "ollama": bool(local_status["available"] and any(not model.endswith((":cloud", "-cloud")) for model in local_status["models"])),
     }
     active_providers = sum(providers.values())
 
@@ -163,7 +173,7 @@ async def health_modules():
     modules = {
         "database": {
             "available": DATABASE_AVAILABLE,
-            "status": "green" if DATABASE_AVAILABLE else "red",
+            "status": "green" if DATABASE_AVAILABLE and db_manager._initialized else "yellow",
             "type": "sqlite" if os.getenv("USE_SQLITE", "").lower() == "true" else "postgresql",
             "required_dependency": "sqlalchemy + database server"
         },
@@ -174,9 +184,9 @@ async def health_modules():
             "required_dependency": "neo4j server + NEO4J_PASSWORD env var"
         },
         "whisper": {
-            "available": True,
-            "status": "green",
-            "required_dependency": "whisper model files (auto-downloaded)"
+            "available": speech_ready,
+            "status": "green" if speech_ready else "yellow",
+            "required_dependency": "A loaded local speech model"
         },
         "voice_clone": {
             "available": VOICE_CLONE_AVAILABLE,
@@ -185,11 +195,11 @@ async def health_modules():
             "required_dependency": "Edge TTS (always available), RVC models (optional)"
         },
         "ai_router": {
-            "available": True,
-            "status": "green",
+            "available": active_providers > 0,
+            "status": "green" if active_providers else "yellow",
             "providers": providers,
             "active_providers": active_providers,
-            "required_dependency": "At least one AI provider key"
+            "required_dependency": "An installed local model or configured cloud provider"
         },
         "collaboration": {
             "available": COLLABORATION_AVAILABLE,
@@ -251,3 +261,14 @@ async def get_rate_limit_status(request: Request):
         "window_seconds": int(headers.get("X-RateLimit-Window", 60)),
         "allowed": allowed
     }
+
+@router.get('/health/ready')
+def readiness():
+    """Core readiness is separate from liveness and optional feature probes."""
+    from fastapi.responses import JSONResponse
+    database_ready = DATABASE_AVAILABLE and db_manager._initialized
+    return JSONResponse(status_code=200 if database_ready else 503, content={
+        'ready': database_ready,
+        'database_ready': database_ready,
+        'optional_features_url': '/health/modules',
+    })

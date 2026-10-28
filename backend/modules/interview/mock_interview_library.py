@@ -5,9 +5,12 @@ Strategy: Massive combinatorial template filling with lazy generation
 """
 
 import random  # nosec B311 — used for question randomization, not security
-from typing import Dict, List, Optional, Iterator
+import uuid
+from typing import Dict, List, Optional, Set, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
+import hashlib
+import threading
 
 @dataclass
 class InterviewQuestion:
@@ -905,17 +908,21 @@ class MockInterviewLibrary:
     Uses lazy generation - never runs out!
     """
 
-    def __init__(self, preload_count: int = 10000000):  # 10M default
+    def __init__(self, preload_count: int = 1000):
+        if not 1 <= preload_count <= 10000:
+            raise ValueError("Catalogue size must be between 1 and 10000")
+        self._load_lock = threading.Lock()
         self.preload_count = preload_count
         self._preloaded: List[InterviewQuestion] = []
         self._loaded = False
-        self._generator = _generator
+        self._generator = LazyQuestionGenerator(seed=42)
         self._total_preloaded = 0
         self._batch_size = 100000  # Generate in 100K chunks for memory efficiency
 
     def _ensure_loaded(self):
-        if not self._loaded:
-            self._load_preload()
+        with self._load_lock:
+            if not self._loaded:
+                self._load_preload()
 
     def _load_preload(self):
         """Load pregenerated questions in batches to avoid memory issues."""
@@ -931,9 +938,9 @@ class MockInterviewLibrary:
             yield self._generator.generate(count=1)[0]
 
     def get_question_count(self) -> int:
-        """Return theoretical maximum + actual loaded count."""
-        theoretical = self._generator.get_total_possible()
-        return max(theoretical, self._total_preloaded)
+        """Return the actual searchable catalogue size."""
+        self._ensure_loaded()
+        return self._total_preloaded
 
     def get_all_questions(self) -> List[InterviewQuestion]:
         self._ensure_loaded()
@@ -960,9 +967,11 @@ class MockInterviewLibrary:
                         categories: List[str] = None) -> List[InterviewQuestion]:
         result = []
         cats = categories or ["coding", "system_design", "behavioral", "technical"]
-        per_cat = max(1, num_questions // len(cats))
-        for cat in cats:
-            result.extend(self._generator.generate(role=role, category=cat, count=per_cat))
+        per_cat, remainder = divmod(max(0, num_questions), len(cats))
+        for index, cat in enumerate(cats):
+            count = per_cat + (1 if index < remainder else 0)
+            if count:
+                result.extend(self._generator.generate(role=role, category=cat, count=count))
         return result[:num_questions]
 
     def search_questions(self, query: str, limit: int = 100) -> List[InterviewQuestion]:
@@ -983,6 +992,7 @@ class MockInterviewLibrary:
         return {
             "total_questions_available": self.get_question_count(),
             "questions_preloaded": self._total_preloaded,
+            "theoretical_combinations": self._generator.get_total_possible(),
             "it_roles": len(IT_ROLES),
             "companies": len(ALL_COMPANIES),
             "categories": len(CATEGORIES),
@@ -990,8 +1000,8 @@ class MockInterviewLibrary:
         }
 
 
-# Global instance - 10M questions default
-mock_library = MockInterviewLibrary(preload_count=10000000)
+# Bounded searchable catalogue; practice questions are generated on demand.
+mock_library = MockInterviewLibrary()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

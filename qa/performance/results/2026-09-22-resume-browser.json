@@ -1,0 +1,7 @@
+{
+  "model": "qwen3.5:9b",
+  "elapsedSeconds": 3.855300000011921,
+  "visibleText": "AI[QWEN3.5:9B]3.9S\n\nI am a software engineer at Acme where I built a Python inventory service using PostgreSQL. My resume does not specify any other work experience or technical details beyond these facts.\n\nCopy\nRead",
+  "processing": false,
+  "passed": true
+}

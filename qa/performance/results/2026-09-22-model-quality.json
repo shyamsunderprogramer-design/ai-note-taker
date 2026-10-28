@@ -1,0 +1,53 @@
+{
+  "conditions": "Production local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "samples": [
+    {
+      "model": "qwen3.5:9b",
+      "case": "missing_fact",
+      "first_seconds": 3.047521999978926,
+      "total_seconds": 3.2352177500142716,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting",
+      "first_seconds": 2.6021520840004086,
+      "total_seconds": 3.536321667023003,
+      "answer": "The project summary is to be sent by Friday. Maya's task is to review the budget, and Daniel's task is to schedule the next meeting. Both owners and deadlines are specified for these actions.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical",
+      "first_seconds": 0.4446298750117421,
+      "total_seconds": 4.4949840839835815,
+      "answer": "In Kubernetes, readiness probes determine if a container is ready to accept traffic, while liveness probes detect if a container is stuck in a failure state and trigger a restart. Memory limits enforce a hard cap on the amount of RAM a container can use; when this limit is exceeded, the kernel sends a SIGKILL signal to terminate the process immediately. This termination causes the container to be removed from the pod's running set, which triggers a restart if the liveness probe or restart policy dictates it. The component that enforces the memory limit is the Linux cgroup subsystem associated with the container, which operates at the kernel level rather than within the Kubernetes control plane itself. Traffic removal occurs when the readiness probe fails or the service controller detects an unhealthy endpoint, whereas container restarts occur specifically when a liveness probe fails or the process is killed due to exceeding resource limits.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting_status",
+      "first_seconds": 0.4414761250372976,
+      "total_seconds": 2.1124766670400277,
+      "answer": "Priya proposed moving the release to Monday, but this remains a proposal rather than a decision since Omar requires test results before agreeing and no date was finalized. Lee has already sent the draft. The only action item is for Omar to review test results; his owner status is unspecified as he is the one needing them, and the deadline is unspecified pending those results.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting_owners",
+      "first_seconds": 0.4427296670037322,
+      "total_seconds": 1.3143537089927122,
+      "answer": "Elena will send the invoice on Tuesday. Marcus will check the contract with an unspecified deadline. Updating the launch checklist is a pending task with an unspecified owner and a deadline of Thursday.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical_restart",
+      "first_seconds": 0.4412142919609323,
+      "total_seconds": 4.061372958007269,
+      "answer": "No, a liveness probe does not need to fail for a container marked with `restartPolicy: Always` to restart after an OOMKill event. The Kubernetes kubelet automatically restarts the container immediately upon detecting that the process has exited due to an Out-Of-Memory (OOM) kill signal, regardless of the state of any liveness or readiness probes. Liveness probes are designed to detect application-level issues where the process is running but unresponsive; they do not influence the restart behavior triggered by a fatal system event like OOMKill. The mechanism that enforces the restart in this specific case is the kubelet's monitoring of container exit codes and signals, which triggers a restart for any non-`Never` restart policy when the container terminates unexpectedly.",
+      "errors": []
+    }
+  ]
+}

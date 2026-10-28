@@ -1,0 +1,121 @@
+{
+  "model": "small",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.12.0",
+  "model_load_seconds": 1.5096265830070479,
+  "fixture": "macOS Samantha 170 wpm; 3 synthetic clean-English clips",
+  "limits": "Not representative human speech; no microphone, network, streaming endpoint, or AI response measured.",
+  "gates": {
+    "synthetic_wer": true,
+    "faster_than_half_real_time": true,
+    "silence_no_hallucination": true
+  },
+  "metrics": {
+    "p50_seconds": 0.7938633750018198,
+    "p95_seconds": 0.9912747500056867,
+    "p95_real_time_factor": 0.15964130266968596,
+    "mean_wer": 0.015873015873015872,
+    "silence_transcript": ""
+  },
+  "samples": [
+    {
+      "clip": 0,
+      "run": 1,
+      "sample_rate": 22050,
+      "duration_seconds": 6.209387755102041,
+      "elapsed_seconds": 0.9912747500056867,
+      "real_time_factor": 0.15964130266968596,
+      "reference": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "transcript": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "wer": 0.0
+    },
+    {
+      "clip": 0,
+      "run": 2,
+      "sample_rate": 22050,
+      "duration_seconds": 6.209387755102041,
+      "elapsed_seconds": 0.7786697920091683,
+      "real_time_factor": 0.12540202395467445,
+      "reference": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "transcript": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "wer": 0.0
+    },
+    {
+      "clip": 0,
+      "run": 3,
+      "sample_rate": 22050,
+      "duration_seconds": 6.209387755102041,
+      "elapsed_seconds": 0.7757646249956451,
+      "real_time_factor": 0.12493415705247686,
+      "reference": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "transcript": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "wer": 0.0
+    },
+    {
+      "clip": 1,
+      "run": 1,
+      "sample_rate": 22050,
+      "duration_seconds": 5.9209977324263035,
+      "elapsed_seconds": 0.7985057500045514,
+      "real_time_factor": 0.13485999929227133,
+      "reference": "Tell me about a time you solved a difficult problem. What did you change, and how did you measure the result?",
+      "transcript": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+      "wer": 0.0
+    },
+    {
+      "clip": 1,
+      "run": 2,
+      "sample_rate": 22050,
+      "duration_seconds": 5.9209977324263035,
+      "elapsed_seconds": 0.7825202079984592,
+      "real_time_factor": 0.1321601938323659,
+      "reference": "Tell me about a time you solved a difficult problem. What did you change, and how did you measure the result?",
+      "transcript": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+      "wer": 0.0
+    },
+    {
+      "clip": 1,
+      "run": 3,
+      "sample_rate": 22050,
+      "duration_seconds": 5.9209977324263035,
+      "elapsed_seconds": 0.8027481669996632,
+      "real_time_factor": 0.1355765030280992,
+      "reference": "Tell me about a time you solved a difficult problem. What did you change, and how did you measure the result?",
+      "transcript": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+      "wer": 0.0
+    },
+    {
+      "clip": 2,
+      "run": 1,
+      "sample_rate": 22050,
+      "duration_seconds": 6.571700680272109,
+      "elapsed_seconds": 0.7938633750018198,
+      "real_time_factor": 0.12080029411335712,
+      "reference": "The service handles forty requests per second. We need to reduce response time and add a test before the next release.",
+      "transcript": "The service handles 40 requests per second. We need to reduce response time and add a test before the next release.",
+      "wer": 0.047619047619047616
+    },
+    {
+      "clip": 2,
+      "run": 2,
+      "sample_rate": 22050,
+      "duration_seconds": 6.571700680272109,
+      "elapsed_seconds": 0.7931304160010768,
+      "real_time_factor": 0.1206887614924416,
+      "reference": "The service handles forty requests per second. We need to reduce response time and add a test before the next release.",
+      "transcript": "The service handles 40 requests per second. We need to reduce response time and add a test before the next release.",
+      "wer": 0.047619047619047616
+    },
+    {
+      "clip": 2,
+      "run": 3,
+      "sample_rate": 22050,
+      "duration_seconds": 6.571700680272109,
+      "elapsed_seconds": 0.7991868329991121,
+      "real_time_factor": 0.12161035200495784,
+      "reference": "The service handles forty requests per second. We need to reduce response time and add a test before the next release.",
+      "transcript": "The service handles 40 requests per second. We need to reduce response time and add a test before the next release.",
+      "wer": 0.047619047619047616
+    }
+  ]
+}

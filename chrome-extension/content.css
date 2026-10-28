@@ -1,0 +1,6 @@
+/* Chrome Extension Styles — Stealth Build */
+/* No identifiable prefixes. Job save button uses data-role attribute, no class. */
+/* All overlay styles are inside closed Shadow DOM — not detectable by page scripts. */
+
+/* Notification (outside shadow — uses random class at runtime) */
+/* This file intentionally left minimal — all overlay CSS is injected into Shadow DOM by content.js */

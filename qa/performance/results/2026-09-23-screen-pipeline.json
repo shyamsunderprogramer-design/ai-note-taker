@@ -1,0 +1,22 @@
+{
+  "conditions": "Production provider adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "screen_typed",
+      "first_seconds": 0.703484583995305,
+      "total_seconds": 0.7644257500069216,
+      "answer": "Cedar is above budget by\u202f$1,400. (Its budget is $4,800 and spending is $6,200.)",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "screen_voice",
+      "first_seconds": 0.682004957983736,
+      "total_seconds": 0.710907916945871,
+      "answer": "Cedar is above budget by\u202f$1,400.",
+      "errors": []
+    }
+  ]
+}

@@ -5,14 +5,17 @@ Screen recording alongside audio, camera overlay, save/search/export.
 import os
 import json
 import uuid
+import time
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 logger = logging.getLogger("recording_manager")
 
-RECORDINGS_DIR = os.path.join("data", "recordings")
+_DATA_ROOT = Path(os.environ["ANT_DATA_DIR"]) if os.getenv("ANT_DATA_DIR") else Path(__file__).resolve().parents[2] / "data"
+RECORDINGS_DIR = str(Path(os.getenv("ANT_RECORDINGS_DIR", str(_DATA_ROOT / "recordings"))).resolve())
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 

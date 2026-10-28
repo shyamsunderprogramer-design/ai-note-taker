@@ -32,6 +32,16 @@ on:
       - 'k8s/**'
       - 'package*.json'
       - '.github/workflows/security.yml'
+  # Required so the dependency-review job (PR-only) ever runs
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'electron/**'
+      - 'infrastructure/**'
+      - 'docker/**'
+      - 'k8s/**'
+      - 'package*.json'
 
 permissions:
   contents: read
@@ -117,8 +127,9 @@ jobs:
           image-ref: 'ant-backend:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+          # Fail the scan on HIGH+ findings — reports are not enough
+          exit-code: '1'
           vuln-type: 'os,library'
 
       - name: Upload Trivy scan results to Security tab
@@ -171,7 +182,6 @@ jobs:
 
       - name: Run Checkov (Terraform)
         uses: bridgecrewio/checkov-action@6f26dc90000b74feb589a906cdfae540f5119895
-        continue-on-error: true
         with:
           directory: infrastructure/terraform
           framework: terraform
@@ -180,7 +190,6 @@ jobs:
 
       - name: Run Checkov (Kubernetes)
         uses: bridgecrewio/checkov-action@6f26dc90000b74feb589a906cdfae540f5119895
-        continue-on-error: true
         with:
           directory: k8s
           framework: kubernetes
@@ -229,32 +238,27 @@ jobs:
           tar xzf conftest_0.53.0_Linux_x86_64.tar.gz
           sudo mv conftest /usr/local/bin/
 
-      - name: Create OPA policy directory
-        run: mkdir -p .github/opa-policies
-
+      # Policies live in .github/opa-policies/ (docker.rego, kubernetes.rego)
       - name: Validate Docker policies
         run: |
           conftest test docker/Dockerfile.backend \
             --policy .github/opa-policies/ \
-            --output table || true
-        continue-on-error: true
+            --output table
 
       - name: Validate Kubernetes policies
         run: |
           conftest test k8s/helm/backend/templates/ \
             --policy .github/opa-policies/ \
-            --output table || true
-        continue-on-error: true
+            --output table
 
       - name: Validate Terraform policies
         run: |
           for dir in infrastructure/terraform/*/; do
             if [ -d "$dir" ]; then
               echo "OPA policy check for $dir"
-              conftest test "$dir" --policy .github/opa-policies/ --output table || true
+              conftest test "$dir" --policy .github/opa-policies/ --output table
             fi
           done
-        continue-on-error: true
 
   # ═══════════════════════════════════════════════════════════════════════
   # BANDIT PYTHON SECURITY LINT
@@ -277,7 +281,7 @@ jobs:
 
       - name: Run Bandit
         run: |
-          bandit -r . -c .bandit -f sarif -o bandit-results.sarif || true
+          bandit -r . -c .bandit -f sarif -o bandit-results.sarif
         working-directory: ./backend
 
       - name: Upload Bandit results to Security tab

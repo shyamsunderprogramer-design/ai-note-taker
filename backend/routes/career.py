@@ -1,5 +1,6 @@
 """Route module for career features: cover letter generation, resume tailoring,
 interview prep, salary insights, and skill gap analysis."""
+from lib.async_stream import iterate_stream
 import logging
 import re
 from typing import Dict, List
@@ -394,7 +395,7 @@ async def generate_cover_letter(
                 "Return only the cover letter text."
             )
             result_parts = []
-            async for chunk in route_ai_stream(prompt):
+            async for chunk in iterate_stream(route_ai_stream(prompt)):
                 result_parts.append(chunk)
             cover_letter = "".join(result_parts).strip()
             if cover_letter:
@@ -467,7 +468,7 @@ async def tailor_resume(
                 "'summary_suggestion' (a tailored professional summary)."
             )
             result_parts = []
-            async for chunk in route_ai_stream(prompt):
+            async for chunk in iterate_stream(route_ai_stream(prompt)):
                 result_parts.append(chunk)
             ai_result = "".join(result_parts).strip()
             if ai_result:
@@ -578,7 +579,7 @@ async def get_interview_prep(
                 "Return as structured text."
             )
             result_parts = []
-            async for chunk in route_ai_stream(prompt):
+            async for chunk in iterate_stream(route_ai_stream(prompt)):
                 result_parts.append(chunk)
             ai_result = "".join(result_parts).strip()
             if ai_result:
@@ -678,7 +679,7 @@ async def get_salary_insights(
                 "Return as structured text."
             )
             result_parts = []
-            async for chunk in route_ai_stream(prompt):
+            async for chunk in iterate_stream(route_ai_stream(prompt)):
                 result_parts.append(chunk)
             ai_result = "".join(result_parts).strip()
             if ai_result:
@@ -757,7 +758,7 @@ async def identify_skill_gaps(
                 "Return as structured text."
             )
             result_parts = []
-            async for chunk in route_ai_stream(prompt):
+            async for chunk in iterate_stream(route_ai_stream(prompt)):
                 result_parts.append(chunk)
             ai_result = "".join(result_parts).strip()
             if ai_result:

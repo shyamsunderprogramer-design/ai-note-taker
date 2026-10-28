@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "model": "groq-gpt-oss-120b",
+      "elapsedSeconds": 1.391699999988079,
+      "visibleText": "AI[OPENAI/GPT-OSS-120B]1.4S\n\nI worked as a software engineer at Acme, where I built an inventory service using Python. The service leveraged PostgreSQL as its database.\n\nCopy\nRead",
+      "processing": false,
+      "passed": true
+    },
+    {
+      "model": "auto",
+      "elapsedSeconds": 1.017199999988079,
+      "visibleText": "AI\nOpenai\nGoogle\nGroq\nOllama-Cloud\n[OPENAI/GPT-OSS-120B]1.0S\n\nAt Acme, I worked as a software engineer where I built an inventory service using Python. The service leveraged PostgreSQL as its database.\n\nCopy\nRead",
+      "processing": false,
+      "passed": true
+    }
+  ],
+  "limits": "Isolated loopback server; actual provider keys stay on backend. Synthetic resume. No user database, microphone or desktop capture."
+}

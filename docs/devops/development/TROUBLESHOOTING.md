@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> Common errors and their fixes for the ANT monorepo. For ops runbook, see [OPERATIONS.md](OPERATIONS.md). For migrations, see [MIGRATIONS.md](MIGRATIONS.md).
+> Common errors and their fixes for the ANT monorepo. For ops runbook, see [OPERATIONS.md](../operations/OPERATIONS.md). For migrations, see [MIGRATIONS.md](MIGRATIONS.md).
 
 ---
 
@@ -156,7 +156,7 @@ bcrypt<4.1
 
 OR migrate off passlib and use `bcrypt` directly.
 
-This is a known issue. See [memory/bcrypt-passlib-incompatibility.md](memory/bcrypt-passlib-incompatibility.md).
+Check the bcrypt/passlib versions against `backend/requirements.txt` and reinstall the pinned dependencies in the project virtual environment.
 
 ---
 

@@ -1,0 +1,15 @@
+{
+  "fixture": "macOS Samantha synthetic clean English; meeting actions",
+  "limits": "One synthetic fixture, accelerated packet delivery; not human speech or microphone acceptance.",
+  "duration_seconds": 6.2094375,
+  "decode_seconds": 1.3866173750138842,
+  "reference": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+  "transcript": "Please send the project summary by Friday. Maya will review the budget. and Daniel will schedule the next meeting.",
+  "previews": [
+    "Please send the project summary by Friday. Maya will review the budget.",
+    "and Daniel will schedule the next meeting."
+  ],
+  "wer": 0.0,
+  "worker_stopped": true,
+  "passed": true
+}

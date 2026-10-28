@@ -1,0 +1,295 @@
+{
+  "name": "finalround-dashboard",
+  "url": "https://www.finalroundai.com/dashboard",
+  "text": "Subscription\nSign up - It's Free!\n\nThis legacy web page is being retired soon.\n\nYou can keep using the remaining web tools here for now. For the best experience across interview launch, practice, reports, resumes, and materials, use the Final Round AI app. Your existing subscription remains available in the app.\n\nPrepare\nBring together your resume, target role, job details, and supporting materials.\nPerform\nUse the app for every interview type and practice interview workflow.\nReview\nRevisit reports, notes, and saved materials to improve your next round.\nDownload the app\nWelcome! Pick your interview type\nGeneral Interview\n\nWorks seamlessly across every major platform\n\nGoogle Meet\n\nZoom\n\nMicrosoft Teams\n\nDiscord\n\n+ More\nMock Interview\n\nPratice makes it perfect\n\nCase Study\n\nBehavioral\n\nTechnical\n\n1,047 users practicing now\nAPP EXPERIENCE RECOMMENDED\nThis web entry is retiring soon. Use the app for this interview type and a better experience.\nDownload app\nCoding Interview\n\nSolve coding challenges interactively with real-time AI feedback\n\nLeetCode\n\nMercor\n\nHackerRank\n\nCodeSignal\n\nCoderPad\n\nCodePen\n\n+ More\nAPP EXPERIENCE RECOMMENDED\nThis web entry is retiring soon. Use the app for this interview type and a better experience.\nDownload app\nPhone Interview\n\nListens to your call and delivers fast, AI-powered suggestions on the fly\n\nGoogle Meet\n\nZoom Phone\n\nDirect Call\n\nWhatsApp\n\n+ More\nAPP EXPERIENCE RECOMMENDED\nThis web entry is retiring soon. Use the app for this interview type and a better experience.\nDownload app\nOne Way Interview\n\nDetects questions in real time and suggests smart, tailored answers.\n\nMercor\n\nHireVue\n\nSpark Hire\n\nModern Hire\n\nVidCruiter\n\n+ More\nAPP EXPERIENCE RECOMMENDED\nThis web entry is retiring soon. Use the app for this interview type and a better experience.\nDownload app\nCompany\nAbout\nContact Us\nReferral Program\nSpecial Discount\nCareers\nFAQ\nMedia Kit\nHow Final Round AI Works\nChangelog\nMore\nProducts\nInterview CoPilot™\nHow it works\nDownload Our App\nPricing\nMore\nFeatures\nLive Interview\nPractice Interview\nInterview Debrief\nScreen Help\nStealth Mode\nMore\nUse Cases\nFor Software Engineers\nFor Product Managers\nFor Consultants\nFor Data Scientists\nFor Finance Professionals\nFor Remote Jobs\nMore\nCareer Tools\nAI Salary Calculator\nResources\nBlog\nGlossary\nInternships\nGuide\nTech Layoffs\nArticles\nCompare\nFAQ\nMore\nRefund Policy\nPrivacy Policy\nTerms & Conditions\nSecurity\nDisclaimer: This platform provides guidance, resources, and support to enhance your job search. However, securing employment within 30 days depends on various factors beyond our control, including market conditions, individual effort, and employer decisions. We do not guarantee job placement within any specific timeframe. © 2026 Final Round AI, 188 King St, Unit 402 San Francisco, CA, 94107",
+  "controls": [
+    {
+      "tag": "BUTTON",
+      "text": "Sign Up",
+      "type": "submit"
+    },
+    {
+      "tag": "A",
+      "text": "Subscription",
+      "href": "https://www.finalroundai.com/subscription-simple",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Sign up - It's Free!",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Download the app",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "+ More",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "+ More",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "+ More",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "+ More",
+      "type": "submit"
+    },
+    {
+      "tag": "A",
+      "text": "About",
+      "href": "https://www.finalroundai.com/about",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact Us",
+      "href": "https://www.finalroundai.com/contact",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Referral Program",
+      "href": "https://www.finalroundai.com/referral-program",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Special Discount",
+      "href": "https://www.finalroundai.com/special-discount",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Careers",
+      "href": "https://www.finalroundai.com/careers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://www.finalroundai.com/frequently-asked-questions",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Media Kit",
+      "href": "https://www.finalroundai.com/media-kit",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "How Final Round AI Works",
+      "href": "https://www.youtube.com/watch?v=nBoH3bjPLWQ",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Changelog",
+      "href": "https://www.finalroundai.com/updates",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Interview CoPilot™",
+      "href": "https://www.finalroundai.com/interview-copilot",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "How it works",
+      "href": "https://www.finalroundai.com/interview-copilot",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download Our App",
+      "href": "https://www.finalroundai.com/download?from=shared-marketing-footer",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://www.finalroundai.com/subscription",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Live Interview",
+      "href": "https://www.finalroundai.com/live-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Practice Interview",
+      "href": "https://www.finalroundai.com/ai-mock-interview",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Interview Debrief",
+      "href": "https://www.finalroundai.com/interview-debrief",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Screen Help",
+      "href": "https://www.finalroundai.com/screen-help",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Stealth Mode",
+      "href": "https://www.finalroundai.com/stealth-mode",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "For Software Engineers",
+      "href": "https://www.finalroundai.com/use-cases/software-engineers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Product Managers",
+      "href": "https://www.finalroundai.com/use-cases/product-managers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Consultants",
+      "href": "https://www.finalroundai.com/use-cases/for-consultants",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Data Scientists",
+      "href": "https://www.finalroundai.com/use-cases/data-scientists",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Finance Professionals",
+      "href": "https://www.finalroundai.com/use-cases/finance-professionals",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "For Remote Jobs",
+      "href": "https://www.finalroundai.com/use-cases/remote-jobs",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "AI Salary Calculator",
+      "href": "https://www.finalroundai.com/ai-salary-calculator",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://www.finalroundai.com/blog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Glossary",
+      "href": "https://www.finalroundai.com/glossary",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Internships",
+      "href": "https://www.finalroundai.com/internships",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Guide",
+      "href": "https://www.finalroundai.com/guide",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Tech Layoffs",
+      "href": "https://www.finalroundai.com/tech-layoffs",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Articles",
+      "href": "https://www.finalroundai.com/articles",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Compare",
+      "href": "https://www.finalroundai.com/compare",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "FAQ",
+      "href": "https://www.finalroundai.com/frequently-asked-questions",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "More",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Refund Policy",
+      "href": "https://www.finalroundai.com/refund-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://www.finalroundai.com/privacy-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms & Conditions",
+      "href": "https://www.finalroundai.com/terms-of-use",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Security",
+      "href": "https://www.finalroundai.com/security",
+      "type": ""
+    }
+  ]
+}

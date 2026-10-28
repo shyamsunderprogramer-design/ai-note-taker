@@ -1,0 +1,54 @@
+{
+  "conditions": "Local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "missing_fact",
+      "first_seconds": 1.0267199999652803,
+      "total_seconds": 1.0288709579617716,
+      "answer": "The resume does not list any AWS certifications, so there\u2019s no information about which certifications you hold or when you earned them.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting",
+      "first_seconds": 1.016659457993228,
+      "total_seconds": 1.2773180410149507,
+      "answer": "- Send the project summary \u2013 Owner: **unspecified**, Deadline: **Friday**  \n- Review the budget \u2013 Owner: **Maya**, Deadline: **unspecified**  \n- Schedule the next meeting \u2013 Owner: **Daniel**, Deadline: **unspecified**",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical",
+      "first_seconds": 2.524355541972909,
+      "total_seconds": 2.7150339169893414,
+      "answer": "Readiness probes affect the pod\u2019s readiness condition; when they fail, the endpoint controller removes the pod\u2019s IP from Service endpoints, so it stops receiving traffic while the container keeps running. Liveness probes affect the container\u2019s health; a failure causes the kubelet to restart the container according to the pod\u2019s restartPolicy, without altering Service routing. Memory limits are set in the pod spec; the kubelet configures cgroups in the kernel, which enforce the limit. If the container exceeds the limit, the kernel OOM\u2011killer kills it, and the kubelet may restart it per the restartPolicy.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_status",
+      "first_seconds": 1.6958769169868901,
+      "total_seconds": 1.8667687089764513,
+      "answer": "**Decisions:** None.\n\n**Proposals**\n- Priya proposed moving the release to Monday. (owner: Priya, deadline: unspecified)\n\n**Blockers**\n- Omar needs test results before agreeing to the release date. (owner: Omar, deadline: unspecified)\n\n**Completed work**\n- Lee sent the draft. (owner: Lee, deadline: unspecified)\n\n**Pending actions:** None.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_owners",
+      "first_seconds": 3.471981041948311,
+      "total_seconds": 3.5225223749876022,
+      "answer": "- Send invoice \u2013 Owner: Elena \u2013 Deadline: Tuesday  \n- Check contract \u2013 Owner: Marcus \u2013 Deadline: unspecified",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_restart",
+      "first_seconds": 1.7100857920013368,
+      "total_seconds": 1.9907692089909688,
+      "answer": "The affected resource is the container that was terminated with the **`OOMKilled`** reason. The **kubelet** (the node\u2011level controller) observes this termination status and, based on the pod\u2019s **`restartPolicy`** (\u202f`Always`\u202for\u202f`OnFailure`\u202f\u2192 restart;\u202f`Never`\u202f\u2192 do not restart), decides whether to launch a new instance. A liveness probe is only consulted while the container is running; its failure does not influence the restart of an OOMKilled container. Thus, the restart is driven by the termination reason and the pod\u2019s restartPolicy, not by a liveness probe.",
+      "errors": []
+    }
+  ]
+}

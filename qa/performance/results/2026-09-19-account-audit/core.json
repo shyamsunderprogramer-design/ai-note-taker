@@ -1,0 +1,59 @@
+{
+  "results": [
+    {
+      "name": "default-answer",
+      "seconds": 1.033,
+      "firstVisibleSeconds": 0.224,
+      "answer": "AI\nOpenai\nGoogle\nGroq\nOllama-Cloud\n[LLAMA-3.3-70B-VERSATILE]0.2S\nCopy\nRead",
+      "errors": []
+    },
+    {
+      "name": "resume-upload",
+      "state": "Answering as the person in audit-resume.md · Remove"
+    },
+    {
+      "name": "resume-answer",
+      "seconds": 6.703,
+      "firstVisibleSeconds": 5.487,
+      "answer": "AI[QWEN3.5:9B]6.6S\n\nMy most relevant project was building a Python inventory API for Acme that we deployed on Kubernetes. We added Redis caching to the system, which reduced the p95 latency from 900 ms down to 120 ms.\n\nCopy\nRead",
+      "errors": []
+    },
+    {
+      "name": "unsupported-experience",
+      "seconds": 2.643,
+      "firstVisibleSeconds": 0.621,
+      "answer": "AI[QWEN3.5:9B]2.5S\n\nI do not currently hold any AWS certifications based on the resume provided. My experience focuses on building and deploying systems like the Python inventory API at Acme using Kubernetes and Redis rather than earning specific cloud provider credentials. If asked about my cloud expertise in an interview, I would highlight how I have applied these skills to reduce latency by adding caching layers instead of relying on a certification badge.\n\nCopy\nRead",
+      "errors": []
+    },
+    {
+      "name": "resume-reload",
+      "state": {
+        "attached": true,
+        "name": "audit-resume.md",
+        "visible": true
+      }
+    },
+    {
+      "name": "long-detailed-answer",
+      "seconds": 8.722,
+      "firstVisibleSeconds": 0.822,
+      "answer": "AI[QWEN3.5:9B]8.7S\n\nI would start by checking the application logs on the healthy pods to see if they show errors or warnings that appeared right after the release, while looking at the restarting pods for crash loops or OOMKilled events. I would then examine the readiness and liveness probe configurations to ensure a pod is not being killed because it temporarily failed a health check during high load, which could cause traffic to be routed incorrectly. Next, I would inspect memory limits in the pod spec to see if the new code caused a spike that hit the limit and triggered an eviction or restart. Finally, I would verify database connections by checking for pool exhaustion or slow queries that might be causing timeouts even when the app itself is running. If the logs show consistent errors across multiple pods or if the database connection pool is full, I would decide to roll back the release immediately to restore service stability. To verify recovery, I would monitor error rates and latency metrics until they return to baseline levels after the rollback. To prevent this from happening again, I would increase memory limits if needed, tune the database connection pool size, add better circuit breakers in the code, or implement gradual rollout strategies like canary deployments instead of rolling all pods at once. For example, in my work at Acme building a Python inventory API with PostgreSQL and Redis, we reduced latency significantly by adding caching, but if a similar timeout occurred there, I would have checked whether the cache layer was overwhelmed or if the database pool was undersized for the new traffic pattern before deciding on a rollback.\n\nCopy\nRead",
+      "errors": []
+    },
+    {
+      "name": "history",
+      "state": {
+        "messages": 2,
+        "conversation": true
+      }
+    },
+    {
+      "name": "resume-remove",
+      "state": {
+        "removed": true,
+        "hidden": true
+      }
+    }
+  ],
+  "network": []
+}

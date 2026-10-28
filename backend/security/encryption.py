@@ -45,7 +45,9 @@ class EncryptionManager:
     def _get_default_key_file(self) -> str:
         """Get the default key file path based on machine-specific data"""
         # Store key in user's home directory or app data
-        if os.name == 'nt':  # Windows
+        if os.getenv("ANT_DATA_DIR"):
+            key_dir = Path(os.environ["ANT_DATA_DIR"]).resolve() / "encryption"
+        elif os.name == 'nt':  # Windows
             app_data = os.getenv('LOCALAPPDATA', os.path.expanduser('~'))
             key_dir = Path(app_data) / "AI_Note_Taker"
         else:  # Linux/Mac

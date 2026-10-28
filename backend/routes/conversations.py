@@ -311,3 +311,49 @@ async def get_template(template_id: str, user: User = Depends(require_authentica
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     return template
+# Persisted API conversations used by the web and mobile clients. Desktop IPC
+# conversations remain in their existing local store.
+from pydantic import BaseModel, Field
+from uuid import UUID
+from core.database import ConversationRepository
+
+
+class ConversationInput(BaseModel):
+    title: str = Field(default="Untitled conversation", max_length=500)
+    messages: list[dict] = Field(default_factory=list, max_length=10000)
+
+
+@router.get("/conversations")
+async def list_conversations(
+    limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
+    user: User = Depends(require_authentication),
+):
+    conversations = await ConversationRepository.get_by_user(str(user.id), limit=limit, offset=offset)
+    return [conversation.to_dict() for conversation in conversations]
+
+
+@router.post("/conversations", status_code=201)
+async def create_conversation(body: ConversationInput, user: User = Depends(require_authentication)):
+    conversation = await ConversationRepository.create(str(user.id), title=body.title, messages=body.messages)
+    if conversation is None:
+        raise HTTPException(status_code=500, detail="Could not save conversation")
+    saved = await ConversationRepository.get_by_id(str(conversation.id))
+    if saved is None:
+        raise HTTPException(status_code=500, detail="Could not read saved conversation")
+    return saved.to_dict()
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: UUID, user: User = Depends(require_authentication)):
+    conversation = await ConversationRepository.get_by_id(str(conversation_id))
+    if conversation is None or str(conversation.user_id) != str(user.id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation.to_dict()
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: UUID, user: User = Depends(require_authentication)):
+    await get_conversation(conversation_id, user)
+    if not await ConversationRepository.delete(str(conversation_id)):
+        raise HTTPException(status_code=500, detail="Could not delete conversation")
+    return {"deleted": True}

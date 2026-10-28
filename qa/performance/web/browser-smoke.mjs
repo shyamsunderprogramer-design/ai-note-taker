@@ -33,6 +33,11 @@ try {
     const response = await page.goto(`${origin}/${name}`);
     await page.waitForLoadState('networkidle');
     if (name === 'index.html') {
+      const unifiedReady = await page.evaluate(() =>
+        typeof window.liveSessionContext?.prompt === 'function'
+        && typeof window.observeUnifiedSessionEvent === 'function'
+        && !!document.getElementById('unifiedSessionBtn'));
+      if (!unifiedReady) errors.push('Unified session scripts did not initialize in production HTML');
       await page.locator('#unifiedSessionInfo').focus();
       await page.keyboard.press('Enter');
       const infoOpened = await page.evaluate(() =>
@@ -49,6 +54,15 @@ try {
       if (await page.evaluate(() => document.activeElement.id !== 'textInput' || isListening)) {
         errors.push('Skip link failed to focus the question input without starting audio');
       }
+      const captureHistory = await page.evaluate(() => {
+        loadConversationIntoUI({id:'qa-screen-metadata',messages:[{role:'user',text:'Read question 2',timestamp:123,captureMetadata:{status:'captured',capturedAt:100,displayId:2}}]});
+        const label = document.querySelector('.chat-message.user .msg-label');
+        const restored = label.textContent.includes('Screen context') && label.title.includes('Display 2') && currentMessages[0].captureMetadata.displayId === 2;
+        clearConversation();
+        currentConversationId = null;
+        return restored;
+      });
+      if (!captureHistory) errors.push('Screen metadata failed to survive actual chat history rendering');
       const preview = await page.evaluate(() => {
         textInput.value = 'My typed question';
         const speech = 'This is a complete spoken sentence that should remain readable without losing the beginning or cutting words.';
@@ -160,7 +174,7 @@ try {
         batchUpdateBubble('Hello reader');
         await frame();
         const notDuplicated = latestBotMessage.bubble.dataset.fullText === 'Hello reader';
-        // Streaming follows gently rather than jumping directly to the bottom.
+        // Streaming follows at the configured gentle speed rather than jumping.
         const follows = chatArea.scrollTop > streamStart
           || chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 5;
         chatArea.dispatchEvent(new WheelEvent('wheel', {deltaY: -100, bubbles: true}));
@@ -293,6 +307,32 @@ try {
       if (keyboard.starts !== 1 || !keyboard.started || !keyboard.stopped || !keyboard.typedWhileListening || !keyboard.restored || !keyboard.buttonStopped || keyboard.unintendedSubmissions) {
         errors.push(`Enter/processing regression: ${JSON.stringify(keyboard)}`);
       }
+      const continuousEnter = await page.evaluate(() => {
+        const previousHelp = window.requestUnifiedHelp;
+        const previousSubmit = submitText;
+        let helps = 0;
+        const typed = [];
+        window.unifiedSessionActive = true;
+        window.requestUnifiedHelp = () => helps++;
+        submitText = async text => typed.push(text);
+        setListeningUI(true);
+        const enter = target => target.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true,cancelable:true}));
+        textInput.value = '';
+        textInput.focus(); enter(textInput);
+        const emptyKeptListening = isListening && window.unifiedSessionActive;
+        textInput.value = 'Explain the conversation'; enter(textInput);
+        const typedKeptListening = isListening && typed.length === 1;
+        const liveButton = document.getElementById('unifiedSessionBtn');
+        liveButton.focus(); const defaultAllowed = enter(liveButton);
+        const focusedButtonKeptListening = isListening && !defaultAllowed && helps === 2;
+        window.unifiedSessionActive = false;
+        window.requestUnifiedHelp = previousHelp;
+        submitText = previousSubmit;
+        setListeningUI(false);
+        textInput.value = '';
+        return {emptyKeptListening,typedKeptListening,focusedButtonKeptListening};
+      });
+      if (Object.values(continuousEnter).some(value => !value)) errors.push(`Live helper Enter stopped capture: ${JSON.stringify(continuousEnter)}`);
       const live = await page.evaluate(() => {
         const before = currentMessages.length;
         showLiveHint({ session_id: 'first-call', answer_id: 1, partial: true, text: 'Opening sentence.' });

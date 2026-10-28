@@ -28,7 +28,7 @@ inventory, in priority order:
 ### Test strategy docs
 - `docs/qa/test-strategy.md` — what's covered, what's not, the test pyramid
 - `docs/qa/test-environment.md` — how to set up the test DB, mocks, etc.
-- `docs/qa/DIY_TEST_GUIDE.md` — moved from `docs/development/DIY_TEST_GUIDE.md`
+- `docs/qa/DIY_TEST_GUIDE.md` — moved from `docs/qa/DIY_TEST_GUIDE.md`
 - `docs/qa/troubleshooting.md` — debugging test failures
 
 ### Test-runner config

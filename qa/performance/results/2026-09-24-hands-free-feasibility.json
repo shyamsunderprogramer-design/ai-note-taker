@@ -1,0 +1,44 @@
+{
+  "scope": "QA-only prototype; synthetic failure scenarios and supplied partial text; real backup requests; no production recovery installed",
+  "cases": [
+    {
+      "name": "quota_before_text",
+      "failure": "Simulated quota-before-text scenario; no primary request",
+      "partial": "",
+      "provider": "groq",
+      "question": "Synthetic resume: Alex built Python APIs at Acme. No certifications are listed. JD: Python, Kubernetes, AWS certification required. Which AWS certifications do I hold? Use only resume evidence and distinguish unknown from absent.",
+      "qa_continuation_requests": 1,
+      "backup_text": "The resume lists no certifications, so there is no evidence that Alex holds any AWS certification. The status is unknown (none listed).",
+      "first_backup_text_seconds": 0.744,
+      "total_seconds": 0.796,
+      "completed": true,
+      "errors": []
+    },
+    {
+      "name": "output_limit",
+      "failure": "Synthetic partial answer representing an output limit",
+      "partial": "Cedar is $1,400 over budget.",
+      "provider": "groq",
+      "question": "Cedar budget $4800, spent $6200; Maple budget $3000, spent $2700. Give the variance for each project and the combined net overrun. Keep it under 80 words.",
+      "qa_continuation_requests": 1,
+      "backup_text": "Maple is $300 under budget. Combined net overrun is $1,100.",
+      "first_backup_text_seconds": 1.675,
+      "total_seconds": 1.714,
+      "completed": true,
+      "errors": []
+    },
+    {
+      "name": "cross_provider_disconnect",
+      "failure": "Synthetic partial answer representing a primary disconnect",
+      "partial": "I built Python APIs at Acme.",
+      "provider": "ollama-cloud",
+      "question": "Synthetic resume: Alex built Python APIs at Acme and added Redis caching. No certifications or Kubernetes experience are listed. JD: Python APIs, Redis, Kubernetes, AWS certification. Give a brief first-person role-fit answer using only resume evidence. Distinguish requirements from my experience; explain gaps as unspecified, not absent.",
+      "qa_continuation_requests": 1,
+      "backup_text": "I built Python APIs at Acme and added Redis caching to improve performance, which directly matches two of the listed requirements. My experience with Kubernetes is unspecified, and I hold no AWS certification listed on my resume.",
+      "first_backup_text_seconds": 7.696,
+      "total_seconds": 8.076,
+      "completed": true,
+      "errors": []
+    }
+  ]
+}

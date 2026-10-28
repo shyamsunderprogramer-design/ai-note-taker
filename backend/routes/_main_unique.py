@@ -91,7 +91,6 @@ from routes import deps as _route_deps  # noqa: E402
 
 
 # ── Root + health diagnostics ──────────────────────────────────────────
-@router.get("/")
 def health_check():
     """Root health probe — returns service + mode info."""
     state = getattr(_route_deps, "state", None)

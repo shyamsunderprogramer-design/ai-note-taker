@@ -1,0 +1,204 @@
+[
+  {
+    "id": "ANT-001",
+    "priority": "P0",
+    "title": "Test isolation and evidence",
+    "files": "backend/tests/conftest.py; backend/pytest.ini; e2e/playwright.config.js",
+    "evidence": "Live tests currently require fixed ports and some fixtures can import production state.",
+    "action": "Provide temporary data root, isolated auth, explicit API URL/ports and deterministic teardown. Make clean-checkout initialization part of the test harness.",
+    "acceptance": "All tests run without reading .env, writing personal data, or relying on an existing app instance.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-002",
+    "priority": "P0",
+    "title": "BYOK authentication coroutine",
+    "files": "backend/routes/ollama.py; backend/routes/deps.py",
+    "evidence": "Confirmed: get_byok_status receives a coroutine because the local auth helper does not await get_current_user.",
+    "action": "Use the shared awaited auth dependency; audit duplicate wrappers and BYOK configure/delete paths. Preserve all access checks.",
+    "acceptance": "Valid token returns status without 500; invalid/missing token gets 401/403; no coroutine warnings; user isolation tested.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-003",
+    "priority": "P0",
+    "title": "Audit database identity and lifecycle",
+    "files": "backend/security/audit.py; backend/core/database.py; backend/core/main.py",
+    "evidence": "Confirmed divergent import: audit uses database while app/auth use core.database. Logs show uninitialized session_maker.",
+    "action": "Use one canonical database module/manager and correct startup ordering. Keep missing optional dependency distinct from broken initialization.",
+    "acceptance": "Register/login/logout audit records persist in the same temporary database; restart reads them; shutdown awaits cleanup; no NoneType session failures.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-004",
+    "priority": "P0",
+    "title": "Mock interview event-loop blocking",
+    "files": "backend/modules/interview/mock_interview_library.py; backend/routes/interview.py",
+    "evidence": "Confirmed: first get_all_questions/search can synchronously generate ten million questions; async route calls it directly. Integration calls and following auth fixtures time out.",
+    "action": "Replace whole-library materialization with bounded pagination/generation or indexed storage; cap work and memory. Offload any remaining blocking generation and prevent concurrent preload duplication. Return truthful counts.",
+    "acceptance": "Cold and warm list/search/random/practice requests complete within budgets; concurrent health/auth remain responsive; no ten-million-object preload.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-005",
+    "priority": "P0",
+    "title": "Streaming function import-order mutation",
+    "files": "backend/core/main.py; backend/lib/async_stream.py; backend/routes/ai.py; backend/routes/recovery.py; provider/AI modules",
+    "evidence": "Confirmed full-suite failures: app import wraps shared sync generators into async generators. Focused recheck passes.",
+    "action": "Normalize sync/async iteration at the route boundary instead of mutating shared module functions globally. Inventory all consumers, preserve cancellation/close and thread offloading. Update QA adapter loaders if needed.",
+    "acceptance": "Full backend suite and targeted stream tests pass together and in reverse import order; no event-loop blocking or lost terminal errors; recovery tests remain green.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-006",
+    "priority": "P0",
+    "title": "Desktop overlay URL and authentication",
+    "files": "apps/web/caption-overlay.html; apps/web/interview-overlay.html; apps/web/js/core/config.js; electron/preload.js",
+    "evidence": "Confirmed file:// hostname is empty, producing ws://:8000/ws/transcribe.",
+    "action": "Derive HTTP/WebSocket base from shared configuration, map http/https to ws/wss, and use the existing authenticated WebSocket protocol. Bound reconnects and stop on close/logout.",
+    "acceptance": "Both real Electron overlays connect on file://; HTTP and HTTPS URL tests pass; unauthenticated connections remain rejected; no listener leaks.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-007",
+    "priority": "P1",
+    "title": "Recording storage root",
+    "files": "backend/modules/video/recording_manager.py; backend/routes/video.py; backend/tests/test_fix_33_no_stub_recordings.py",
+    "evidence": "Observed missing directory in clean isolated suite; storage path is relative to process working directory. Import/init timing also needs confirmation.",
+    "action": "Centralize configurable absolute runtime storage and create directories on manager initialization. Align tests with initialization contract; do not create fake recording files to satisfy assertions.",
+    "acceptance": "Fresh checkout, root/backend CWD and packaged desktop resolve the same configured root; real synthetic record/list/delete works only in temporary storage.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-008",
+    "priority": "P1",
+    "title": "API contract reconciliation",
+    "files": "backend/tests/test_api_integration.py; backend/routes/conversations.py; cognitive.py; study.py; interview.py; jobs.py; agents.py; ai.py",
+    "evidence": "Observed 404/422 and document response-shape mismatches. At least import expects multipart, retrieve expects form, and documents returns pagination metadata.",
+    "action": "Build route/client/test contract matrix from registered OpenAPI routes. Fix real clients if wrong; update stale tests if wrong; choose one canonical contract and document compatibility. Resolve duplicate inline/router ownership.",
+    "acceptance": "Every valid request is accepted with schema assertions; malformed inputs still return useful 4xx; all affected API tests pass for the correct reason.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-009",
+    "priority": "P1",
+    "title": "Browser routes and weak E2E assertions",
+    "files": "e2e/playwright.config.js; e2e/tests/*.spec.js; apps/web/vite.config.js; deployment routing config",
+    "evidence": "Confirmed plain-file test server returns 404 for extensionless URLs; some tests accept generic 404 headings as successful render.",
+    "action": "Use production-equivalent frontend routing in tests and explicit deployment rewrites where supported. Assert status, page identity, key controls and no uncaught errors. Test .html desktop navigation separately.",
+    "acceptance": "All 44 current cross-browser cases pass with real page content; new negative control rejects a 404 page; direct deep links work in supported deployments.",
+    "status": "verified"
+  },
+  {
+    "id": "ANT-010",
+    "priority": "P1",
+    "title": "Speech benchmark validity",
+    "files": "qa/performance/voice/speech.py; qa/performance/pipeline/local.py; new versioned interview soak harness",
+    "evidence": "Harness investigation: /tmp/ant-interview-soak.py calls transcribe_audio without warmup/model_ready.set; transcribe waits up to five seconds each call. Earlier totals remain observations of that harness, not production latency.",
+    "action": "Persist a reproducible runner; use real startup/readiness semantics; measure load, readiness wait, speech end, STT, first AI token and completed answer independently. Capture failure states.",
+    "acceptance": "Cold/warm runs identify readiness cost; corrected 30-minute benchmark can be reproduced; prior report receives an explicit caveat, never silently rewritten as faster results.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-011",
+    "priority": "P1",
+    "title": "Technical speech recognition",
+    "files": "backend/modules/voice/whisper_handler.py; backend/routes/transcription.py; backend/lib/audio_upload.py",
+    "evidence": "Observed cache\u2192cash on all six invalidation questions in synthetic run.",
+    "action": "Evaluate domain vocabulary hints derived from actual resume/JD and recent question context, beam/model settings and confidence-aware correction. Keep original transcript; do not blindly replace cash globally.",
+    "acceptance": "Held-out cache/cash minimal pairs, technical terms, accents/noise and silence pass agreed thresholds; financial cash questions remain correct; latency measured with corrected harness.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-012",
+    "priority": "P1",
+    "title": "Resume-grounded answers and history",
+    "files": "apps/web/app.js; backend/modules/ai/ai_router.py; backend/modules/platform/cloud_providers.py; backend/lib/stream_recovery.py",
+    "evidence": "Observed 120ms\u219212ms twice and unsupported personal validation/deployment claims; generated history can reinforce errors.",
+    "action": "Treat resume as authoritative and JD as requirements. Preserve factual spans/metrics; separate facts from generated history; validate high-risk personal claims/numbers and use bounded correction or an honest fallback. Apply identical grounding to continuation.",
+    "acceptance": "Known wrong-number and invented-certification cases fail before changes and pass after; held-out personal facts/negations/units pass; hypothetical approaches remain allowed; correction attempts bounded.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-013",
+    "priority": "P1",
+    "title": "Screen-question freshness and answer scope",
+    "files": "apps/web/app.js; electron/main.js; backend/modules/ai/ocr_service.py; screen-context tests",
+    "evidence": "Observed user confusion and follow-up requests without saved answers; original screenshot absent from saved record. Exact error was not captured.",
+    "action": "Reproduce with numbered PDF fixtures, multiple screens and refreshed questions. Define singular vs all-visible scope; record non-sensitive capture metadata/status, selected display and request timing. Show unreadable/missing context explicitly. Prefer fresh capture over stale ring data.",
+    "acceptance": "Single/all-visible questions answer intended content in order; unreadable screens do not invent questions; new questions cancel older output; use latest capture; errors remain inspectable without storing screenshots by default.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-014",
+    "priority": "P1",
+    "title": "Backend status and feature readiness",
+    "files": "electron/main.js; apps/web/app.js; backend/routes/health.py; backend/core/main.py",
+    "evidence": "Observed intermittent red health indicator and 81.8% module-health display. Some failures may follow blocked request handlers.",
+    "action": "Fix blocking causes first. Separate process liveness, readiness and optional feature availability. Use bounded health deadlines, consecutive-failure handling, nonoverlapping polls and honest retry status.",
+    "acceptance": "Temporary slow response does not claim backend dead; actual crash is detected/restarted; unavailable modules provide actionable status; health responsive during AI/STT/mock load.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-015",
+    "priority": "P1",
+    "title": "Model catalog and effective limits",
+    "files": "apps/web/app.js; apps/web/index.html; backend/modules/platform/cloud_providers.py; backend/routes/ollama.py",
+    "evidence": "Observed static and runtime model lists diverge; 1024K UI budget is not proof a provider supports it.",
+    "action": "Use one runtime catalog with capability/availability metadata; remove or flag stale options only after verification. Respect provider and model toggles, image support, effective context and output limits.",
+    "acceptance": "UI and request agree on exact model; disabled models never selected; capability mismatches are clear; context UI never promises unsupported limits; custom/local models supported.",
+    "status": "verified",
+    "verification": "2026-10-02 controlled regression checkpoint: see MODEL-RECOVERY-CHECKPOINT-2026-10-02.md. Live cloud capacity/quota and native desktop workflows remain unverified."
+  },
+  {
+    "id": "ANT-016",
+    "priority": "P1",
+    "title": "Recovery and chat-state regression protection",
+    "files": "backend/lib/stream_recovery.py; backend/routes/recovery.py; apps/web/app.js; existing recovery/history tests",
+    "evidence": "Existing recovery and chat tests passed; refactors could regress them.",
+    "action": "Retain bounded retries, cooldowns, refusal behavior, partial preservation, latest-question ownership, timeout release and accurate model provenance. Add slow discovery, network cut, repeated limits and exhausted local fallback cases.",
+    "acceptance": "All existing scenarios pass; no stale answer, duplicate partial, false done, endless retry, cross-chat overwrite, or automatic cloud spend outside enabled configuration.",
+    "status": "verified",
+    "verification": "2026-10-02 controlled regression checkpoint: see MODEL-RECOVERY-CHECKPOINT-2026-10-02.md. Live cloud capacity/quota and native desktop workflows remain unverified."
+  },
+  {
+    "id": "ANT-017",
+    "priority": "P2",
+    "title": "Feature workflow completion matrix",
+    "files": "Feature HTML/JS pages and matching backend/routes modules; e2e tests",
+    "evidence": "Many controls were inspected but never exercised end-to-end. Visibility is not workflow completion.",
+    "action": "For each feature family below, test happy path, invalid input, unavailable backend/model, persistence and cancellation where applicable. Repair broken workflows, show accurate unavailable states for optional dependencies.",
+    "acceptance": "Every scoped feature has a linked test and explicit pass/fail/external-blocked result. Required core flows cannot be waived as unavailable.",
+    "status": "in_progress"
+  },
+  {
+    "id": "ANT-018",
+    "priority": "P2",
+    "title": "UI clarity and accessibility",
+    "files": "apps/web/index.html; apps/web/style.css; feature pages; electron shortcut wiring",
+    "evidence": "Review artifacts expose technical/legacy/hidden options and Mac shortcut labels displaying Ctrl. User will provide design changes after review.",
+    "action": "Fix functional layout issues, labels, focus/keyboard access, empty/loading/error states and OS-specific shortcut help. Preserve compact resume/JD header and saved-chat improvements. Avoid unrelated redesign.",
+    "acceptance": "Desktop narrow/large and web small viewport review; all actionable icons labeled; keyboard-only navigation; option values match behavior; no obscured confirmations.",
+    "status": "planned"
+  },
+  {
+    "id": "ANT-019",
+    "priority": "P2",
+    "title": "Mobile and extension validation",
+    "files": "mobile/; apps/ant-chrome-extension/; platform test configs",
+    "evidence": "Jest and JS syntax passed; physical device/browser capture workflows unverified. Existing unrelated mobile changes are present.",
+    "action": "Run isolated mobile emulator flows and load extension in a disposable browser profile. Validate auth/API URLs, permissions, recording lifecycle and failure recovery. Do not claim Windows/Linux runtime validation from a Mac.",
+    "acceptance": "Target-platform results recorded; unsupported/unavailable environments explicitly external-blocked; personal mobile/extension data untouched.",
+    "status": "planned"
+  },
+  {
+    "id": "ANT-020",
+    "priority": "P0 release gate",
+    "title": "Final verification and delivery",
+    "files": "qa/performance/; test configs; CI workflow",
+    "evidence": "No fully green release evidence yet.",
+    "action": "Run all scoped suites after fixes, cross-browser and live desktop smoke, corrected 30-minute speech/recovery soak, leak/cancel checks, review UI and compare before/after. Commit only reviewed scope, with rollback references; publish only within authorization.",
+    "acceptance": "No unresolved core P0/P1 issues; all relevant suites green or explicitly scoped external limitations; known quality failures resolved on held-out cases; final report truthful and reproducible.",
+    "status": "planned"
+  }
+]

@@ -1,6 +1,6 @@
 # Development Guide
 
-> Day-to-day dev commands, workflow, and conventions for the ANT monorepo. For ops, see [OPERATIONS.md](OPERATIONS.md). For troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+> Day-to-day dev commands, workflow, and conventions for the ANT monorepo. For ops, see [OPERATIONS.md](../operations/OPERATIONS.md). For troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ---
 
@@ -84,7 +84,7 @@ Workspaces are declared in the root `package.json` (see [MONOREPO.md](../../../M
 - **Main process:** `electron/main.js` is the entry. Split into `electron/lib/`, `electron/windows/`, `electron/ipc/`, `electron/backend/` for organization.
 - **Security:** All 4 `BrowserWindow` instances have `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Never disable these.
 - **IPC:** All renderer→main communication goes through `ipcMain.handle` / `ipcRenderer.invoke` with a contextBridge in `preload.js`. Never use `ipcRenderer.send` with a callback.
-- **Logging:** Use `electron-log` (already a dep). Logs go to platform-specific locations (see [OPERATIONS.md §3](OPERATIONS.md#3-logs)).
+- **Logging:** Use `electron-log` (already a dep). Logs go to platform-specific locations (see [OPERATIONS.md §3](../operations/OPERATIONS.md#3-logs)).
 
 ---
 
@@ -116,7 +116,7 @@ See [MOBILE.md](MOBILE.md) for the full guide. Quick rules:
    ```
 4. **Register the router** in `core/main.py:app.include_router()`.
 5. **Test it:** add a test file in `backend/tests/test_routes_invoices.py` and exercise the route with `httpx.AsyncClient` + `ASGITransport`.
-6. **Document it:** update `docs/backend/api/API_REFERENCE.md` (or `docs/backend/api/API_REFERENCE_PHASE2.md` if it's a Phase 2 feature).
+6. **Document it:** update `docs/backend/api/API_REFERENCE.md` (or `docs/backend/api/API_REFERENCE.md` if it's a Phase 2 feature).
 
 ---
 
@@ -178,7 +178,7 @@ psql "$DATABASE_URL"
 
 ### "Tests are flaky"
 
-- Check the pre-existing failures doc: [memory/pre-existing-test-failures.md](memory/pre-existing-test-failures.md).
+- Record current failures and their evidence; the [release checklist](../deployment/RELEASE_CHECKLIST.md) explains how to report validation limitations.
 - Re-run a single test: `pytest tests/test_X.py::TestY::test_z -v`.
 - Run with `--count=3` (if `pytest-repeat` is installed) to detect flakiness.
 

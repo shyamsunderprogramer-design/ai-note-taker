@@ -405,6 +405,7 @@
   </div>
 
   <script src="js/core/config.js"></script>
+  <script src="js/core/overlay-connection.js"></script>
   <script>
     const ipc = window.api || { send: () => {}, receive: () => {}, invoke: async () => null };
 
@@ -425,8 +426,6 @@
     };
 
     let clickThrough = false;
-    let ws = null;
-    let reconnectTimer = null;
 
     // ── Click-through toggle ──
     function toggleClickThrough() {
@@ -458,53 +457,14 @@
     });
 
     // ── WebSocket for live transcription + suggestions ──
-    function connect() {
-      const url = new URL((window.API_BASE || 'http://127.0.0.1:8000') + '/ws/transcribe');
-      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = url.toString();
-
-      setStatus('connecting', 'Connecting...');
-
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch (e) {
-        setStatus('offline', 'WebSocket failed');
-        scheduleReconnect();
-        return;
+    const connection = createOverlayConnection({
+      onStatus(type, text) { setStatus(type === 'connected' ? 'ready' : type, text); },
+      onMessage(data) {
+        if (data.type === 'partial') setTranscript(data.text, true);
+        else if (data.type === 'final') setTranscript(data.text, false);
+        else if (data.type === 'suggestion') setHint(data.text);
       }
-
-      ws.onopen = () => {
-        setStatus('ready', 'Ready');
-        clearTimeout(reconnectTimer);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'partial') {
-            setTranscript(data.text, true);
-          } else if (data.type === 'final') {
-            setTranscript(data.text, false);
-          } else if (data.type === 'suggestion') {
-            setHint(data.text);
-          }
-        } catch (e) {}
-      };
-
-      ws.onclose = () => {
-        setStatus('offline', 'Disconnected');
-        scheduleReconnect();
-      };
-
-      ws.onerror = () => {
-        setStatus('offline', 'Error');
-      };
-    }
-
-    function scheduleReconnect() {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, 3000);
-    }
+    });
 
     // ── UI helpers ──
     function setStatus(type, text) {
@@ -547,7 +507,7 @@
     ipc.receive('interview:status', (type) => setStatus(type, type));
 
     // ── Init ──
-    connect();
+    connection.connect();
     ipc.send('interview-overlay:ready');
     console.log('[InterviewOverlay] Initialized');
   </script>

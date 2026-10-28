@@ -1,0 +1,38 @@
+{
+  "name": "parakeet-trial",
+  "url": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+  "title": "Sign In - ParakeetAI",
+  "text": "Sign in to ParakeetAI\nContinue with Google\nContinue with Apple\nOR\nContinue with Email\n\nStay signed in on one desktop and one mobile at a time. Signing in on a new device signs you out of the previous device of the same type.\n\nBy continuing, you agree to ParakeetAI’s\nTerms and Conditions and Privacy Policy.",
+  "controls": [
+    {
+      "tag": "BUTTON",
+      "text": "Continue with Google",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Continue with Apple",
+      "type": "button"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Continue with Email",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Terms and Conditions",
+      "href": "https://www.parakeet-ai.com/terms-and-conditions",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://www.parakeet-ai.com/privacy-policy",
+      "type": ""
+    }
+  ],
+  "errors": [
+    "Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+}

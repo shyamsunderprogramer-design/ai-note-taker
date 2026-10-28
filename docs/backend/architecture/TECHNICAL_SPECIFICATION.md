@@ -713,7 +713,7 @@ ai-note-taker/
 │   └── pre-interview.js       # Interview prep logic
 ├── docs/                       # Documentation
 │   ├── technical_specification.md  # This document
-│   ├── COGNITIVE_GRAPH_API.md    # /docs/backend/COGNITIVE_GRAPH_API.md
+│   ├── COGNITIVE_GRAPH_API.md    # /docs/backend/api/API_REFERENCE.md
 │   ├── ENTITY_EXTRACTION.md      # /docs/business/ENTITY_EXTRACTION.md
 │   └── SETUP_COGNITIVE_GRAPH.md  # /docs/backend/setup/SETUP_COGNITIVE_GRAPH.md
 └── neo4j/                      # Neo4j installation
@@ -741,7 +741,7 @@ ai-note-taker/
 
 ### 7.3 Related Documentation
 
-- [COGNITIVE_GRAPH_API.md](../COGNITIVE_GRAPH_API.md) - Graph API reference
+- [COGNITIVE_GRAPH_API.md](../api/API_REFERENCE.md) - Graph API reference
 - [ENTITY_EXTRACTION.md](../../business/ENTITY_EXTRACTION.md) - NLP documentation
 - [SETUP_COGNITIVE_GRAPH.md](../setup/SETUP_COGNITIVE_GRAPH.md) - Neo4j setup guide
 - [README.md](../README.md) - Project overview

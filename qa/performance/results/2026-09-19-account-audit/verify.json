@@ -1,0 +1,36 @@
+[
+  {
+    "name": "auto-repeat",
+    "bubble": "",
+    "chat": "YOU\n\nExplain the difference between a container and a virtual machine in two clear sentences.\n\nAI\nOpenai\nGoogle\nGroq\nOllama-Cloud\n[LLAMA-3.3-70B-VERSATILE]0.2S\nCopy\nRead"
+  },
+  {
+    "name": "screenshot-after-wait",
+    "state": {
+      "processing": false,
+      "attached": true,
+      "badge": "We need to extract all visible text from the image. The image shows a split-scre...",
+      "visible": "flex"
+    }
+  },
+  {
+    "name": "resume-review",
+    "body": "←\n✕\n−\n+\nResume Review\n←\n📄 AI Resume Review\nUpload or Paste Resume\nUpload Resume File (PDF, DOCX, TXT)\n📄\nClick to upload or drag and drop\nSupports PDF, DOCX, TXT, MD, RTF\nOR\nPaste Resume Text\nJob Description (optional but recommended)\nAnalyze Resume\nAnalysis Results\n35\nOverall Score\n✨ AI Rewrites (XYZ Formula)\n\nNo specific rewrites suggested.\n\n🔍 Keyword Match\npostgresqlkubernetespython\n📊 Section Analysis\n20\nExperience\n30\nSkills\n40\nEducation\n50\nSummary\n✅ Strengths\n🎯 Areas for Improvement\n→\nAdd a brief professional summary at the top\n→\nAdd a dedicated skills section",
+    "network": []
+  },
+  {
+    "name": "resume-review-v2",
+    "body": "←\n✕\n−\n+\nResume Review V2 - AI-Powered Analysis | Free Forever\n←\nAI Resume Review V2\nRecruiter scan • ATS check • Interview prep ✓ FREE FOREVER\n📄 Upload Resume\nUpload Resume (PDF, DOCX, TXT)\n📄\nClick to upload or drag & drop\nSupports PDF, DOCX, TXT, MD, RTF (Max 10MB)\nOR\nPaste Resume Text\n🎯 Job Description (optional but recommended)\nAnalyze Resume\nAnalysis Results\n\nAnalyzing your resume...\n\nThis may take a few seconds while our AI reviews your content\n\n📤 Upload your resume and click \"Analyze Resume\" to get:\n\n✓ Recruiter scan simulation\n✓ ATS compatibility (50+ systems)\n✓ Competitive benchmarking\n✓ Interview question predictions\n✓ Achievement badges & quests\n\n\nAll completely FREE forever!\n\n--\nOverall Resume Score\n📊 Section Scores\n🔍 Keyword Analysis\n✨ AI Rewrites (Free: 3/day)\nUnlimited →\n✅ Strengths\n🎯 Areas for Improvement\n🎉 Love your analysis?\n\nShare your score and challenge your friends!\n\n📤 Share Your Score",
+    "network": [
+      {
+        "path": "/resume/analyze-v2",
+        "status": 401
+      }
+    ]
+  },
+  {
+    "name": "graph-after-wait",
+    "body": "←\n✕\n−\n+\nCognitive Graph\n←\nCognitive Graph\nConnecting...\nOverview\nSearch\nCompanies\nSkills\nExtract\n0\nINTERVIEWS\n0\nQUESTIONS\n0\nCOMPANIES\n0\nTOPICS\n📈\nInterview Activity\n📈\nLoading...\n🥧\nQuestion Categories\n🥧\nLoading...\n📋\nRecent Interviews\n📋\nLoading...\n🏢\nTop Companies\n🏢\nLoading...",
+    "network": []
+  }
+]

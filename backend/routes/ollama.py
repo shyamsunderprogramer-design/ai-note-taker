@@ -3,28 +3,20 @@ import logging
 import os
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 
-from fastapi import APIRouter, Depends, Form, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import JSONResponse
 
 from config import OLLAMA_URL
 from lib.http_client import sync_client
-from security import ErrorCode, error_response
+from security import (
+    ErrorCode, error_response,
+)
 from security.auth import User
 
-# Auth helpers (mirrored from auth.py — will be consolidated in a shared deps module)
 from fastapi import HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-security_bearer = HTTPBearer(auto_error=False)
-
-
-async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Depends(security_bearer)) -> str:
-    if credentials:
-        return credentials.credentials
-    return None
-
-
 from routes.deps import require_authentication
 
 
@@ -45,6 +37,9 @@ def _has_provider_key(provider: str, env_var: str) -> bool:
         _provider_key_cache[provider] = True
         _provider_key_cache_time[0] = now
         return True
+
+    if os.getenv("ANT_DISABLE_KEY_SERVER") == "1":
+        return False
 
     try:
         headers = {}
@@ -183,7 +178,7 @@ def _probe_ollama() -> Dict:
 
 
 @router.get("/providers")
-async def list_providers(request=None):
+def list_providers(request=None):
     """Returns which AI providers are available.
 
     Shape (backwards-compatible):
@@ -196,19 +191,33 @@ async def list_providers(request=None):
     Frontend code that does `providers.ollama` truthy-check still works
     (the bool stays). New code should read providers.ollama_status.models.
     """
-    status = _probe_ollama()
-    return {
-        "openai": _has_provider_key("openai", "OPENAI_API_KEY"),
-        "anthropic": _has_provider_key("anthropic", "ANTHROPIC_API_KEY"),
-        "google": _has_provider_key("google", "GOOGLE_API_KEY"),
-        "xai": _has_provider_key("xai", "XAI_API_KEY"),
-        "deepseek": _has_provider_key("deepseek", "DEEPSEEK_API_KEY"),
-        "groq": _has_provider_key("groq", "GROQ_API_KEY"),
-        "ollama-cloud": _has_provider_key("ollama-cloud", "OLLAMA_CLOUD_API_KEY"),
-        "perplexity": _has_provider_key("perplexity", "PERPLEXITY_API_KEY"),
-        "ollama": status["available"],
-        "ollama_status": status,
+    providers = {
+        "openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY",
+        "google": "GOOGLE_API_KEY", "xai": "XAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY", "groq": "GROQ_API_KEY",
+        "ollama-cloud": "OLLAMA_CLOUD_API_KEY", "perplexity": "PERPLEXITY_API_KEY",
     }
+    # Independent one-second probes must not accumulate into an eight-second wait.
+    with ThreadPoolExecutor(max_workers=9) as pool:
+        local = pool.submit(_probe_ollama)
+        keys = {name: pool.submit(_has_provider_key, name, env) for name, env in providers.items()}
+        result = {name: future.result() for name, future in keys.items()}
+        status = local.result()
+    return {**result, "ollama": status["available"], "ollama_status": status}
+
+
+@router.get("/models/catalog")
+def model_catalog():
+    from lib.model_catalog import build_catalog
+    status = list_providers()
+    # Catalog discovery has a shorter budget than the interactive model manager.
+    try:
+        response = sync_client.get(f"{OLLAMA_URL}/api/tags", timeout=1, skip_ssrf_check=True)
+        installed = response.json().get("models", []) if response.status_code == 200 else []
+    except Exception:
+        installed = []
+    return {"models": build_catalog(installed, status, sync_client, OLLAMA_URL),
+            "cloud_availability_verified": False}
 
 
 @router.get("/providers/byok/status")

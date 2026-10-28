@@ -256,13 +256,14 @@ class TestDataMigratorIdempotency:
     """The marker file makes run_full_migration a no-op after success."""
 
     def test_marker_path_under_data_dir(self):
-        """The marker lives at backend/data/.migrated_to_sql (sibling
-        to users.json) so a `rm data/*.json && git pull` style reset
-        wipes both at once."""
-        from core.database import DataMigrator
+        """The marker lives in the app data dir (sibling to users.json)
+        so a `rm data/*.json && git pull` style reset wipes both at once.
+        The data dir follows ANT_DATA_DIR relocation (storage_path), so
+        assert against _DATA_DIR rather than a literal `data/` segment."""
+        from core.database import DataMigrator, _DATA_DIR
         path = DataMigrator._marker_path()
         assert path.name == ".migrated_to_sql"
-        assert "data" in path.parts
+        assert path.parent == _DATA_DIR
 
     def test_already_migrated_false_when_no_marker(self, fresh_db, tmp_path):
         """A fresh DB with no marker file → not migrated."""

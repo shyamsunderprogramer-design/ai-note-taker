@@ -1,0 +1,56 @@
+{
+  "profile": {
+    "stt": "small",
+    "ai": "qwen3.5:9b",
+    "mode": "instant"
+  },
+  "gates": {
+    "warm_pipeline_under_4s": true,
+    "warm_first_assistance_under_3s": true,
+    "wer_under_15_percent": true,
+    "factual_coverage": true,
+    "exact_persistence": true
+  },
+  "samples": [
+    {
+      "run": 1,
+      "transcription_seconds": 0.968695999996271,
+      "first_assistance_seconds": 4.8579713749932125,
+      "ai_seconds": 4.848370082996553,
+      "save_read_seconds": 0.01995241700205952,
+      "total_seconds": 5.837018499994883,
+      "wer": 0.0,
+      "required_facts_present": true,
+      "exact_persistence": true,
+      "transcript": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "notes": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified)."
+    },
+    {
+      "run": 2,
+      "transcription_seconds": 1.1519132499961415,
+      "first_assistance_seconds": 1.2158995420031715,
+      "ai_seconds": 1.0515203749964712,
+      "save_read_seconds": 0.003688374999910593,
+      "total_seconds": 2.2071219999925233,
+      "wer": 0.0,
+      "required_facts_present": true,
+      "exact_persistence": true,
+      "transcript": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "notes": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified)."
+    },
+    {
+      "run": 3,
+      "transcription_seconds": 0.9425949169963133,
+      "first_assistance_seconds": 0.9908696249913191,
+      "ai_seconds": 1.018434083001921,
+      "save_read_seconds": 0.0042605829949025065,
+      "total_seconds": 1.9652895829931367,
+      "wer": 0.0,
+      "required_facts_present": true,
+      "exact_persistence": true,
+      "transcript": "Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "notes": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified)."
+    }
+  ],
+  "limits": "Three repetitions of one synthetic clean-English recorded meeting; begins after capture ends. No microphone, HTTP, UI, human speech quality, or cloud provider measurement. RAG disabled. First run excluded from warm latency gates."
+}

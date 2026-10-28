@@ -1,0 +1,11 @@
+{
+  "capture": {
+    "fixtureRead": true,
+    "appExcluded": true
+  },
+  "visibility": {
+    "hidden": false,
+    "events": []
+  },
+  "passed": true
+}

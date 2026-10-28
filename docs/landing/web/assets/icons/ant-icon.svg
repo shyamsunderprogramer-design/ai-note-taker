@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Ant body -->
+  <!-- Abdomen -->
+  <ellipse cx="100" cy="155" rx="32" ry="38" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+  <ellipse cx="100" cy="155" rx="28" ry="34" fill="url(#antGrad)"/>
+  <!-- Thorax -->
+  <ellipse cx="100" cy="108" rx="20" ry="22" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+  <ellipse cx="100" cy="108" rx="17" ry="19" fill="url(#antGrad)"/>
+  <!-- Head -->
+  <ellipse cx="100" cy="68" rx="24" ry="26" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+  <ellipse cx="100" cy="68" rx="21" ry="23" fill="url(#antGrad)"/>
+  <!-- Eyes -->
+  <ellipse cx="89" cy="62" rx="7" ry="9" fill="#3b82f6"/>
+  <ellipse cx="111" cy="62" rx="7" ry="9" fill="#3b82f6"/>
+  <ellipse cx="89" cy="60" rx="3" ry="4" fill="#93c5fd"/>
+  <ellipse cx="111" cy="60" rx="3" ry="4" fill="#93c5fd"/>
+  <!-- Mandibles -->
+  <path d="M82 80 Q74 90 78 98" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M118 80 Q126 90 122 98" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Antennae -->
+  <path d="M88 48 Q70 28 55 18" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M112 48 Q130 28 145 18" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="55" cy="18" r="3" fill="#3b82f6"/>
+  <circle cx="145" cy="18" r="3" fill="#3b82f6"/>
+  <!-- Legs - Left -->
+  <path d="M82 100 Q55 88 40 75" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M80 108 Q50 105 35 100" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M82 118 Q55 130 40 140" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Legs - Right -->
+  <path d="M118 100 Q145 88 160 75" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M120 108 Q150 105 165 100" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M118 118 Q145 130 160 140" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Leg tips -->
+  <circle cx="40" cy="75" r="2" fill="#1e293b"/>
+  <circle cx="35" cy="100" r="2" fill="#1e293b"/>
+  <circle cx="40" cy="140" r="2" fill="#1e293b"/>
+  <circle cx="160" cy="75" r="2" fill="#1e293b"/>
+  <circle cx="165" cy="100" r="2" fill="#1e293b"/>
+  <circle cx="160" cy="140" r="2" fill="#1e293b"/>
+  <!-- Connection between segments -->
+  <line x1="100" y1="88" x2="100" y2="86" stroke="#3b82f6" stroke-width="3"/>
+  <line x1="100" y1="130" x2="100" y2="117" stroke="#3b82f6" stroke-width="3"/>
+  <!-- Gradient definition -->
+  <defs>
+    <radialGradient id="antGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+  </defs>
+  <!-- Subtle body highlights -->
+  <ellipse cx="95" cy="148" rx="12" ry="18" fill="rgba(59,130,246,0.08)"/>
+  <ellipse cx="95" cy="102" rx="8" ry="10" fill="rgba(59,130,246,0.1)"/>
+  <ellipse cx="95" cy="62" rx="9" ry="12" fill="rgba(59,130,246,0.1)"/>
+</svg>

@@ -271,7 +271,7 @@ async def interview_simulator_finish(session_id: str):
 # --- Mock Interview Library Endpoints ---
 
 @router.get("/mock-interview/questions")
-async def get_mock_questions(
+def get_mock_questions(
     role: str = Query(None, description="Filter by role"),
     category: str = Query(None, description="Filter by category"),
     difficulty: str = Query(None, description="Filter by difficulty"),
@@ -311,7 +311,7 @@ async def get_mock_questions(
 
 
 @router.get("/mock-interview/question/random")
-async def get_random_mock_question(
+def get_random_mock_question(
     role: str = Query(None, description="Filter by role"),
     category: str = Query(None, description="Filter by category"),
     difficulty: str = Query(None, description="Filter by difficulty")
@@ -331,7 +331,7 @@ async def get_random_mock_question(
 
 
 @router.get("/mock-interview/practice-set")
-async def get_practice_question_set(
+def get_practice_question_set(
     role: str = Query("software_engineer", description="Role for practice set"),
     num_questions: int = Query(5, description="Number of questions", ge=1, le=10)
 ):
@@ -352,7 +352,7 @@ async def get_practice_question_set(
 
 
 @router.get("/mock-interview/search")
-async def search_mock_questions(
+def search_mock_questions(
     query: str = Query(..., description="Search query"),
     limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0)
@@ -362,7 +362,7 @@ async def search_mock_questions(
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
 
     try:
-        questions = mock_library.search_questions(query)
+        questions = mock_library.search_questions(query, limit=mock_library.preload_count)
         total = len(questions)
         return {
             "questions": [vars(q) for q in questions[offset:offset + limit]],
@@ -377,7 +377,7 @@ async def search_mock_questions(
 
 
 @router.get("/mock-interview/stats")
-async def get_mock_library_stats():
+def get_mock_library_stats():
     """Get library statistics."""
     if not MOCK_LIBRARY_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)
@@ -390,7 +390,7 @@ async def get_mock_library_stats():
 
 
 @router.get("/mock-interview/companies")
-async def get_companies_with_questions():
+def get_companies_with_questions():
     """Get list of companies that have specific questions."""
     if not MOCK_LIBRARY_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Mock interview library not available", status_code=503)

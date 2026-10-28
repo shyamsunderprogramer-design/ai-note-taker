@@ -1,6 +1,6 @@
 # Operations Runbook
 
-> Production runbook for the ANT (AI Note Taker) backend. For day-to-day dev commands, see [DEVELOPMENT.md](DEVELOPMENT.md). For common errors, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+> Production runbook for the ANT (AI Note Taker) backend. For day-to-day dev commands, see [DEVELOPMENT.md](../development/DEVELOPMENT.md). For common errors, see [TROUBLESHOOTING.md](../development/TROUBLESHOOTING.md).
 
 ---
 
@@ -103,7 +103,7 @@ tail -f ~/Library/Logs/ANT/main.log
 
 ## 4. Database migrations (Alembic)
 
-> See [MIGRATIONS.md](MIGRATIONS.md) for the full developer guide. This section is the ops runbook.
+> See [MIGRATIONS.md](../development/MIGRATIONS.md) for the full developer guide. This section is the ops runbook.
 
 ### Apply pending migrations
 

@@ -1,0 +1,4 @@
+{
+  "name": "interviewhelper-io-retry",
+  "error": "page.goto: net::ERR_NAME_NOT_RESOLVED at https://interviewhelper.io/\nCall log:\n\u001b[2m  - navigating to \"https://interviewhelper.io/\", waiting until \"domcontentloaded\"\u001b[22m\n"
+}

@@ -17,15 +17,7 @@ import ai_router
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-# Reuse the production adapter without starting the full app or its database.
-tree = ast.parse((ROOT / 'backend/core/main.py').read_text())
-fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_patch_to_async_gen')
-namespace = {'asyncio': asyncio}
-exec(compile(ast.Module(body=[fn], type_ignores=[]), '<production-adapter>', 'exec'), namespace)
-ai_router.ask_ollama_stream = namespace['_patch_to_async_gen'](ai_router.ask_ollama_stream)
-from modules.platform import cloud_providers
-for name in ['ask_groq_stream', 'ask_gpt_stream', 'ask_gemini_stream', 'ask_ollama_cloud_stream']:
-    setattr(cloud_providers, name, namespace['_patch_to_async_gen'](getattr(cloud_providers, name)))
+# Production routes normalize sync/async streams locally.
 from routes.ai import stream_ai, stream_race
 from routes.interview import upload_resume_context
 

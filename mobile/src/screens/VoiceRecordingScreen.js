@@ -18,6 +18,7 @@ import {
   Platform,
 } from "react-native"
 import AudioRecorderPlayer from "react-native-audio-recorder-player"
+import apiService from "../services/api"
 
 const audioRecorderPlayer = new AudioRecorderPlayer()
 
@@ -27,16 +28,23 @@ export default function VoiceRecordingScreen() {
   const [durationMs, setDurationMs] = useState(0)
   const [audioPath, setAudioPath] = useState(null)
   const [error, setError] = useState(null)
-  const recordStartRef = useRef(null)
+  const [transcript, setTranscript] = useState(null)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const activeRef = useRef(false)
+  const busyRef = useRef(false)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    // Cleanup on unmount
+    mountedRef.current = true
     return () => {
-      if (isRecording) {
+      mountedRef.current = false
+      audioRecorderPlayer.removeRecordBackListener()
+      if (activeRef.current) {
+        activeRef.current = false
         audioRecorderPlayer.stopRecorder().catch(() => {})
       }
     }
-  }, [isRecording])
+  }, [])
 
   const requestMicPermission = async () => {
     if (Platform.OS !== "android") return true
@@ -56,33 +64,54 @@ export default function VoiceRecordingScreen() {
   }
 
   const handleStart = async () => {
+    if (busyRef.current || activeRef.current) return
+    busyRef.current = true
+    setIsTransitioning(true)
     setError(null)
-    const ok = await requestMicPermission()
-    if (!ok) {
-      setError("Microphone permission denied")
-      return
-    }
     try {
+      const ok = await requestMicPermission()
+      if (!mountedRef.current) return
+      if (!ok) {
+        setError("Microphone permission denied")
+        return
+      }
       const path = await audioRecorderPlayer.startRecorder()
-      recordStartRef.current = Date.now()
+      if (!mountedRef.current) {
+        await audioRecorderPlayer.stopRecorder()
+        return
+      }
+      activeRef.current = true
       setAudioPath(path)
+      setDurationMs(0)
+      setTranscript(null)
       setIsRecording(true)
       audioRecorderPlayer.addRecordBackListener((e) => {
         setDurationMs(e.currentPosition)
       })
     } catch (err) {
-      setError(`Failed to start recording: ${err.message}`)
+      if (mountedRef.current) setError(`Failed to start recording: ${err.message}`)
+    } finally {
+      busyRef.current = false
+      if (mountedRef.current) setIsTransitioning(false)
     }
   }
 
   const handleStop = async () => {
-    if (!isRecording) return
+    if (!activeRef.current || busyRef.current) return
+    busyRef.current = true
+    setIsTransitioning(true)
     try {
       const result = await audioRecorderPlayer.stopRecorder()
+      activeRef.current = false
+      audioRecorderPlayer.removeRecordBackListener()
+      if (!mountedRef.current) return
       setIsRecording(false)
       setAudioPath(result)
     } catch (err) {
-      setError(`Failed to stop recording: ${err.message}`)
+      if (mountedRef.current) setError(`Failed to stop recording: ${err.message}`)
+    } finally {
+      busyRef.current = false
+      if (mountedRef.current) setIsTransitioning(false)
     }
   }
 
@@ -92,16 +121,14 @@ export default function VoiceRecordingScreen() {
       return
     }
     setIsUploading(true)
+    setError(null)
     try {
-      // The actual upload is delegated to the apiService (which
-      // builds the multipart form-data and POSTs to the backend).
-      // For now, this is a placeholder — the upload endpoint is
-      // /api/transcribe (or similar) and is wired in api.js.
-      Alert.alert("Upload", "Audio upload would happen here.")
+      const result = await apiService.transcribeAudio(audioPath)
+      if (mountedRef.current) setTranscript(result.text || "No speech detected. Try recording again.")
     } catch (err) {
-      setError(`Upload failed: ${err.message}`)
+      if (mountedRef.current) setError(`Upload failed: ${err.message}`)
     } finally {
-      setIsUploading(false)
+      if (mountedRef.current) setIsUploading(false)
     }
   }
 
@@ -124,12 +151,13 @@ export default function VoiceRecordingScreen() {
       </Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
+      {transcript !== null && <Text selectable style={styles.transcript}>{transcript}</Text>}
 
       <View style={styles.controls}>
         <TouchableOpacity
           style={[styles.button, isRecording && styles.buttonRecording]}
           onPress={isRecording ? handleStop : handleStart}
-          disabled={isUploading}
+          disabled={isUploading || isTransitioning}
         >
           <Text style={styles.buttonText}>
             {isRecording ? "⏹ Stop" : "⏺ Record"}
@@ -139,7 +167,7 @@ export default function VoiceRecordingScreen() {
         <TouchableOpacity
           style={[styles.button, styles.uploadButton]}
           onPress={handleUpload}
-          disabled={!audioPath || isRecording || isUploading}
+          disabled={!audioPath || isRecording || isUploading || isTransitioning}
         >
           {isUploading ? (
             <ActivityIndicator color="#fff" />
@@ -178,6 +206,7 @@ const styles = StyleSheet.create({
     color: "#f87171",
     marginBottom: 16,
   },
+  transcript: { color: "#fff", marginBottom: 16 },
   controls: {
     flexDirection: "row",
     gap: 12,

@@ -1,0 +1,193 @@
+{
+  "name": "cluely-download",
+  "url": "https://cluely.com/download",
+  "title": "Download Cluely for Mac & Windows | Free AI Meeting Assistant",
+  "text": "Cluely\nUndetectability\nMobile\nBlog\nGet for Mac\nDownload the Cluely desktop app\n\nCluely takes perfect meeting notes and gives you real-time answers, all while completely undetectable. Available for macOS and Windows.\n\nDownload for Mac\nSYSTEM REQUIREMENTS FOR\nOPTIMAL PERFORMANCE.\nmacOS\n• macOS 10.15 (Catalina) or later\n• Apple Silicon or Intel processor\n• 500 MB free disk space\n• 8 GB RAM recommended\nWindows\n• Windows 11\n• x64 (64-bit) processor\n• 500 MB free disk space\n• 8 GB RAM recommended\nCluely\nProduct\nDownload\nPricing\nUndetectability\nCareers\nResources\nMobile\nNew\nBlog\nManifesto\nPress\nBug Bounty\nCompare\nCluely vs Otter\nCluely vs Granola\nOtter Alternatives\nWhat Is an AI Notetaker\nSupport\nPrivacy Policy\nTerms of Service\nHelp Center\nContact Us\nAll systems operational\n\n© 2026 Cluely. All rights reserved.\n\nFollow us on Twitter\nJoin us on Discord\nFollow us on Instagram\nFollow us on GitHub",
+  "controls": [
+    {
+      "tag": "A",
+      "text": "Cluely",
+      "href": "https://cluely.com/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Undetectability",
+      "href": "https://cluely.com/#undetectability",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mobile",
+      "href": "https://cluely.com/mobile",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://cluely.com/blog",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Get the desktop app",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Get for Mac",
+      "href": "https://api.v2.cluely.com/desktop-download/mac/latest.dmg?glass=bisect",
+      "type": ""
+    },
+    {
+      "tag": "BUTTON",
+      "text": "TriggerOpen menu",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Download for Mac",
+      "href": "https://api.v2.cluely.com/desktop-download/mac/latest.dmg?glass=bisect",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Cluely",
+      "href": "https://cluely.com/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Download",
+      "href": "https://cluely.com/download",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Pricing",
+      "href": "https://cluely.com/pricing",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Undetectability",
+      "href": "https://cluely.com/undetectability",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Careers",
+      "href": "https://cluely.com/careers",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Mobile\nNew",
+      "href": "https://cluely.com/mobile",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Blog",
+      "href": "https://cluely.com/blog",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Manifesto",
+      "href": "https://cluely.com/manifesto",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Press",
+      "href": "https://cluely.com/press",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Bug Bounty",
+      "href": "https://cluelyhq.notion.site/bugbounty",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Cluely vs Otter",
+      "href": "https://cluely.com/blog/cluely-vs-otter",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Cluely vs Granola",
+      "href": "https://cluely.com/blog/cluely-vs-granola",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Otter Alternatives",
+      "href": "https://cluely.com/blog/otter-ai-alternatives",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "What Is an AI Notetaker",
+      "href": "https://cluely.com/blog/ai-notetaker-guide",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://cluely.com/privacy-policy",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Terms of Service",
+      "href": "https://cluely.com/terms",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Help Center",
+      "href": "https://support.cluely.com/en/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Contact Us",
+      "href": "mailto:help@cluely.com",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "All systems operational",
+      "href": "https://cluely.trust.pagerduty.com/posts/dashboard/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Follow us on Twitter",
+      "href": "https://x.com/cluely",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Join us on Discord",
+      "href": "https://discord.gg/cluely",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Follow us on Instagram",
+      "href": "https://www.instagram.com/cluely/",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Follow us on GitHub",
+      "href": "https://github.com/cluely",
+      "type": ""
+    }
+  ],
+  "errors": []
+}

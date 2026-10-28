@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "text": "Maya will review the budget.\nSend the project summary by Friday.",
+  "method": "apple-vision",
+  "seconds": 0.274,
+  "passed": true,
+  "screenshot": {
+    "visible": true,
+    "text": "Rep v Rep claude >vscode A Work low Automation P3t > ALAssistant_Job_Applie > AL..."
+  }
+}

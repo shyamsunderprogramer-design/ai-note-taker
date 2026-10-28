@@ -82,6 +82,6 @@ For researchers who want to understand the threat model:
 
 See also:
 
-- [`docs/devsecops/SECURITY.md`](docs/devsecops/SECURITY.md) — the full security architecture doc
+- [`docs/devsecops/SECURITY.md`](docs/devsecops/compliance/SECURITY.md) — the full security architecture doc
 - [`docs/devsecops/THREAT_MODEL.md`](docs/devsecops/THREAT_MODEL.md) — threat model
 - [`docs/devsecops/AUDIT_*.md`](docs/devsecops/) — periodic audit reports

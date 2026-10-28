@@ -1,0 +1,140 @@
+{
+  "model": "qwen3.5:9b",
+  "cases": [
+    [
+      "Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Notes: Please send the project summary by Friday. Maya will review the budget. Daniel will schedule the next meeting.",
+      [
+        "maya",
+        "daniel",
+        "friday",
+        "budget",
+        "summary"
+      ]
+    ],
+    [
+      "Write a short interview answer using only these facts: I added a Redis cache. Latency dropped from 900 to 120 milliseconds. I paired with Priya to test the change. Do not invent outcomes or add other metrics.",
+      [
+        "redis",
+        "120",
+        "priya"
+      ]
+    ],
+    [
+      "Summarize decisions, blockers and next steps in under forty words. Notes: The release moved to Tuesday. Nina owns documentation. Tests are blocked pending staging access. Do not invent an owner for staging access.",
+      [
+        "tuesday",
+        "nina",
+        "staging"
+      ]
+    ]
+  ],
+  "gates": {
+    "nonempty_responses": true,
+    "warm_first_content_under_2s": true,
+    "event_loop_lag_under_100ms": true,
+    "factual_coverage": true,
+    "final_answers": true
+  },
+  "samples": [
+    {
+      "case": 0,
+      "run": 1,
+      "first_content_seconds": 2.828257040993776,
+      "total_seconds": 3.8270502079976723,
+      "max_event_loop_lag_seconds": 0.0011812089983141046,
+      "response": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified).",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "first_content_seconds": 0.048567207995802164,
+      "total_seconds": 1.013479165994795,
+      "max_event_loop_lag_seconds": 0.0011212079884717237,
+      "response": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified).",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "first_content_seconds": 0.04155587501008995,
+      "total_seconds": 1.057284125010483,
+      "max_event_loop_lag_seconds": 0.0011736659985035654,
+      "response": "1. Send project summary by Friday (owner: unspecified). 2. Review budget (owner: Maya, deadline: unspecified). 3. Schedule next meeting (owner: Daniel, deadline: unspecified).",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "first_content_seconds": 0.24107354100851808,
+      "total_seconds": 1.253306500002509,
+      "max_event_loop_lag_seconds": 0.00113741599896457,
+      "response": "I paired with Priya to test a new Redis cache implementation, which reduced latency from 900 to 120 milliseconds. This collaboration ensured the change was validated before deployment without introducing any additional metrics.",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "first_content_seconds": 0.03921095799887553,
+      "total_seconds": 1.0457670000032522,
+      "max_event_loop_lag_seconds": 0.0011389580072136592,
+      "response": "I paired with Priya to test a new Redis cache implementation, which reduced latency from 900 to 120 milliseconds. This collaboration ensured the change was validated before deployment without introducing any additional metrics.",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "first_content_seconds": 0.04580858300323598,
+      "total_seconds": 1.0467267079948215,
+      "max_event_loop_lag_seconds": 0.0014970829983940344,
+      "response": "I paired with Priya to test a new Redis cache implementation, which reduced latency from 900 to 120 milliseconds. This collaboration ensured the change was validated before deployment without introducing any additional metrics.",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "first_content_seconds": 0.23854054100229405,
+      "total_seconds": 0.794841875002021,
+      "max_event_loop_lag_seconds": 0.0011354589991969984,
+      "response": "The release was moved to Tuesday. Documentation is owned by Nina, while tests remain blocked due to unspecified staging access issues.",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "first_content_seconds": 0.04110541699628811,
+      "total_seconds": 0.6039205419947393,
+      "max_event_loop_lag_seconds": 0.0014971670066006477,
+      "response": "The release was moved to Tuesday. Documentation is owned by Nina, while tests remain blocked due to unspecified staging access issues.",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "first_content_seconds": 0.04021120800462086,
+      "total_seconds": 0.6035082910093479,
+      "max_event_loop_lag_seconds": 0.0011110829986864697,
+      "response": "The release was moved to Tuesday. Documentation is owned by Nina, while tests remain blocked due to unspecified staging access issues.",
+      "errors": [],
+      "required_facts_present": true,
+      "final_answer_without_thinking": true
+    }
+  ],
+  "limits": "Local synthetic prompt, RAG disabled, first run may include model load. Fact matching is not a human quality evaluation. No HTTP frontend or auth included."
+}

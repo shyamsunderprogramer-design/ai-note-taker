@@ -10,7 +10,7 @@
 | File | What |
 |---|---|
 | [SECURITY_IMPLEMENTATION_SUMMARY.md](SECURITY_IMPLEMENTATION_SUMMARY.md) | What the auth / encryption / rate-limiting code actually does (moved from `docs/security/`) |
-| [BROWSER_EXTENSION_SAFETY.md](BROWSER_EXTENSION_SAFETY.md) | The MV3 Chrome extension threat model + mitigations (moved from root) |
+| [Extension data and permissions](../../business/JOB_APPLICATION_WORKFLOW.md#data-and-permissions) | Browser-extension behavior, permissions, and boundaries |
 | [threat-model.md](threat-model.md) | The repo-wide threat model (stub — to be expanded) |
 
 ---
@@ -34,8 +34,8 @@ Add a doc here when:
 - You're documenting a new attack surface (new endpoint, new
   client platform, new external integration) → add to
   `threat-model.md`
-- You're adding a new browser-extension safety rule → update
-  `BROWSER_EXTENSION_SAFETY.md`
+- You're changing extension data handling → update the
+  [job workflow](../../business/JOB_APPLICATION_WORKFLOW.md#data-and-permissions) and the threat model
 - You're adding a new compliance control → add to
   `../compliance/`
 
