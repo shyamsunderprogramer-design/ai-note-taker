@@ -60,10 +60,10 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-from routes.deps import require_authentication
+from routes.deps import require_authentication, resolve_user_id
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authentication)])
 
 
 # --- Analytics Store Endpoints ---
@@ -135,9 +135,11 @@ async def export_analytics(body: dict):
 async def get_skill_progression_api(
     user_id: str,
     skill: str = Query(...),
-    months: int = Query(6)
+    months: int = Query(6),
+    user: User = Depends(require_authentication)
 ):
     """Get skill progression over time for charting"""
+    user_id = resolve_user_id(user, user_id)
     if not ANALYTICS_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
@@ -166,9 +168,11 @@ async def compare_companies(
 @router.get("/analytics/topic-network/{user_id}")
 async def get_topic_network_api(
     user_id: str,
-    min_connections: int = Query(2)
+    min_connections: int = Query(2),
+    user: User = Depends(require_authentication)
 ):
     """Get topic co-occurrence network for D3.js visualization"""
+    user_id = resolve_user_id(user, user_id)
     if not ANALYTICS_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
@@ -182,9 +186,11 @@ async def get_topic_network_api(
 @router.get("/analytics/interview-calendar/{user_id}")
 async def get_interview_calendar_api(
     user_id: str,
-    months: int = Query(6)
+    months: int = Query(6),
+    user: User = Depends(require_authentication)
 ):
     """Get interview frequency data for calendar heatmap"""
+    user_id = resolve_user_id(user, user_id)
     if not ANALYTICS_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
@@ -197,9 +203,11 @@ async def get_interview_calendar_api(
 
 @router.get("/analytics/performance-trends/{user_id}")
 async def get_performance_trends_api(
-    user_id: str
+    user_id: str,
+    user: User = Depends(require_authentication)
 ):
     """Get overall performance trends (improving/declining/stable skills)"""
+    user_id = resolve_user_id(user, user_id)
     if not ANALYTICS_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
@@ -212,9 +220,11 @@ async def get_performance_trends_api(
 
 @router.get("/analytics/dashboard/{user_id}")
 async def get_dashboard_summary_api(
-    user_id: str
+    user_id: str,
+    user: User = Depends(require_authentication)
 ):
     """Get dashboard summary with key metrics"""
+    user_id = resolve_user_id(user, user_id)
     if not ANALYTICS_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Analytics engine not available", status_code=503)
 
@@ -349,9 +359,11 @@ async def get_quality_tiers():
 @router.get("/performance/checklist/{user_id}")
 async def get_personalized_checklist(
     user_id: str,
-    question_type: str = Query("behavioral")
+    question_type: str = Query("behavioral"),
+    user: User = Depends(require_authentication)
 ):
     """Get personalized interview performance checklist based on cognitive graph"""
+    user_id = resolve_user_id(user, user_id)
     if not PERFORMANCE_ANALYZER_AVAILABLE or not COGNITIVE_GRAPH_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Performance analyzer or cognitive graph not available", status_code=503)
 
