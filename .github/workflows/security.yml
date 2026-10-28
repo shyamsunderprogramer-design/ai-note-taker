@@ -30,6 +30,15 @@ on:
       - 'infrastructure/**'
       - 'docker/**'
       - 'k8s/**'
+  # Required so the dependency-review job (PR-only) ever runs
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'electron/**'
+      - 'infrastructure/**'
+      - 'docker/**'
+      - 'k8s/**'
 
 permissions:
   contents: read
@@ -48,13 +57,17 @@ jobs:
     name: Snyk Dependency Scan
     runs-on: ubuntu-latest
     if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'sca' || github.event.inputs.scan_type == ''
+    # Job-level env so `if: env.SNYK_TOKEN != ''` conditions can see it
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Run Snyk (Python)
-        uses: snyk/actions/python@master
-        continue-on-error: true
+        # Skipped (not silently passed) when no token is configured
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/python@11b673cfb4b0dc0d860a1323caa199d54950dcce # master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -70,8 +83,8 @@ jobs:
         working-directory: ./electron
 
       - name: Run Snyk (Node.js)
-        uses: snyk/actions/node@master
-        continue-on-error: true
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/node@11b673cfb4b0dc0d860a1323caa199d54950dcce # master
         with:
           args: --severity-threshold=high
         env:
@@ -123,13 +136,14 @@ jobs:
           docker build -t ant-backend:scan -f docker/Dockerfile.backend .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
         with:
           image-ref: 'ant-backend:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+          # Fail the scan on HIGH+ findings — reports are not enough
+          exit-code: '1'
           vuln-type: 'os,library'
 
       - name: Upload Trivy scan results to Security tab
@@ -139,7 +153,7 @@ jobs:
         continue-on-error: true
 
       - name: Generate Trivy HTML report
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
         with:
           image-ref: 'ant-backend:scan'
           format: 'table'
@@ -167,7 +181,7 @@ jobs:
           fetch-depth: 0
 
       - name: GitLeaks Scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .github/gitleaks.toml
@@ -192,8 +206,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Checkov (Terraform)
-        uses: bridgecrewio/checkov-action@master
-        continue-on-error: true
+        uses: bridgecrewio/checkov-action@c3e106d5f8f4253a6de5110efb41a080f83db294 # master
         with:
           directory: infrastructure/terraform
           framework: terraform
@@ -201,8 +214,7 @@ jobs:
           output_file_path: checkov-results.sarif
 
       - name: Run Checkov (Kubernetes)
-        uses: bridgecrewio/checkov-action@master
-        continue-on-error: true
+        uses: bridgecrewio/checkov-action@c3e106d5f8f4253a6de5110efb41a080f83db294 # master
         with:
           directory: k8s
           framework: kubernetes
@@ -232,32 +244,27 @@ jobs:
           tar xzf conftest_0.53.0_Linux_x86_64.tar.gz
           sudo mv conftest /usr/local/bin/
 
-      - name: Create OPA policy directory
-        run: mkdir -p .github/opa-policies
-
+      # Policies live in .github/opa-policies/ (docker.rego, kubernetes.rego)
       - name: Validate Docker policies
         run: |
           conftest test docker/Dockerfile.backend \
             --policy .github/opa-policies/ \
-            --output table || true
-        continue-on-error: true
+            --output table
 
       - name: Validate Kubernetes policies
         run: |
           conftest test k8s/helm/backend/templates/ \
             --policy .github/opa-policies/ \
-            --output table || true
-        continue-on-error: true
+            --output table
 
       - name: Validate Terraform policies
         run: |
           for dir in infrastructure/terraform/*/; do
             if [ -d "$dir" ]; then
               echo "OPA policy check for $dir"
-              conftest test "$dir" --policy .github/opa-policies/ --output table || true
+              conftest test "$dir" --policy .github/opa-policies/ --output table
             fi
           done
-        continue-on-error: true
 
   # ═══════════════════════════════════════════════════════════════════════
   # BANDIT PYTHON SECURITY LINT
@@ -280,7 +287,7 @@ jobs:
 
       - name: Run Bandit
         run: |
-          bandit -r . -c .bandit -f sarif -o bandit-results.sarif || true
+          bandit -r . -c .bandit -f sarif -o bandit-results.sarif
         working-directory: ./backend
 
       - name: Upload Bandit results to Security tab

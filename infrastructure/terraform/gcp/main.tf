@@ -512,10 +512,13 @@ resource "google_compute_security_policy" "main" {
     priority = 1002
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('cve-canary')"
+        # 'cve-canary' matched nothing (canary test ruleset); use the
+        # real preconfigured RCE set, which covers Log4Shell and JNDI
+        # injection (CVE-2021-44228 and related).
+        expression = "evaluatePreconfiguredWaf('rce-v33-stable')"
       }
     }
-    description = "Block Log4j CVE-2021-44228"
+    description = "Block Log4j CVE-2021-44228 and other RCE injection"
   }
 }
 

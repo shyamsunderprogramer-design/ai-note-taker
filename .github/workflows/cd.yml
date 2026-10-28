@@ -62,6 +62,9 @@ jobs:
     steps:
       - name: Validate deployment
         id: validate
+        env:
+          # Pass untrusted input through env, never ${{ }} shell interpolation
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
         run: |
           # Determine target environment
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
@@ -74,11 +77,15 @@ jobs:
             ENV="${{ github.event.inputs.environment || 'staging' }}"
           fi
 
-          # Determine image tag
-          TAG="${{ github.event.inputs.image_tag || github.sha }}"
-          # For workflow_run, use the SHA from the completed CI workflow
+          # Determine image tag (server-supplied SHAs are trusted; manual
+          # input is validated strictly before it reaches terraform/helm)
+          TAG="${INPUT_IMAGE_TAG:-$GITHUB_SHA}"
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             TAG="${{ github.event.workflow_run.head_sha }}"
+          fi
+          if ! echo "$TAG" | grep -Eq '^[a-zA-Z0-9._-]+$'; then
+            echo "::error::Invalid image tag: $TAG"
+            exit 1
           fi
 
           echo "environment=$ENV" >> $GITHUB_OUTPUT
@@ -122,17 +129,24 @@ jobs:
 
       - name: Terraform Plan
         id: plan
+        env:
+          DEPLOY_ENVIRONMENT: ${{ needs.pre-deploy.outputs.environment }}
+          DEPLOY_IMAGE_TAG: ${{ needs.pre-deploy.outputs.image_tag }}
         run: |
           terraform plan \
-            -var="environment=${{ needs.pre-deploy.outputs.environment }}" \
-            -var="image_tag=${{ needs.pre-deploy.outputs.image_tag }}" \
+            -var="environment=$DEPLOY_ENVIRONMENT" \
+            -var="image_tag=$DEPLOY_IMAGE_TAG" \
             -out=tfplan \
             -no-color
         working-directory: infrastructure/terraform/aws
-        continue-on-error: true
 
+      # Deny-by-default: production infrastructure changes are planned and
+      # uploaded for review, but never auto-applied. A human applies the plan
+      # (or re-runs a dispatch targeting a non-production environment). Pair
+      # with a required-reviewers protection rule on the GitHub 'production'
+      # environment for defense in depth.
       - name: Terraform Apply
-        if: needs.pre-deploy.outputs.environment != 'production' || github.event.inputs.rollout_strategy != 'manual'
+        if: needs.pre-deploy.outputs.environment != 'production'
         run: terraform apply -auto-approve tfplan
         working-directory: infrastructure/terraform/aws
 
@@ -182,20 +196,22 @@ jobs:
 
       - name: Verify OPA Gatekeeper constraints
         run: |
-          # Check that OPA Gatekeeper is enforcing policies
-          kubectl get constrainttemplates.gatekeeper.sh -o wide || echo "Gatekeeper not installed (optional)"
-          kubectl get constraints -o wide || echo "No constraints found"
-        continue-on-error: true
+          # Fail the deploy if Gatekeeper is not enforcing policies.
+          kubectl get constrainttemplates.gatekeeper.sh -o wide
+          kubectl get constraints -o wide
 
       # ─── Backend Deployment ────────────────────────────────────────────
       - name: Deploy Backend Helm Chart
+        env:
+          DEPLOY_IMAGE_TAG: ${{ needs.pre-deploy.outputs.image_tag }}
+          DEPLOY_ENVIRONMENT: ${{ needs.pre-deploy.outputs.environment }}
         run: |
           helm upgrade --install ant-backend \
             ./k8s/helm/backend \
             --namespace ant \
             --create-namespace \
-            --values ./k8s/helm/backend/values-${{ needs.pre-deploy.outputs.environment }}.yaml \
-            --set image.tag=${{ needs.pre-deploy.outputs.image_tag }} \
+            --values ./k8s/helm/backend/values-${DEPLOY_ENVIRONMENT}.yaml \
+            --set image.tag="$DEPLOY_IMAGE_TAG" \
             --wait --timeout 10m \
             --atomic \
             --cleanup-on-fail
@@ -203,11 +219,13 @@ jobs:
       # ─── Canary Rollout (Production) ──────────────────────────────────
       - name: Canary Deployment (Production)
         if: needs.pre-deploy.outputs.environment == 'production' && github.event.inputs.rollout_strategy == 'canary'
+        env:
+          DEPLOY_IMAGE_TAG: ${{ needs.pre-deploy.outputs.image_tag }}
         run: |
           # Use Argo Rollouts for canary deployment
           kubectl argo rollouts set image ant-backend \
-            ant-backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ needs.pre-deploy.outputs.image_tag }} \
-            --namespace ant 2>/dev/null || echo "Argo Rollouts not available, using Helm deployment"
+            ant-backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:$DEPLOY_IMAGE_TAG \
+            --namespace ant
 
           # Monitor rollout progress
           kubectl argo rollouts get rollout ant-backend \
@@ -227,11 +245,14 @@ jobs:
               -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "localhost")
           fi
 
-          # Health check
+          # Health check — the deploy is not healthy unless this passes
           echo "Testing health endpoint at https://$BACKEND_URL/health"
-          curl -sf --max-time 30 "https://$BACKEND_URL/health" || \
-          curl -sf --max-time 30 "http://$BACKEND_URL:8000/health" || \
-          echo "Warning: Could not reach health endpoint (may be internal only)"
+          if ! curl -sf --max-time 30 "https://$BACKEND_URL/health"; then
+            if ! curl -sf --max-time 30 "http://$BACKEND_URL:8000/health"; then
+              echo "::error::Health endpoint unreachable at $BACKEND_URL"
+              exit 1
+            fi
+          fi
 
       # ─── Verify Deployment Health ──────────────────────────────────────
       - name: Verify Deployment Health
