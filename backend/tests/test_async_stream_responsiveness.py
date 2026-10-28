@@ -52,3 +52,23 @@ async def test_cancellation_closes_provider_after_pending_read():
         await task
     release.set()
     assert await asyncio.to_thread(closed.wait, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+async def test_route_accepts_both_provider_protocols_after_app_import(monkeypatch, asynchronous):
+    import ai_router
+    from modules.platform import cloud_providers
+    original = cloud_providers.ask_gpt_stream
+    import core.main
+    assert cloud_providers.ask_gpt_stream is original
+    assert not hasattr(original, '_async_patched')
+    expected = ['event: content\ndata: {"content":"answer"}\n\n', 'event: done\ndata: {}\n\n']
+    def sync_provider(*args, **kwargs):
+        yield from expected
+    async def async_provider(*args, **kwargs):
+        for item in expected:
+            yield item
+    monkeypatch.setattr(ai_router, 'ask_ollama_stream', async_provider if asynchronous else sync_provider)
+    actual = [event async for event in ai_router.route_ai_stream('Question', provider='qa:local')]
+    assert actual == expected

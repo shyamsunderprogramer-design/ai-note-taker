@@ -1,4 +1,5 @@
 """Route module for AI streaming, race, search, and configuration endpoints."""
+from lib.async_stream import iterate_stream
 import hashlib
 import asyncio
 import json
@@ -138,10 +139,8 @@ def stream_ai(q: str, mode: str = "fast", style: str = "concise", provider: str 
 
             collected_parts = []
             stream_failed = False
-            # route_ai_stream is now async (its inner helpers are also async
-            # generators after the core/main.py patch). Must use `async for`
-            # — sync `for` raises "'async_generator' object is not iterable".
-            async for event in route_ai_stream(q, mode, style, provider, messages, temperature=temperature):
+            # Adapt provider streams locally without changing their public protocol.
+            async for event in iterate_stream(route_ai_stream(q, mode, style, provider, messages, temperature=temperature)):
                 for line in event.splitlines():
                     if line.startswith("data:"):
                         try:
@@ -296,7 +295,7 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                         yield make_error("The selected provider is unavailable.")
                         return
                     stream = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)
-                async for event in stream:
+                async for event in iterate_stream(stream):
                     answered = answered or has_answer_content(event)
                     failed = failed or "event: error" in event
                     if "event: done" not in event or answered:
@@ -332,10 +331,8 @@ def stream_race(q: str, mode: str = "race", style: str = "concise", context: str
                     stream_iter = stream_fn(q, model=model_name, mode=mode, style=style, messages=messages, temperature=temperature)
 
                 has_error = False
-                # All stream functions are patched to async generators at
-                # core/main.py import time, so `async for` works uniformly
-                # for both ollama and cloud providers.
-                async for event in stream_iter:
+                # Adapt provider streams locally without changing their public protocol.
+                async for event in iterate_stream(stream_iter):
                     if cancel_flags[pk].is_set():
                         logger.info("[PROVIDER CANCELLED] %s after %.1fs", pk, time.time() - provider_start)
                         race_queue.put((pk, "DONE", None))
@@ -548,7 +545,7 @@ async def ask_with_image(
             try:
                 from ai_router import route_ai_stream
                 # route_ai_stream is async — must use `async for`.
-                async for event in route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature):
+                async for event in iterate_stream(route_ai_stream(query, mode=mode, style=style, provider=provider, messages=messages, temperature=temperature)):
                     yield event
             except Exception as e:
                 logger.error("[Stream] Image request failed")
@@ -574,12 +571,12 @@ async def ask_with_image(
                     if not stream_fn:
                         raise ValueError("Selected model provider does not support screenshots")
                     stream = stream_fn(query, image_b64=image_b64, model=chosen[1], mode=mode, style=style, messages=messages, temperature=temperature)
-                elif ":" in provider and not provider.endswith(":cloud"):
+                elif ":" in provider and not provider.endswith((":cloud", "-cloud")):
                     from ai_router import ask_ollama_vision_stream
                     stream = ask_ollama_vision_stream(query, image_b64=image_b64, model_name=provider, mode=mode, style=style, messages=messages, temperature=temperature)
                 else:
                     raise ValueError("Selected model is unavailable for screenshots; choose a vision model or remove the screenshot")
-                async for event in stream:
+                async for event in iterate_stream(stream):
                     yield event
             except Exception as exc:
                 yield f"event: error\ndata: {json.dumps({'type':'error','message':'The selected model could not process the screenshot. Check its availability and vision support.'})}\n\n"
@@ -636,7 +633,7 @@ async def ask_with_image(
             async def single_vision_gen():
                 STATE["is_streaming"] = True
                 try:
-                    async for event in stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature):
+                    async for event in iterate_stream(stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature)):
                         yield event
                 except Exception as e:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
@@ -652,7 +649,7 @@ async def ask_with_image(
                 try:
                     from ai_router import ask_ollama_vision_stream
                     # Patched to async generator at core/main.py import time.
-                    async for event in ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=ollama_vision_model, temperature=temperature):
+                    async for event in iterate_stream(ask_ollama_vision_stream(query, image_b64=image_b64, mode=mode, style=style, messages=messages, model_name=ollama_vision_model, temperature=temperature)):
                         yield event
                 except Exception as e:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"
@@ -693,8 +690,8 @@ async def ask_with_image(
                         return
                     stream_iter = stream_fn(query, image_b64=image_b64, model=model, mode=mode, style=style, messages=messages, temperature=temperature)
 
-                # All vision stream functions are patched to async generators.
-                async for event in stream_iter:
+                # Adapt provider streams locally without changing their public protocol.
+                async for event in iterate_stream(stream_iter):
                     if cancel_flags[provider_name].is_set():
                         race_queue.put((provider_name, "DONE", None))
                         return
@@ -768,18 +765,18 @@ async def overlay_ask(
                 if not model_name:
                     yield f"event: error\ndata: {json.dumps({'type':'error','message':'No vision model found. Pull one with: ollama pull llava:latest'})}\n\n"
                     return
-                # ask_ollama_vision_stream is async (patched in core/main.py).
-                async for event in ask_ollama_vision_stream(
+                # Adapt provider streams locally without changing their public protocol.
+                async for event in iterate_stream(ask_ollama_vision_stream(
                     query,
                     image_b64=screenshot_b64,
                     mode="fast",
                     style="concise",
                     model_name=model_name,
                     temperature=temperature
-                ):
+                )):
                     yield event
             else:
-                async for event in route_ai_stream(query, mode="fast", style="concise", temperature=temperature):
+                async for event in iterate_stream(route_ai_stream(query, mode="fast", style="concise", temperature=temperature)):
                     yield event
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'type':'error','message':'An internal error occurred'})}\n\n"

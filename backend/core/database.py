@@ -35,7 +35,7 @@ DEFAULT_POSTGRES_URL = ""  # Must be set via DATABASE_URL env var in production
 
 # SQLite path: use absolute path based on this file's location
 _BACKEND_DIR = Path(__file__).resolve().parent  # backend/core/
-_DATA_DIR = _BACKEND_DIR.parent / "data"  # backend/data/
+_DATA_DIR = Path(os.environ["ANT_DATA_DIR"]).resolve() if os.getenv("ANT_DATA_DIR") else _BACKEND_DIR.parent / "data"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_SQLITE_URL = f"sqlite+aiosqlite:///{_DATA_DIR / 'ainotetaker.db'}"
 
@@ -61,11 +61,11 @@ if database_dialect(DATABASE_URL) == "sqlite":
     USE_SQLITE = True
 
 # Force SQLite for development (safer default)
-if FORCE_SQLITE:
+if FORCE_SQLITE or USE_SQLITE:
     USE_SQLITE = True
-    DATABASE_URL = DEFAULT_SQLITE_URL
-elif USE_SQLITE:
-    DATABASE_URL = DEFAULT_SQLITE_URL
+    # Keep explicit SQLite URLs (including disposable test databases).
+    if not DATABASE_URL.lower().startswith("sqlite"):
+        DATABASE_URL = DEFAULT_SQLITE_URL
 
 logger.info("[Database] Module loaded (SQLite=%s)", USE_SQLITE)
 

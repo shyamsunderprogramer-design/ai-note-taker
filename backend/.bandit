@@ -1,0 +1,12 @@
+# Bandit security linter configuration for AI Note Taker
+# https://bandit.readthedocs.io/
+
+profile:
+  exclude_dirs:
+    - 'tests'
+    - 'core/test_startup.py'
+  skips:
+    - B101  # assert used in test files is intentional; excluded dirs above
+
+targets:
+  - '.'

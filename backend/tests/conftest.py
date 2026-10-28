@@ -3,8 +3,16 @@ Test configuration and fixtures for AI Note Taker backend tests.
 """
 import os
 import sys
+import tempfile
+from pathlib import Path
 import pytest
 import pytest_asyncio
+
+# Allocate disposable default storage before importing application modules.
+# The isolated runner supplies its own artifact directory.
+if not os.getenv("ANT_DATA_DIR"):
+    os.environ["ANT_DATA_DIR"] = tempfile.mkdtemp(prefix="ant-pytest-data-")
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///" + str(Path(os.environ["ANT_DATA_DIR"]) / "test.db")
 
 # Set test environment variables before importing app modules
 os.environ["USE_SQLITE"] = "true"
@@ -13,8 +21,8 @@ os.environ["TESTING"] = "true"
 os.environ["ANT_SKIP_ALEMBIC"] = "1"  # tests build a fresh in-memory DB
 
 # Add backend and modules paths for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'modules', 'ai'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'modules' / 'ai'))
 
 
 @pytest.fixture(scope="session")
@@ -136,4 +144,4 @@ async def tmp_db(monkeypatch, tmp_path):
 @pytest.fixture
 def api_base_url():
     """Base URL for the API."""
-    return os.getenv("TEST_API_URL", "http://127.0.0.1:8000")  # nosec B106 — test localhost
+    return os.getenv("TEST_API_URL", "http://127.0.0.1:8046")  # nosec B106 — test localhost

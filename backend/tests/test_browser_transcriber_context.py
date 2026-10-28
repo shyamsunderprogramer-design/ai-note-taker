@@ -84,3 +84,16 @@ def test_disconnect_suppresses_inflight_callback(speech, monkeypatch):
     assert seen == []
     transcriber.add_chunk(audio(8))
     assert transcriber._chunk_queue.empty()
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('Explain cash invalidation.', 'Explain cache invalidation.'),
+    ('The cash hit rate improved.', 'The cache hit rate improved.'),
+    ('Cash miss rate increased.', 'Cache miss rate increased.'),
+    ('We need cash flow for the business.', 'We need cash flow for the business.'),
+    ('Our cash balance fell.', 'Our cash balance fell.'),
+    ('Count cash in the register.', 'Count cash in the register.'),
+    ('We tested the cash change.', 'We tested the cash change.'),
+])
+def test_homophones_require_computing_phrase(speech, heard, expected):
+    assert speech.normalize_technical_homophones(heard) == expected

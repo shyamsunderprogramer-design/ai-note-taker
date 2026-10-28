@@ -14,6 +14,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-AriaNeural",
       "training_progress": 0.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -30,6 +32,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-AriaNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -46,6 +50,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-GuyNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -62,6 +68,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-AndrewNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -78,6 +86,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-JennyNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -94,6 +104,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-GB-SoniaNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -110,6 +122,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-GB-ThomasNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -126,6 +140,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-AriaNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -142,6 +158,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-GuyNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -158,6 +176,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-US-AndrewNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -174,6 +194,8 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-GB-SoniaNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
       "training_error": ""
     },
     {
@@ -190,6 +212,26 @@
       "f0_method": "rmvpe",
       "edge_voice": "en-GB-ThomasNeural",
       "training_progress": 1.0,
+      "reference_audio": "",
+      "reference_text": "",
+      "training_error": ""
+    },
+    {
+      "id": "voice_a48ed1c76cf349799cbabd6ad0290584",
+      "name": "Test voice",
+      "sample_count": 1,
+      "created_at": 1791218534.193092,
+      "model_path": "/Volumes/Storage/D Drive /Rep/ai-note-taker/backend/data/voice_models/voice_a48ed1c76cf349799cbabd6ad0290584",
+      "quality_score": 0.0,
+      "status": "ready",
+      "model_file": "",
+      "index_file": "",
+      "source": "qwen_local",
+      "f0_method": "rmvpe",
+      "edge_voice": "",
+      "training_progress": 0.0,
+      "reference_audio": "/Volumes/Storage/D Drive /Rep/ai-note-taker/backend/data/voice_models/voice_a48ed1c76cf349799cbabd6ad0290584/reference.wav",
+      "reference_text": "A reference transcript",
       "training_error": ""
     }
   ]

@@ -10,9 +10,12 @@ import httpx
 import asyncio
 import uuid
 import socket
+import json
+import os
+from urllib.parse import urlparse
 from typing import AsyncGenerator
 
-BASE_URL = "http://127.0.0.1:8000"  # nosec B106 — test localhost
+BASE_URL = os.getenv("TEST_API_URL", "http://127.0.0.1:8046")  # nosec B106 — test localhost
 
 # Test user credentials - admin user is auto-created by UserManager
 TEST_USERNAME = "admin"
@@ -22,7 +25,8 @@ TEST_PASSWORD = "admin123"  # nosec B105 — test credential
 def _server_available() -> bool:
     """Check if the API server is reachable."""
     try:
-        host, port = "127.0.0.1", 8000  # nosec B106 — test localhost
+        target = urlparse(BASE_URL)
+        host, port = target.hostname, target.port or 80  # nosec B106 — test localhost
         with socket.create_connection((host, port), timeout=1):
             return True
     except (ConnectionRefusedError, OSError, TimeoutError):
@@ -32,7 +36,7 @@ def _server_available() -> bool:
 # Skip entire module if server is not running
 pytestmark = pytest.mark.skipif(
     not _server_available(),
-    reason="API server not running at http://127.0.0.1:8000 — start with: python -m core.main"
+    reason=f"Isolated API server not running at {BASE_URL}"
 )
 
 
@@ -54,15 +58,15 @@ async def auth_client() -> AsyncGenerator[httpx.AsyncClient, None]:
             "email": f"integration_{unique}@example.com",
             "password": "TestPass123!"
         })
+        assert reg_resp.status_code in (200, 201), reg_resp.text
         # Login with the registered user
         response = await client.post("/auth/login", data={
             "username": f"integration_{unique}",
             "password": "TestPass123!"
         })
-        if response.status_code == 200:
-            token = response.json().get("access_token")
-            if token:
-                client.headers["Authorization"] = f"Bearer {token}"
+        assert response.status_code == 200, response.text
+        token = response.json()["access_token"]
+        client.headers["Authorization"] = f"Bearer {token}"
         yield client
 
 
@@ -116,7 +120,7 @@ class TestProviderEndpoints:
     async def test_byok_status(self, auth_client: httpx.AsyncClient):
         """GET /providers/byok/status."""
         response = await auth_client.get("/providers/byok/status")
-        assert response.status_code in [200, 401]  # nosec B101
+        assert response.status_code == 200  # nosec B101
 
     async def test_rate_limit_status(self, auth_client: httpx.AsyncClient):
         """GET /rate-limit/status."""
@@ -152,8 +156,9 @@ class TestConversationEndpoints:
 
     async def test_import_conversation(self, auth_client: httpx.AsyncClient):
         """POST /conversations/import."""
-        response = await auth_client.post("/conversations/import", json={})
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.post("/conversations/import", files={"file": ("qa.json", json.dumps({"messages": [{"role": "user", "text": "QA import"}]}), "application/json")})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
 
 @pytest.mark.asyncio
@@ -165,14 +170,16 @@ class TestDocumentEndpoints:
         response = await auth_client.get("/documents")
         assert response.status_code == 200  # nosec B101
         data = response.json()
-        assert isinstance(data, list)  # nosec B101
+        assert isinstance(data["documents"], list)
+        assert data["total"] >= 0
 
     async def test_retrieve_documents(self, auth_client: httpx.AsyncClient):
         """POST /documents/retrieve."""
-        response = await auth_client.post("/documents/retrieve", json={
+        response = await auth_client.post("/documents/retrieve", data={
             "query": "test query"
         })
-        assert response.status_code in [200, 400]  # nosec B101
+        assert response.status_code == 200, response.text  # nosec B101
+
 
 
 @pytest.mark.asyncio
@@ -206,10 +213,11 @@ class TestInterviewAndSuggestions:
 
     async def test_realtime_process(self, auth_client: httpx.AsyncClient):
         """POST /realtime/process."""
-        response = await auth_client.post("/realtime/process", json={
-            "text": "test transcript"
+        response = await auth_client.post("/realtime/process", params={
+            "text": "test transcript", "speaker": "user"
         })
-        assert response.status_code in [200, 400]  # nosec B101
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_realtime_configure(self, auth_client: httpx.AsyncClient):
         """POST /realtime/configure."""
@@ -225,13 +233,15 @@ class TestInterviewAndSuggestions:
 
     async def test_predict_questions(self, auth_client: httpx.AsyncClient):
         """GET /predict/questions."""
-        response = await auth_client.get("/predict/questions")
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.get("/predict/questions", params={"company": "QA Company"})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_predict_checklist(self, auth_client: httpx.AsyncClient):
         """GET /predict/checklist."""
-        response = await auth_client.get("/predict/checklist")
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.get("/predict/checklist", params={"company": "QA Company"})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_predict_companies(self, auth_client: httpx.AsyncClient):
         """GET /predict/companies."""
@@ -278,10 +288,11 @@ class TestPerformanceEndpoints:
 
     async def test_performance_analyze(self, auth_client: httpx.AsyncClient):
         """POST /performance/analyze."""
-        response = await auth_client.post("/performance/analyze", json={
-            "conversation_id": "test"
+        response = await auth_client.post("/performance/analyze", params={
+            "answer_text": "Our service was slow. I profiled the queries and added an index. Latency fell from 120 ms to 80 ms."
         })
-        assert response.status_code in [200, 400]  # nosec B101
+        assert response.status_code == 200, response.text  # nosec B101
+
 
 
 @pytest.mark.asyncio
@@ -290,10 +301,12 @@ class TestStudyPlanEndpoints:
 
     async def test_study_plan_generate(self, auth_client: httpx.AsyncClient):
         """POST /study-plan/generate."""
-        response = await auth_client.post("/study-plan/generate", json={
-            "goal": "test goal"
+        me = (await auth_client.get("/auth/me")).json()
+        response = await auth_client.post("/study-plan/generate", params={
+            "user_id": me["id"], "days": 3, "daily_minutes": 30, "target_role": "software_engineer"
         })
-        assert response.status_code in [200, 400]  # nosec B101
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_study_plan_resources(self, auth_client: httpx.AsyncClient):
         """GET /study-plan/resources/{category}."""
@@ -317,8 +330,9 @@ class TestJobTrackerEndpoints:
 
     async def test_job_tracker_search(self, auth_client: httpx.AsyncClient):
         """GET /job-tracker/search."""
-        response = await auth_client.get("/job-tracker/search", params={"q": "engineer"})
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.get("/job-tracker/search", params={"query": "engineer"})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_job_tracker_upcoming_interviews(self, auth_client: httpx.AsyncClient):
         """GET /job-tracker/upcoming-interviews."""
@@ -352,8 +366,9 @@ class TestMockInterviewEndpoints:
 
     async def test_mock_interview_search(self, auth_client: httpx.AsyncClient):
         """GET /mock-interview/search."""
-        response = await auth_client.get("/mock-interview/search", params={"q": "behavioral"})
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.get("/mock-interview/search", params={"query": "behavioral"})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_mock_interview_stats(self, auth_client: httpx.AsyncClient):
         """GET /mock-interview/stats."""
@@ -402,13 +417,15 @@ class TestCollaborationEndpoints:
 
     async def test_collab_status(self, auth_client: httpx.AsyncClient):
         """GET /collaboration/status."""
-        response = await auth_client.get("/collaboration/status")
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.get("/collaboration/status", params={"session_id": "qa-missing-session"})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_collab_messages(self, auth_client: httpx.AsyncClient):
         """GET /collaboration/messages."""
-        response = await auth_client.get("/collaboration/messages")
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.get("/collaboration/messages", params={"session_id": "qa-missing-session", "participant_id": "qa-missing-participant"})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
 
 @pytest.mark.asyncio
@@ -447,7 +464,7 @@ class TestMiscEndpoints:
 
     async def test_search_web(self, auth_client: httpx.AsyncClient):
         """GET /search/web."""
-        response = await auth_client.get("/search/web", params={"q": "test"})
+        response = await auth_client.get("/search/web", params={"query": "test"})
         assert response.status_code in [200, 400, 503]  # nosec B101
 
     async def test_search_status(self, auth_client: httpx.AsyncClient):
@@ -457,20 +474,23 @@ class TestMiscEndpoints:
 
     async def test_resume_analyze(self, auth_client: httpx.AsyncClient):
         """POST /resume/analyze."""
-        response = await auth_client.post("/resume/analyze", json={})
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.post("/resume/analyze", params={"resume_text": "QA Engineer. Built Python test automation and maintained Linux services."})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_resume_compare(self, auth_client: httpx.AsyncClient):
         """POST /resume/compare."""
-        response = await auth_client.post("/resume/compare", json={})
-        assert response.status_code in [200, 400]  # nosec B101
+        response = await auth_client.post("/resume/compare", params={"resume_text": "QA Engineer. Built Python test automation.", "job_description": "Seeking a QA engineer with Python experience."})
+        assert response.status_code == 200, response.text  # nosec B101
+
 
     async def test_analysis_complexity(self, auth_client: httpx.AsyncClient):
         """POST /analysis/complexity."""
-        response = await auth_client.post("/analysis/complexity", json={
+        response = await auth_client.post("/analysis/complexity", params={
             "text": "test"
         })
-        assert response.status_code in [200, 400]  # nosec B101
+        assert response.status_code == 200, response.text  # nosec B101
+
 
 
 # ====================
