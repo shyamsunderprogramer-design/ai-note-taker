@@ -61,14 +61,10 @@ sdist/
 # require("./lib/logger") and the app silently hangs on launch.
 !electron/lib/
 
-# Root package-lock.json is NOT used by the release CI — only
-# electron/package-lock.json is. If a root lockfile exists it tends to
-# drag in @rollup/rollup-{darwin-arm64,win32-x64,...} transitive deps
-# from a single-platform `npm install`, which then fail EBADPLATFORM on
-# the other 2 matrix runners. The root package.json has no real deps
-# (only eslint in devDependencies; all installable workspaces carry
-# their own lockfile).
+# Ignore workspace-local lockfiles; the root lockfile covers the monorepo.
 package-lock.json
+# The monorepo CI uses npm ci and needs the root workspace lockfile.
+!/package-lock.json
 var/
 wheels/
 share/python-wheels/
@@ -309,3 +305,26 @@ lib-cov
 !README.md
 !LICENSE
 !CHANGELOG.md
+
+# App-managed voice runtime and downloaded model weights
+backend/data/voice_models/local_engine/
+
+# ── Local runtime & agent-tooling state (never commit) ───────────
+# Runtime DB files created by agent tooling in the repo root
+agentdb.rvf
+agentdb.rvf.lock
+:memory:.ses
+# Local session/test artifacts produced by QA runs
+artifacts/
+e2e/test-results/
+e2e/playwright-report/
+# App runtime data (users, audit logs, DB, generated audio)
+backend/core/data/
+# Local agent state (memory, worktrees, provenance)
+.claude/agent-memory/
+.claude/worktrees/
+.claude/proven-config.json
+.claude/.proven-config-version
+.claude-flow/
+# Design reference images (not referenced by any build)
+Ant Images/
