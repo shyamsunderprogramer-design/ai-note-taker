@@ -22,6 +22,12 @@ export class ApiService {
       ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
       ...options.headers,
     }
+    // Native fetch adds the multipart boundary for file uploads.
+    if (options.body instanceof FormData) {
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase() === "content-type") delete headers[key]
+      }
+    }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
@@ -34,7 +40,49 @@ export class ApiService {
       throw new Error("Authentication required")
     }
 
-    return response.json()
+    const data = await response.json()
+    if (!response.ok || data?.status === "error") {
+      throw new Error(data?.detail || data?.error?.message || data?.message || `Request failed (${response.status})`)
+    }
+    return data
+  }
+
+  async transcribeAudio(path) {
+    if (!path) throw new Error("No recording to upload")
+    const uri = /^(file|content):\/\//.test(path) ? path : `file://${path}`
+    const extension = path.split(/[?#]/)[0].split(".").pop().toLowerCase()
+    const types = { m4a: "audio/mp4", mp4: "audio/mp4", aac: "audio/aac", wav: "audio/wav", mp3: "audio/mpeg", webm: "audio/webm" }
+    const form = new FormData()
+    form.append("file", {
+      uri,
+      name: `recording.${types[extension] ? extension : "m4a"}`,
+      type: types[extension] || "audio/mp4",
+    })
+    return this.request("/transcribe", { method: "POST", body: form })
+  }
+
+  async listJobs() {
+    const user = await this.request("/auth/me")
+    const data = await this.request(`/job-tracker/applications?user_id=${encodeURIComponent(user.id)}`)
+    return data.applications
+  }
+
+  async generateStudyPlan(topic) {
+    const user = await this.request("/auth/me")
+    const data = await this.request("/study-plan/generate-personalized", {
+      method: "POST",
+      body: JSON.stringify({ user_id: String(user.id), target_role: topic }),
+    })
+    return {
+      ...data,
+      steps: (data.sessions || []).flatMap(session =>
+        (session.tasks || []).map(task => `${session.date}: ${task.title} — ${task.description}`)),
+    }
+  }
+
+  async getAnalytics() {
+    const user = await this.request("/auth/me")
+    return this.request(`/analytics/dashboard/${encodeURIComponent(user.id)}`)
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────

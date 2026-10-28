@@ -67,20 +67,20 @@ export default function AnalyticsScreen() {
       <Text style={styles.title}>Your Analytics</Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>Conversations</Text>
-        <Text style={styles.cardValue}>{stats?.conversationCount ?? 0}</Text>
+        <Text style={styles.cardLabel}>Interviews</Text>
+        <Text style={styles.cardValue}>{stats?.summary?.total_interviews ?? 0}</Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>Total Duration</Text>
+        <Text style={styles.cardLabel}>Current Streak</Text>
         <Text style={styles.cardValue}>
-          {Math.round((stats?.totalDurationSec ?? 0) / 60)} min
+          {stats?.summary?.current_streak ?? 0} days
         </Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>Entities Tracked</Text>
-        <Text style={styles.cardValue}>{stats?.entityCount ?? 0}</Text>
+        <Text style={styles.cardLabel}>Skills Tracked</Text>
+        <Text style={styles.cardValue}>{stats?.summary?.total_skills ?? 0}</Text>
       </View>
 
       {stats?.topTopics && stats.topTopics.length > 0 && (

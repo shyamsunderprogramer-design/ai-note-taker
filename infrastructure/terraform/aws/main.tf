@@ -46,8 +46,7 @@ provider "aws" {
 # VPC & Networking
 # ─────────────────────────────────────────────────────────────────────────────
 module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "5.5.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=e4768508a17f79337f9f1e48ebf47ee885b98c1f"
 
   name = "ant-vpc-${var.environment}"
   cidr = var.vpc_cidr
@@ -70,8 +69,7 @@ module "vpc" {
 # EKS Cluster
 # ─────────────────────────────────────────────────────────────────────────────
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "20.8.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-eks.git?ref=6d3d6d9383076df7009e01e2bb79febcdd24ebf0"
 
   cluster_name                   = "${var.cluster_name}-${var.environment}"
   cluster_version                = "1.29"
@@ -177,8 +175,7 @@ resource "helm_release" "aws_lb_controller" {
 }
 
 module "aws_lb_controller_irsa" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "5.30.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-iam.git//modules/iam-role-for-service-accounts-eks?ref=856b5438e91dd87c1e9d225afd123769aaadb635"
 
   role_name = "${var.cluster_name}-aws-lb-controller"
 
@@ -200,9 +197,14 @@ resource "aws_iam_policy" "aws_lb_controller" {
     Version = "2012-10-17"
     Statement = [
       {
+        Effect    = "Allow"
+        Action    = "iam:CreateServiceLinkedRole"
+        Resource  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing"
+        Condition = { StringEquals = { "iam:AWSServiceName" = "elasticloadbalancing.amazonaws.com" } }
+      },
+      {
         Effect = "Allow"
         Action = [
-          "iam:CreateServiceLinkedRole",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeImages",
           "ec2:DescribeInstances",
@@ -244,8 +246,7 @@ resource "helm_release" "cluster_autoscaler" {
 }
 
 module "cluster_autoscaler_irsa" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "5.30.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-iam.git//modules/iam-role-for-service-accounts-eks?ref=856b5438e91dd87c1e9d225afd123769aaadb635"
 
   role_name = "${var.cluster_name}-cluster-autoscaler"
 
@@ -334,8 +335,7 @@ resource "helm_release" "ant_backend" {
 # Backend IAM Role for Service Accounts (IRSA)
 # ─────────────────────────────────────────────────────────────────────────────
 module "backend_irsa" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "5.30.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-iam.git//modules/iam-role-for-service-accounts-eks?ref=856b5438e91dd87c1e9d225afd123769aaadb635"
 
   role_name = "${var.cluster_name}-backend"
 
@@ -385,8 +385,7 @@ resource "aws_iam_policy" "backend" {
 # RDS PostgreSQL (Optional - for production)
 # ─────────────────────────────────────────────────────────────────────────────
 module "rds" {
-  source  = "terraform-aws-modules/rds/aws"
-  version = "6.6.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-rds.git?ref=04d53d8aeea19db2589fbafe96fad576b679b6d3"
 
   identifier = "ant-postgres-${var.environment}"
 
@@ -434,11 +433,11 @@ resource "aws_security_group" "rds" {
   }
 
   egress {
-    description = "Allow all outbound traffic"
+    description = "Database outbound traffic within the VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 }
 
@@ -459,23 +458,33 @@ resource "aws_network_interface" "rds_endpoint" {
 # ─────────────────────────────────────────────────────────────────────────────
 resource "aws_ecr_repository" "backend" {
   name                 = "ant-backend"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   # Fix #24: was `image_scanning_configuration = { scan_on_push = true }`
   # (attribute syntax); AWS provider 5.x requires a block.
   image_scanning_configuration {
     scan_on_push = true
   }
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.ecr.arn
+  }
+
 }
 
 resource "aws_ecr_repository" "electron" {
   name                 = "ant-electron"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   # Fix #24: same change as the backend repo above.
   image_scanning_configuration {
     scan_on_push = true
   }
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.ecr.arn
+  }
+
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -636,6 +645,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   rule {
     id     = "transition-to-ia"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
@@ -809,7 +819,6 @@ resource "aws_s3_bucket_replication_configuration" "data" {
   rule {
     id     = "replicate-all"
     status = "Enabled"
-
     filter {}
 
     destination {
@@ -1020,6 +1029,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "replication_logs" {
   rule {
     id     = "expire-logs"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
@@ -1056,6 +1066,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   rule {
     id     = "expire-logs"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
@@ -1081,6 +1092,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "replication" {
   rule {
     id     = "expire-old-versions"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
@@ -1233,6 +1245,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs_replication" {
   rule {
     id     = "expire-old-versions"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
@@ -1317,7 +1330,6 @@ resource "aws_s3_bucket_replication_configuration" "logs" {
   rule {
     id     = "replicate-logs"
     status = "Enabled"
-
     filter {}
 
     destination {
@@ -1437,4 +1449,20 @@ resource "aws_s3_bucket_notification" "logs_replication" {
   }
 
   depends_on = [aws_sns_topic_policy.logs_replication_events]
+}
+
+resource "aws_kms_key" "ecr" {
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EnableAccountKeyAdministration"
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+      Action    = "kms:*"
+      Resource  = "*"
+    }]
+  })
+  description             = "Encryption key for immutable ANT image repositories"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
 }
