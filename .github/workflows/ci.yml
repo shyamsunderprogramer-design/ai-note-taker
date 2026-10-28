@@ -112,18 +112,17 @@ jobs:
       - name: Audit JavaScript dependencies
         run: npm audit --audit-level=low
 
+      - name: Verify web build assets and performance budget
+        working-directory: apps/web
+        # A successful Vite build alone does not catch missing classic scripts.
+        run: |
+          npm test
+          npm --prefix ../.. run benchmark:web
+
       - name: Verify desktop and mobile unit tests
         run: |
           npm --workspace ai-note-taker test
           npm --workspace ant-mobile test -- --runInBand --watchman=false
-
-      - name: Build apps/web SPA
-        working-directory: apps/web
-        # apps/web/package.json (Fix #18) ships only "dev", "build",
-        # and "preview" scripts — no eslint config, no test script.
-        # Per scope we only verify the production build succeeds;
-        # we deliberately do not run `eslint` here.
-        run: npm run build
 
   e2e:
     name: E2E (Playwright)
@@ -186,6 +185,11 @@ jobs:
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
           npx playwright install --with-deps
 
+      - name: Verify production pages in Chromium
+        run: |
+          npm run web:build
+          npm run benchmark:browser
+
       - name: Run Playwright tests
         working-directory: e2e
         env:
@@ -229,7 +233,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Preserve real historical diffs for reviewed secret fingerprints.
+          # Scan real commit diffs rather than treating a shallow snapshot as
+          # a new commit containing the entire repository.
           fetch-depth: 0
 
       - name: Set up Python 3.12
