@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANT — AI Note Taker | Private. Local. Free.</title>
+<meta name="description" content="ANT is a privacy-first AI notepad with local Whisper transcription, 8 cloud AI providers, stealth mode, and interview tools. 100% free and open source.">
+<meta name="theme-color" content="#0f0f1a">
+<link rel="icon" type="image/svg+xml" href="landing/web/assets/icons/ant-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="landing/web/assets/icons/ant-icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="landing/web/assets/icons/ant-icon-192.png">
+<style>
+/* ── RESET ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+body{font-family:"Segoe UI Variable","Segoe UI",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;color:#e8e8ed;background:#0a0a14;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img,video{max-width:100%;display:block}
+
+/* ── TOKENS ── */
+:root{
+  --pri:#4f6ef6;--pri2:#8b5cf6;--acc:#22d36c;--acc2:#10b981;
+  --dark1:#0a0a14;--dark2:#111122;--dark3:#1a1a2e;--dark4:#222240;
+  --text1:#e8e8ed;--text2:#a0a0b8;--text3:#606078;
+  --glass:rgba(255,255,255,0.03);--glass2:rgba(255,255,255,0.06);
+  --rad:12px;--rad2:20px;--rad3:28px;
+  --ease:cubic-bezier(0.4,0,0.2,1);--spring:cubic-bezier(0.34,1.56,0.64,1);
+}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--dark2)}
+::-webkit-scrollbar-thumb{background:var(--dark4);border-radius:3px}
+
+/* ── NAV ── */
+.nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;transition:background .3s,border-color .3s;border-bottom:1px solid transparent}
+.nav.scrolled{background:rgba(10,10,20,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom-color:rgba(255,255,255,0.06)}
+.nav-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25rem;letter-spacing:-0.02em}
+.nav-logo svg{flex-shrink:0}
+.nav-links{display:flex;align-items:center;gap:36px}
+.nav-links a{font-size:.875rem;font-weight:500;color:var(--text2);transition:color .15s}
+.nav-links a:hover{color:var(--text1)}
+.nav-cta{background:var(--pri);color:#fff;padding:8px 20px;border-radius:999px;font-size:.813rem;font-weight:600;transition:all .2s var(--ease)}
+.nav-cta:hover{background:var(--pri2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(79,110,246,0.4)}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:999px;font-size:.938rem;font-weight:600;border:none;cursor:pointer;transition:all .25s var(--ease);font-family:inherit;white-space:nowrap}
+.btn-pri{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;box-shadow:0 4px 24px rgba(79,110,246,0.35)}
+.btn-pri:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(79,110,246,0.5);filter:brightness(1.1)}
+.btn-out{background:transparent;color:var(--text1);border:1px solid rgba(255,255,255,0.2)}
+.btn-out:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.35)}
+.btn-lg{padding:18px 40px;font-size:1.063rem}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:120px 40px 80px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;pointer-events:none;z-index:0}
+.hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;opacity:0.45}
+.hero-video-overlay{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(10,10,20,0.3) 0%,rgba(10,10,20,0.75) 60%,rgba(10,10,20,0.95) 100%)}
+.hero-orb{position:absolute;border-radius:50%;filter:blur(140px);opacity:.25;z-index:2}
+.hero-orb1{width:700px;height:700px;background:radial-gradient(circle,rgba(79,110,246,.4),transparent 70%);top:-250px;left:-150px;animation:orb1 12s ease-in-out infinite}
+.hero-orb2{width:600px;height:600px;background:radial-gradient(circle,rgba(139,92,246,.3),transparent 70%);bottom:-250px;right:-150px;animation:orb2 15s ease-in-out infinite}
+.hero-orb3{width:500px;height:500px;background:radial-gradient(circle,rgba(34,211,108,.2),transparent 70%);top:40%;left:50%;transform:translate(-50%,-50%);animation:orb3 10s ease-in-out infinite}
+@keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(60px,-40px) scale(1.1)}66%{transform:translate(-30px,30px) scale(.95)}}
+@keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,30px) scale(1.08)}66%{transform:translate(40px,-20px) scale(.93)}}
+@keyframes orb3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.2)}}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 70% 70% at 50% 50%,black 30%,transparent 60%);z-index:2}
+.hero-content{position:relative;z-index:3;text-align:center;max-width:800px}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;background:rgba(79,110,246,0.12);border:1px solid rgba(79,110,246,0.2);border-radius:999px;font-size:.75rem;font-weight:600;color:#a0b8ff;margin-bottom:28px}
+.hero-badge-dot{width:6px;height:6px;border-radius:50%;background:#22d36c;box-shadow:0 0 8px rgba(34,211,108,.5)}
+h1{font-size:clamp(2.8rem,6vw,4.5rem);font-weight:800;line-height:1.08;letter-spacing:-0.03em;margin-bottom:24px;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,0.4)}
+h1 span{background:linear-gradient(135deg,var(--pri),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-p{font-size:1.15rem;color:var(--text2);max-width:540px;margin:0 auto 36px;line-height:1.7;text-shadow:0 1px 12px rgba(0,0,0,0.5)}
+.hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
+.hero-meta{display:flex;align-items:center;gap:12px;justify-content:center;font-size:.813rem;color:var(--text3);flex-wrap:wrap;text-shadow:0 1px 8px rgba(0,0,0,0.5)}
+.hero-scroll{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);z-index:3;color:var(--text3);animation:scroll-bounce 2s ease-in-out infinite;transition:color .2s}
+.hero-scroll:hover{color:var(--text1)}
+@keyframes scroll-bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(8px)}}
+.hero-meta svg{color:#f59e0b}
+
+/* ── APP PREVIEW ── */
+.preview-wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:0 40px 80px}
+.preview{background:var(--dark2);border-radius:var(--rad3);overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 32px 80px rgba(0,0,0,.5);position:relative}
+.preview-bar{display:flex;gap:8px;padding:14px 18px;background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.05)}
+.preview-bar span{width:10px;height:10px;border-radius:50%}
+.preview-bar span:nth-child(1){background:#ef4444}
+.preview-bar span:nth-child(2){background:#f59e0b}
+.preview-bar span:nth-child(3){background:#22c55e}
+.preview-body{display:flex;min-height:420px}
+.preview-sidebar{width:200px;border-right:1px solid rgba(255,255,255,.06);padding:16px 12px;display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.preview-sidebar-item{padding:8px 10px;border-radius:6px;font-size:.75rem;color:var(--text3);display:flex;align-items:center;gap:8px}
+.preview-sidebar-item.active{background:rgba(79,110,246,.12);color:#a0b8ff}
+.preview-main{flex:1;padding:20px;display:flex;flex-direction:column;gap:14px}
+.preview-msg{display:flex;gap:10px;align-items:flex-start}
+.preview-avatar{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.625rem;font-weight:700;flex-shrink:0}
+.preview-avatar.usr{background:rgba(79,110,246,.25);color:#6b9fff}
+.preview-avatar.ai{background:rgba(34,211,108,.2);color:#4ade80}
+.preview-bubble{padding:10px 14px;border-radius:var(--rad);font-size:.813rem;line-height:1.5;flex:1}
+.preview-bubble.usr{background:rgba(79,110,246,.1);color:var(--text2);border:1px solid rgba(79,110,246,.1)}
+.preview-bubble.ai{background:rgba(255,255,255,.03);color:var(--text2);border:1px solid rgba(255,255,255,.05)}
+.preview-skel{height:8px;background:rgba(255,255,255,.06);border-radius:4px;width:100%}
+.preview-skel.short{width:60%}
+.preview-wave{display:flex;align-items:flex-end;gap:3px;height:30px;padding:6px 10px;background:rgba(79,110,246,.08);border-radius:8px;margin-top:4px}
+.preview-wave b{flex:1;background:var(--pri);border-radius:2px;animation:wave .7s ease-in-out infinite;opacity:.7}
+.preview-wave b:nth-child(odd){animation-delay:.1s}
+.preview-wave b:nth-child(even){animation-delay:.25s}
+@keyframes wave{0%,100%{opacity:.4;transform:scaleY(.6)}50%{opacity:1;transform:scaleY(1)}}
+.preview-badge{position:absolute;top:16px;right:20px;background:rgba(34,211,108,.15);color:#4ade80;font-size:.688rem;font-weight:700;padding:4px 10px;border-radius:999px;animation:pulse-badge 2s ease-in-out infinite}
+@keyframes pulse-badge{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* ── SECTION HEADERS ── */
+.sec{max-width:1100px;margin:0 auto;padding:100px 40px}
+.sec-head{text-align:center;max-width:600px;margin:0 auto 64px}
+.sec-head h2{font-size:clamp(1.6rem,3vw,2.4rem);font-weight:800;letter-spacing:-0.02em;margin-bottom:14px;color:#fff}
+.sec-head p{font-size:1rem;color:var(--text2);line-height:1.7}
+
+/* ── FEATURES ── */
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feat-card{background:var(--dark3);border:1px solid rgba(255,255,255,.06);border-radius:var(--rad2);padding:32px 28px;transition:all .35s var(--ease);position:relative;overflow:hidden}
+.feat-card::after{content:'';position:absolute;inset:0;background:radial-gradient(500px circle at var(--mx,50%) var(--my,50%),rgba(79,110,246,.06),transparent 60%);opacity:0;transition:opacity .35s var(--ease);pointer-events:none}
+.feat-card:hover::after{opacity:1}
+.feat-card:hover{border-color:rgba(255,255,255,.12);transform:translateY(-4px);box-shadow:0 16px 48px rgba(0,0,0,.3)}
+.feat-icon{width:44px;height:44px;border-radius:var(--rad);display:flex;align-items:center;justify-content:center;margin-bottom:18px;position:relative;z-index:1}
+.feat-icon.b{background:rgba(79,110,246,.12);color:#6b9fff}
+.feat-icon.g{background:rgba(34,211,108,.12);color:#4ade80}
+.feat-icon.p{background:rgba(139,92,246,.12);color:#a78bfa}
+.feat-icon.o{background:rgba(245,158,11,.12);color:#f59e0b}
+.feat-icon.c{background:rgba(6,182,212,.12);color:#06b6d4}
+.feat-icon.r{background:rgba(239,68,68,.12);color:#f87171}
+.feat-card h3{font-size:1rem;font-weight:700;margin-bottom:8px;color:#fff;position:relative;z-index:1}
+.feat-card p{font-size:.813rem;color:var(--text2);line-height:1.65;position:relative;z-index:1}
+
+/* ── ADVANTAGES ── */
+.adv-sec{background:var(--dark2);border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.04)}
+.adv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.adv-card{display:flex;gap:16px;align-items:flex-start;padding:24px 28px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:var(--rad2);transition:all .25s var(--ease)}
+.adv-card:hover{border-color:rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+.adv-num{font-size:2rem;font-weight:800;color:rgba(255,255,255,.1);line-height:1;flex-shrink:0}
+.adv-card h4{font-size:.938rem;font-weight:700;color:#fff;margin-bottom:4px}
+.adv-card p{font-size:.813rem;color:var(--text2);line-height:1.6}
+
+/* ── STATS ── */
+.stats-row{display:flex;justify-content:center;gap:80px;margin-top:48px;flex-wrap:wrap}
+.stat{text-align:center}
+.stat-num{font-size:2.8rem;font-weight:800;background:linear-gradient(135deg,var(--pri),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1;margin-bottom:6px}
+.stat-label{font-size:.813rem;color:var(--text3);font-weight:500}
+
+/* ── PROVIDERS ── */
+.prov-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.prov{display:flex;align-items:center;gap:10px;padding:12px 22px;background:var(--dark3);border:1px solid rgba(255,255,255,.06);border-radius:999px;font-size:.813rem;font-weight:600;transition:all .2s var(--ease)}
+.prov:hover{border-color:rgba(255,255,255,.15);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.prov-dot{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;color:#fff;flex-shrink:0}
+.prov-dot.oai{background:#10a37f}.prov-dot.ant{background:#d4a373}.prov-dot.goo{background:#4285f4}.prov-dot.xai{background:#222}.prov-dot.dsk{background:#4f46e5}.prov-dot.grq{background:#f15bb5}.prov-dot.oll{background:#6366f1}.prov-dot.prp{background:#1e1e1e}
+
+/* ── COMPARISON TABLE ── */
+.comp-wrap{overflow-x:auto}
+.comp{width:100%;border-collapse:collapse;font-size:.875rem}
+.comp thead th{text-align:left;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--text2);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+.comp tbody td{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text2)}
+.comp tbody td:first-child{font-weight:600;color:var(--text1);white-space:nowrap}
+.comp .yes{color:#4ade80}.comp .no{color:var(--text3)}.comp .hi{color:#f59e0b;font-weight:600}
+.comp .ant-row td{background:rgba(79,110,246,.04)}
+.comp .ant-row td:first-child{color:#6b9fff}
+
+/* ── DOWNLOAD ── */
+.dl-wrap{background:linear-gradient(135deg,rgba(79,110,246,.04),rgba(139,92,246,.04));border:1px solid rgba(255,255,255,.06);border-radius:var(--rad3);padding:48px;text-align:center;max-width:700px;margin:0 auto}
+.dl-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:32px 0}
+.dl-card{background:var(--dark3);border:2px solid rgba(255,255,255,.04);border-radius:var(--rad2);padding:28px 20px;text-align:center;transition:all .3s var(--ease);cursor:pointer}
+.dl-card:hover{border-color:rgba(255,255,255,.12)}
+.dl-card.sel{border-color:var(--pri);box-shadow:0 0 0 6px rgba(79,110,246,.08)}
+.dl-card svg{color:var(--text3);margin-bottom:12px}
+.dl-card h4{font-size:.938rem;font-weight:700;color:#fff;margin-bottom:4px}
+.dl-card .dl-fmt{font-size:.75rem;color:var(--text3)}
+.dl-card .btn{margin-top:16px;width:100%;justify-content:center}
+
+/* ── CTA ── */
+.cta{text-align:center;padding:80px 40px;background:linear-gradient(180deg,transparent,rgba(79,110,246,.04),transparent)}
+.cta h2{font-size:clamp(1.5rem,3vw,2rem);font-weight:800;margin-bottom:14px;color:#fff}
+.cta p{font-size:1rem;color:var(--text2);margin-bottom:28px}
+.cta .btn{margin:0 8px}
+
+/* ── FOOTER ── */
+.foot{border-top:1px solid rgba(255,255,255,.06);padding:40px;display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto;flex-wrap:wrap;gap:20px}
+.foot-brand{display:flex;align-items:center;gap:12px}
+.foot-brand span{font-weight:800;font-size:1rem}
+.foot p{font-size:.75rem;color:var(--text3)}
+.foot-links{display:flex;gap:24px}
+.foot-links a{font-size:.813rem;color:var(--text3);transition:color .15s}
+.foot-links a:hover{color:var(--text2)}
+
+/* ── HERO ENTRANCE ── */
+.hero-badge{animation:hero-in .6s ease .2s both}
+.hero-content h1{animation:hero-in .7s ease .35s both}
+.hero-p{animation:hero-in .7s ease .5s both}
+.hero-btns{animation:hero-in .7s ease .65s both}
+.hero-meta{animation:hero-in .7s ease .8s both}
+.hero-scroll{animation:hero-in .7s ease 1s both}
+@keyframes hero-in{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── ANIMATIONS ── */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity .6s ease,transform .6s ease}
+.reveal.vis{opacity:1;transform:translateY(0)}
+@media(max-width:900px){.feat-grid{grid-template-columns:1fr}.adv-grid{grid-template-columns:1fr}.dl-cards{grid-template-columns:1fr}.preview-sidebar{display:none}.stats-row{gap:40px}.nav-links{display:none}.hero{padding:100px 24px 60px}.sec{padding:60px 24px}.hero-video{opacity:.25}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <a href="#" class="nav-logo">
+    <svg width="28" height="28" viewBox="0 0 200 200" fill="none"><ellipse cx="100" cy="155" rx="32" ry="38" fill="#1e293b" stroke="#4f6ef6" stroke-width="2"/><ellipse cx="100" cy="155" rx="28" ry="34" fill="#334155"/><ellipse cx="100" cy="108" rx="20" ry="22" fill="#1e293b" stroke="#4f6ef6" stroke-width="2"/><ellipse cx="100" cy="108" rx="17" ry="19" fill="#334155"/><ellipse cx="100" cy="68" rx="24" ry="26" fill="#1e293b" stroke="#4f6ef6" stroke-width="2"/><ellipse cx="100" cy="68" rx="21" ry="23" fill="#334155"/><ellipse cx="89" cy="62" rx="7" ry="9" fill="#4f6ef6"/><ellipse cx="111" cy="62" rx="7" ry="9" fill="#4f6ef6"/><ellipse cx="89" cy="60" rx="3" ry="4" fill="#93c5fd"/><ellipse cx="111" cy="60" rx="3" ry="4" fill="#93c5fd"/><path d="M82 80 Q74 90 78 98" fill="none" stroke="#4f6ef6" stroke-width="2.5" stroke-linecap="round"/><path d="M118 80 Q126 90 122 98" fill="none" stroke="#4f6ef6" stroke-width="2.5" stroke-linecap="round"/><path d="M88 48 Q70 28 55 18" fill="none" stroke="#4f6ef6" stroke-width="2.5" stroke-linecap="round"/><path d="M112 48 Q130 28 145 18" fill="none" stroke="#4f6ef6" stroke-width="2.5" stroke-linecap="round"/><circle cx="55" cy="18" r="3" fill="#4f6ef6"/><circle cx="145" cy="18" r="3" fill="#4f6ef6"/><path d="M82 100 Q55 88 40 75" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><path d="M80 108 Q50 105 35 100" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><path d="M82 118 Q55 130 40 140" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><path d="M118 100 Q145 88 160 75" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><path d="M120 108 Q150 105 165 100" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><path d="M118 118 Q145 130 160 140" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><circle cx="40" cy="75" r="2" fill="#1e293b"/><circle cx="35" cy="100" r="2" fill="#1e293b"/><circle cx="40" cy="140" r="2" fill="#1e293b"/><circle cx="160" cy="75" r="2" fill="#1e293b"/><circle cx="165" cy="100" r="2" fill="#1e293b"/><circle cx="160" cy="140" r="2" fill="#1e293b"/><line x1="100" y1="88" x2="100" y2="86" stroke="#4f6ef6" stroke-width="3"/><line x1="100" y1="130" x2="100" y2="117" stroke="#4f6ef6" stroke-width="3"/><ellipse cx="95" cy="148" rx="12" ry="18" fill="rgba(79,110,246,0.08)"/><ellipse cx="95" cy="102" rx="8" ry="10" fill="rgba(79,110,246,0.1)"/><ellipse cx="95" cy="62" rx="9" ry="12" fill="rgba(79,110,246,0.1)"/></svg>
+    ANT
+  </a>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#advantages">Advantages</a>
+    <a href="#compare">Compare</a>
+    <a href="#download">Download</a>
+  </div>
+  <a href="#download" class="nav-cta">Download Free</a>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-bg">
+    <video class="hero-video" autoplay loop muted playsinline preload="auto" poster="landing/web/assets/icons/ant-splash.png">
+      <source src="landing/assets/ant-animation-clean.mp4" type="video/mp4">
+    </video>
+    <div class="hero-video-overlay"></div>
+    <div class="hero-orb hero-orb1"></div><div class="hero-orb hero-orb2"></div><div class="hero-orb hero-orb3"></div>
+    <div class="hero-grid"></div>
+  </div>
+  <div class="hero-content">
+    <div class="hero-badge"><span class="hero-badge-dot"></span> Open source · MIT Licensed</div>
+    <h1>Your AI Note Taker.<br><span>Private. Local. Free.</span></h1>
+    <p class="hero-p">Record, transcribe, and analyze conversations with AI — all running locally on your machine. No cloud required. No data leaves your computer. No paywalls. Ever.</p>
+    <div class="hero-btns">
+      <a href="#download" class="btn btn-pri btn-lg">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Free
+      </a>
+      <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker" target="_blank" rel="noopener" class="btn btn-out btn-lg">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> <span id="ghStars">—</span></span>
+      <span>·</span><span>Windows · macOS · Linux</span>
+      <span>·</span><span>100% Free & Open Source</span>
+    </div>
+    <a href="#features" class="hero-scroll" aria-label="Scroll to features">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 13l5 5 5-5"/><path d="M7 6l5 5 5-5"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- ── APP PREVIEW ── -->
+<div class="preview-wrap">
+  <div class="preview reveal">
+    <div class="preview-bar"><span></span><span></span><span></span></div>
+    <div class="preview-body">
+      <div class="preview-sidebar">
+        <div class="preview-sidebar-item active">💬 Chat</div>
+        <div class="preview-sidebar-item">📝 Notes</div>
+        <div class="preview-sidebar-item">🎙 Record</div>
+        <div class="preview-sidebar-item">📊 Analytics</div>
+        <div class="preview-sidebar-item">🔍 Search</div>
+      </div>
+      <div class="preview-main">
+        <div class="preview-msg"><div class="preview-avatar ai">AI</div><div class="preview-bubble ai">Hello! I'm ANT — ready to transcribe, analyze, and chat. Press Start to begin recording.</div></div>
+        <div class="preview-msg"><div class="preview-avatar usr">U</div><div class="preview-bubble usr">Summarize my meeting about the Q3 roadmap review</div></div>
+        <div class="preview-msg"><div class="preview-avatar ai">AI</div><div class="preview-bubble ai">
+          <strong style="color:#a78bfa">Meeting Summary — Q3 Roadmap Review</strong>
+          <div style="margin-top:8px;color:var(--text2)">
+            <b style="color:#4ade80">Key Points</b><br>
+            · Q3 targets: 30% user growth, launch mobile beta<br>
+            · Engineering: refactor auth, ship dark mode<br>
+            · Budget: $2.5M allocated across 6 teams<br><br>
+            <b style="color:#f59e0b">Action Items</b><br>
+            · Sarah: finalize mobile spec by Friday<br>
+            · Dev team: auth sprint starts Monday<br>
+            · Finance: reallocate $400K from infra to hiring
+          </div>
+        </div></div>
+        <div class="preview-wave"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div>
+      </div>
+    </div>
+    <div class="preview-badge">● Live Transcription</div>
+  </div>
+</div>
+
+<!-- ── FEATURES ── -->
+<section class="sec" id="features">
+  <div class="sec-head"><h2>Everything you need. Nothing you don't.</h2><p>ANT packs pro-level AI tools into a lightweight desktop app — no signup, no cloud dependency, no compromises.</p></div>
+  <div class="feat-grid">
+    <div class="feat-card reveal"><div class="feat-icon b"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></div><h3>Local Whisper Transcription</h3><p>Real-time speech-to-text powered by faster-whisper running 100% on your hardware. Works offline. Your voice data never touches the internet.</p></div>
+    <div class="feat-card reveal"><div class="feat-icon g"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div><h3>8 AI Providers + Race Mode</h3><p>OpenAI, Claude, Gemini, Grok, DeepSeek, Groq, Ollama, Perplexity — all in one app. Race mode queries every provider simultaneously and uses the fastest response.</p></div>
+    <div class="feat-card reveal"><div class="feat-icon p"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div><h3>Stealth Mode</h3><p>Windows DRM-level screen capture protection. Your app content is invisible to screenshots, screen recorders, and streaming tools. Like Netflix for your notes.</p></div>
+    <div class="feat-card reveal"><div class="feat-icon o"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div><h3>10 AI Modes</h3><p>Instant, Auto, Fast, Turbo, Adaptive, Universal, Interview, Reasoning, Cloud, Code — each tuned for specific workflows. Switch modes with one click.</p></div>
+    <div class="feat-card reveal"><div class="feat-icon c"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div><h3>Cognitive Graph</h3><p>Powered by Neo4j. Visualize connections, entities, and patterns across all your conversations. Semantic search finds insights you forgot about.</p></div>
+    <div class="feat-card reveal"><div class="feat-icon r"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div><h3>Interview & Career Tools</h3><p>Mock interview simulator with real-time coaching, resume review, job tracker, study plan generator, and pre-interview checklists — all privacy-first.</p></div>
+  </div>
+  <div class="stats-row reveal">
+    <div class="stat"><div class="stat-num">8</div><div class="stat-label">AI Providers</div></div>
+    <div class="stat"><div class="stat-num">10</div><div class="stat-label">AI Modes</div></div>
+    <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Local STT</div></div>
+    <div class="stat"><div class="stat-num">$0</div><div class="stat-label">Free Forever</div></div>
+  </div>
+</section>
+
+<!-- ── ADVANTAGES ── -->
+<section class="adv-sec" id="advantages">
+  <div class="sec">
+    <div class="sec-head"><h2>Why ANT over the alternatives?</h2><p>Most AI note-takers charge monthly fees and send your data to the cloud. ANT is different.</p></div>
+    <div class="adv-grid">
+      <div class="adv-card reveal"><div class="adv-num">01</div><div><h4>Everything runs locally</h4><p>Transcription happens on your GPU via faster-whisper. No audio ever uploaded to a server. Otter, Fireflies, and Fathom all require cloud — ANT does not.</p></div></div>
+      <div class="adv-card reveal"><div class="adv-num">02</div><div><h4>Bring your own AI keys</h4><p>Use any provider you trust. No vendor lock-in. No ANT subscription. You pay only for what you use — and you can always fall back to free Ollama models.</p></div></div>
+      <div class="adv-card reveal"><div class="adv-num">03</div><div><h4>Stealth mode that actually works</h4><p>ANT uses Windows DRM APIs (SetWindowDisplayAffinity) — the same tech Netflix uses to block screen recording. Competitors can't offer this.</p></div></div>
+      <div class="adv-card reveal"><div class="adv-num">04</div><div><h4>Built for job seekers</h4><p>Mock interviews, resume review, job tracker, pre-interview prep, and cognitive graph — tools specifically designed to help you land your next role.</p></div></div>
+      <div class="adv-card reveal"><div class="adv-num">05</div><div><h4>Race mode: ask all AIs at once</h4><p>ANT queries every configured AI provider simultaneously and streams the first response. Get answers faster than any single-provider tool.</p></div></div>
+      <div class="adv-card reveal"><div class="adv-num">06</div><div><h4>100% free. Forever. No catch.</h4><p>MIT Licensed. No premium tiers. No "unlimited" upsells. No telemetry. We don't want your money — we want AI tools to be accessible to everyone.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── COMPARISON ── -->
+<section class="sec" id="compare">
+  <div class="sec-head"><h2>See how ANT stacks up</h2><p>Honest comparison with the most popular AI note-taking tools.</p></div>
+  <div class="comp-wrap reveal">
+    <table class="comp">
+      <thead><tr><th>Feature</th><th style="color:#6b9fff">ANT</th><th>Otter</th><th>Fireflies</th><th>Fathom</th><th>tl;dv</th></tr></thead>
+      <tbody>
+        <tr class="ant-row"><td>Price</td><td class="hi">Free forever</td><td class="no">$16.99/mo</td><td class="no">$10/mo</td><td class="no">$19/mo</td><td class="no">$20/mo</td></tr>
+        <tr class="ant-row"><td>Local transcription</td><td class="yes">✓ Yes (Whisper)</td><td class="no">✗ Cloud only</td><td class="no">✗ Cloud only</td><td class="no">✗ Cloud only</td><td class="no">✗ Cloud only</td></tr>
+        <tr class="ant-row"><td>AI Providers</td><td class="yes">8 + Race Mode</td><td>1 (Proprietary)</td><td>1 (Proprietary)</td><td>1 (GPT only)</td><td>1 (GPT only)</td></tr>
+        <tr class="ant-row"><td>Stealth / DRM</td><td class="yes">✓ Netflix-level</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+        <tr class="ant-row"><td>Interview tools</td><td class="yes">✓ Full suite</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+        <tr class="ant-row"><td>Cognitive graph</td><td class="yes">✓ (Neo4j)</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+        <tr class="ant-row"><td>Offline capable</td><td class="yes">✓ Full</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+        <tr class="ant-row"><td>Open source</td><td class="yes">✓ MIT License</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── AI PROVIDERS ── -->
+<section class="sec">
+  <div class="sec-head"><h2>Connect any AI provider you trust</h2><p>No lock-in. Use your own API keys. Or run fully offline with Ollama.</p></div>
+  <div class="prov-grid reveal">
+    <div class="prov"><div class="prov-dot oai">O</div>OpenAI</div>
+    <div class="prov"><div class="prov-dot ant">A</div>Anthropic Claude</div>
+    <div class="prov"><div class="prov-dot goo">G</div>Google Gemini</div>
+    <div class="prov"><div class="prov-dot xai">X</div>xAI Grok</div>
+    <div class="prov"><div class="prov-dot dsk">D</div>DeepSeek</div>
+    <div class="prov"><div class="prov-dot grq">Q</div>Groq</div>
+    <div class="prov"><div class="prov-dot oll">L</div>Ollama (Local)</div>
+    <div class="prov"><div class="prov-dot prp">P</div>Perplexity</div>
+  </div>
+</section>
+
+<!-- ── DOWNLOAD ── -->
+<section class="sec" id="download">
+  <div class="sec-head"><h2>Get ANT on your desktop</h2><p>Free. Open source. No signup required. Choose your platform.</p></div>
+  <div class="dl-wrap reveal">
+    <div class="dl-cards">
+      <div class="dl-card sel" id="dlWin">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.452H0m10.949-9.645L24 0v11.4H10.949M0 12.6h9.75v9.45L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+        <h4>Windows</h4><div class="dl-fmt">.exe · portable</div>
+        <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest" class="btn btn-pri" target="_blank" rel="noopener">Download</a>
+      </div>
+      <div class="dl-card" id="dlMac">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        <h4>macOS</h4><div class="dl-fmt">.dmg · .zip</div>
+        <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest" class="btn btn-out" target="_blank" rel="noopener">Download</a>
+      </div>
+      <div class="dl-card" id="dlLin">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155.004-.312.03-.458.107-1.72.895-3.324 2.004-4.743 3.268-3.176 2.83-5.09 6.22-5.22 9.862-.043.965.07 1.893.318 2.782.143.52.337 1.028.574 1.512.186.385.46.705.707 1.058.277.394.628.694.98 1.05.09.092.183.183.262.285.186.244.31.517.316.829-.01.348-.167.678-.384.953-.216.273-.481.506-.77.713-.31.222-.632.426-.966.617-.17.096-.307.225-.32.412-.02.18.105.328.247.436.207.158.44.278.685.363.47.155.973.178 1.475.176.73-.002 1.449-.164 2.1-.474.435-.2.825-.45 1.128-.817.274-.33.428-.747.406-1.18-.008-.13-.03-.26-.058-.388-.073-.332-.205-.648-.385-.937-.18-.289-.41-.538-.673-.743-.487-.378-1.062-.615-1.653-.72-.287-.05-.578-.085-.87-.094.06-.285.145-.562.255-.83.21-.52.487-1.008.823-1.452.645-.85 1.446-1.576 2.35-2.137.48-.3.986-.553 1.51-.753 1.07-.41 2.205-.575 3.344-.483 1.07.08 2.106.37 3.03.832.86.43 1.614 1.02 2.213 1.744.135.164.26.335.378.512.07.105.137.213.178.333.068.193-.04.35-.2.424-.25.117-.51.21-.774.28-.72.194-1.416.47-2.077.822-.69.37-1.305.84-1.833 1.401-.525.56-.943 1.22-1.224 1.95-.14.367-.238.752-.292 1.147-.055.4-.07.804-.04 1.208.025.38.09.757.19 1.127.15.547.39 1.07.713 1.546.312.463.692.876 1.127 1.227.426.344.9.622 1.41.82.51.196 1.046.3 1.59.308.506.005 1.003-.07 1.474-.24.465-.17.89-.43 1.253-.77.36-.338.64-.75.816-1.21.178-.47.246-.97.198-1.47-.06-.62-.25-1.215-.556-1.754-.304-.54-.7-1.018-1.17-1.418-.472-.4-1.01-.72-1.59-.942-1.16-.445-2.433-.555-3.671-.326-1.237.228-2.4.726-3.4 1.442-.16.116-.315.24-.47.367.04-.133.08-.267.12-.402.2-.66.5-1.28.89-1.834.4-.563.89-1.06 1.457-1.458 1.136-.807 2.47-1.26 3.86-1.313 1.39-.053 2.758.274 3.975.9l.003.002c.084.04.17.076.255.108.086.03.174.05.263.064.084.014.17.02.255.025.09.005.18 0 .27.002.09-.003.18-.003.27.002.084.005.168.014.253.02.09.004.18.003.27-.006.085-.008.17-.027.254-.05.08-.02.16-.043.243-.065.086-.02.173-.04.26-.06 0 0 .002.01 0 0 .086-.002.173-.004.26-.006.086.005.173.01.26.006.09-.003.178-.014.266-.027.09-.014.178-.027.266-.044.086-.02.173-.048.256-.082.086-.034.17-.07.25-.116.08-.043.157-.092.23-.146.038-.03.072-.06.105-.096.03-.036.056-.07.08-.11.025-.042.047-.082.07-.126.02-.042.04-.086.062-.127.018-.042.04-.084.062-.12l.003-.006c.018-.043.04-.088.065-.125.02-.04.044-.084.07-.122.023-.04.05-.08.077-.118.025-.04.052-.08.08-.12.025-.04.048-.083.076-.122l.04-.066c.024-.045.048-.09.073-.136.023-.044.05-.086.08-.127.033-.044.07-.09.113-.138.003.003.01.008.018.017.03.028.06.053.085.085.032.04.056.085.082.13.048.087.09.177.13.27.087.2.148.416.173.642.025.23.007.463-.063.684-.07.22-.19.424-.354.595-.164.17-.366.303-.595.387-.17.064-.353.1-.538.105-.186.006-.37-.014-.546-.067-.175-.052-.338-.13-.484-.233-.13-.092-.243-.207-.337-.34-.096-.132-.17-.28-.222-.438-.037-.115-.064-.234-.077-.355-.014-.12-.018-.242-.012-.364.004-.07.013-.14.026-.21l.04-.203c.014-.068.033-.133.054-.197.045-.13.102-.253.17-.372s.146-.226.23-.328c.167-.203.357-.386.566-.546.418-.32.89-.56 1.39-.72.5-.16 1.02-.23 1.54-.217.523.013 1.032.123 1.507.32.474.2.906.49 1.27.86.366.37.655.815.854 1.308.197.49.293 1.02.282 1.555-.01.53-.13 1.047-.355 1.52-.225.473-.55.894-.955 1.23-.406.337-.888.585-1.413.724-.525.14-1.083.163-1.627.07-.543-.09-1.058-.3-1.508-.61-.452-.313-.828-.72-1.107-1.196-.277-.476-.45-1.008-.508-1.56-.06-.553 0-1.11.174-1.627.173-.515.448-.985.808-1.382.25-.275.54-.51.86-.697l.478-.254z"/></svg>
+        <h4>Linux</h4><div class="dl-fmt">.AppImage · .deb</div>
+        <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker/releases/latest" class="btn btn-out" target="_blank" rel="noopener">Download</a>
+      </div>
+    </div>
+    <p style="color:var(--text3);font-size:.813rem">All downloads link to the latest GitHub Release. Windows, macOS (Intel + Apple Silicon), and Linux (x64) supported.</p>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<section class="cta">
+  <h2>Ready to try the most private AI note-taker?</h2>
+  <p>Zero cost. Zero telemetry. Zero cloud requirements. Just powerful AI on your desktop.</p>
+  <a href="#download" class="btn btn-pri btn-lg">Download ANT — It's Free</a>
+  <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker" target="_blank" rel="noopener" class="btn btn-out btn-lg" style="margin-left:12px">View on GitHub</a>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer class="foot">
+  <div>
+    <div class="foot-brand">
+      <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#4f6ef6"/><path d="M8 11h14M8 16h10M8 21h12" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="23" cy="16" r="4.5" fill="#22d36c" stroke="#fff" stroke-width="1.5"/></svg>
+      <span>ANT</span>
+    </div>
+    <p style="margin-top:6px">AI Note Taker — Privacy-first, free forever.</p>
+  </div>
+  <div class="foot-links">
+    <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker/releases" target="_blank" rel="noopener">Releases</a>
+    <a href="https://github.com/shyamsunderprogramer-design/ai-note-taker/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+  </div>
+</footer>
+
+<script>
+(function() {
+  // ── Nav scroll ──
+  var nav = document.getElementById('nav'), ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) { requestAnimationFrame(function() { nav.classList.toggle('scrolled', window.scrollY > 40); ticking = false; }); ticking = true; }
+  });
+
+  // ── Scroll reveal ──
+  var obs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('vis'); });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal,.feat-card,.adv-card,.prov,.stat,.dl-wrap').forEach(function(el) { obs.observe(el); });
+
+  // ── Feature card mouse tracking ──
+  document.querySelectorAll('.feat-card').forEach(function(card) {
+    card.addEventListener('mousemove', function(e) {
+      var r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+      card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+    });
+  });
+
+  // ── OS detection for download highlight ──
+  var os = 'windows';
+  var ua = navigator.userAgent || '';
+  if (ua.indexOf('Mac') !== -1 && ua.indexOf('iPhone') === -1 && ua.indexOf('iPad') === -1) os = 'macos';
+  else if (ua.indexOf('Linux') !== -1 && ua.indexOf('Android') === -1) os = 'linux';
+  var sel = document.getElementById(os === 'macos' ? 'dlMac' : os === 'linux' ? 'dlLin' : 'dlWin');
+  if (sel) { document.querySelectorAll('.dl-card').forEach(function(c) { c.classList.remove('sel'); }); sel.classList.add('sel'); }
+
+  // ── GitHub stars ──
+  var starsEl = document.getElementById('ghStars');
+  try {
+    var cached = localStorage.getItem('ant:landing:stars');
+    if (cached) starsEl.textContent = cached;
+    fetch('https://api.github.com/repos/shyamsunderprogramer-design/ai-note-taker')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.stargazers_count) { var s = d.stargazers_count; localStorage.setItem('ant:landing:stars', s + ' GitHub stars'); starsEl.textContent = s + ' GitHub stars'; }
+      }).catch(function() {});
+  } catch(_) {}
+
+  // ── Smooth scroll for all hash links ──
+  document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      var t = document.querySelector(a.getAttribute('href'));
+      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth' }); }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
