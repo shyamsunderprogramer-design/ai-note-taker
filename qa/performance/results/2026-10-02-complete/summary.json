@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-03",
+  "status": "Comprehensive testing found failures; workloads stopped to investigate reported unresponsiveness",
+  "verified": {
+    "backend": 1280,
+    "api": 59,
+    "desktop_web": 97,
+    "mobile": 34,
+    "cross_browser_final": 44,
+    "soak_answers": 60,
+    "soak_recoveries": 20,
+    "soak_health_failures": 0
+  },
+  "failures": [
+    "Document upload hangs in non-advancing text chunk loop and blocks backend health",
+    "Job application visible to another synthetic account",
+    "Invalid job stage accepted",
+    "Job applications lost on backend restart",
+    "Study plan re-fetch regenerates defaults; task completion not persisted by API",
+    "Job UI drops authentication for a configured API on a nondefault port",
+    "Job form notes omitted; card detail action is a stub; outage shown as empty list",
+    "Productivity extension original manifest cannot load; removing careers.*.com in a temporary diagnostic copy allows installation",
+    "Job-capture popup crashes when tab URL is unavailable",
+    "Visible form controls missing accessible names"
+  ],
+  "last_action": "Stopped disposable API, browser-fixture and recovery servers. Reopened real app; Settings open/close and text input focus verified. No pending AI request.",
+  "remaining": [
+    "Native screenshot/OCR and full native overlay/window lifecycle this revision",
+    "Human microphone check (user participation pending)",
+    "Mobile device/emulator unavailable: full Xcode/simctl/Android tools absent",
+    "Live external integrations and voice-clone model workflows not certified",
+    "User-reported unresponsive action not yet identified"
+  ],
+  "release_ready": false,
+  "scope": "Synthetic data for destructive workflows; no personal chat deletion, no commit/push/release"
+}

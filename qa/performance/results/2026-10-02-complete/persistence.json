@@ -1,0 +1,50 @@
+{
+  "scope": "Same disposable source, JWT secret and data directory across restart",
+  "checks": [
+    {
+      "name": "Study plan survives immediate retrieval",
+      "passed": false,
+      "detail": {
+        "created_days": 3,
+        "retrieved_days": 30,
+        "retrieved_role": null
+      }
+    },
+    {
+      "name": "Account/token survives server restart",
+      "passed": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "Conversation survives server restart",
+      "passed": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "Job application survives server restart",
+      "passed": false,
+      "detail": {
+        "http": 200,
+        "body": {
+          "error": {
+            "code": "NOT_FOUND",
+            "message": "Application not found"
+          }
+        }
+      }
+    },
+    {
+      "name": "Study plan survives server restart",
+      "passed": false,
+      "detail": {
+        "days": 30,
+        "role": null
+      }
+    },
+    {
+      "name": "Logged-out token rejected",
+      "passed": true,
+      "detail": "HTTP 401"
+    }
+  ]
+}

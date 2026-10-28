@@ -1,0 +1,66 @@
+{
+  "results": [
+    {
+      "name": "default-answer",
+      "seconds": 4.468,
+      "firstVisibleSeconds": 3.252,
+      "answer": "Docker is an open-source platform that enables developers to package applications into standardized containers for consistent deployment across different environments. It simplifies software management by ensuring that the application runs exactly as intended regardless of the underlying infrastructure.",
+      "errors": []
+    },
+    {
+      "name": "resume-upload",
+      "state": "Answering as the person in audit-resume.md · Remove"
+    },
+    {
+      "name": "resume-answer",
+      "seconds": 5.269,
+      "firstVisibleSeconds": 3.446,
+      "answer": "My most relevant project involved building a Python inventory API using PostgreSQL, which I deployed on Kubernetes with Helm. To improve performance, I added Redis caching, which reduced the p95 latency from 900 ms to 120 ms. During the rollout tests for this project, I worked closely with Maya.",
+      "errors": []
+    },
+    {
+      "name": "unsupported-experience",
+      "seconds": 1.024,
+      "firstVisibleSeconds": 0.821,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "name": "resume-reload",
+      "state": {
+        "attached": true,
+        "name": "audit-resume.md",
+        "visible": true
+      }
+    },
+    {
+      "name": "long-detailed-answer",
+      "seconds": 8.31,
+      "firstVisibleSeconds": 0.82,
+      "answer": "When an API starts timing out after a release with mixed pod health, I begin by inspecting application logs for errors like connection refused or timeout exceptions that might indicate database issues. I would then check readiness and liveness probes to determine if the unhealthy pods are failing because they cannot serve traffic or if they are crashing due to resource exhaustion. If memory limits are exceeded, the Kubernetes scheduler will OOM kill the containers, which often triggers a restart loop; reviewing container metrics against their defined limits helps confirm this. Additionally, I would verify database connection pool status to see if the application is running out of available connections or if the database itself is under heavy load.\n\nDeciding whether to roll back depends on the severity and root cause of the issue; if the problem stems from a critical bug introduced in the new code or a configuration error causing widespread failures, an immediate rollback is necessary to restore service stability. To verify recovery, I would monitor key performance indicators such as latency, error rates, and request throughput using tools like Prometheus or Grafana until they return to baseline levels. Once the system is stable, I would analyze the specific failure point, whether it was a memory leak, a database schema change, or a probe configuration mismatch, to implement targeted fixes such as increasing memory limits, optimizing queries, or adjusting probe thresholds to prevent recurrence.",
+      "errors": []
+    },
+    {
+      "name": "history",
+      "state": {
+        "messages": 2,
+        "conversation": true
+      }
+    },
+    {
+      "name": "meeting-actions",
+      "seconds": 6.093,
+      "firstVisibleSeconds": 3.05,
+      "answer": "The team has three specific tasks to complete for the upcoming project phase. First, a project summary needs to be sent out before the end of this Friday. Second, Maya is responsible for reviewing the budget details. Third, Daniel will handle scheduling the next meeting.\n\nThese action items are distinct and should be tracked separately to ensure accountability. The deadline for the project summary is explicitly set for Friday, while the owners for the budget review and meeting scheduling are identified as Maya and Daniel respectively. No additional deadlines or owners were provided for these specific tasks in the current notes.",
+      "errors": []
+    },
+    {
+      "name": "resume-remove",
+      "state": {
+        "removed": true,
+        "hidden": true
+      }
+    }
+  ],
+  "network": []
+}

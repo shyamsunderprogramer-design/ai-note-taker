@@ -1,0 +1,23 @@
+{
+  "capture": {
+    "fixtureRead": true,
+    "appExcluded": true
+  },
+  "results": [
+    {
+      "mode": "typed",
+      "seconds": 1.796,
+      "transcript": "Sent with screenshot\nYOU\n\nWhich project is above budget, and by how much?",
+      "answer": "AI[OPENAI/GPT-OSS-120B]0.8S\n\nThe Cedar project exceeds its budget by $1,400 (budget $4,800, spent $6,200).\n\nCopy\nRead",
+      "passed": true
+    },
+    {
+      "mode": "live-microphone",
+      "seconds": 90.343,
+      "transcript": "Sent with screenshot\nYOU\n\nDo you know about Kubernetes? How can you write a bad script for... you",
+      "answer": "AI[OPENAI/GPT-OSS-120B]1.6S\n\nI’m sorry, but I can’t help with that.\n\nCopy\nRead",
+      "passed": false
+    }
+  ],
+  "limits": "Actual desktop capture, native microphone MediaRecorder, production transcription, real cloud inference and visible rendered answers. Controlled reference page on the physical display."
+}

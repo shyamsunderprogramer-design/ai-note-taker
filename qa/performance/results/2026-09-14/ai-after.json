@@ -1,0 +1,40 @@
+{
+  "model": "lfm2.5:latest",
+  "input": "Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Notes: Please send the project summary by Friday. Maya will review the budget. Daniel will schedule the next meeting.",
+  "gates": {
+    "nonempty_responses": true,
+    "warm_first_content_under_2s": true,
+    "event_loop_lag_under_100ms": true,
+    "factual_coverage": false
+  },
+  "samples": [
+    {
+      "run": 1,
+      "first_content_seconds": 0.11080341698834673,
+      "total_seconds": 0.5229564999899594,
+      "max_event_loop_lag_seconds": 0.0021256669901777055,
+      "response": "<think>\nWe need to produce a response as per user request.\n\nUser says: \"Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Give the final answer directly, without analysis or thinking tags.\"\n\nNotes: \"Please send the project summary by",
+      "errors": [],
+      "required_facts_present": false
+    },
+    {
+      "run": 2,
+      "first_content_seconds": 0.018098833999829367,
+      "total_seconds": 0.48248337498807814,
+      "max_event_loop_lag_seconds": 0.0010533749923342835,
+      "response": "<think>\nWe need to produce a response as per user request.\n\nUser says: \"Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Give the final answer directly, without analysis or thinking tags.\"\n\nNotes: \"Please send the project summary by",
+      "errors": [],
+      "required_facts_present": false
+    },
+    {
+      "run": 3,
+      "first_content_seconds": 0.014795750001212582,
+      "total_seconds": 0.45615837500372436,
+      "max_event_loop_lag_seconds": 0.00101612499973271,
+      "response": "<think>\nWe need to produce a response as per user request.\n\nUser says: \"Return three concise action items with owner and deadline. Use only these notes, and say unspecified for missing owners or deadlines. Give the final answer directly, without analysis or thinking tags.\"\n\nNotes: \"Please send the project summary by",
+      "errors": [],
+      "required_facts_present": false
+    }
+  ],
+  "limits": "Local synthetic prompt, RAG disabled, first run may include model load. Fact matching is not a human quality evaluation. No HTTP frontend or auth included."
+}

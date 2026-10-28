@@ -1,0 +1,10 @@
+[
+  ["meeting_no_tasks", "Transcript: Ava suggested replacing the dashboard. Ben said he cannot approve it without usage data. Nobody agreed to do anything. The old dashboard was fixed yesterday. List decisions and pending action items only."],
+  ["meeting_unassigned", "Transcript: The certificate must be renewed by June 12. Nobody has taken ownership. Sam has already published the guide. Extract pending tasks with their owners and deadlines."],
+  ["meeting_correction", "Transcript: Nina will email the contract Friday. Correction: Nina said the deadline is now Tuesday, not Friday. Arun offered to review the quote by Wednesday; the team accepted. List the current action items, owners and deadlines."],
+  ["resume_boundary", "[Resume answer context] Resume: Casey maintained Django services and PostgreSQL at Northwind from 2021 to 2023. There is no mention of management or team size. How many engineers did I manage? Use only the resume for personal claims."],
+  ["technical_sql", "Does adding an index guarantee that every SQL query becomes faster? Explain the effects on reads and writes and whether a query planner must use the index."],
+  ["technical_python", "In a standard CPython build with the GIL enabled, will adding threads always speed up CPU-bound Python code? Distinguish CPU work, I/O waiting, and processes."],
+  ["technical_retry", "A client times out after sending an HTTP POST that creates an order. Is it safe to retry blindly? Explain what the timeout proves and how to prevent duplicate orders."],
+  ["technical_kubernetes_policy", "A Kubernetes container with restartPolicy Never is OOMKilled. What killed it, and will the kubelet restart that container? Distinguish this from a controller creating a replacement pod."]
+]

@@ -1,0 +1,54 @@
+{
+  "conditions": "Local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "missing_fact",
+      "first_seconds": 0.5867979589966126,
+      "total_seconds": 0.639212750014849,
+      "answer": "The resume does not list any AWS certifications, so the specific certifications you hold and their dates are unknown (unspecified).",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting",
+      "first_seconds": 0.7540539170149714,
+      "total_seconds": 0.836490584013518,
+      "answer": "- Send the project summary \u2013 Owner: unspecified, Deadline: Friday  \n- Review the budget \u2013 Owner: Maya, Deadline: unspecified  \n- Schedule the next meeting \u2013 Owner: Daniel, Deadline: unspecified",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical",
+      "first_seconds": 0.4039463750086725,
+      "total_seconds": 0.7592317500384524,
+      "answer": "**Readiness probe** \u2013 determines if a pod is fit to receive traffic. When it fails, the pod stays running but is removed from Service load\u2011balancing/endpoints, so no new requests are sent to it.\n\n**Liveness probe** \u2013 tells Kubernetes whether the container is still healthy. A failure triggers the kubelet to **restart the container** (or the whole pod, depending on restartPolicy), not just stop traffic.\n\n**Memory limit** \u2013 a cgroup\u2011enforced ceiling on the container\u2019s RAM usage. If the process exceeds this limit, the kernel OOM killer terminates the container, and the kubelet then restarts it per the pod\u2019s restartPolicy.\n\n**Component enforcing the memory limit:** the **container runtime\u2019s cgroup (via the kernel OOM killer)**, orchestrated by the kubelet.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_status",
+      "first_seconds": 0.7408689589938149,
+      "total_seconds": 0.8080365000059828,
+      "answer": "**Decisions**\n- None were finalized.\n\n**Action items**\n- Provide test results before Omar can agree\u202f\u2014\u202fOwner: unspecified; Deadline: unspecified.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_owners",
+      "first_seconds": 0.5045251669944264,
+      "total_seconds": 0.5880568340071477,
+      "answer": "- Send the invoice \u2013 Owner: Elena; Deadline: Tuesday  \n- Check the contract \u2013 Owner: Marcus; Deadline: unspecified  \n- Update the launch checklist \u2013 Owner: unspecified; Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_restart",
+      "first_seconds": 0.5525723329628818,
+      "total_seconds": 0.7916383749688976,
+      "answer": "A container that is OOMKilled is terminated by the kernel because it exceeded its memory limit. The kubelet treats this as a container failure, not as a liveness\u2011probe result, and will immediately attempt to restart the container according to the pod\u2019s restartPolicy (default\u202f=\u202fAlways). A liveness probe is only consulted when the container is still running; it does not need to fail for an OOMKilled container to be restarted. Restart behavior is therefore determined by the OOMKill event, the pod\u2019s restartPolicy, and any back\u2011off limits configured for the pod.",
+      "errors": []
+    }
+  ]
+}

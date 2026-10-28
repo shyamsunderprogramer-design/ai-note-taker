@@ -1,0 +1,54 @@
+{
+  "results": [
+    {
+      "name": "history-restore",
+      "count": 4,
+      "restored": "YOU\n8:51:59 AM\n\nExplain the difference between a container and a virtual machine in two clear sentences.\n\nAI\n8:51:59 AM\nCopy\nRead"
+    },
+    {
+      "name": "export",
+      "downloaded": false,
+      "dialogs": [],
+      "network": []
+    },
+    {
+      "name": "study-task-persistence",
+      "taskCount": 0
+    },
+    {
+      "name": "settings-tabs",
+      "tabs": [
+        {
+          "name": "General",
+          "opened": true
+        },
+        {
+          "name": "Providers",
+          "opened": true
+        },
+        {
+          "name": "Models",
+          "opened": true
+        },
+        {
+          "name": "Voice",
+          "opened": true
+        },
+        {
+          "name": "Clone",
+          "opened": true
+        },
+        {
+          "name": "Data",
+          "opened": true
+        },
+        {
+          "name": "Integrations",
+          "opened": true
+        }
+      ]
+    }
+  ],
+  "network": [],
+  "dialogs": []
+}

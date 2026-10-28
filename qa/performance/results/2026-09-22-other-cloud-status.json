@@ -1,0 +1,36 @@
+{
+  "conditions": "Production provider adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "openai-gpt-4o-mini",
+      "case": "missing_fact",
+      "first_seconds": null,
+      "total_seconds": 0.39768029196420684,
+      "answer": "",
+      "errors": [
+        "OpenAI (HTTP 401): The provider rejected its API key. Check the configured key."
+      ]
+    },
+    {
+      "model": "google-gemini-2-0-flash",
+      "case": "missing_fact",
+      "first_seconds": null,
+      "total_seconds": 0.18181854201247916,
+      "answer": "",
+      "errors": [
+        "Google (HTTP 404): This model is unavailable. Select a supported model."
+      ]
+    },
+    {
+      "model": "ollama-cloud",
+      "case": "missing_fact",
+      "first_seconds": null,
+      "total_seconds": 0.2915739589952864,
+      "answer": "",
+      "errors": [
+        "Ollama Cloud error: HTTP 410"
+      ]
+    }
+  ]
+}

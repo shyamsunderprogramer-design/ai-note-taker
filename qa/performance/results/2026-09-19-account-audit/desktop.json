@@ -1,0 +1,75 @@
+[
+  {
+    "name": "microphone-cycle-1",
+    "started": {
+      "listening": true,
+      "recorder": "recording",
+      "tracks": [
+        {
+          "state": "live",
+          "enabled": true
+        }
+      ]
+    },
+    "preview": "Please the project summary by Friday, Maya will review the budget and Daniel will",
+    "stopState": {
+      "listening": false
+    },
+    "totalSeconds": 15.989,
+    "chat": "YOU\n\nPlease send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.\n\nAI[QWEN3.5:9B]5.2S\n\nI have noted that the project summary needs to be sent by Friday. Maya is responsible for reviewing the budget, so she will handle that part of the work. Daniel will take care of scheduling the next meeting once everything is ready.\n\nThese tasks are clear and everyone knows what they need to do before the deadline arrives.\n\nCopy\nRead"
+  },
+  {
+    "name": "microphone-cycle-2",
+    "started": {
+      "listening": true,
+      "recorder": "recording",
+      "tracks": [
+        {
+          "state": "live",
+          "enabled": true
+        }
+      ]
+    },
+    "preview": "Please. the project summary by Friday, Maya will review",
+    "stopState": {
+      "listening": false,
+      "recorder": "inactive"
+    },
+    "totalSeconds": 11.34,
+    "chat": "YOU\n\nPlease send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.\n\nAI[QWEN3.5:9B]5.2S\n\nI have noted that the project summary needs to be sent by Friday. Maya is responsible for reviewing the budget, so she will handle that part of the work. Daniel will take care of scheduling the next meeting once everything is ready.\n\nThese tasks are clear and everyone knows what they need to do before the deadline arrives.\n\nCopy\nRead\nYOU\n\nPlease send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting.\n\nAI[QWEN3.5:9B]2.2S\n\nI have made sure everyone knows to send the project summary by Friday. Maya will handle reviewing the budget while Daniel takes care of scheduling our next meeting.\n\nThis plan keeps things moving forward so we can stay on track with our goals. Everyone has a clear role to play before the deadline hits.\n\nCopy\nRead"
+  },
+  {
+    "name": "protection-on",
+    "label": "Protection on",
+    "nativeState": {
+      "enabled": true,
+      "undetectable": true
+    }
+  },
+  {
+    "name": "protection-off",
+    "label": "Protection off",
+    "nativeState": {
+      "enabled": false,
+      "undetectable": false
+    }
+  },
+  {
+    "name": "screenshot-attachment",
+    "badge": "\n      \n      \n      \n        \n      \n    ",
+    "visible": false
+  },
+  {
+    "name": "overlays",
+    "overlays": [
+      {
+        "kind": "showCaptionOverlay",
+        "error": "page.evaluate: Error: Error invoking remote method 'caption:show': ReferenceError: isProd is not defined"
+      },
+      {
+        "kind": "showInterviewOverlay",
+        "error": "page.evaluate: Error: Error invoking remote method 'interview-overlay:show': ReferenceError: isProd is not defined"
+      }
+    ]
+  }
+]

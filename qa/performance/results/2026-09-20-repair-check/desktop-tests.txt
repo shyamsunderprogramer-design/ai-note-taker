@@ -1,0 +1,24 @@
+✔ .chat-area has -webkit-app-region: no-drag so mouse wheel scrolls (0.780583ms)
+✔ .response-area has -webkit-app-region: no-drag (0.1565ms)
+✔ .chat-area is still a vertical scroll container (0.108833ms)
+✔ Enter toggles recording instead of only cutting a question (0.604666ms)
+✔ the cut is sent as a control message both channels understand (0.065167ms)
+✔ the cut reaches every open channel, since either may hold the question (0.06925ms)
+✔ cutting only targets sockets that are actually open (0.067083ms)
+✔ closing a session waits for answers already in flight (0.219541ms)
+✔ the committed answer lands in the chat, not the side panel (0.070541ms)
+✔ the streamed answer rewrites one bubble instead of adding a second (0.063042ms)
+✔ saved history keeps the full answer, not the opening fragment (0.058375ms)
+✔ rolling previews stay in the side panel (0.071ms)
+✔ capture protection toggles both directions and reports failures (2.062834ms)
+✔ main.js pushes native darwin traffic lights off-screen (1.061209ms)
+✔ style.css no longer hides custom HTML traffic lights on darwin (0.481833ms)
+✔ .traffic-corner is positioned top-right and is the visible control (0.168ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 76.113

@@ -28,11 +28,17 @@ async def run(args):
     import ai_router
     original_prompt = ai_router.build_prompt
     ai_router.build_prompt = lambda *a, **k: original_prompt(*a, **{**k, 'include_rag': False})
-    tree = ast.parse(args.adapter.read_text())
-    fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '_patch_to_async_gen')
-    namespace = {'asyncio': asyncio}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), str(args.adapter), 'exec'), namespace)
-    stream = namespace['_patch_to_async_gen'](ai_router.ask_ollama_stream)
+    if args.adapter:
+        # Explicit historical adapters remain usable for before/after comparisons.
+        tree = ast.parse(args.adapter.read_text())
+        fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '_patch_to_async_gen')
+        namespace = {'asyncio': asyncio}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), str(args.adapter), 'exec'), namespace)
+        stream = namespace['_patch_to_async_gen'](ai_router.ask_ollama_stream)
+    else:
+        from lib.async_stream import iterate_stream
+        def stream(*args, **kwargs):
+            return iterate_stream(ai_router.ask_ollama_stream(*args, **kwargs))
     samples = []
     for iteration in range(args.runs * len(CASES)):
         prompt, required = CASES[iteration // args.runs]
@@ -85,7 +91,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--model', default='qwen3.5:9b')
     parser.add_argument('--runs', type=int, default=3)
-    parser.add_argument('--adapter', type=Path, default=ROOT / 'backend/core/main.py')
+    parser.add_argument('--adapter', type=Path, default=None)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.runs < 1: parser.error('--runs must be positive')

@@ -1,0 +1,26 @@
+{
+  "conditions": "Local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": true,
+  "samples": [
+    {
+      "model": "qwen3.5:9b",
+      "case": "missing_fact",
+      "first_seconds": null,
+      "total_seconds": 39.96681270800764,
+      "answer": "",
+      "errors": [
+        "The answer reached its output limit and may be incomplete. Choose Detailed or ask a narrower question."
+      ]
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting",
+      "first_seconds": null,
+      "total_seconds": 30.002444709010888,
+      "answer": "",
+      "errors": [
+        "Model 'qwen3.5:9b' stopped responding for 30s. It may be loading or under memory pressure. Your selected model was not changed."
+      ]
+    }
+  ]
+}

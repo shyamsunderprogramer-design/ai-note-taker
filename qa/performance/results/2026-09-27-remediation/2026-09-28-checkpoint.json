@@ -1,0 +1,69 @@
+{
+  "backend": {
+    "passed": 1266,
+    "warnings": 10,
+    "scope": "Isolated tests excluding API integration; includes startup checks"
+  },
+  "desktop_web": {
+    "passed": 91
+  },
+  "build": "passed",
+  "browser_smoke": [
+    {
+      "page": "signin.html",
+      "status": 200,
+      "title": "Sign In - ANT",
+      "errors": []
+    },
+    {
+      "page": "index.html",
+      "status": 200,
+      "title": "ANT (AI Note Taker)",
+      "errors": []
+    },
+    {
+      "page": "job-tracker.html",
+      "status": 200,
+      "title": "Job Application Tracker - ANT",
+      "errors": []
+    },
+    {
+      "page": "study-plan.html",
+      "status": 200,
+      "title": "Study Plan - ANT (AI Note Taker)",
+      "errors": []
+    },
+    {
+      "page": "resume-review-v2.html",
+      "status": 200,
+      "title": "Resume Review V2 - AI-Powered Analysis | Free Forever",
+      "errors": []
+    }
+  ],
+  "screen_pipeline": {
+    "scope": "Controlled browser screenshots, real OCR, real renderer and local Qwen; native OS capture not exercised",
+    "results": [
+      {
+        "question": "Answer all visible questions",
+        "answer": "1. 15\n2. Paris",
+        "passed": true
+      },
+      {
+        "question": "Answer the question on screen",
+        "answer": "I can see questions 1, 2. Which number should I answer? You can also ask me to answer all.",
+        "passed": true
+      },
+      {
+        "question": "Updated fixture: question 3",
+        "answer": "15",
+        "passed": true
+      },
+      {
+        "question": "Fresh capture metadata per question",
+        "passed": true
+      }
+    ]
+  },
+  "visible_browser": "Crashed before newPage twice; not verified",
+  "remaining": "Master remediation plan still in progress; no release or push"
+}

@@ -24,7 +24,9 @@ test.describe('Cognitive Graph page', () => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await page.goto('/cognitive-graph');
+    const response = await page.goto('/cognitive-graph');
+    expect(response.status()).toBe(200);
+    await expect(page).not.toHaveTitle(/Error response/i);
     // The page should have a heading — any h1/h2 will do for a smoke.
     const heading = await page.locator('h1, h2').first();
     await expect(heading).toBeVisible();

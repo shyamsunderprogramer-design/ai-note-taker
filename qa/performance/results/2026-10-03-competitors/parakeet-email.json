@@ -1,0 +1,35 @@
+{
+  "name": "parakeet-email",
+  "url": "https://www.parakeet-ai.com/auth/signin?callbackUrl=/dashboard",
+  "text": "What’s your email address?\nContinue with Email\nBack to login\n\nBy continuing, you agree to ParakeetAI’s\nTerms and Conditions and Privacy Policy.",
+  "controls": [
+    {
+      "tag": "INPUT",
+      "text": "",
+      "type": "email",
+      "placeholder": "Enter email address"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Continue with Email",
+      "type": "submit"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "Back to login",
+      "type": "button"
+    },
+    {
+      "tag": "A",
+      "text": "Terms and Conditions",
+      "href": "https://www.parakeet-ai.com/terms-and-conditions",
+      "type": ""
+    },
+    {
+      "tag": "A",
+      "text": "Privacy Policy",
+      "href": "https://www.parakeet-ai.com/privacy-policy",
+      "type": ""
+    }
+  ]
+}

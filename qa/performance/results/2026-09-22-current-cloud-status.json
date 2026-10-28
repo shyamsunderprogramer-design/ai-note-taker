@@ -1,0 +1,24 @@
+{
+  "conditions": "Production provider adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "google-gemini-3-8-flash",
+      "case": "missing_fact",
+      "first_seconds": null,
+      "total_seconds": 0.15064129198435694,
+      "answer": "",
+      "errors": [
+        "Google (HTTP 403): The API key does not have permission for this request."
+      ]
+    },
+    {
+      "model": "ollama-cloud",
+      "case": "missing_fact",
+      "first_seconds": 7.268757749989163,
+      "total_seconds": 8.908676958002616,
+      "answer": "Based on the resume information provided, **no AWS certifications are listed**, and no dates for earning them are documented.\n\nHere's what I can determine from the resume context:\n- **Certifications:** None listed\n- **Earning dates:** None listed\n- **AWS-specific credentials:** Not documented\n\n**Important clarification on your instructions:** You provided two somewhat conflicting guidelines \u2014 \"Use only the resume for personal facts\" and \"Unlisted does not mean absent.\" I've taken the conservative interpretation: I will not fabricate certifications or dates, but I also won't claim definitively that you hold *no* AWS certifications (since a resume is inherently a summary, not an exhaustive record).\n\nIf you actually hold AWS certifications, you'd need to share that information directly, or they would need to appear in the resume text, for me to report on them accurately.\n\nWould you like to share your certification details so I can help you with something specific (e.g., tailoring the resume to highlight them)?",
+      "errors": []
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "conditions": "Production local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "samples": [
+    {
+      "model": "gemma4:e4b",
+      "case": "missing_fact",
+      "first_seconds": 3.4496292500407435,
+      "total_seconds": 3.5757374170352705,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "meeting",
+      "first_seconds": 2.368885500007309,
+      "total_seconds": 3.201724250044208,
+      "answer": "*   **Send the project summary:** Owner: unspecified, Deadline: Friday\n*   **Review the budget:** Owner: Maya, Deadline: unspecified\n*   **Schedule the next meeting:** Owner: Daniel, Deadline: unspecified",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "technical",
+      "first_seconds": 0.260475332965143,
+      "total_seconds": 4.185551165952347,
+      "answer": "Readiness probes, liveness probes, and memory limits affect a Kubernetes pod as follows:\n\n*   **Liveness Probe:** Determines if the container is running correctly. If the probe fails, Kubernetes assumes the container is unhealthy and restarts it.\n*   **Readiness Probe:** Determines if the container is ready to serve traffic. If the probe fails, Kubernetes removes the pod's IP address from the Service endpoints, meaning no traffic is sent to the container, but the container itself is not restarted.\n*   **Memory Limits:** Define the maximum amount of memory a container is allowed to consume. If the container exceeds this limit, the container will be terminated by the operating system (usually via an OOMKill).\n\n**Distinction between removal from traffic and container restarts:**\n\n*   **Readiness Probe Failure:** Causes the pod to be removed from the Service endpoints, meaning traffic is diverted away from it, but the container continues to run.\n*   **Liveness Probe Failure:** Causes Kubernetes to restart the container.\n\n**Component enforcing the memory limit:**\n\nThe operating system (via the container runtime/kubelet) enforces the memory limit.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "meeting_status",
+      "first_seconds": 0.2626875000423752,
+      "total_seconds": 0.5841763330390677,
+      "answer": "Decisions:\n* None\n\nAction Items:\n* unspecified: No date was decided.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "meeting_owners",
+      "first_seconds": 0.2551950420020148,
+      "total_seconds": 0.9809411670430563,
+      "answer": "*   **Send the invoice:** Owner: Elena, Deadline: Tuesday\n*   **Check the contract:** Owner: Marcus, Deadline: unspecified\n*   **Update the launch checklist:** Owner: unspecified, Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "technical_restart",
+      "first_seconds": 0.2506690839654766,
+      "total_seconds": 1.292147166968789,
+      "answer": "No, a liveness probe does not need to fail for a container to restart if it is OOMKilled. The restart behavior is determined by the container runtime and Kubernetes' restart policy, which dictates how the container should be managed when it exits, regardless of the exit reason (such as being OOMKilled).",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "missing_fact",
+      "first_seconds": 5.379903750028461,
+      "total_seconds": 5.4283382089925,
+      "answer": "\nMy resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "meeting",
+      "first_seconds": 4.737357541976962,
+      "total_seconds": 4.9685011669644155,
+      "answer": "\nProject summary due by Friday.\n\n- Review budget \u2013 Maya (deadline: Friday)  \n- Schedule next meeting \u2013 Daniel (deadline: unspecified)",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "technical",
+      "first_seconds": 3.221763750014361,
+      "total_seconds": 4.800979708030354,
+      "answer": "\n- **Readiness probes** \u2013 sent to the container when it starts; they indicate whether the container is prepared to accept traffic. If a readiness probe fails, the pod remains unavailable until the condition is met.  \n- **Liveness probes** \u2013 continuously checked while the container runs; if the probe indicates the process has hung or crashed, the kubelet restarts the container. This prevents a stuck container from affecting other pods.  \n- **Memory limits** \u2013 defined in a container\u2019s configuration (e.g., `resources.limits.memory`). The Kubernetes runtime enforces these limits on each node; exceeding them triggers an out\u2011of\u2011memory (OOM) kill, which is the pod\u2019s removal mechanism.  \n- **Removal vs. traffic** \u2013 *removal* refers to the deletion of a pod or its resources; *traffic* refers to network connections that a pod can accept or serve. *Container restarts* are triggered by liveness probe failures or explicit restart policies, not by removal events.  \n- **Component enforcing memory limits** \u2013 the **kubelet**, the node\u2011level agent in Kubernetes, monitors and enforces memory constraints on containers.  \n\nMy resume does not specify additional details.",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "meeting_status",
+      "first_seconds": 5.914206249988638,
+      "total_seconds": 6.150583957962226,
+      "answer": "\nDecisions:\n- No release date decision; awaiting test results and Omar\u2019s agreement\n\nAction Items:\n- Send draft \u2013 Owner: Lee \u2013 Deadline: unspecified",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "meeting_owners",
+      "first_seconds": 4.4543380420072936,
+      "total_seconds": 4.741925582988188,
+      "answer": "\n- Elena will send the invoice \u2013 Owner: Elena; Deadline: Tuesday  \n- Marcus will check the contract \u2013 Owner: unspecified; Deadline: unspecified  \n- Update launch checklist \u2013 Owner: unspecified; Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "technical_restart",
+      "first_seconds": 4.605410457996186,
+      "total_seconds": 5.338963291957043,
+      "answer": "\n- An OOMKilled container is terminated by the Kubernetes scheduler; its pod will be restarted based on the pod\u2019s\u202frestartPolicy (Always or OnFailure) unless that policy is set to\u202fNever.  \n- A liveness\u2011probe failure does **not** require a restart; only when the liveness probe itself fails during health checks would it trigger a restart if configured to do so.  \n- For an OOMKilled event, whether the pod restarts is determined solely by the pod\u2019s\u202frestartPolicy, not by the liveness\u2011probe status.",
+      "errors": []
+    }
+  ]
+}

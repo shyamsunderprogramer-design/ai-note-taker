@@ -1,0 +1,13 @@
+{
+  "test": "ANT system-audio capture of isolated synthetic afplay process",
+  "elapsedSeconds": 11.344,
+  "capturedSeconds": 10.5,
+  "chunks": 105,
+  "peak": 25745,
+  "nonzeroSamples": 98264,
+  "silent": false,
+  "playerExitCode": 0,
+  "errors": [],
+  "passed": true,
+  "limits": "OS loopback test, not a Meet/Zoom call. No microphone or unrelated processes captured."
+}

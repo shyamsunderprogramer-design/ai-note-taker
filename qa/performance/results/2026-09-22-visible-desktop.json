@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "name": "explicit-cloud",
+      "selected": "groq-gpt-oss-120b",
+      "seconds": 2.095,
+      "answer": "AI[OPENAI/GPT-OSS-120B]1.8S\nSend invoice – Owner: Elena; Deadline: Tuesday.\nCheck contract – Owner: Marcus; Deadline: unspecified.\nUpdate launch checklist – Owner: unspecified; Deadline: Thursday.\nCopy\nRead",
+      "scroll": {
+        "following": true,
+        "distanceFromBottom": -1
+      }
+    },
+    {
+      "name": "auto-cloud",
+      "selected": "auto",
+      "seconds": 1.733,
+      "answer": "AI\nOpenai\nGoogle\nGroq\nOllama-Cloud\n[OPENAI/GPT-OSS-120B]1.4S\n\nNo. An OOMKilled container is terminated by the kernel, and the kubelet will restart it based solely on the pod’s restartPolicy. The liveness probe is only evaluated while the container is running; its failure is not required for a restart after OOMKill. With restartPolicy=Always (default) or OnFailure (the OOMKill exit code 137 counts as a failure), the container is restarted; with restartPolicy=Never it is not.\n\nCopy\nRead",
+      "scroll": {
+        "following": true,
+        "distanceFromBottom": 2
+      }
+    }
+  ],
+  "errors": []
+}

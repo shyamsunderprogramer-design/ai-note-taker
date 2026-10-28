@@ -1,0 +1,324 @@
+{
+  "passed": true,
+  "samples": [
+    {
+      "run": 1,
+      "audio_send_seconds": 7.318601083999965,
+      "passed": true,
+      "events": [
+        {
+          "after_send_seconds": -5.964257042011013,
+          "type": "partial",
+          "text": "Tell me abou-",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -4.298573749998468,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -3.881426375010051,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Describe the specific time you solved a performance issue by building a cache that reduced latency by 20%.",
+          "question": "Tell me about a time you solved.",
+          "model": "qwen3.5:9b",
+          "gen_ms": 591,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": -2.3781490420078626,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -1.653935750000528,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Describe the specific problem you solved and the exact change you made to achieve it.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 507,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": -1.3833520420012064,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you change and how did you",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": 1.6304291659907904,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you change and how did you Measure the result.",
+          "source": "system",
+          "speaker": "Speaker 2",
+          "semantic_role": "interviewer"
+        },
+        {
+          "after_send_seconds": 1.845136290998198,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Describe the specific problem you solved, your changes, and how you measured the results.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 526,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": 2.6235779159906087,
+          "type": "suggestion",
+          "answer_id": 1,
+          "session_id": "e0d465993d7a4808814a55dd28482561",
+          "partial": true,
+          "text": "I built a custom cache that reduced our system latency by 20 percent.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "latency_ms": 2934,
+          "category": "answer",
+          "confidence": 0.9
+        },
+        {
+          "after_send_seconds": 3.474872624996351,
+          "type": "suggestion",
+          "answer_id": 1,
+          "session_id": "e0d465993d7a4808814a55dd28482561",
+          "partial": false,
+          "text": "I built a custom cache that reduced our system latency by 20 percent. I changed the data retrieval strategy to leverage this new layer for frequently accessed items. We measured the result by comparing average response times before and after deployment using our monitoring dashboard.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 1505,
+          "latency_ms": 3789,
+          "category": "answer",
+          "confidence": 0.9
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "audio_send_seconds": 7.299052875008783,
+      "passed": true,
+      "events": [
+        {
+          "after_send_seconds": -5.853769207998994,
+          "type": "partial",
+          "text": "Tell me abou-",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -4.1753671250044135,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -3.860117500007618,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Talk about the time you solved a problem where you built a cache that reduced latency by 20 percent.",
+          "question": "Tell me about a time you solved.",
+          "model": "qwen3.5:9b",
+          "gen_ms": 617,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": -2.4009369170089485,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -1.1637963329994818,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Describe the specific problem you solved and exactly what changes you made to fix it.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 803,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": -0.8241421670099953,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you change and how did you",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": 1.6815636249957606,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you change and how did you Measure the result.",
+          "source": "system",
+          "speaker": "Speaker 2",
+          "semantic_role": "interviewer"
+        },
+        {
+          "after_send_seconds": 2.102023332990939,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Describe the specific problem you solved, the changes you made, and how you measured the results.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 630,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": 2.526576374992146,
+          "type": "suggestion",
+          "answer_id": 1,
+          "session_id": "666acfd4b3464ee98f416d0727640317",
+          "partial": true,
+          "text": "I built a custom cache that reduced system latency by 20 percent.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "latency_ms": 2832,
+          "category": "answer",
+          "confidence": 0.9
+        },
+        {
+          "after_send_seconds": 3.1057361669954844,
+          "type": "suggestion",
+          "answer_id": 1,
+          "session_id": "666acfd4b3464ee98f416d0727640317",
+          "partial": false,
+          "text": "I built a custom cache that reduced system latency by 20 percent. I changed our data retrieval strategy to prioritize frequent requests, and I measured success by monitoring average response times before and after deployment.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 966,
+          "latency_ms": 3411,
+          "category": "answer",
+          "confidence": 0.9
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "audio_send_seconds": 7.27879695899901,
+      "passed": true,
+      "events": [
+        {
+          "after_send_seconds": -6.02697612499469,
+          "type": "partial",
+          "text": "Tell me abou-",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -4.151964000004227,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -3.832212374996743,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Talk about the time you solved a performance issue by building a cache that reduced latency by 20 percent.",
+          "question": "Tell me about a time you solved.",
+          "model": "qwen3.5:9b",
+          "gen_ms": 629,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": -2.2845321250060806,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": -1.3954067089944147,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Describe the difficult problem you solved and specifically what changes you made to fix it.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 486,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": -1.0434230840037344,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you change and how did you",
+          "source": "system",
+          "speaker": "Speaker 1",
+          "semantic_role": "user"
+        },
+        {
+          "after_send_seconds": 1.4620184999948833,
+          "type": "partial",
+          "text": "Tell me abou- about a time you solved a difficult called problem. What did you change and how did you Measure the result.",
+          "source": "system",
+          "speaker": "Speaker 2",
+          "semantic_role": "interviewer"
+        },
+        {
+          "after_send_seconds": 1.8537149579933612,
+          "type": "suggestion",
+          "preview": true,
+          "text": "Talk about the specific cache changes you made and how you measured the 20 percent latency reduction.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 593,
+          "category": "direction",
+          "confidence": 0.5
+        },
+        {
+          "after_send_seconds": 2.2156595410051523,
+          "type": "suggestion",
+          "answer_id": 1,
+          "session_id": "b167054ffb964d29b1d136be9d0cb0c3",
+          "partial": true,
+          "text": "I built a custom cache to solve high latency issues.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "latency_ms": 2529,
+          "category": "answer",
+          "confidence": 0.9
+        },
+        {
+          "after_send_seconds": 2.8415704579965677,
+          "type": "suggestion",
+          "answer_id": 1,
+          "session_id": "b167054ffb964d29b1d136be9d0cb0c3",
+          "partial": false,
+          "text": "I built a custom cache to solve high latency issues. By implementing this change, we reduced response times by 20 percent. We measured success by monitoring system metrics before and after deployment.",
+          "question": "Tell me about a time you solved a difficult problem. What did you change? And how did you measure the result?",
+          "model": "qwen3.5:9b",
+          "gen_ms": 920,
+          "latency_ms": 3155,
+          "category": "answer",
+          "confidence": 0.9
+        }
+      ]
+    }
+  ],
+  "limits": "Three repeats of one synthetic interview prompt; real route, VAD, Whisper small and local live AI. In-process ASGI transport, auth disabled only in harness. No microphone, meeting platform or visible UI."
+}

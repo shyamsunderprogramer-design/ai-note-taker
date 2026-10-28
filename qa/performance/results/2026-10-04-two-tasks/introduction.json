@@ -1,0 +1,17 @@
+{
+  "seconds": 8.48,
+  "words": 124,
+  "answer": "I am a backend engineer with five years of experience focused on building reliable Python APIs. My work primarily involves designing services that handle complex data logic while maintaining high performance standards in production environments.\n\nAt Cedar Labs, I contributed to a team that reduced API p95 latency from 800 ms to 300 ms. This improvement was achieved by profiling database queries and adding necessary indexes using PostgreSQL within Dockerized containers. Previously, I also maintained an internal inventory service to support operational workflows.\n\nThis background in optimizing Python services aligns directly with the needs of a role focused on building reliable APIs. My experience with performance tuning and backend architecture allows me to immediately contribute to creating efficient and stable systems for your team.",
+  "final": {
+    "type": "done",
+    "ms": 8482,
+    "recoveries": 1,
+    "providers": [
+      "groq-test",
+      "qwen3.5:9b"
+    ],
+    "numeric_repairs": 1,
+    "resume_measurements_checked": true
+  },
+  "cloud_failure": "injected unavailable; local inference real"
+}

@@ -1,0 +1,55 @@
+{
+  "conditions": "Production local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "samples": [
+    {
+      "model": "qwen3.5:9b",
+      "case": "missing_fact",
+      "first_seconds": 2.904254499997478,
+      "total_seconds": 3.091956082964316,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting",
+      "first_seconds": 2.8468917079735547,
+      "total_seconds": 4.206508832983673,
+      "answer": "- Task: Send the project summary\n  - Owner: unspecified\n  - Deadline: Friday\n\n- Task: Review the budget\n  - Owner: Maya\n  - Deadline: unspecified\n\n- Task: Schedule the next meeting\n  - Owner: Daniel\n  - Deadline: unspecified",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical",
+      "first_seconds": 0.42818887502653524,
+      "total_seconds": 5.169369042036124,
+      "answer": "In Kubernetes, readiness probes determine if a container is ready to accept traffic; if they fail, the Service stops sending requests to that Pod. Liveness probes detect if a container is stuck or hung; if they fail, Kubernetes restarts the container by killing it and starting a new one. Memory limits are enforced by the Linux cgroup subsystem (specifically `memory.limit_in_bytes`), which kills the process when memory usage exceeds the limit, triggering an OOMKilled event that causes the container to restart.\n\n*   **Readiness Probe Failure**: Traffic is removed from the Pod; the container remains running but does not receive new requests.\n*   **Liveness Probe Failure or Memory Limit Exceeded**: The container is restarted (killed and respawned); traffic removal is a consequence of the readiness state changing during this restart, but the primary action is the restart itself.\n*   **Enforcing Component**: The Linux kernel's cgroup memory controller enforces the memory limit.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting_status",
+      "first_seconds": 0.4283941669855267,
+      "total_seconds": 1.1537122500012629,
+      "answer": "Decisions: None.\nAction Items:\n- Task: Obtain test results before agreeing to move the release. Owner: unspecified. Deadline: unspecified.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting_owners",
+      "first_seconds": 0.4278902090154588,
+      "total_seconds": 1.6103774590301327,
+      "answer": "- Action: Send the invoice\n  Owner: Elena\n  Deadline: Tuesday\n\n- Action: Check the contract\n  Owner: Marcus\n  Deadline: unspecified\n\n- Action: Update the launch checklist\n  Owner: unspecified\n  Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical_restart",
+      "first_seconds": 0.4249614169821143,
+      "total_seconds": 7.494689624989405,
+      "answer": "No, a liveness probe does not need to fail for a container marked with `restartPolicy: Always` (the default) to restart after an OOMKilled event.\n\nWhen a container is **OOMKilled** (Out Of Memory Killed), the Kubernetes kubelet immediately terminates the container process. The pod's restart behavior is then determined by the **`restartPolicy`** field in the Pod specification, not by liveness probes:\n\n1.  **`restartPolicy: Always` (Default)**: If a container exits for any reason\u2014including being OOMKilled\u2014the kubelet will automatically attempt to restart that specific container within the pod. A liveness probe failure is irrelevant in this scenario because the container has already been forcefully terminated by the kernel.\n2.  **`restartPolicy: OnFailure`**: The container will only restart if it exits with a non-zero exit code or is killed (like OOMKilled). It will not restart on `ExitCode: 0`. Since OOMKilled results in a termination signal, the container would restart under this policy as well.\n3.  **`restartPolicy: Never`**: The container will not restart after an OOMKilled event.\n\n**What determines whether it restarts:**\nThe sole determinant for restarting an OOMKilled container is the **`restartPolicy`** setting on the Pod. Liveness probes are used to detect application-level unhealthiness (e.g.,",
+      "errors": [
+        "The answer reached its output limit and may be incomplete. Choose Detailed or ask a narrower question."
+      ]
+    }
+  ]
+}

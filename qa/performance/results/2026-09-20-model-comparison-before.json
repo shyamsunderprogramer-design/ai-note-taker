@@ -1,0 +1,77 @@
+{
+  "conditions": "Production local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "samples": [
+    {
+      "model": "qwen3.5:9b",
+      "case": "missing_fact",
+      "first_seconds": 4.26325783401262,
+      "total_seconds": 4.479036042001098,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting",
+      "first_seconds": 3.0971457089763135,
+      "total_seconds": 4.337321416998748,
+      "answer": "The project summary is to be sent by Friday. Maya is assigned to review the budget, and Daniel is assigned to schedule the next meeting. Owners and deadlines for these specific actions are as stated; any other details remain unspecified.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical",
+      "first_seconds": 0.37997766700573266,
+      "total_seconds": 3.9475660839816555,
+      "answer": "In Kubernetes, readiness probes determine if a container is ready to accept traffic, while liveness probes detect if a container is stuck in a failed state and trigger a restart. Memory limits are enforced by the kernel's OOM (Out-Of-Memory) killer; when a process exceeds its limit, the kernel terminates that specific process rather than restarting the entire container automatically. Consequently, exceeding memory limits causes the application inside the container to crash, which may lead to a restart if a liveness probe fails or if the container is configured to exit on failure, whereas readiness probes only control whether traffic is routed to the pod without affecting its running state.",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "missing_fact",
+      "first_seconds": 1.7465059999958612,
+      "total_seconds": 4.194561833981425,
+      "answer": "<think>\nWe need to parse the user request.\n\nThe user says:\n\n\"ANT, an assistant for meeting notes and interview preparation. Follow the user's requested task and format. Use only the supplied facts for summaries and action items; mark missing owners or deadlines as unspecified. Give the final answer directly, without analysis or thinking tags.\n\nDefault style when the user has not requested a format: One short paragraph for simple questions. Cover every requested point for complex questions.\n\nQuestion: Answer the current question directly in natural, conversational language. Use periods or commas instead of em dashes. Avoid filler and unrelated examples. Use general knowledge for technical explanations. Use only supplied facts for personal claims and meeting notes; missing personal facts remain unknown, not absent. Previous assistant replies are drafts, not evidence. Never claim actions were completed without a confirming tool result. Preserve each action's own owner and deadline; mark missing values unspecified.\n\n[Resume answer context] Resume: Jordan built Python APIs at Acme and added Redis caching. No certifications are listed. Which AWS certifications do I hold and when did I earn them? Use only the resume for personal facts. Unlisted does not mean absent.\"\n\nThus we have a scenario where the user asks: \"Which AWS certifications do I hold and when did I earn them?\" The resume says Jordan built Python APIs at Acme and added Redis caching. No certifications are listed. So there is no information about",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "meeting",
+      "first_seconds": 0.9297587919863872,
+      "total_seconds": 3.33173070801422,
+      "answer": "<think>\nWe need to produce a response that follows the user's instructions.\n\nUser says: \"Answer the current question directly in natural, conversational language. Use periods or commas instead of em dashes. Avoid filler and unrelated examples. Use general knowledge for technical explanations. Use only supplied facts for personal claims and meeting notes; missing personal facts remain unknown, not absent.\"\n\nQuestion: \"Please send the project summary by Friday. Maya will review the budget, and Daniel will schedule the next meeting. Summarize these action items with each owner and deadline. Mark missing details unspecified. Do not invent dependencies between tasks.\"\n\nWe have no explicit dates for owners; only that Maya will review the budget (deadline unspecified? It says \"by Friday\" for sending project summary, but not for Maya's review or Daniel's scheduling. So we need to summarize: Action items: Send project summary by Friday (owner unspecified). Maya will review the budget (owner: Maya; deadline unspecified). Daniel will schedule next meeting (owner: Daniel; deadline unspecified). Also note missing details unspecified where appropriate.\n\nThus answer: \"The project summary should be sent by Friday, though the owner is not specified. Maya is assigned to review the budget and has no stated deadline. Daniel is tasked with scheduling the next meeting and also has no stated deadline.\" That uses periods or commas, no em dashes. No filler. That seems correct.\n\nWe must ensure we don't claim",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "technical",
+      "first_seconds": 0.09272262500599027,
+      "total_seconds": 2.577232915966306,
+      "answer": "<think>\nWe need to produce answer according to user request. Let's parse:\n\nUser says: \"You are ANT, an assistant for meeting notes and interview preparation.\" They want us to follow a task and format. Use only supplied facts for summaries and action items; mark missing owners or deadlines as unspecified. Provide final answer directly, without analysis or thinking tags.\n\nQuestion: \"Explain how readiness probes, liveness probes, and memory limits affect a Kubernetes pod. Distinguish removal from traffic from container restarts. Which component enforces the memory limit?\"\n\nWe have no supplied facts in the conversation. There's no prior context. So we must rely on general knowledge for technical explanations, but only use supplied facts for personal claims and meeting notes; missing personal facts remain unknown, not absent.\n\nThus we need to produce a concise answer: explain how readiness probes, liveness probes, memory limits affect a pod, distinguish removal from traffic from container restarts, and state which component enforces the memory limit. Since we have no supplied facts, we must use general knowledge but also note that missing personal facts remain unknown. However we can still provide explanation based on known info.\n\nWe need to ensure we don't claim actions were completed without confirming tool result. That's not relevant here.\n\nWe need to produce a single paragraph? The default style when user hasn't requested a format: \"One short paragraph for simple questions. Cover every requested point for complex questions.\" So the answer should be one short",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "missing_fact",
+      "first_seconds": 2.584351542056538,
+      "total_seconds": 2.7495448340196162,
+      "answer": "The resume does not list any AWS certifications.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "meeting",
+      "first_seconds": 3.1149291250039823,
+      "total_seconds": 3.477474124985747,
+      "answer": "Project summary is due by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "technical",
+      "first_seconds": 0.16197766602272168,
+      "total_seconds": 1.922208333038725,
+      "answer": "Readiness probes determine if a pod is ready to receive traffic, while liveness probes determine if the container is running correctly and needs restarting. Memory limits are resource constraints that, when exceeded, can cause the container to be terminated. The kubelet component enforces the memory limit. Removing traffic from a pod is different from container restarts because traffic removal is a controlled process managed by the service or ingress, whereas container restarts are an action taken by Kubernetes when a probe fails or the container crashes.",
+      "errors": []
+    }
+  ]
+}

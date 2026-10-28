@@ -1,0 +1,16 @@
+{
+  "capture": {
+    "fixtureRead": true,
+    "appExcluded": true
+  },
+  "results": [
+    {
+      "mode": "replayed-microphone-question",
+      "seconds": 3.746,
+      "transcript": "Sent with screenshot\nYOU\n\nDo you know about Kubernetes? How can you write a bad script for... you",
+      "answer": "AI[OPENAI/GPT-OSS-120B]2.8S\n\nYes, I’m familiar with Kubernetes, it orchestrates containerized workloads across clusters using pods, deployments, services, ConfigMaps, etc., handling scaling, self‑healing, and rolling updates. To illustrate a “bad” script, I need to know its intended purpose (e.g., a kubectl command script, a Helm chart, or a deployment manifest). Could you specify what the script should do?\n\nCopy\nRead",
+      "passed": true
+    }
+  ],
+  "limits": "Exact transcript from the earlier physical microphone run resubmitted through visible UI after prompt fix; this is not another microphone recording."
+}

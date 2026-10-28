@@ -1,0 +1,136 @@
+{
+  "elapsed_seconds": 2.91,
+  "answer": "The answer is 5, because you add 2 and 3 to find the total.",
+  "events": [
+    {
+      "type": "meta",
+      "provider": "openai",
+      "model": "openai-gpt-4o-mini",
+      "display": "openai-gpt-4o-mini"
+    },
+    {
+      "type": "recovery",
+      "provider": "google",
+      "model": "google-gemini-3-8-flash",
+      "attempt": 1,
+      "reason": "unavailable",
+      "continuation": false,
+      "message": "Switching to google-gemini-3-8-flash\u2026"
+    },
+    {
+      "type": "meta",
+      "provider": "google",
+      "model": "google-gemini-3-8-flash",
+      "display": "google-gemini-3-8-flash"
+    },
+    {
+      "type": "recovery",
+      "provider": "ollama",
+      "model": "minicpm-v4.6:1b",
+      "attempt": 2,
+      "reason": "unavailable",
+      "continuation": false,
+      "message": "Switching to minicpm-v4.6:1b\u2026"
+    },
+    {
+      "type": "meta",
+      "provider": "ollama",
+      "model": "minicpm-v4.6:1b",
+      "display": "minicpm-v4.6:1b"
+    },
+    {
+      "type": "limits",
+      "model": "minicpm-v4.6:1b",
+      "context_tokens": 4096,
+      "output_tokens": 300
+    },
+    {
+      "type": "chunk",
+      "content": "The"
+    },
+    {
+      "type": "chunk",
+      "content": " answer"
+    },
+    {
+      "type": "chunk",
+      "content": " is"
+    },
+    {
+      "type": "chunk",
+      "content": " "
+    },
+    {
+      "type": "chunk",
+      "content": "5"
+    },
+    {
+      "type": "chunk",
+      "content": ","
+    },
+    {
+      "type": "chunk",
+      "content": " because"
+    },
+    {
+      "type": "chunk",
+      "content": " you"
+    },
+    {
+      "type": "chunk",
+      "content": " add"
+    },
+    {
+      "type": "chunk",
+      "content": " "
+    },
+    {
+      "type": "chunk",
+      "content": "2"
+    },
+    {
+      "type": "chunk",
+      "content": " and"
+    },
+    {
+      "type": "chunk",
+      "content": " "
+    },
+    {
+      "type": "chunk",
+      "content": "3"
+    },
+    {
+      "type": "chunk",
+      "content": " to"
+    },
+    {
+      "type": "chunk",
+      "content": " find"
+    },
+    {
+      "type": "chunk",
+      "content": " the"
+    },
+    {
+      "type": "chunk",
+      "content": " total"
+    },
+    {
+      "type": "chunk",
+      "content": "."
+    },
+    {
+      "type": "done",
+      "ms": 2911,
+      "recoveries": 2,
+      "providers": [
+        "openai-gpt-4o-mini",
+        "google-gemini-3-8-flash",
+        "minicpm-v4.6:1b"
+      ],
+      "numeric_repairs": 0,
+      "resume_measurements_checked": false
+    }
+  ]
+}

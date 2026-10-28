@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-03",
+  "status": "Comprehensive tests found workflow failures \u2014 release not ready",
+  "next": "See COMPLETE-TEST-2026-10-03.md. Test workloads are stopped while investigating the reported live-app responsiveness problem; Settings and input focus passed after reopening.",
+  "backend": {
+    "passed": 1280,
+    "warnings": 10,
+    "scope": "isolated suite including startup; API integration separate"
+  },
+  "api": {
+    "passed": 59
+  },
+  "desktop_web": {
+    "passed": 97
+  },
+  "cross_browser": {
+    "passed": 44,
+    "workers": 2
+  },
+  "mobile": {
+    "passed": 34,
+    "suites": 5,
+    "scope": "Jest; no emulator"
+  },
+  "build": "passed",
+  "live_checks": 11,
+  "catalog_seconds": 0.015,
+  "recovery": "passed including runtime catalog, embedding exclusion, delayed discovery cancellation and five-second catalog timeout fallback",
+  "history": "passed with synthetic conversations, including 390px layout",
+  "source_sha256": {
+    "backend/routes/ollama.py": "12671650f4cf397dda5eb30018dd73ed8eb77b8b461a36d232b53664e5cb03a7",
+    "backend/lib/model_catalog.py": "73713307764d699a9bbad76bcb937539f7aed60982f2c666f15be10aefc809cf",
+    "apps/web/app.js": "79475dacb4eab18dc4474d073dfb9b6c31b42a0550fafe79b3c38cf929c74016",
+    "apps/web/dist/app.js": "79475dacb4eab18dc4474d073dfb9b6c31b42a0550fafe79b3c38cf929c74016",
+    "qa/performance/web/recovery.mjs": "24daf6a81ec5a108936f681003dd3b436323024d86b4c2e4b99b286076c80648",
+    "backend/tests/test_model_catalog.py": "52c8d6844d27aba4c8e23f4fdb62007756dc1e4c0c9620efcfa43a4a06088bc9"
+  },
+  "limitations": [
+    "No live cloud credential or provider quota tests",
+    "No native OS capture, microphone/meeting or emulator verification in this continuation",
+    "Feature workflow coverage remains incomplete; job-card details currently only log to console",
+    "Prior long-run soak applies to its recorded source, not this latest revision",
+    "No commit, push or release"
+  ]
+}

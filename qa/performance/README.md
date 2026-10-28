@@ -1,5 +1,17 @@
 # Performance Scripts & Budgets
 
+**Product-flow benchmark:** [measured scorecard and reproduction](BENCHMARK-SCORECARD.md).
+This adds real local Whisper/Ollama inference and note persistence to the earlier
+build/unit-test review.
+
+Latest results: [recording, streaming, and verified cloud-provider repair, 2026-09-22](REPAIR-REPORT-2026-09-22.md).
+
+Runnable checks: `npm run benchmark:web` validates the production build and
+its local assets; `AINT_Venv/bin/python qa/performance/backend/cache-read.py`
+measures cache reads. See [web results](web/vite-build-time.md),
+[cache results](backend/cache-read.md), and the
+[review scope and remaining gaps](REVIEW-2026-09-12.md).
+
 > **Role tag:** `qa`
 > **Owner:** `role-qa`
 

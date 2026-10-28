@@ -1,0 +1,236 @@
+{
+  "checks": [
+    {
+      "name": "Sign in through actual form",
+      "status": "passed",
+      "detail": "Disposable account signed in"
+    },
+    {
+      "name": "Settings tabs and model selector",
+      "status": "passed",
+      "detail": {
+        "tabs": 7,
+        "modelOptions": 38
+      }
+    },
+    {
+      "name": "Job description save/cancel/reload/remove",
+      "status": "passed",
+      "detail": "Saved context persists; cancel preserves it; remove clears it"
+    },
+    {
+      "name": "Denied microphone produces actionable error",
+      "status": "passed",
+      "detail": "Permission-denial UI releases processing state (injected rejection)"
+    },
+    {
+      "name": "Create job in actual UI and reload",
+      "status": "failed",
+      "detail": "Job creation HTTP 401; authenticated UI must forward its token to configured API"
+    },
+    {
+      "name": "Job form preserves notes",
+      "status": "failed",
+      "detail": "The actual submitted request omitted form notes\n+ actual - expected\n\n+ null\n- 'Synthetic note must persist'\n"
+    },
+    {
+      "name": "Job card opens a usable detail view",
+      "status": "failed",
+      "detail": "Clicking the job card opens no detail dialog"
+    },
+    {
+      "name": "Study plan generation and browser completion persistence",
+      "status": "passed",
+      "detail": {
+        "completedBefore": "1",
+        "completedAfter": "1",
+        "storage": "Browser-local persistence; backend tested separately"
+      }
+    },
+    {
+      "name": "Job tracker unavailable-backend state",
+      "status": "failed",
+      "detail": "The input did not match the regular expression /unavailable|could not|failed|try again|retry/i. Input:\n\n'←\\n' +\n  '💼 Job Application Tracker\\n' +\n  '\\n' +\n  'Track applications, interviews, and offers\\n' +\n  '\\n' +\n  '+\\n' +\n  'Add Application\\n' +\n  '0\\n' +\n  'Total Applications\\n' +\n  '0\\n' +\n  'Applied\\n' +\n  '0\\n' +\n  'Interviews\\n' +\n  '0\\n' +\n  'Offers\\n' +\n  '0%\\n' +\n  'Response Rate\\n' +\n  'Saved\\n' +\n  '0\\n' +\n  'Applied\\n' +\n  '0\\n' +\n  'Phone Screen\\n' +\n  '0\\n' +\n  'Technical\\n' +\n  '0\\n' +\n  'Onsite\\n' +\n  '0\\n' +\n  'Offer\\n' +\n  '0\\n' +\n  'Accepted\\n' +\n  '0\\n' +\n  '📋\\n' +\n  'No Applications Yet\\n' +\n  '\\n' +\n  'Start tracking your job applications here'\n"
+    },
+    {
+      "name": "Responsive document overflow",
+      "status": "passed",
+      "detail": [
+        {
+          "page": "index.html",
+          "width": 390,
+          "content": 390,
+          "passed": true
+        },
+        {
+          "page": "index.html",
+          "width": 960,
+          "content": 960,
+          "passed": true
+        },
+        {
+          "page": "index.html",
+          "width": 1440,
+          "content": 1440,
+          "passed": true
+        },
+        {
+          "page": "job-tracker.html",
+          "width": 390,
+          "content": 390,
+          "passed": true
+        },
+        {
+          "page": "job-tracker.html",
+          "width": 960,
+          "content": 960,
+          "passed": true
+        },
+        {
+          "page": "job-tracker.html",
+          "width": 1440,
+          "content": 1440,
+          "passed": true
+        },
+        {
+          "page": "study-plan.html",
+          "width": 390,
+          "content": 390,
+          "passed": true
+        },
+        {
+          "page": "study-plan.html",
+          "width": 960,
+          "content": 960,
+          "passed": true
+        },
+        {
+          "page": "study-plan.html",
+          "width": 1440,
+          "content": 1440,
+          "passed": true
+        },
+        {
+          "page": "resume-review-v2.html",
+          "width": 390,
+          "content": 390,
+          "passed": true
+        },
+        {
+          "page": "resume-review-v2.html",
+          "width": 960,
+          "content": 960,
+          "passed": true
+        },
+        {
+          "page": "resume-review-v2.html",
+          "width": 1440,
+          "content": 1440,
+          "passed": true
+        },
+        {
+          "page": "interview-simulator.html",
+          "width": 390,
+          "content": 390,
+          "passed": true
+        },
+        {
+          "page": "interview-simulator.html",
+          "width": 960,
+          "content": 960,
+          "passed": true
+        },
+        {
+          "page": "interview-simulator.html",
+          "width": 1440,
+          "content": 1440,
+          "passed": true
+        },
+        {
+          "page": "analytics-dashboard.html",
+          "width": 390,
+          "content": 390,
+          "passed": true
+        },
+        {
+          "page": "analytics-dashboard.html",
+          "width": 960,
+          "content": 960,
+          "passed": true
+        },
+        {
+          "page": "analytics-dashboard.html",
+          "width": 1440,
+          "content": 1440,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Visible control accessible-name precheck",
+      "status": "failed",
+      "detail": [
+        {
+          "page": "index.html",
+          "unnamed": [
+            {
+              "tag": "INPUT",
+              "id": "opacitySlider",
+              "type": "range"
+            },
+            {
+              "tag": "SELECT",
+              "id": "modeSelect",
+              "type": "select-one"
+            },
+            {
+              "tag": "SELECT",
+              "id": "modelSelect",
+              "type": "select-one"
+            },
+            {
+              "tag": "INPUT",
+              "id": "textInput",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "page": "job-tracker.html",
+          "unnamed": []
+        },
+        {
+          "page": "study-plan.html",
+          "unnamed": []
+        },
+        {
+          "page": "resume-review-v2.html",
+          "unnamed": [
+            {
+              "tag": "TEXTAREA",
+              "id": "resumeInput",
+              "type": "textarea"
+            },
+            {
+              "tag": "TEXTAREA",
+              "id": "jobInput",
+              "type": "textarea"
+            }
+          ]
+        },
+        {
+          "page": "interview-simulator.html",
+          "unnamed": []
+        },
+        {
+          "page": "analytics-dashboard.html",
+          "unnamed": []
+        }
+      ],
+      "scope": "Name-presence precheck only; not a full accessibility conformance audit"
+    }
+  ],
+  "scriptErrors": [
+    "Cannot read properties of undefined (reading 'getHealthUrl')"
+  ]
+}

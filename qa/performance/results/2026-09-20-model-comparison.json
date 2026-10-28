@@ -1,0 +1,77 @@
+{
+  "conditions": "Production local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "samples": [
+    {
+      "model": "qwen3.5:9b",
+      "case": "missing_fact",
+      "first_seconds": 3.5050780409947038,
+      "total_seconds": 3.720692290982697,
+      "answer": "My resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "meeting",
+      "first_seconds": 3.0784210420097224,
+      "total_seconds": 4.291491417039651,
+      "answer": "The project summary is to be sent by Friday. Maya is assigned to review the budget, and Daniel is assigned to schedule the next meeting. Owners and deadlines for these specific actions are as stated; any other details remain unspecified.",
+      "errors": []
+    },
+    {
+      "model": "qwen3.5:9b",
+      "case": "technical",
+      "first_seconds": 0.3796391250216402,
+      "total_seconds": 3.969556750031188,
+      "answer": "In Kubernetes, readiness probes determine if a container is ready to accept traffic, while liveness probes detect if a container is stuck in a failed state and trigger a restart. Memory limits are enforced by the kernel's OOM (Out-Of-Memory) killer; when a process exceeds its limit, the kernel terminates that specific process rather than restarting the entire container automatically. Consequently, exceeding memory limits causes the application inside the container to crash, which may lead to a restart if a liveness probe fails or if the container is configured to exit on failure, whereas readiness probes only control whether traffic is routed to the pod without affecting its running state.",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "missing_fact",
+      "first_seconds": 4.785139000043273,
+      "total_seconds": 4.858309834031388,
+      "answer": "\nMy resume does not specify that detail.",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "meeting",
+      "first_seconds": 5.389742707950063,
+      "total_seconds": 5.653975832974538,
+      "answer": "\nThe project summary should be sent by Friday unspecified owner. Maya will review the budget unspecified deadline. Daniel will schedule the next meeting unspecified deadline.",
+      "errors": []
+    },
+    {
+      "model": "lfm2.5:latest",
+      "case": "technical",
+      "first_seconds": 8.156913582992274,
+      "total_seconds": 9.064300749974791,
+      "answer": "\nReadiness probes determine when a container is ready to accept traffic, liveness probes identify when a container has become unresponsive and should be restarted, and memory limits set the maximum RAM a pod may consume which can cause an OOM kill or trigger a restart loop; removal means deleting a pod without sending new traffic while traffic refers to incoming requests and container restarts refer to restarting the process inside the pod; the component that enforces the memory limit is the Kubernetes runtime environment, specifically the kubelet which monitors resource usage and applies those limits.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "missing_fact",
+      "first_seconds": 2.665077666984871,
+      "total_seconds": 2.9621364169870503,
+      "answer": "My resume does not specify which AWS certifications I hold or when I earned them.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "meeting",
+      "first_seconds": 2.889346833981108,
+      "total_seconds": 3.288822041999083,
+      "answer": "Project summary is due by Friday. Maya will review the budget, and Daniel will schedule the next meeting.",
+      "errors": []
+    },
+    {
+      "model": "gemma4:e4b",
+      "case": "technical",
+      "first_seconds": 0.2350400829454884,
+      "total_seconds": 2.239472165994812,
+      "answer": "Readiness probes, liveness probes, and memory limits each affect a Kubernetes pod in different ways. A readiness probe determines if a container is ready to serve traffic; if it fails, the pod is removed from service, meaning traffic is stopped to it. A liveness probe checks if the container is running correctly; if it fails, Kubernetes will restart the container. Memory limits, on the other hand, are resource constraints that, when exceeded, cause the container to be terminated by the container runtime. The component that enforces the memory limit is the container runtime.",
+      "errors": []
+    }
+  ]
+}

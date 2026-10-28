@@ -13,7 +13,9 @@ test.describe('Interview Simulator page', () => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await page.goto('/interview-simulator');
+    const response = await page.goto('/interview-simulator');
+    expect(response.status()).toBe(200);
+    await expect(page).not.toHaveTitle(/Error response/i);
     const heading = await page.locator('h1, h2').first();
     await expect(heading).toBeVisible();
     const bodyText = await page.textContent('body');

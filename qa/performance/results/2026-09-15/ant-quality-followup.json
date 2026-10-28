@@ -1,0 +1,16 @@
+[
+  {
+    "case": "missing",
+    "text": "I don't have specific project details or metrics to share for that situation. I would describe the problem, explain the changes made using [project details], and measure the result through [measurement method]. Please allow me to elaborate on my relevant experience when you provide those specifics.",
+    "gen_ms": 4028,
+    "model": "qwen3.5:9b",
+    "error": null
+  },
+  {
+    "case": "partial",
+    "text": "I built a cache that reduced latency by 20 percent. I changed the data retrieval strategy by implementing this caching layer. The result was measured using [measurement method] on [project details].",
+    "gen_ms": 1148,
+    "model": "qwen3.5:9b",
+    "error": null
+  }
+]

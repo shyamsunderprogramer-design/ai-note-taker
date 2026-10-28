@@ -1,0 +1,61 @@
+{
+  "updated": "2026-10-02 17:26:29",
+  "server": "http://127.0.0.1:8046",
+  "checks": [
+    {
+      "name": "Server health",
+      "passed": true,
+      "detail": "HTTP 200; 0.152s"
+    },
+    {
+      "name": "Core readiness",
+      "passed": true,
+      "detail": "HTTP 200; {\"ready\":true,\"database_ready\":true,\"optional_features_url\":\"/health/modules\"}"
+    },
+    {
+      "name": "Liveness while optional modules are checked",
+      "passed": true,
+      "detail": "liveness=0.004s; modules HTTP 200"
+    },
+    {
+      "name": "Runtime model inventory",
+      "passed": true,
+      "detail": "HTTP 200; 44 entries; 0.015s; cloud references classified separately"
+    },
+    {
+      "name": "Five-question practice set",
+      "passed": true,
+      "detail": "HTTP 200; questions=5"
+    },
+    {
+      "name": "BYOK rejects missing credentials",
+      "passed": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "name": "Disposable account registration",
+      "passed": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "Authenticated BYOK status",
+      "passed": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "Mock interview first page",
+      "passed": true,
+      "detail": "HTTP 200; 0.006s; total=1000"
+    },
+    {
+      "name": "Stable distinct second page",
+      "passed": true,
+      "detail": "HTTP 200; 10 distinct questions"
+    },
+    {
+      "name": "Mock interview search",
+      "passed": true,
+      "detail": "HTTP 200; matches=401"
+    }
+  ]
+}

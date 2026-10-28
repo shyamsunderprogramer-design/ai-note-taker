@@ -1,0 +1,45 @@
+{
+  "scope": "Four sequential real Groq calls; includes network, prompt construction, inference and resume verification. Before emulates high effort and whole-answer buffering. Excludes desktop capture/OCR/provider discovery. Not a latency guarantee or exhaustive quality evaluation.",
+  "samples": [
+    {
+      "variant": "before",
+      "question": "What is a Kubernetes cluster and how would you configure it?",
+      "model": "openai/gpt-oss-120b",
+      "first_visible_ms": 2134,
+      "complete_ms": 2135,
+      "completed": true,
+      "answer": "A Kubernetes cluster is a group of machines\u2014called nodes\u2014that run your containerized applications under the control of the Kubernetes platform, which handles scheduling, scaling, and health\u2011checking automatically.\n\nTo configure it, I would start by provisioning at least one master node (the control plane) that runs the API server, scheduler, and controller manager, and then add worker nodes that actually run the containers. I\u2019d install a supported Kubernetes distribution (like kubeadm, k3s, or a managed service) and then initialize the control plane, which generates a join token that the workers use to register with the cluster. After the nodes are joined, I\u2019d set up networking (for pod communication) and storage classes (for persistent volumes), then apply configuration files\u2014YAML manifests\u2014that define namespaces, deployments, and services for the workloads I want to run. This gives me a reproducible, declarative way to manage the whole application lifecycle.",
+      "errors": []
+    },
+    {
+      "variant": "after",
+      "question": "What is a Kubernetes cluster and how would you configure it?",
+      "model": "openai/gpt-oss-120b",
+      "first_visible_ms": 701,
+      "complete_ms": 1039,
+      "completed": true,
+      "answer": "A Kubernetes cluster is a group of machines that work together to run containerized applications, with a control plane that manages the overall state and a set of worker nodes that actually host the containers.\n\nI would start by provisioning at least three control\u2011plane nodes for high availability, then add worker nodes sized for the workload I expect. Using a tool like kubeadm or a managed service (EKS, GKE, AKS), I\u2019d initialize the control plane, install the networking plugin (for example Calico) so pods can talk to each other, and then join the workers to the cluster. After the cluster is up, I\u2019d create namespaces to isolate environments, define resource quotas to limit CPU and memory per team, and set up role\u2011based access control (RBAC) so only authorized users can deploy or modify resources. Finally, I\u2019d configure a CI/CD pipeline to push my Python APIs as Docker images and let Kubernetes handle scaling and rolling updates.",
+      "errors": []
+    },
+    {
+      "variant": "before",
+      "question": "How would you manage on call rotations?",
+      "model": "openai/gpt-oss-120b",
+      "first_visible_ms": 3508,
+      "complete_ms": 3509,
+      "completed": true,
+      "answer": "I would manage on\u2011call rotations by setting up a predictable schedule, clear escalation paths, and solid documentation so the team always knows who\u2019s responsible. First, I\u2019d work with the operations team to create a rotation calendar that evenly distributes shifts and respects time\u2011off requests, using a tool like PagerDuty or an internal schedule. I\u2019d also define which incidents need immediate response versus those that can be triaged later, and make sure each on\u2011call engineer has run\u2011books\u2014step\u2011by\u2011step guides\u2014for common issues. After each incident, I\u2019d hold a short post\u2011mortem to capture what went well and what needs improvement, updating the run\u2011books and adjusting the rotation if the workload feels unbalanced. My experience building Python APIs and collaborating with ops has taught me the importance of clear hand\u2011offs and reliable monitoring, which I\u2019d apply to keep the on\u2011call process smooth and reduce downtime.",
+      "errors": []
+    },
+    {
+      "variant": "after",
+      "question": "How would you manage on call rotations?",
+      "model": "openai/gpt-oss-120b",
+      "first_visible_ms": 466,
+      "complete_ms": 838,
+      "completed": true,
+      "answer": "I would set up a clear on\u2011call schedule, maintain up\u2011to\u2011date runbooks, and make sure there\u2019s a reliable alerting system that routes incidents to the right person.\n\nFirst, I\u2019d work with the operations team to define a rotation calendar\u2014usually weekly or bi\u2011weekly\u2014so everyone knows when they\u2019re on call and who the backup is. I\u2019d automate the hand\u2011off using a scheduling tool (like PagerDuty or Opsgenie) that sends reminders before a shift starts and escalates alerts if the primary on\u2011call doesn\u2019t acknowledge them. Next, I\u2019d create concise runbooks for the most common issues, linking directly to the Python APIs I\u2019ve built so responders can quickly see logs, health endpoints, and remediation steps. Finally, I\u2019d hold a short post\u2011mortem after each incident to capture what worked, update the runbooks, and adjust the rotation if workload imbalances appear. This keeps coverage reliable, reduces mean\u2011time\u2011to\u2011resolution, and spreads knowledge across the team.",
+      "errors": []
+    }
+  ]
+}

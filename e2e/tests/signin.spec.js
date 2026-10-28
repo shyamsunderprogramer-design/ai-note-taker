@@ -2,12 +2,16 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('ANT AI Note Taker - Sign In Page', () => {
   test('page loads with correct title', async ({ page }) => {
-    await page.goto('/signin.html');
+    const response = await page.goto('/signin.html');
+    expect(response.status()).toBe(200);
+    await expect(page).not.toHaveTitle(/Error response/i);
     await expect(page).toHaveTitle(/ANT|Sign In|Login/i);
   });
 
   test('login form is visible', async ({ page }) => {
-    await page.goto('/signin.html');
+    const response = await page.goto('/signin.html');
+    expect(response.status()).toBe(200);
+    await expect(page).not.toHaveTitle(/Error response/i);
     const usernameInput = page.locator('input[name="username"], input[type="text"]').first();
     const passwordInput = page.locator('input[name="password"], input[type="password"]').first();
     await expect(usernameInput).toBeVisible();
@@ -15,7 +19,9 @@ test.describe('ANT AI Note Taker - Sign In Page', () => {
   });
 
   test('invalid login shows error', async ({ page }) => {
-    await page.goto('/signin.html');
+    const response = await page.goto('/signin.html');
+    expect(response.status()).toBe(200);
+    await expect(page).not.toHaveTitle(/Error response/i);
     const username = page.locator('input[name="username"], input[type="text"]').first();
     const password = page.locator('input[name="password"], input[type="password"]').first();
     await username.fill('invalid_user_test');

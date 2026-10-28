@@ -1,0 +1,138 @@
+[
+  {
+    "name": "Authenticated account identity",
+    "status": "passed",
+    "detail": true,
+    "seconds": 0.007
+  },
+  {
+    "name": "Conversation lifecycle and isolation",
+    "status": "passed",
+    "detail": "create/read, two-account denial, JSON export/import, deletion verified",
+    "seconds": 0.061
+  },
+  {
+    "name": "Malformed conversation import rejected",
+    "status": "failed",
+    "detail": "Invalid import accepted",
+    "seconds": 0.006
+  },
+  {
+    "name": "Resume txt extraction",
+    "status": "passed",
+    "detail": "HTTP 200",
+    "seconds": 0.015
+  },
+  {
+    "name": "Resume md extraction",
+    "status": "passed",
+    "detail": "HTTP 200",
+    "seconds": 0.006
+  },
+  {
+    "name": "Resume json extraction",
+    "status": "passed",
+    "detail": "HTTP 200",
+    "seconds": 0.005
+  },
+  {
+    "name": "Resume DOCX extraction",
+    "status": "passed",
+    "detail": "HTTP 200",
+    "seconds": 0.006
+  },
+  {
+    "name": "Resume rejects empty",
+    "status": "passed",
+    "detail": "HTTP 422",
+    "seconds": 0.006
+  },
+  {
+    "name": "Resume rejects corrupt PDF",
+    "status": "passed",
+    "detail": "HTTP 422",
+    "seconds": 0.068
+  },
+  {
+    "name": "Resume rejects unsupported",
+    "status": "passed",
+    "detail": "HTTP 422",
+    "seconds": 0.005
+  },
+  {
+    "name": "Resume rejects oversize",
+    "status": "passed",
+    "detail": "HTTP 422",
+    "seconds": 0.015
+  },
+  {
+    "name": "Job application API lifecycle",
+    "status": "passed",
+    "detail": "create/read/status/re-read/search verified",
+    "seconds": 0.027
+  },
+  {
+    "name": "Job application account isolation",
+    "status": "failed",
+    "detail": "Second synthetic account can read first account job: HTTP 200",
+    "seconds": 0.005
+  },
+  {
+    "name": "Job application invalid stage rejection",
+    "status": "failed",
+    "detail": "Invalid stage accepted: HTTP 200",
+    "seconds": 0.005
+  },
+  {
+    "name": "Job application deletion",
+    "status": "passed",
+    "detail": {
+      "success": true,
+      "message": "Application deleted"
+    },
+    "seconds": 0.006
+  },
+  {
+    "name": "Study plan creation and retrieval",
+    "status": "failed",
+    "detail": "",
+    "seconds": 0.013
+  },
+  {
+    "name": "Study task completion persists",
+    "status": "failed",
+    "detail": "API reports completion but reloading the task still shows incomplete",
+    "seconds": 0.01
+  },
+  {
+    "name": "Study rejects nonexistent task",
+    "status": "failed",
+    "detail": "Nonexistent task accepted: HTTP 200",
+    "seconds": 0.004
+  },
+  {
+    "name": "Interview create/question/answer/finish",
+    "status": "passed",
+    "detail": {
+      "session_completed": true,
+      "finish_fields": [
+        "session_id",
+        "saved_to_graph",
+        "summary"
+      ]
+    },
+    "seconds": 0.023
+  },
+  {
+    "name": "Knowledge upload and retrieval",
+    "status": "failed",
+    "detail": "timed out",
+    "seconds": 30.081
+  },
+  {
+    "name": "Logout invalidates token",
+    "status": "failed",
+    "detail": "timed out",
+    "seconds": 30.028
+  }
+]

@@ -1,0 +1,132 @@
+{
+  "conditions": "Local adapter; temperature 0; concise; RAG disabled; first sample may include loading. Not a desktop or exhaustive accuracy test.",
+  "reasoning_experiment": false,
+  "samples": [
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "missing_fact",
+      "first_seconds": 1.179612125037238,
+      "total_seconds": 1.2448348749894649,
+      "answer": "The resume does not contain any information about AWS certifications, so the specific certifications you hold and the dates you earned them are unknown based on the provided resume.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting",
+      "first_seconds": 1.143222542013973,
+      "total_seconds": 1.2722734169801697,
+      "answer": "**Action items**\n\n- Send the project summary \u2013 Owner: *unspecified* \u2013 Deadline: **Friday**  \n- Review the budget \u2013 Owner: **Maya** \u2013 Deadline: *unspecified*  \n- Schedule the next meeting \u2013 Owner: **Daniel** \u2013 Deadline: *unspecified*",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical",
+      "first_seconds": null,
+      "total_seconds": 5.140468417026568,
+      "answer": "",
+      "errors": [
+        "Groq: The answer reached its output limit and is incomplete. Ask a narrower question or choose Detailed."
+      ]
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_status",
+      "first_seconds": 1.6387327500269748,
+      "total_seconds": 1.7491352920187637,
+      "answer": "**Decisions:** None.\n\n**Proposals**\n- Priya proposed moving the release to Monday.\n\n**Blockers**\n- Omar needs test results before agreeing to the release date.\n\n**Completed work**\n- Lee sent the draft.\n\n**Pending actions:** None.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_owners",
+      "first_seconds": 1.1318206249852665,
+      "total_seconds": 1.2056034170091152,
+      "answer": "- Send invoice \u2013 Owner: Elena \u2013 Deadline: Tuesday  \n- Check contract \u2013 Owner: Marcus \u2013 Deadline: unspecified  \n- Update launch checklist \u2013 Owner: unspecified \u2013 Deadline: Thursday",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_restart",
+      "first_seconds": 2.6483681249665096,
+      "total_seconds": 2.9116443749517202,
+      "answer": "No, a liveness probe does not need to fail.\u202f**Affected resource:** the container.\u202f**Enforcing mechanism:** the kubelet (via the container runtime) detects the OOMKilled termination reason.\u202f**Policy:** the pod\u2019s\u202frestartPolicy\u202fdetermines the outcome\u2014if it is\u202fAlways\u202f(or\u202fOnFailure\u202ffor a non\u2011zero exit code like OOMKill), the kubelet will restart the container; if it is\u202fNever, it will not. Liveness probes only trigger restarts when they fail, but they are not required for a restart after an OOMKill.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_no_tasks",
+      "first_seconds": 1.08299929095665,
+      "total_seconds": 1.1132705409545451,
+      "answer": "**Decisions**\n- None\n\n**Pending Action Items**\n- None",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_unassigned",
+      "first_seconds": 1.4589466659817845,
+      "total_seconds": 1.4666786659508944,
+      "answer": "The transcript identifies one pending task:\n\n- **Renew the certificate** \u2013 Owner: **unspecified**, Deadline: **June\u202f12**.",
+      "errors": []
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "meeting_correction",
+      "first_seconds": null,
+      "total_seconds": 0.12748195801395923,
+      "answer": "",
+      "errors": [
+        "Groq (HTTP 429): The provider rate or quota limit was reached. Retry later or select another provider."
+      ]
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "resume_boundary",
+      "first_seconds": null,
+      "total_seconds": 0.12793154100654647,
+      "answer": "",
+      "errors": [
+        "Groq (HTTP 429): The provider rate or quota limit was reached. Retry later or select another provider."
+      ]
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_sql",
+      "first_seconds": null,
+      "total_seconds": 0.12560774997109547,
+      "answer": "",
+      "errors": [
+        "Groq (HTTP 429): The provider rate or quota limit was reached. Retry later or select another provider."
+      ]
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_python",
+      "first_seconds": null,
+      "total_seconds": 0.12880824995227158,
+      "answer": "",
+      "errors": [
+        "Groq (HTTP 429): The provider rate or quota limit was reached. Retry later or select another provider."
+      ]
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_retry",
+      "first_seconds": null,
+      "total_seconds": 0.12739395798416808,
+      "answer": "",
+      "errors": [
+        "Groq (HTTP 429): The provider rate or quota limit was reached. Retry later or select another provider."
+      ]
+    },
+    {
+      "model": "groq-gpt-oss-120b",
+      "case": "technical_kubernetes_policy",
+      "first_seconds": null,
+      "total_seconds": 0.1271866669994779,
+      "answer": "",
+      "errors": [
+        "Groq (HTTP 429): The provider rate or quota limit was reached. Retry later or select another provider."
+      ]
+    }
+  ]
+}

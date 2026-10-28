@@ -1,0 +1,9 @@
+{
+  "result": {
+    "text": null,
+    "gen_ms": 12250,
+    "model": "qwen3.5:9b",
+    "error": "timed out"
+  },
+  "first_sentences": []
+}
