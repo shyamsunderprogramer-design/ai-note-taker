@@ -84,7 +84,7 @@ Typical PR outputs from a backend dev:
 - New Pydantic schemas
 - New test file under `backend/tests/test_<module>.py`
 - API reference update in `docs/backend/api/API_REFERENCE.md`
-- Phase-2 feature work: updates `docs/backend/api/API_REFERENCE_PHASE2.md`
+- Phase-2 feature work: updates `docs/backend/api/API_REFERENCE.md`
 - Architecture deep-dive update in `docs/backend/architecture/TECHNICAL_SPECIFICATION.md`
 
 ---
@@ -120,7 +120,7 @@ When CODEOWNERS routes a PR to `role-backend`, this role checks:
 4. **API contract unchanged or API reference updated** — `docs/backend/api/API_REFERENCE.md` is current
 5. **No new secrets committed** — `*.pem`, `*.key`, `.env`, `users.json` not in the diff
 6. **Tests cover new behavior** — `backend/tests/test_<feature>.py` exists
-7. **Phase-2 work also updates** `docs/backend/api/API_REFERENCE_PHASE2.md` if applicable
+7. **Phase-2 work also updates** `docs/backend/api/API_REFERENCE.md` if applicable
 
 ---
 

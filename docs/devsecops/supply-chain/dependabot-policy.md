@@ -48,7 +48,7 @@ Deps are eligible for auto-merge if **all** of these are true:
 
 - Patch or minor version bump (no major)
 - Dep is in the "trusted" list
-  (see [`trusted-deps.md`](trusted-deps.md) — TODO)
+  (a maintained trusted-dependency inventory has not been added yet)
 - CI is green
 - No `breaking-change` label
 - No security advisory (npm audit / pip-audit clean)

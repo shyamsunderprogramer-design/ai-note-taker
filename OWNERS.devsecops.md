@@ -25,8 +25,8 @@ inventory, in priority order:
 - `docs/devsecops/supply-chain/dependabot-policy.md`
 - `docs/devsecops/supply-chain/README.md`
 - `docs/devsecops/compliance/audit-log-policy.md`
-- `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md` — moved from
-  `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md`
+- `docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md` — moved from
+  `docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md`
 - `docs/security/BROWSER_EXTENSION_SAFETY.md` — moved from
   `BROWSER_EXTENSION_SAFETY.md` (root)
 

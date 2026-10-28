@@ -35,7 +35,7 @@ The agent may write to:
 - `docs/devsecops/`
 - `docs/security/` — co-owned (read by devsecops; write depends on
   file; the implementation summary was moved here from
-  `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md`)
+  `docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md`)
 - `agents/devsecops/MEMORY.md`
 
 The agent may **read** (for review) but NOT **write** to:

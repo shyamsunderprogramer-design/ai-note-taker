@@ -1,214 +1,64 @@
-# Release Checklist
+# Release and production readiness
 
-Pre-release checklist for AI Note Taker v1.0.0 (Phase 2 Complete)
+Use this checklist for a specific candidate build or deployment. The original checklist and readiness reports are historical inputs; their checked boxes, market scores, and old version numbers do not certify a new release.
 
----
+## 1. Define the candidate
 
-## Pre-Release Tasks
+- [ ] Identify the commit, target branch, version, supported OS/architectures, and deployment environment.
+- [ ] Describe user-visible changes and known limitations.
+- [ ] Confirm which features and integrations are supported in this release.
 
-### 1. Code Quality
-- [ ] All tests passing (`python -m pytest backend/tests/ -v`)
-- [ ] No critical bugs or security issues
-- [ ] Code review completed
-- [ ] Documentation updated
+## 2. Validate the application
 
-### 2. Version Updates
-- [ ] Update version in `electron/package.json` (1.0.0)
-- [ ] Update version in `backend/main.py` health check
-- [ ] Update CHANGELOG.md with release date
-- [ ] Update README.md if needed
+- [ ] Install dependencies from the candidate checkout and run relevant backend, desktop, and web checks.
+- [ ] Build the web app with `npm run web:build`.
+- [ ] Verify sign-in, provider-key save, local/cloud answers, follow-ups, and saved history.
+- [ ] Verify microphone, system audio, screenshots, OS permissions, and unsupported-device behavior.
+- [ ] Verify stream errors, recovery, shutdown, and data persistence.
+- [ ] Record failures and excluded tests; do not report a successful full gate when only focused checks passed.
 
-### 3. Build Preparation
-- [ ] Install dependencies: `cd electron && npm install`
-- [ ] Ensure Python environment is set up
-- [ ] Test local build: `npm run build:win`
+See the [test strategy](../../qa/test-strategy.md), [manual test guide](../../qa/DIY_TEST_GUIDE.md), and [performance guide](../../business/PERFORMANCE.md).
 
-### 4. Assets
-- [ ] App icon created (`assets/icon.ico` for Windows)
-- [ ] App icon created (`assets/icon.icns` for macOS)
-- [ ] Screenshots for release notes
-- [ ] Demo GIF/video prepared
+## 3. Prepare data and deployment
 
----
+- [ ] Set production signing/encryption keys, database configuration, authentication, and allowed origins.
+- [ ] Apply and validate the intended migrations; back up persistent data and test restore.
+- [ ] Check user isolation, logging, and credential handling.
+- [ ] Validate only the integrations enabled for this environment.
+- [ ] Define health/readiness checks, monitoring, and a rollback procedure.
 
-## Build Process
+Use the [deployment guide](DEPLOYMENT_GUIDE.md), [migration guide](../development/MIGRATIONS.md), and [operations runbook](../operations/OPERATIONS.md) for their respective procedures.
 
-### Windows Build
-```bash
-cd electron
-npm run build:win
-```
+## 4. Build and test desktop packages
 
-**Expected Outputs:**
-- `dist/AI Note Taker-1.0.0-win-x64.exe` (Installer)
-- `dist/AI Note Taker-1.0.0-win-x64-portable.exe` (Portable)
-
-### macOS Build
-```bash
-cd electron
-npm run build:mac
-```
-
-**Expected Outputs:**
-- `dist/AI Note Taker-1.0.0-mac-x64.dmg`
-- `dist/AI Note Taker-1.0.0-mac-arm64.dmg`
-
-### Linux Build
-```bash
-cd electron
-npm run build:linux
-```
-
-**Expected Outputs:**
-- `dist/AI Note Taker-1.0.0-linux-x64.AppImage`
-- `dist/AI Note Taker-1.0.0-linux-x64.deb`
-
----
-
-## GitHub Release
-
-### Create Release
-1. Go to GitHub Releases
-2. Click "Draft a new release"
-3. Tag version: `v1.0.0`
-4. Target: `main` branch
-
-### Release Notes Template
-
-```markdown
-## AI Note Taker v1.0.0 - Phase 2 Complete 🎉
-
-### What's New
-
-**Real-Time Interview Assistance**
-- Contextual suggestions during live interviews
-- Voice commands: "What did I say about React?"
-- Confidence-based suggestion filtering
-
-**Enhanced Analytics**
-- 4 new dashboard visualizations
-- Skill progression tracking
-- Company comparison heatmaps
-- Topic network graphs
-
-**Performance Insights**
-- STAR method analysis
-- Code quality scoring
-- Speaking pattern feedback
-- Personalized recommendations
-
-**Study Plan Generator**
-- AI-generated preparation roadmap
-- Spaced repetition scheduling
-- Resource recommendations (LeetCode, System Design)
-- Export to calendar (iCal)
-
-### Downloads
-
-| Platform | Download |
-|----------|----------|
-| Windows (Installer) | `AI Note Taker-Setup-1.0.0-win-x64.exe` |
-| Windows (Portable) | `AI Note Taker-1.0.0-win-x64-portable.exe` |
-| macOS (Intel) | `AI Note Taker-1.0.0-mac-x64.dmg` |
-| macOS (Apple Silicon) | `AI Note Taker-1.0.0-mac-arm64.dmg` |
-| Linux (AppImage) | `AI Note Taker-1.0.0-linux-x64.AppImage` |
-| Linux (deb) | `AI Note Taker-1.0.0-linux-x64.deb` |
-
-### Installation
-
-**Windows:**
-1. Download installer
-2. Run `AI Note Taker-Setup-1.0.0-win-x64.exe`
-3. Follow installation wizard
-
-**macOS:**
-1. Download .dmg
-2. Drag to Applications folder
-3. Allow in System Preferences > Security
-
-**Linux:**
-```bash
-# AppImage
-chmod +x "AI Note Taker-1.0.0-linux-x64.AppImage"
-./"AI Note Taker-1.0.0-linux-x64.AppImage"
-
-# Debian/Ubuntu
-sudo dpkg -i "AI Note Taker-1.0.0-linux-x64.deb"
-```
-
-### What's Changed
-See [CHANGELOG.md](../../../CHANGELOG.md) for full details.
-
-### Contributors
-- @shyamsunderprogramer-design
-- Claude (Anthropic)
-
-### Support
-- Report issues: [GitHub Issues](https://github.com/shyamsunderprogramer-design/ai-note-taker/issues)
-- Documentation: [README.md](../README.md)
-```
-
-### Upload Assets
-- [ ] Upload Windows installer
-- [ ] Upload Windows portable
-- [ ] Upload macOS DMG (x64)
-- [ ] Upload macOS DMG (arm64)
-- [ ] Upload Linux AppImage
-- [ ] Upload Linux deb
-- [ ] Mark as pre-release if needed
-- [ ] Publish release
-
----
-
-## Post-Release Tasks
-
-### Verification
-- [ ] Download and test installer
-- [ ] Verify auto-updater works
-- [ ] Check digital signatures (if applicable)
-
-### Communication
-- [ ] Post on social media
-- [ ] Update website/download page
-- [ ] Send notification to users
-- [ ] Create demo video
-
-### Monitoring
-- [ ] Monitor GitHub issues
-- [ ] Track download statistics
-- [ ] Collect user feedback
-
----
-
-## Quick Commands
+Run the relevant command from the repository root:
 
 ```bash
-# Run tests
-python -m pytest backend/tests/ -v
-
-# Build Windows
-cd electron && npm run build:win
-
-# Build macOS
-cd electron && npm run build:mac
-
-# Build Linux
-cd electron && npm run build:linux
-
-# Build all
-cd electron && npm run build
+npm run electron:build:win
+npm run electron:build:mac
+npm run electron:build:linux
 ```
 
----
+These are platform targets, not a promise that every target can be built on any host. Prepare the platform-specific Python resources required by [electron/package.json](../../../electron/package.json). Build artifacts are written under `electron/dist/`.
 
-## Rollback Plan
+- [ ] Test the actual installer on each supported OS and architecture.
+- [ ] Check clean install, upgrade, launch, permissions, bundled Python, and saved-data handling.
+- [ ] Verify signing/notarization status and document installation behavior accurately.
+- [ ] Generate checksums for the exact artifacts being distributed.
+- [ ] Confirm release notes and download links match the tested artifacts.
 
-If critical issues found:
-1. Mark release as pre-release
-2. Add warning to release notes
-3. Fix issues in patch branch
-4. Release v1.0.1
+## 5. Publish and monitor
 
----
+- [ ] Confirm repository release permissions and the intended tag/target.
+- [ ] Draft release notes with changes, installation guidance, known issues, and validation evidence.
+- [ ] Publish the verified assets and check a downloaded copy.
+- [ ] Monitor issues and deployment health.
+- [ ] If a material regression appears, follow the defined rollback or patch procedure and update release notes.
 
-*Last Updated: 2026-04-05*
+## Evidence record
+
+For each item retain the candidate commit, environment, command or manual procedure, result, and evidence location. Existing April completion reports remain references, not acceptance results for the candidate.
+
+## Historical references
+
+The overlapping source documents are preserved in one [dated reference record](../../archive/release-readiness.md). Use that record for original technical examples and planning context, not current setup or status.

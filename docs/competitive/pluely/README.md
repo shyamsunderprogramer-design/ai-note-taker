@@ -1,23 +1,27 @@
-# Pluely Comparison
+# Pluely comparison and desktop adaptation
 
-> **Audience:** product / business
-> **Owner:** product (no single dev role)
+This guide merges the root-level comparison, post-fix comparison, adaptation plan, implementation report, and critical-gap report. All source comparisons are dated April 2026.
 
----
+## Architecture and decision
 
-## What's in this folder
+The source records compare Pluely's Tauri/Rust approach with ANT's Electron/Python approach. Their main tradeoff is desktop runtime size and resource use versus the Python transcription and AI ecosystem. Retain that tradeoff as design context; the original numerical comparisons are not current benchmarks.
 
-Pluely is a specific competitor of ANT (an interview-coaching
-AI notepad). These 4 docs are the deep-dive on Pluely,
-consolidated from the previous `docs/PLUELY_*.md` files.
+## Adaptation areas
 
-| File | What |
-|---|---|
-| [PLUELY_COMPARISON_2026_COMPLETE.md](PLUELY_COMPARISON_2026_COMPLETE.md) | The complete Pluely comparison |
-| [PLUELY_FEATURES_ADAPTATION.md](PLUELY_FEATURES_ADAPTATION.md) | How Pluely's features could be adapted to ANT |
-| [PLUELY_IMPLEMENTATION_SUMMARY.md](PLUELY_IMPLEMENTATION_SUMMARY.md) | Implementation summary of the comparison work |
-| [PLUELY_ROOT_LEVEL_COMPARISON.md](PLUELY_ROOT_LEVEL_COMPARISON.md) | Root-level architecture / UX comparison |
+| Area | What the earlier documents discuss | Where to verify |
+| --- | --- | --- |
+| Desktop lifecycle | Autostart, tray behavior, portable mode, and shortcuts | [Electron runtime](../../../electron/main.js) |
+| Storage | SQLite consolidation and user migration | [Database](../../../backend/core/database.py) |
+| Audio | System-audio capture, silence, and cleanup | [Electron runtime](../../../electron/main.js) and [voice modules](../../../backend/modules/voice/) |
+| Responsiveness | Splash feedback, deferred work, and streaming | [Performance guide](../../business/PERFORMANCE.md) |
+| Overlay protection | OS capture behavior and visibility | [Security docs](../../devsecops/README.md) |
 
----
+## Validation
 
-*Last Updated: 2026-06-11 — created as part of the role-ownership refactor*
+Use a real installed build and test startup, backend reuse, window visibility, permissions, audio input, database persistence, and shutdown. Measure on the target OS. Verify capture protection with the actual sharing application. Completion claims in a historical implementation summary do not demonstrate those behaviors in a new build.
+
+For normal setup and usage, follow the [project README](../../../README.md). For general competitor research, use the [competitive guide](../README.md).
+
+## Historical references
+
+The overlapping source documents are preserved in one [dated reference record](../../archive/pluely-adaptation.md). Use that record for original technical examples and planning context, not current setup or status.

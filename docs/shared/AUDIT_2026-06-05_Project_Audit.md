@@ -38,7 +38,7 @@ Privacy-first AI note taker with a multi-platform architecture: Electron desktop
 | **`package.json` (root)** | The Electron `package.json` references `../renderer` and `../AINT_Venv`, but there's no monorepo root. `e2e`, `mobile`, `electron`, `apps/web` each have their own — no `npm workspaces` orchestration. Recommend adding root `package.json` with `workspaces` |
 | **`CONTRIBUTING.md`** | Repo has 60+ docs but no contribution guide |
 | **`LICENSE`** ✅ exists | OK (MIT) |
-| **`SECURITY.md`** | Has `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md` but no top-level vulnerability disclosure policy |
+| **`SECURITY.md`** | Has `docs/devsecops/security/SECURITY_IMPLEMENTATION_SUMMARY.md` but no top-level vulnerability disclosure policy |
 | **`CODE_OF_CONDUCT.md`** | Standard for OSS |
 | **`CHANGELOG.md`** ✅ exists | OK |
 | **`.editorconfig`** | Cross-platform editor consistency |
@@ -128,7 +128,7 @@ CORS_ALLOW_ALL: "true"        # ⚠️ overly permissive for production
 **Issues to fix in `render.yaml`** — **FIXED 2026-06-05** for items 1, 3, 4; items 2, 5 noted but out of scope:
 
 1. ~~`CORS_ALLOW_ALL: "true"` should be `"false"` for production (config.py defaults to false, render.yaml contradicts this)~~ ✅ **DONE**: now `"false"`, with an explicit `CORS_ORIGINS: "https://ant-note-taker.vercel.app"` whitelist.
-2. ~~`EMBEDDING_ENABLED: "false"` — but `docker-compose.yml` and `docs/COGNITIVE_GRAPH_API.md` require embeddings for cognitive graph. Users on free tier will see broken semantic search with no warning.~~ ✅ **DONE 2026-06-07**: added `_warn_on_optional_ml_disabled()` in `core/main.py` (called from the startup hook) that logs a clear warning when `EMBEDDING_ENABLED=false` but `COGNITIVE_GRAPH_AVAILABLE=true`, including the env var to flip and the RAM cost. Mirror warning for `CLASSIFIER_ENABLED=false` when `modules.ai.smart_classifier` is importable. 10 regression tests in `tests/test_audit_3_2_embedding_warning.py`. Skipped in `CLOUD_MODE` to avoid noise on every cloud boot.
+2. ~~`EMBEDDING_ENABLED: "false"` — but `docker-compose.yml` and `docs/backend/api/API_REFERENCE.md` require embeddings for cognitive graph. Users on free tier will see broken semantic search with no warning.~~ ✅ **DONE 2026-06-07**: added `_warn_on_optional_ml_disabled()` in `core/main.py` (called from the startup hook) that logs a clear warning when `EMBEDDING_ENABLED=false` but `COGNITIVE_GRAPH_AVAILABLE=true`, including the env var to flip and the RAM cost. Mirror warning for `CLASSIFIER_ENABLED=false` when `modules.ai.smart_classifier` is importable. 10 regression tests in `tests/test_audit_3_2_embedding_warning.py`. Skipped in `CLOUD_MODE` to avoid noise on every cloud boot.
 3. ~~No `SECRET_KEY`, no `JWT_SECRET` env var — but `security/auth.py` likely uses them~~ ✅ **DONE**: `JWT_SECRET_KEY` is now `generateValue: true` so Render creates a strong random secret on first deploy.
 4. ~~Missing env vars: `OLLAMA_URL` (defaults to `localhost:11434` which won't work on Render), `RATE_LIMIT_*`, `CORS_ORIGINS` (only the deprecated `CORS_VERCEL_URL` is set)~~ ✅ **DONE**: `OLLAMA_URL` and `CORS_ORIGINS` both set; `RATE_LIMIT_*` not set (still uses main.py defaults).
 5. `DATABASE_URL` marked `sync: false` but in cloud mode, the Dockerfile sets `FORCE_SQLITE` doesn't get passed — need to check whether `DATABASE_URL` is being honored in Docker *(out of scope; needs runtime verification)*
@@ -405,7 +405,7 @@ A re-audit on 2026-06-08 surfaced 30+ additional items that fell outside the ori
 - **`README.md`**: Rewrote to reference the actual monorepo layout (`apps/`, `electron/`, `backend/`, `mobile/`, `docker/`, `k8s/`, `infrastructure/`, `docs/`, `scripts/`) instead of the stale `renderer/` directory. Added the workspace command list (`npm run web:dev`, etc.) and a `Project Status` line pointing back at this audit.
 - **`CHANGELOG.md`**: Added an `[Unreleased]` section listing all 60 original fixes as bullet points (one line each), followed by the clean `[1.0.0]` original-release entry.
 - **`docs/README.md` index**: Verified the 8-category organization (Start Here, API & Data, Security, Business, Architecture, Performance, Competitive, Resume Builder) and added a new "Operations" category pointing to the new ops docs.
-- **Orphan root docs moved**: `docs/api_reference.md` → `docs/api/`, `docs/database_schema.md` → `docs/database/`, `docs/technical_specification.md` → `docs/architecture/`.
+- **Orphan root docs moved**: `docs/backend/api/API_REFERENCE.md` → `docs/api/`, `docs/backend/database/SCHEMA.md` → `docs/database/`, `docs/backend/architecture/TECHNICAL_SPECIFICATION.md` → `docs/architecture/`.
 - **New ops docs**: `docs/OPERATIONS.md` (production runbook: health checks, backup/restore, rollback, on-call), `docs/MIGRATIONS.md` (Alembic workflow + `ANT_SKIP_ALEMBIC=1` escape hatch + `init_database()` idempotency notes), `docs/MOBILE.md` (RN 0.73 setup + native scaffold regeneration + audio library choice), `docs/DEVELOPMENT.md` (day-to-day commands, test coverage rules), `docs/TROUBLESHOOTING.md` (common errors with fixes).
 
 ### Bucket 2 — `.github/` community files

@@ -24,7 +24,7 @@ file-to-role routing.
 - **`README.md` Project Structure tree** updated: the `docs/`
   comment block changed from "8 categories" to the new per-role
   layout (5 roles + 5 topics).
-- **`README.md`** two one-liners fixed: `docs/SETUP_COGNITIVE_GRAPH.md`
+- **`README.md`** two one-liners fixed: `docs/backend/setup/SETUP_COGNITIVE_GRAPH.md`
   → `docs/backend/setup/SETUP_COGNITIVE_GRAPH.md`; the
   `BROWSER_EXTENSION_SAFETY.md` and `SECURITY.md` Security
   bullets point at the new `docs/devsecops/...` paths.
