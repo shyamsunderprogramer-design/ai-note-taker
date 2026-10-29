@@ -54,6 +54,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Require macOS distribution credentials
+        if: runner.os == 'macOS'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node electron/electron-builder.mac-release.cjs
+
       - name: Verify version and release notes
         env:
           RELEASE_REF: ${{ github.ref_name }}
@@ -97,12 +107,30 @@ jobs:
           subprocess.run([sys.executable, '-m', 'pip_audit', '--path', str(site), '--format', 'json', '--output', 'runtime-audit.json'], check=True)
           PY
       - name: Build installers for the native architecture
+        if: runner.os != 'macOS'
         working-directory: electron
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder ${{ matrix.target }} --publish never
+      - name: Build signed and notarized macOS installers
+        if: runner.os == 'macOS'
+        working-directory: electron
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+        run: npx electron-builder ${{ matrix.target }} --config electron-builder.mac-release.cjs --publish never
       - name: Verify the actual packaged runtime and sign-in
+        if: runner.os != 'macOS'
         run: python scripts/verify_desktop_package.py
+      - name: Verify macOS download signing, notarization and runtime
+        if: runner.os == 'macOS'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: python scripts/verify_macos_release.py
       - name: Upload verified installers
         uses: actions/upload-artifact@v4
         with:

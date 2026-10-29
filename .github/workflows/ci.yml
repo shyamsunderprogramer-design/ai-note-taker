@@ -48,6 +48,8 @@ jobs:
       - name: Run backend tests
         working-directory: backend
         run: python -m pytest core/test_startup.py tests/ --tb=short -v
+      - name: Test release verification gates
+        run: python -m unittest discover -s scripts/tests -v
 
   web-build:
     name: Web and desktop tests
