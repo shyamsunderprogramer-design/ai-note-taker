@@ -5,7 +5,9 @@
  */
 
 var API_BASE = typeof API_BASE !== 'undefined' ? API_BASE : 'http://127.0.0.1:8000';
-const DEFAULT_USER_ID = 'default';
+// "me" resolves server-side to the authenticated user (IDOR fix) —
+// the web session never stores the numeric user id.
+const DEFAULT_USER_ID = 'me';
 
 class StudyPlanManager {
   constructor() {

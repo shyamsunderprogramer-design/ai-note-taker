@@ -5,6 +5,8 @@ Centralizes access to application state, authentication, and commonly
 needed singletons so route modules don't import from main.py.
 """
 
+from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -59,6 +61,27 @@ async def require_admin(user: User = Depends(require_authentication)) -> User:
             detail="Admin access required",
         )
     return user
+
+
+def resolve_user_id(user: User, supplied: Optional[str]) -> str:
+    """Return the effective user_id for an endpoint (IDOR fix, Fix #31
+    pattern).
+
+    The authenticated user is always the source of truth. A client may
+    pass its own id (back-compat for callers built before the fix), the
+    literal ``"me"`` (for clients that never learn their own id, such
+    as the web dashboards), or omit it; passing anyone else's id is
+    rejected with 403 so a client can never read or write another
+    user's data by guessing ids.
+    """
+    if supplied is None or supplied == "me":
+        return str(user.id)
+    if supplied != str(user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access another user's data",
+        )
+    return supplied
 
 
 # ── Module Availability Flags ────────────────────────────────────────────────

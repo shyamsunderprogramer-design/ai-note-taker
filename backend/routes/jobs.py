@@ -1,4 +1,11 @@
-"""Route module for job application tracker endpoints."""
+"""Route module for job application tracker endpoints.
+
+IDOR fix (Fix #31 pattern): every endpoint requires authentication and
+scopes data to the authenticated user. Client-supplied user_id is only
+accepted when it matches the token's user (403 otherwise); app_id
+endpoints enforce ownership and return 404 for another user's ids so
+they are indistinguishable from missing ones.
+"""
 import logging
 from typing import Optional
 
@@ -6,20 +13,7 @@ from fastapi import APIRouter, Depends, Query
 
 from security import ErrorCode, error_response
 from security.auth import User
-
-# Auth helpers (mirrored — will be consolidated)
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-security_bearer = HTTPBearer(auto_error=False)
-
-
-async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Depends(security_bearer)) -> str:
-    if credentials:
-        return credentials.credentials
-    return None
-
-
-from routes.deps import require_authentication
+from routes.deps import require_authentication, resolve_user_id
 
 
 logger = logging.getLogger("routes.jobs")
@@ -31,12 +25,27 @@ try:
 except ImportError:
     JOB_TRACKER_AVAILABLE = False
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authentication)])
+
+
+def _owned_application(app_id: str, user: User):
+    """Fetch an application and enforce ownership.
+
+    Returns (application, None) on success, or (None, error) on
+    failure. Missing and foreign applications both return 404 so a
+    client cannot distinguish another user's app ids from
+    nonexistent ones.
+    """
+    application = job_tracker.get_application(app_id)
+    if not application or application.get("user_id") != str(user.id):
+        return None, error_response(
+            ErrorCode.NOT_FOUND, "Application not found", status_code=404
+        )
+    return application, None
 
 
 @router.post("/job-tracker/application")
 async def create_job_application(
-    user_id: str = Query("default", description="User ID"),
     company: str = Query(..., description="Company name"),
     role: str = Query(..., description="Job role"),
     location: str = Query(None, description="Job location"),
@@ -44,12 +53,14 @@ async def create_job_application(
     job_url: str = Query(None, description="Job posting URL"),
     status: str = Query("saved", description="Application status"),
     priority: str = Query("medium", description="Priority level"),
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
     user: User = Depends(require_authentication)
 ):
     """Create a new job application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     try:
         result = job_tracker.create_application(
             user_id=user_id,
@@ -69,16 +80,18 @@ async def create_job_application(
 
 @router.get("/job-tracker/applications")
 async def get_job_applications(
-    user_id: str = Query("default", description="User ID"),
     status: str = Query(None, description="Filter by status"),
     tags: str = Query(None, description="Filter by tags (comma-separated)"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
+    user: User = Depends(require_authentication)
 ):
     """Get all job applications for a user with optional filters and pagination."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available")
 
+    user_id = resolve_user_id(user, user_id)
     try:
         tag_list = tags.split(",") if tags else None
         applications = job_tracker.get_user_applications(user_id, status, tag_list)
@@ -97,19 +110,15 @@ async def get_job_applications(
 
 
 @router.get("/job-tracker/application/{app_id}")
-async def get_job_application(app_id: str):
+async def get_job_application(app_id: str, user: User = Depends(require_authentication)):
     """Get a single job application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
-    try:
-        application = job_tracker.get_application(app_id)
-        if not application:
-            return error_response(ErrorCode.NOT_FOUND, "Application not found", status_code=404)
-        return application
-    except Exception as e:
-        logger.error("[JobTracker] Get application error: %s", str(e))
-        return error_response(ErrorCode.INTERNAL_ERROR, "An internal error occurred", status_code=500)
+    application, error = _owned_application(app_id, user)
+    if error:
+        return error
+    return application
 
 
 @router.post("/job-tracker/application/{app_id}/status")
@@ -123,6 +132,9 @@ async def update_job_status(
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.update_status(app_id, status, notes)
         return result
@@ -137,12 +149,16 @@ async def add_job_interview(
     interview_type: str = Query(..., description="Interview type"),
     scheduled_date: str = Query(..., description="ISO datetime"),
     duration_minutes: int = Query(60, description="Duration in minutes"),
-    notes: str = Query(None, description="Notes")
+    notes: str = Query(None, description="Notes"),
+    user: User = Depends(require_authentication)
 ):
     """Add an interview to a job application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.add_interview(
             app_id, interview_type, scheduled_date, duration_minutes, notes=notes
@@ -158,12 +174,16 @@ async def add_job_offer(
     app_id: str,
     salary: str = Query(..., description="Salary offer"),
     benefits: str = Query(..., description="Benefits (comma-separated)"),
-    deadline: str = Query(None, description="Offer deadline")
+    deadline: str = Query(None, description="Offer deadline"),
+    user: User = Depends(require_authentication)
 ):
     """Add offer details to a job application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         benefits_list = benefits.split(",") if benefits else []
         result = job_tracker.add_offer(app_id, salary, benefits_list, deadline)
@@ -174,11 +194,15 @@ async def add_job_offer(
 
 
 @router.get("/job-tracker/stats")
-async def get_job_tracker_stats(user_id: str = Query("default", description="User ID")):
+async def get_job_tracker_stats(
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
+    user: User = Depends(require_authentication)
+):
     """Get job application pipeline statistics."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     try:
         stats = job_tracker.get_pipeline_stats(user_id)
         return stats
@@ -189,13 +213,15 @@ async def get_job_tracker_stats(user_id: str = Query("default", description="Use
 
 @router.get("/job-tracker/upcoming-interviews")
 async def get_upcoming_job_interviews(
-    user_id: str = Query("default", description="User ID"),
-    days: int = Query(7, description="Number of days to look ahead")
+    days: int = Query(7, description="Number of days to look ahead"),
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
+    user: User = Depends(require_authentication)
 ):
     """Get upcoming interviews within specified days."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     try:
         interviews = job_tracker.get_upcoming_interviews(user_id, days)
         return {
@@ -209,7 +235,7 @@ async def get_upcoming_job_interviews(
 
 
 @router.get("/job-tracker/company/{company}")
-async def get_company_job_insights(company: str):
+async def get_company_job_insights(company: str, user: User = Depends(require_authentication)):
     """Get insights about a specific company from applications."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
@@ -228,6 +254,9 @@ async def delete_job_application(app_id: str, user: User = Depends(require_authe
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.delete_application(app_id)
         return result
@@ -237,11 +266,15 @@ async def delete_job_application(app_id: str, user: User = Depends(require_authe
 
 
 @router.get("/job-tracker/duplicates")
-async def find_job_duplicates(user_id: str = Query("default", description="User ID")):
+async def find_job_duplicates(
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
+    user: User = Depends(require_authentication)
+):
     """Find duplicate applications (same company + role) for a user."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     try:
         duplicates = job_tracker.find_duplicates(user_id)
         return duplicates
@@ -252,13 +285,15 @@ async def find_job_duplicates(user_id: str = Query("default", description="User 
 
 @router.post("/job-tracker/duplicates/remove")
 async def remove_job_duplicates(
-    user_id: str = Query("default", description="User ID"),
-    keep: str = Query("latest", description="Which to keep: 'latest' or 'oldest'")
+    keep: str = Query("latest", description="Which to keep: 'latest' or 'oldest'"),
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
+    user: User = Depends(require_authentication)
 ):
     """Remove duplicate applications, keeping either the latest or oldest."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     if keep not in ["latest", "oldest"]:
         return error_response(ErrorCode.VALIDATION_ERROR, "keep must be 'latest' or 'oldest'", status_code=422)
 
@@ -271,11 +306,14 @@ async def remove_job_duplicates(
 
 
 @router.get("/job-tracker/application/{app_id}/details")
-async def get_job_application_details(app_id: str):
+async def get_job_application_details(app_id: str, user: User = Depends(require_authentication)):
     """Get detailed information about a specific application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    application, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         details = job_tracker.get_application_details(app_id)
         if not details:
@@ -292,12 +330,16 @@ async def add_recruiter_contact(
     name: str = Query(..., description="Recruiter name"),
     email: Optional[str] = Query(None, description="Recruiter email"),
     phone: Optional[str] = Query(None, description="Recruiter phone"),
-    is_primary: bool = Query(True, description="Set as primary recruiter")
+    is_primary: bool = Query(True, description="Set as primary recruiter"),
+    user: User = Depends(require_authentication)
 ):
     """Add recruiter contact to an application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.add_recruiter(app_id, name, email, phone, is_primary)
         return result
@@ -313,12 +355,16 @@ async def add_communication_log(
     sender: str = Query(..., description="Sender name/email"),
     content: str = Query(..., description="Message content/summary"),
     direction: str = Query("inbound", description="inbound or outbound"),
-    notes: Optional[str] = Query(None, description="Additional notes")
+    notes: Optional[str] = Query(None, description="Additional notes"),
+    user: User = Depends(require_authentication)
 ):
     """Log a communication (email, phone call, message) for an application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.add_communication(app_id, comm_type, sender, content, direction, notes)
         return result
@@ -332,12 +378,16 @@ async def update_background_check_status(
     app_id: str,
     status: str = Query(..., description="Status: initiated, in_progress, completed, failed"),
     provider: Optional[str] = Query(None, description="Background check provider"),
-    notes: Optional[str] = Query(None, description="Notes")
+    notes: Optional[str] = Query(None, description="Notes"),
+    user: User = Depends(require_authentication)
 ):
     """Update background check status for an application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.update_background_check(app_id, status, provider, notes)
         return result
@@ -352,12 +402,16 @@ async def update_drug_test_status(
     status: str = Query(..., description="Status: scheduled, completed, passed, failed"),
     test_date: Optional[str] = Query(None, description="Test date (YYYY-MM-DD)"),
     location: Optional[str] = Query(None, description="Test location"),
-    notes: Optional[str] = Query(None, description="Notes")
+    notes: Optional[str] = Query(None, description="Notes"),
+    user: User = Depends(require_authentication)
 ):
     """Update drug test status for an application."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         result = job_tracker.update_drug_test(app_id, status, test_date, location, notes)
         return result
@@ -371,12 +425,16 @@ async def add_onboarding_info(
     app_id: str,
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     documents: Optional[str] = Query(None, description="Comma-separated document names"),
-    notes: Optional[str] = Query(None, description="Notes")
+    notes: Optional[str] = Query(None, description="Notes"),
+    user: User = Depends(require_authentication)
 ):
     """Add onboarding details for accepted offer."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    _, error = _owned_application(app_id, user)
+    if error:
+        return error
     try:
         docs_list = [d.strip() for d in documents.split(",")] if documents else []
         result = job_tracker.add_onboarding_details(app_id, start_date, docs_list, notes)
@@ -388,15 +446,17 @@ async def add_onboarding_info(
 
 @router.get("/job-tracker/search")
 async def search_job_applications(
-    user_id: str = Query("default", description="User ID"),
     query: str = Query(..., description="Search query"),
     limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
+    user: User = Depends(require_authentication)
 ):
     """Search applications by company, role, or notes."""
     if not JOB_TRACKER_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Job tracker not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     try:
         results = job_tracker.search_applications(user_id, query)
         total = len(results)

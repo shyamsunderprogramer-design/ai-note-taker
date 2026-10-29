@@ -22,7 +22,7 @@ async def get_token_from_request(credentials: HTTPAuthorizationCredentials = Dep
     return None
 
 
-from routes.deps import require_authentication
+from routes.deps import require_authentication, resolve_user_id
 
 
 logger = logging.getLogger("routes.study")
@@ -50,7 +50,7 @@ except ImportError as e:
     REALTIME_AVAILABLE = False
     logger.warning("[Realtime] Module not available: %s", str(e))
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authentication)])
 
 
 # --- Study Plan Endpoints ---
@@ -108,7 +108,9 @@ def _serialize_plan(plan) -> dict:
 
 class StudyPlanPersonalizedRequest(BaseModel):
     """Request body for personalized study plan generation"""
-    user_id: str
+    # Optional (IDOR fix): the authenticated user is the source of
+    # truth; a supplied user_id must match it or the request is 403.
+    user_id: Optional[str] = None
     target_role: str
     target_company: Optional[str] = None
     job_description: Optional[str] = None
@@ -119,7 +121,7 @@ class StudyPlanPersonalizedRequest(BaseModel):
 
 @router.post("/study-plan/generate")
 async def generate_study_plan(
-    user_id: str = Query(..., description="User ID"),
+    user_id: Optional[str] = Query(None, description="Ignored unless it matches the authenticated user"),
     days: int = Query(30, description="Plan duration in days"),
     daily_minutes: int = Query(60, description="Daily study time target"),
     target_role: Optional[str] = Query(None, description="Target job role"),
@@ -132,6 +134,7 @@ async def generate_study_plan(
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
+    user_id = resolve_user_id(user, user_id)
     try:
         skills_list = [s.strip() for s in current_skills.split(",")] if current_skills else None
 
@@ -166,17 +169,18 @@ async def generate_personalized_study_plan(
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
+    user_id = resolve_user_id(user, request.user_id)
     try:
         graph_data = None
         if COGNITIVE_GRAPH_AVAILABLE:
             try:
-                stats = cognitive_graph.get_graph_stats(request.user_id)
+                stats = cognitive_graph.get_graph_stats(user_id)
                 graph_data = {"skills": stats.get("top_skills", [])}
             except Exception:
                 pass  # nosec B110
 
         plan = study_planner.generate_plan(
-            request.user_id, request.days, request.daily_minutes, graph_data,
+            user_id, request.days, request.daily_minutes, graph_data,
             target_role=request.target_role,
             target_company=request.target_company,
             job_description=request.job_description,
@@ -190,8 +194,9 @@ async def generate_personalized_study_plan(
 
 
 @router.get("/study-plan/{user_id}")
-async def get_study_plan(user_id: str):
+async def get_study_plan(user_id: str, user: User = Depends(require_authentication)):
     """Get current study plan for user (generates new one if none exists)"""
+    user_id = resolve_user_id(user, user_id)
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
@@ -215,9 +220,11 @@ async def get_study_plan(user_id: str):
 async def complete_study_task(
     user_id: str,
     task_id: str = Query(...),
-    performance_score: float = Query(0.7, description="Performance rating 0.0-1.0")
+    performance_score: float = Query(0.7, description="Performance rating 0.0-1.0"),
+    user: User = Depends(require_authentication)
 ):
     """Mark task as complete and adapt plan"""
+    user_id = resolve_user_id(user, user_id)
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
@@ -239,8 +246,9 @@ async def complete_study_task(
 
 
 @router.get("/study-plan/{user_id}/today")
-async def get_today_session(user_id: str):
+async def get_today_session(user_id: str, user: User = Depends(require_authentication)):
     """Get today's study session"""
+    user_id = resolve_user_id(user, user_id)
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 
@@ -298,9 +306,11 @@ async def get_study_resources(
 @router.post("/study-plan/{user_id}/export")
 async def export_study_plan(
     user_id: str,
-    format: str = Query("json", description="Export format: json, ical, markdown")
+    format: str = Query("json", description="Export format: json, ical, markdown"),
+    user: User = Depends(require_authentication)
 ):
     """Export study plan to various formats"""
+    user_id = resolve_user_id(user, user_id)
     if not STUDY_PLAN_AVAILABLE:
         return error_response(ErrorCode.MODULE_NOT_AVAILABLE, "Study plan generator not available", status_code=503)
 

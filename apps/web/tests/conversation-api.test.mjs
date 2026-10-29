@@ -7,9 +7,10 @@ test('conversation requests use configured backend and bearer authentication', a
     return new Response(JSON.stringify([]), { status: 200 });
   });
   const requests = [];
-  globalThis.window = { API_BASE: 'http://127.0.0.1:8049' };
-  globalThis.localStorage = { getItem: () => 'qa-token' };
-  t.after(() => { delete globalThis.window; delete globalThis.localStorage; });
+  // api.js reads the token via window.AuthHelper.getToken() (not
+  // localStorage directly) — mock that contract.
+  globalThis.window = { API_BASE: 'http://127.0.0.1:8049', AuthHelper: { getToken: () => 'qa-token' } };
+  t.after(() => { delete globalThis.window; });
   const { API } = await import('../js/core/api.js');
   await API.getConversations();
   await API.loadConversation('a/b');
