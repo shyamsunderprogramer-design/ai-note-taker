@@ -222,11 +222,11 @@
     "audiotee": "^0.0.7",
     "electron-log": "^5.2.4",
     "electron-store": "^8.2.0",
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.11"
   },
   "devDependencies": {
     "electron": "41.10.7",
-    "electron-builder": "26.15.3",
+    "electron-builder": "26.18.0",
     "eslint": "^9.0.0"
   },
   "overrides": {
