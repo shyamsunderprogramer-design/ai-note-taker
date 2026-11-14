@@ -40,7 +40,10 @@
     "build": "npm run renderer:check && npm run electron:build",
     "test:security": "node --test qa/security/*.test.cjs",
     "renderer:check": "node scripts/check-desktop-renderer.mjs",
-    "renderer:test": "npm --workspace ant-desktop-renderer test"
+    "renderer:test": "npm --workspace ant-desktop-renderer test",
+    "site:build": "node scripts/build-site.mjs",
+    "site:preview": "node scripts/preview-site.mjs",
+    "site:test": "node qa/website/smoke.cjs"
   },
   "devDependencies": {
     "eslint": "^8.56.0"

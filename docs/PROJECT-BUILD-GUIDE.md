@@ -2,7 +2,7 @@
 
 Reviewed against the local source tree on **13 November 2026**. Application version: **2.3.0-rc.2**. This guide describes the working tree, including desktop changes that may not be present in a downloaded release. It is not a certification that every integration or installer has been tested.
 
-ANT is an Electron desktop application with a bundled HTML/CSS/JavaScript interface, a local Python/FastAPI backend, native capture helpers, and optional AI providers. The interface uses browser technology **inside the desktop app**. There is no separate website, Vite development server, PWA, or `apps/web` build in the current desktop workflow.
+ANT is an Electron desktop application with a bundled HTML/CSS/JavaScript interface, a local Python/FastAPI backend, native capture helpers, and optional AI providers. The interface uses browser technology **inside the desktop app**. There is no Vite development server, PWA, or `apps/web` build in the current desktop workflow. A separate [marketing website](../apps/landing/README.md), restored on 14 November 2026, provides product information and downloads through its own static build.
 
 Use this document to set up a development machine, understand the application, change it, test it, build distributable packages, and prepare a release. Executable configuration takes precedence over historical documentation: [root package](../package.json), [desktop package](../electron/package.json), [runtime builder](../scripts/build_desktop_runtime.py), and [release workflow](../.github/workflows/release.yml).
 

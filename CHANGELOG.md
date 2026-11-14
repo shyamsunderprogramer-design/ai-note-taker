@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- Restore the standalone marketing website with updated desktop information, published download links, source-feature distinctions, capture/privacy limits and a dependency-free Vercel build. Retire old browser-app routes and PWA caches while preserving saved browser data.
+
 - Add desktop ChatGPT subscription sign-in, account-specific model selection, encrypted OAuth storage, and opt-in local fallback with visible notifications after usage limits.
 - Add Ollama Cloud account connection through the local Ollama app, cloud model selection/registration, and opt-in ChatGPT ↔ Ollama Cloud fallback before the selected local model. Show supported connection options for Claude, Gemini, Grok and Groq without claiming consumer subscription access.
 - Restore desktop Settings scrolling by excluding the panel and its scroll body from Electron's draggable window region.

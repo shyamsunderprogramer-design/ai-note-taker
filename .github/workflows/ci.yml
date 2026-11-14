@@ -101,6 +101,10 @@ jobs:
         run: |
           npm ci
           npm --workspace ant-e2e-tests run install:browsers -- --with-deps
+      - name: Build and verify the product website
+        run: |
+          npm run site:build
+          npm run site:test
       - name: Verify desktop renderer in Chromium
         run: |
           npm run renderer:check

@@ -6,9 +6,9 @@ A desktop application for voice notes, screen-aware questions, and interview pre
 [![CI](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shyamsunderprogramer-design/ai-note-taker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**[Download](#download) · [Source setup](#run-from-source) · [Privacy](#privacy-and-data) · [Build guide](docs/PROJECT-BUILD-GUIDE.md) · [Troubleshooting](#troubleshooting) · [Documentation](#documentation)**
+**[Website](https://ai-note-taker-five.vercel.app/) · [Download](#download) · [Source setup](#run-from-source) · [Privacy](#privacy-and-data) · [Build guide](docs/PROJECT-BUILD-GUIDE.md) · [Troubleshooting](#troubleshooting) · [Documentation](#documentation)**
 
-The desktop interface is bundled in `electron/renderer`. This repository has no standalone website or PWA build. Mobile and extension projects are optional companions.
+The desktop interface is bundled in `electron/renderer`. The [product website](https://ai-note-taker-five.vercel.app/) provides information and downloads; the application runs on the desktop. There is no browser app or PWA build. Mobile and extension projects are optional companions.
 
 Already installed the source dependencies? From the repository root, run:
 
@@ -89,7 +89,7 @@ Whisper turns audio into text. The AI router sends the selected conversation and
 
 [Architecture guide and source map](docs/architecture/README.md) · [Editable SVG](docs/architecture/overview.svg)
 
-The product is a desktop application. Its bundled interface lives in `electron/renderer`; there is no standalone website or PWA build.
+The product is a desktop application. Its bundled interface lives in `electron/renderer`; the separate marketing website does not host the app.
 
 ## Run from source
 
@@ -285,6 +285,10 @@ Output goes to `electron/dist/`. The runtime builder downloads the checksum-pinn
 From the repository root, verify a completed package with `python scripts/verify_desktop_package.py`. See the [packaging guide](docs/PROJECT-BUILD-GUIDE.md#10-how-to-build-desktop-packages) for resource selection, signing limitations and acceptance checks. Installer builds were not rerun for this README update.
 
 The [release workflow](.github/workflows/release.yml) is the reference for the four native build targets, bundled-runtime audits, packaged sign-in checks and checksums. macOS output is ZIP; Windows output is installer and portable EXE; Linux output is AppImage and DEB.
+
+### Product website
+
+The static marketing site lives in `apps/landing`. Run `npm run site:build`, then `npm run site:preview` to preview it at http://127.0.0.1:4178. See the [website guide](apps/landing/README.md) for testing and Vercel deployment. Its published download version is pinned separately from source changes.
 
 ## Project layout
 

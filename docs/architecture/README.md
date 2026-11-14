@@ -6,7 +6,7 @@ This illustration describes the earlier local setup in `v2.3.0-rc.1`. It shows c
 
 ## How the pieces connect
 
-1. **Desktop interface:** Electron loads the bundled interface in [`electron/renderer/`](../../electron/renderer/). Native features go through [`electron/preload.js`](../../electron/preload.js) and [`electron/main.js`](../../electron/main.js). The current product has no standalone website or PWA build.
+1. **Desktop interface:** Electron loads the bundled interface in [`electron/renderer/`](../../electron/renderer/). Native features go through [`electron/preload.js`](../../electron/preload.js) and [`electron/main.js`](../../electron/main.js). The separate marketing website in `apps/landing` provides information and downloads; it does not host the application or a PWA.
 2. **Backend:** Electron starts or reuses a loopback FastAPI server on port 8000. Source runs use `AINT_Venv`; packaged builds use their bundled Python. See [`electron/lib/python-runtime.js`](../../electron/lib/python-runtime.js) and [`backend/core/main.py`](../../backend/core/main.py).
 3. **Voice:** microphone or supported system audio reaches the backend's WebSocket/upload transcription paths. [`whisper_handler.py`](../../backend/modules/voice/whisper_handler.py) transcribes locally with faster-whisper. The transcript can then become AI input.
 4. **AI:** [`routes/ai.py`](../../backend/routes/ai.py) and [`ai_router.py`](../../backend/modules/ai/ai_router.py) route text and image context to a local Ollama server or configured cloud providers. Native [connected-account routing](../../electron/lib/subscriptions.js) is a separate main-process path. Responses stream back to the interface. Auto/race mode can contact multiple enabled providers.
