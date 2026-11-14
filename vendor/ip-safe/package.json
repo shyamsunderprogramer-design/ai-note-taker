@@ -11,6 +11,6 @@
   "license": "MIT",
   "private": true,
   "dependencies": {
-    "ipaddr.js": "2.4.0"
+    "ipaddr.js": "2.5.0"
   }
 }

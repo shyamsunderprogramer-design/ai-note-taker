@@ -225,12 +225,12 @@
     "audiotee": "^0.0.7",
     "electron-log": "^5.2.4",
     "electron-store": "^8.2.0",
-    "electron-updater": "6.8.9",
-    "jose": "^6.2.14"
+    "electron-updater": "6.8.11",
+    "jose": "^6.2.17"
   },
   "devDependencies": {
     "electron": "41.10.7",
-    "electron-builder": "26.15.3",
+    "electron-builder": "26.18.0",
     "eslint": "^9.0.0"
   },
   "overrides": {
