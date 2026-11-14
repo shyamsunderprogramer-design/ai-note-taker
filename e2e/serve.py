@@ -1,4 +1,4 @@
-"""Serve actual web pages with clean URLs and an explicit isolated API endpoint."""
+"""Test-only HTTP harness for bundled desktop renderer pages and an isolated API."""
 import argparse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=8048)
 parser.add_argument('--api', default='http://127.0.0.1:8049')
 args = parser.parse_args()
-root = Path(__file__).resolve().parents[1] / 'apps' / 'web'
+root = Path(__file__).resolve().parents[1] / 'electron' / 'renderer'
 
 class Handler(SimpleHTTPRequestHandler):
     def send_head(self):

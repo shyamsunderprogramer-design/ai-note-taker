@@ -6,7 +6,7 @@
  * The main window is created with `frame: false` (frameless) and the
  * `trafficLightPosition` on darwin is set to off-screen coordinates so
  * the native red/yellow/green buttons never reach the user. The custom
- * HTML traffic lights in apps/web/index.html are the only controls
+ * HTML traffic lights in electron/renderer/index.html are the only controls
  * visible on every platform.
  *
  * Locks in:
@@ -20,7 +20,7 @@ const fs = require("node:fs")
 const path = require("node:path")
 
 const MAIN_JS = path.join(__dirname, "..", "main.js")
-const STYLE_CSS = path.join(__dirname, "..", "..", "apps", "web", "style.css")
+const STYLE_CSS = path.join(__dirname, "..", "..", "electron", "renderer", "style.css")
 
 const mainSrc = fs.readFileSync(MAIN_JS, "utf8")
 const styleSrc = fs.readFileSync(STYLE_CSS, "utf8")

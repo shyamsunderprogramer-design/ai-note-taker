@@ -68,14 +68,6 @@ dev:  ## Run backend + Electron desktop app together
 	@echo "→ Starting Electron app"
 	cd electron && $(NPM) start
 
-.PHONY: dev-web
-dev-web:  ## Run backend + Vite web dev server (no Electron)
-	@echo "→ Starting backend on :8000 (Ctrl+C to stop)"
-	. $(VENV_BIN)/activate && cd backend && uvicorn core.main:app --reload --port 8000 &
-	@sleep 2
-	@echo "→ Starting Vite dev server on :5173"
-	cd apps/web && $(NPM) run dev
-
 .PHONY: test
 test:  ## Run backend pytest suite
 	. $(VENV_BIN)/activate && cd backend && pytest tests/ --ignore=tests/test_api_integration.py -q
@@ -96,12 +88,8 @@ lint:  ## Lint all workspaces that have a lint script
 	$(NPM) run lint
 
 .PHONY: build
-build:  ## Build production web + electron bundles
+build:  ## Build the desktop application
 	$(NPM) run build
-
-.PHONY: build-web
-build-web:  ## Build only the web SPA
-	$(NPM) run web:build
 
 .PHONY: build-electron
 build-electron:  ## Build only the Electron distributable for current platform
@@ -139,10 +127,6 @@ docker-up-full:  ## Start the full stack with neo4j, postgres, redis, monitoring
 docker-down:  ## Stop the local docker-compose stack
 	docker compose -f docker/docker-compose.yml down
 
-.PHONY: pwa-icons
-pwa-icons:  ## Regenerate apps/web PWA icons from assets/design/source/Ant_App_icon.png
-	$(PYTHON) scripts/generate_pwa_icons.py
-
 .PHONY: alembic-upgrade
 alembic-upgrade:  ## Run alembic upgrade head (apply DB migrations)
 	. $(VENV_BIN)/activate && cd backend && alembic upgrade head
@@ -158,8 +142,7 @@ alembic-revision:  ## Generate a new alembic revision (autogenerate). MSG="your 
 
 .PHONY: clean
 clean:  ## Remove build artifacts (NOT the venv, NOT node_modules)
-	rm -rf apps/web/dist electron/dist backend/.pytest_cache backend/htmlcov backend/coverage.xml
-	rm -rf apps/web/.vite electron/.vite
+	rm -rf electron/dist backend/.pytest_cache backend/htmlcov backend/coverage.xml
 	@find . -type d -name "__pycache__" -not -path '*/venv/*' -not -path '*/AINT_Venv/*' -exec rm -rf {} + 2>/dev/null || true
 	@echo "✓ build artifacts removed (run 'make clean-all' for nuke)"
 

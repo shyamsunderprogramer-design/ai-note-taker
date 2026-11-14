@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const vm=require('node:vm');const fs=require('node:fs');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../../apps/web/app.js'),'utf8');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../../electron/renderer/app.js'),'utf8');
 function prompt(q){const scope=vm.createContext({interviewContext:{active:false},jobDescriptionContext:'',resumeAnswerContext:{text:'Alex built Python APIs.'},selectResumeContext:t=>t});vm.runInContext(source.slice(source.indexOf('function buildInterviewPrompt('),source.indexOf('// OPACITY SLIDER')),scope);return scope.buildInterviewPrompt(q)}
 test('introduction is structured, spoken, bounded and grounded',()=>{
  const p=prompt('Tell me about yourself');assert.match(p,/60–90 seconds/);assert.match(p,/140–180 words/);assert.match(p,/at most three relevant technology/);assert.match(p,/at most one measured result/);

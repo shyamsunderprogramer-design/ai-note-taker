@@ -989,7 +989,7 @@ async def start_listener():
                     )
                 else:
                     logger.warning(
-                        "[Startup] Live-assist warmup failed (%s) — first hint will be slow",
+                        "[Startup] Live-assist warmup failed (%s) — local model readiness is unverified",
                         res.get("error"),
                     )
             except Exception as exc:
@@ -1049,7 +1049,7 @@ async def start_listener():
                     logger.warning("[Startup] Ollama probe returned HTTP %d — AI calls will fail until ollama is up.", resp.status_code)
             except Exception as e:
                 print(f"[Startup] Ollama unreachable: {e}", flush=True)
-                logger.warning("[Startup] Ollama unreachable at %s (%s) — AI calls will fall back to heuristics.", OLLAMA_URL, str(e)[:120])
+                logger.warning("[Startup] Ollama unreachable at %s (%s) — local AI is unavailable. Start Ollama or select a configured cloud provider.", OLLAMA_URL, str(e)[:120])
         except ImportError as e:
             print(f"[Startup] Ollama probe ImportError: {e}", flush=True)
 

@@ -240,10 +240,9 @@ def transcribe(audio, mode="adaptive", streaming=False, language="en", auto_dete
         if accelerated is not None:
             accelerated['text'] = normalize_technical_homophones(accelerated['text'])
             return accelerated
-    # Wait for warmup to complete (max 5s — return error if not ready)
-    if not wait_for_model(timeout=5):
-        logger.warning("Whisper model not ready after 5s")
-
+    # get_model() already waits on the model-loading lock when warmup is
+    # running. Waiting on model_ready first adds five idle seconds when
+    # startup warmup was skipped (or this module was imported separately).
     try:
         model = get_model(mode, streaming=streaming)
 

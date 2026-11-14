@@ -1,7 +1,7 @@
 # QA Test Environment
 
 > **Role tag:** `qa`
-> **Owner:** `role-qa` (see [OWNERS.qa.md](../../OWNERS.qa.md) for the
+> **Owner:** `role-qa` (see [OWNERS.qa.md](../OWNERS.qa.md) for the
 > full charter)
 > **What lives here:** test plans, fixtures, performance scripts — *not*
 > the test code itself (that lives next to the code: `e2e/`,
@@ -110,7 +110,7 @@ make setup
 cd backend && pytest tests/ -q && cd ..
 
 # 2. Web build (smoke)
-cd apps/web && npx vite build && cd ../..
+cd electron/renderer && npx vite build && cd ../..
 
 # 3. Mobile tests
 cd mobile && npm test && cd ..

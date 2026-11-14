@@ -1,12 +1,12 @@
 # ANT documentation
 
-Start with the [project README](../README.md) to install ANT and use its desktop or browser interface. This index gives each subject one maintained guide. Original research, plans, and implementation reports are grouped by topic in the [historical references](archive/README.md).
+Start with the [project README](../README.md) to install ANT and use its desktop interface. This index gives each subject one maintained guide. Original research, plans, and implementation reports are grouped by topic in the [historical references](archive/README.md).
 
 ## Setup and everyday use
 
 | What you want to do | Read this |
 | --- | --- |
-| Install, configure, and launch ANT | [Setup and usage](../README.md#set-up-from-source) |
+| Install, configure, and launch ANT | [Setup and usage](../README.md#run-from-source) |
 | Choose local AI or add cloud credentials | [Local AI and API keys](business/BYOK.md) |
 | Review a resume or personalize answers | [Resume tools and job context](business/resume-builder/README.md) |
 | Save jobs and use the extension | [Job workflow](business/JOB_APPLICATION_WORKFLOW.md) |
@@ -18,6 +18,8 @@ Start with the [project README](../README.md) to install ANT and use its desktop
 
 | Topic | Maintained document |
 | --- | --- |
+| End-to-end desktop development and packaging | [Project build guide](PROJECT-BUILD-GUIDE.md) |
+| Files and folders by role | [Role map](ROLES.md) |
 | Development workflow | [Development guide](devops/development/DEVELOPMENT.md) |
 | API routes and request contracts | [API reference](backend/api/API_REFERENCE.md) |
 | Architecture and data flow | [Technical specification](backend/architecture/TECHNICAL_SPECIFICATION.md) |
@@ -45,7 +47,7 @@ Start with the [project README](../README.md) to install ANT and use its desktop
 
 ## Keep the documentation clear
 
-Update the existing topic guide when behavior changes. Put setup commands in the project README, API contracts in the running schema and API guide, and release evidence in the candidate's validation record. Do not copy a guide into the docs root or publish another overlapping “complete” report.
+Update the existing topic guide when behavior changes. The [project build guide](PROJECT-BUILD-GUIDE.md) is the maintained end-to-end entry point; keep its source links and validation ledger current. Put concise setup commands in the project README, API contracts in the running schema and API guide, and release evidence in the candidate's validation record. Avoid creating competing complete-project guides.
 
 Historical reference records retain unique examples and proposals with their original context. Their completion claims, prices, timelines, and benchmarks are not current guarantees. See the [consolidation map](CONSOLIDATION.md) to find a document by its previous path.
 

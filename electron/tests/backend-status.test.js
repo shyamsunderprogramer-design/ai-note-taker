@@ -3,6 +3,20 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+test('source and packaged launches both pass a stable backend signing key', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
+  const start = source.indexOf('  const env = {', source.indexOf('async function startBackend()'));
+  const end = source.indexOf('  const spawnOpts = {', start);
+  for (const isProd of [false, true]) {
+    let calls = 0;
+    const scope = {isProd, path, process:{env:{}}, backendDir:'/backend', dataDir:'/private/data',
+      getAppDataPath:()=>'/private/app', providerEnvPath:()=>'/private/providers.env',
+      backendSigningSecret(directory) { assert.equal(directory,'/private/data'); calls++; return 'persisted-test-key' }};
+    const env = vm.runInNewContext(source.slice(start,end)+'\nenv',scope);
+    assert.equal(env.JWT_SECRET_KEY, 'persisted-test-key');
+    assert.equal(calls, 1);
+  }
+});
 test('an existing healthy backend reports ready and starts monitoring', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
   const start = source.indexOf('async function startBackend()');
@@ -16,7 +30,7 @@ test('an existing healthy backend reports ready and starts monitoring', async ()
   assert.equal(scope.backendRestartAttempts, 0);
 });
 test('a new error cancels connected-status hiding and recovery clears restart action', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../apps/web/app.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../electron/renderer/app.js'), 'utf8');
   const start = source.indexOf('let backendStatusHideTimer');
   const end = source.indexOf('// Listen for backend status changes', start);
   const timers = new Map(); let id = 0;

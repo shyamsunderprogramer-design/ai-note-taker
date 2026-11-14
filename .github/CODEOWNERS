@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────
 # ANT (AI Note Taker) — role-based CODEOWNERS
-# Reorganized 2026-06-11 as part of the role-ownership refactor.
+# Role routing completed 2026-10-29; see docs/ROLES.md for navigation.
 # See OWNERS.{backend,uiux,devops,qa,devsecops}.md for each role's charter.
 #
 # All five role teams currently have @shyamsunderprogramer-design as the
@@ -19,21 +19,26 @@
 *       @shyamsunderprogramer-design
 
 # ── Backend dev ───────────────────────────────────────────────────
-/backend/core/
-/backend/modules/
-/backend/routes/
-/backend/lib/
-/backend/migrations/
-/backend/data/seed*
-/backend/pytest.ini
-/backend/requirements*.txt
-/backend/start_server.py
-/backend/alembic.ini
+/backend/                        @shyamsunderprogramer-design/role-backend
+/backend/core/                   @shyamsunderprogramer-design/role-backend
+/backend/modules/                @shyamsunderprogramer-design/role-backend
+/backend/routes/                 @shyamsunderprogramer-design/role-backend
+/backend/lib/                    @shyamsunderprogramer-design/role-backend
+/backend/migrations/             @shyamsunderprogramer-design/role-backend
+/backend/data/seed*              @shyamsunderprogramer-design/role-backend
+/backend/pytest.ini              @shyamsunderprogramer-design/role-backend
+/backend/requirements*.txt       @shyamsunderprogramer-design/role-backend
+/backend/start_server.py         @shyamsunderprogramer-design/role-backend
+/backend/alembic.ini             @shyamsunderprogramer-design/role-backend
 /backend/tests/conftest.py      @shyamsunderprogramer-design/role-backend
 
 # ── UI/UX dev ─────────────────────────────────────────────────────
-/apps/web/                       @shyamsunderprogramer-design/role-uiux
-/apps/landing/                   @shyamsunderprogramer-design/role-uiux
+/apps/                           @shyamsunderprogramer-design/role-uiux
+/chrome-extension/               @shyamsunderprogramer-design/role-uiux
+/browser-extension/              @shyamsunderprogramer-design/role-uiux
+/vscode-extension/               @shyamsunderprogramer-design/role-uiux
+/mobile/                         @shyamsunderprogramer-design/role-uiux
+/electron/renderer/                       @shyamsunderprogramer-design/role-uiux
 /apps/ant-chrome-extension/      @shyamsunderprogramer-design/role-uiux
 /electron/features/              @shyamsunderprogramer-design/role-uiux
 /electron/assets/                @shyamsunderprogramer-design/role-uiux
@@ -45,12 +50,20 @@
 /mobile/package.json             @shyamsunderprogramer-design/role-uiux
 
 # ── Devops / release ──────────────────────────────────────────────
+/electron/                       @shyamsunderprogramer-design/role-devops
+# More specific UI paths override the Electron runtime default.
+/electron/features/              @shyamsunderprogramer-design/role-uiux
+/electron/assets/                @shyamsunderprogramer-design/role-uiux
+/mobile/ios/                     @shyamsunderprogramer-design/role-devops
+/mobile/android/                 @shyamsunderprogramer-design/role-devops
+/.github/workflows/              @shyamsunderprogramer-design/role-devops
+/.env.example                    @shyamsunderprogramer-design/role-devops
+/.python-version                 @shyamsunderprogramer-design/role-devops
 /Dockerfile                      @shyamsunderprogramer-design/role-devops
 /docker/                         @shyamsunderprogramer-design/role-devops
 /k8s/                            @shyamsunderprogramer-design/role-devops
 /infrastructure/                 @shyamsunderprogramer-design/role-devops
 /render.yaml                     @shyamsunderprogramer-design/role-devops
-/vercel.json                     @shyamsunderprogramer-design/role-devops
 /Makefile                        @shyamsunderprogramer-design/role-devops
 /scripts/                        @shyamsunderprogramer-design/role-devops
 /electron/main.js                @shyamsunderprogramer-design/role-devops
@@ -79,12 +92,38 @@
 /.github/dependabot.yml          @shyamsunderprogramer-design/role-devsecops
 /SECURITY.md                     @shyamsunderprogramer-design/role-devsecops
 /backend/security/               @shyamsunderprogramer-design/role-devsecops
+/backend/.bandit                 @shyamsunderprogramer-design/role-devsecops
+/.gitleaksignore                  @shyamsunderprogramer-design/role-devsecops
+/.github/gitleaks.toml            @shyamsunderprogramer-design/role-devsecops
+/.github/codeql-config.yml        @shyamsunderprogramer-design/role-devsecops
+/.github/opa-policies/            @shyamsunderprogramer-design/role-devsecops
+/.github/actions/scan-secrets/    @shyamsunderprogramer-design/role-devsecops
+/vendor/                         @shyamsunderprogramer-design/role-devsecops
 
-# ── Co-owned (require approvals from multiple roles) ──────────────
-# Files that touch more than one role's domain. GitHub CODEOWNERS will
-# require approval from each listed owner. Until collaborators join,
-# the single human (@shyamsunderprogramer-design) can satisfy both by
-# approving twice in the PR's review panel.
+
+# ── Role documentation, charters, and agent instructions ───────────
+/docs/backend/                   @shyamsunderprogramer-design/role-backend
+/agents/backend/                 @shyamsunderprogramer-design/role-backend
+/OWNERS.backend.md               @shyamsunderprogramer-design/role-backend
+/docs/uiux/                      @shyamsunderprogramer-design/role-uiux
+/agents/uiux/                    @shyamsunderprogramer-design/role-uiux
+/OWNERS.uiux.md                  @shyamsunderprogramer-design/role-uiux
+/docs/devops/                    @shyamsunderprogramer-design/role-devops
+/agents/devops/                  @shyamsunderprogramer-design/role-devops
+/OWNERS.devops.md                @shyamsunderprogramer-design/role-devops
+/docs/qa/                        @shyamsunderprogramer-design/role-qa
+/agents/qa/                      @shyamsunderprogramer-design/role-qa
+/OWNERS.qa.md                    @shyamsunderprogramer-design/role-qa
+/docs/devsecops/                 @shyamsunderprogramer-design/role-devsecops
+/agents/devsecops/               @shyamsunderprogramer-design/role-devsecops
+/OWNERS.devsecops.md             @shyamsunderprogramer-design/role-devsecops
+/docs/architecture/              @shyamsunderprogramer-design/role-backend
+/docs/releases/                  @shyamsunderprogramer-design/role-devops
+/docs/landing/                   @shyamsunderprogramer-design/role-uiux
+
+# ── Co-owned review routing ──────────────────────────────────────
+# Files that touch more than one role's domain list all relevant owners.
+# CODEOWNERS alone does not enforce a separate approval from every role.
 
 # Runtime shell — devops owns, backend approves IPC contract changes
 /electron/main.js                @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-backend
@@ -94,7 +133,6 @@
 # Deploy manifests — devops owns, devsecops approves attack-surface changes
 /Dockerfile                      @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
 /render.yaml                     @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
-/vercel.json                     @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
 /.dockerignore                   @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
 
 # Backend security — devsecops owns policy, backend owns implementation
@@ -107,5 +145,13 @@
 /e2e/                            @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-uiux
 
 # App-level API call contracts in UI — uiux owns, backend approves contract
-/apps/web/app.js                 @shyamsunderprogramer-design/role-uiux @shyamsunderprogramer-design/role-backend
-/apps/web/js/core/api.js         @shyamsunderprogramer-design/role-uiux @shyamsunderprogramer-design/role-backend
+/electron/renderer/app.js                 @shyamsunderprogramer-design/role-uiux @shyamsunderprogramer-design/role-backend
+/electron/renderer/js/core/api.js         @shyamsunderprogramer-design/role-uiux @shyamsunderprogramer-design/role-backend
+
+# Security checks and supply chain cross role boundaries.
+/qa/security/                    @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-devsecops
+/backend/requirements*.txt       @shyamsunderprogramer-design/role-backend @shyamsunderprogramer-design/role-devsecops
+/backend/pytest.ini              @shyamsunderprogramer-design/role-qa @shyamsunderprogramer-design/role-backend
+/.github/dependabot.yml          @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+/.github/workflows/security.yml  @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops
+/.github/workflows/codeql.yml    @shyamsunderprogramer-design/role-devops @shyamsunderprogramer-design/role-devsecops

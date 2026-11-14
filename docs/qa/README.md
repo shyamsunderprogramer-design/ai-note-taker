@@ -16,6 +16,7 @@ to the actual test code (which lives next to its code, not here).
 
 | File | What's there |
 |---|---|
+| [reports/testing_operational_maturity_analysis.json](reports/testing_operational_maturity_analysis.json) | Historical maturity assessment dated 2026-06-08 |
 | [test-strategy.md](test-strategy.md) | The QA strategy doc — what we test, how, and why |
 | [test-environment.md](test-environment.md) | The QA test-environment manifest (Python, Node, Playwright, Ollama versions) |
 

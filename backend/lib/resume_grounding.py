@@ -96,16 +96,16 @@ class ResumeGrounding:
                             if len(text) > 30000:
                                 yield _frame('error', {'code': 'grounding', 'message': 'Resume answer exceeded the verification limit.'})
                                 return
-                            # Release complete sentences without numbers only after
-                            # checking them. Any number holds the remaining draft:
-                            # later personal context can turn an earlier metric into
-                            # a personal claim, so it must be checked as a whole.
+                            # Hold measured claims: later personal context can turn
+                            # an earlier metric into a personal claim. Ordinary
+                            # results, HTTP codes and versions are not measurements
+                            # under unsupported(), so they need no whole-draft wait.
                             while not held:
                                 boundary = re.search(r'(?<=[.!?])\s+', pending)
                                 if not boundary:
                                     break
                                 sentence = pending[:boundary.end()]
-                                if re.search(r'\d', sentence) or self.unsupported(released + sentence):
+                                if numeric_claims(sentence) or self.unsupported(released + sentence):
                                     held = True
                                     break
                                 released += sentence

@@ -559,8 +559,10 @@ async def ws_transcribe(ws: WebSocket):
     def _on_draft(audio, epoch):
         """Hidden, provisional candidate speech for panel interruptions."""
         try:
+            if ws_closed or epoch != _draft_state["epoch"] or _decode_pending["count"]:
+                return
             from modules.voice.apple_speech import transcribe_cached
-            result = transcribe_cached(audio)
+            result = transcribe_cached(audio, blocking=False)
             if (not ws_closed and epoch == _draft_state["epoch"]
                     and result and result.get("text", "").strip()):
                 loop.call_soon_threadsafe(msg_queue.put_nowait, {
@@ -985,7 +987,8 @@ async def ws_transcribe(ws: WebSocket):
                     _emit_activity()
                 _now = time.time()
                 if (questions_only and ws_source != "system" and segmenter.is_speaking
-                        and not _draft_state["busy"] and _now - _draft_state["at"] >= 1.5):
+                        and not _decode_pending["count"] and not _draft_state["busy"]
+                        and _now - _draft_state["at"] >= 1.5):
                     _draft = segmenter.peek()
                     if _draft is not None and len(_draft) >= 16000:
                         _draft_state["busy"] = True

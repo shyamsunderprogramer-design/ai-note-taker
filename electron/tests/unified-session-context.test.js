@@ -2,7 +2,7 @@ const {test} = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path')
 const scope = vm.createContext({})
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../../apps/web/js/unified-session.js'), 'utf8'), scope)
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../../electron/renderer/js/unified-session.js'), 'utf8'), scope)
 const {UnifiedSessionContext} = scope
 
 test('Terraform concurrency resolves the observed lock homophone without changing logging questions', () => {

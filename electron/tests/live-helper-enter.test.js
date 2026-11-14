@@ -1,5 +1,5 @@
 const {test}=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('node:vm'), path=require('node:path')
-const source=fs.readFileSync(path.join(__dirname,'../../apps/web/app.js'),'utf8')
+const source=fs.readFileSync(path.join(__dirname,'../../electron/renderer/app.js'),'utf8')
 function setup({text='',focusButton=false,buttonId='unifiedSessionBtn'}={}) {
  const calls=[]
  let handler

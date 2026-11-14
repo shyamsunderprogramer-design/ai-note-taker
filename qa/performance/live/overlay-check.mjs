@@ -14,7 +14,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(pathToFileURL(path.join(root, 'apps/web', file)).href);
+    await page.goto(pathToFileURL(path.join(root, 'electron/renderer', file)).href);
     await page.waitForFunction(() => document.getElementById('statusText')?.textContent === 'Live', { timeout: 15000 });
     if (errors.length) throw new Error(errors.join('\n'));
     await page.screenshot({ path: path.join(output, file + '.png') });

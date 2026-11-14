@@ -21,7 +21,7 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 
-const STYLE_CSS = path.join(__dirname, "..", "..", "apps", "web", "style.css")
+const STYLE_CSS = path.join(__dirname, "..", "..", "electron", "renderer", "style.css")
 const styleSrc = fs.readFileSync(STYLE_CSS, "utf8")
 
 /** Extract the body of the first matching CSS rule. */

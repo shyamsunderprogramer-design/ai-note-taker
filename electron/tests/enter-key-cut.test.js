@@ -4,7 +4,7 @@ const fs = require("fs")
 const path = require("path")
 
 const app = fs.readFileSync(
-  path.join(__dirname, "..", "..", "apps", "web", "app.js"), "utf8"
+  path.join(__dirname, "..", "..", "electron", "renderer", "app.js"), "utf8"
 )
 
 test("Enter toggles recording instead of only cutting a question", () => {

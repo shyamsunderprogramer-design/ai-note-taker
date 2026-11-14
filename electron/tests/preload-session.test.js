@@ -9,7 +9,7 @@ test('desktop API calls renew an expired login before attaching authorization',a
   let session={access_token:'expired',refresh_token:'refresh',expires_at:1};
   const calls=[];
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../preload.js'),'utf8'),{
-    window:{},console,Date,
+    window:{},location:{protocol:'https:'},console,Date,
     require:name=>{
       assert.equal(name,'electron');
       return {contextBridge:{exposeInMainWorld:(name,value)=>{api=value}},

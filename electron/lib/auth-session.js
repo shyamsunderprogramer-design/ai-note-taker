@@ -141,4 +141,4 @@ function registerAuthSessionIPC({ ipcMain, sessionStore, rendererDirectory }) {
   });
 }
 
-module.exports = { backendSigningSecret, createAuthSessionStore, createSessionRefresher, registerAuthSessionIPC, isAppFrame };
+module.exports = { backendSigningSecret, createAuthSessionStore, createSessionRefresher, registerAuthSessionIPC, isAppFrame, readPrivateFile, writePrivateFile };

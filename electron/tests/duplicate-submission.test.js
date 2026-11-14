@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../../apps/web/app.js'),'utf8');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../../electron/renderer/app.js'),'utf8');
 test('duplicate pending text is ignored while a distinct question still replaces it',async()=>{
  let release;const pending=new Promise(resolve=>release=resolve);let starts=0;const messages=[];
  const scope=vm.createContext({activeQuestion:null,window:{speechSynthesis:{cancel(){}}},

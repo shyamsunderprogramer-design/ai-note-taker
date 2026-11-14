@@ -3,7 +3,7 @@
  * Run with:
  *   node electron/tests/opacity-slider.test.js
  *
- * The slider in apps/web/index.html (id="opacitySlider") used to be
+ * The slider in electron/renderer/index.html (id="opacitySlider") used to be
  * hard-capped at max=100. That meant the user could never get a
  * darker glass than the CSS-at-100% values. The slider was extended
  * to max=150 so the user can crank past 100% — 10–100 still maps to
@@ -24,8 +24,8 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 
-const HTML = path.join(__dirname, "..", "..", "apps", "web", "index.html")
-const APP_JS = path.join(__dirname, "..", "..", "apps", "web", "app.js")
+const HTML = path.join(__dirname, "..", "..", "electron", "renderer", "index.html")
+const APP_JS = path.join(__dirname, "..", "..", "electron", "renderer", "app.js")
 
 const htmlSrc = fs.readFileSync(HTML, "utf8")
 const appSrc = fs.readFileSync(APP_JS, "utf8")

@@ -8,7 +8,7 @@ await writeFile(join(dir,'main.cjs'),`const {app,BrowserWindow,ipcMain}=require(
 const app=await electron.launch({args:[join(dir,'main.cjs')]});
 try{
  const page=await app.firstWindow();await page.setContent('<style>body{margin:0}header{height:160px}#conversationPanel[hidden]{display:none}</style><div id="settingsPanel"></div><div id="historyPanel"></div><header>ANT compact window test — listening stays active</header><button id="conversationToggle" aria-expanded="true">Hide conversation</button><div id="conversationPanel"><p>Preserved answer</p></div>');
- await page.addScriptTag({content:await readFile('apps/web/js/conversation-panel.js','utf8')});
+ await page.addScriptTag({content:await readFile('electron/renderer/js/conversation-panel.js','utf8')});
  const initial=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].getSize());
  await page.locator('#conversationToggle').click();await page.waitForFunction(()=>innerHeight<400);
  const compact=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].getSize());assert.ok(compact[1]<initial[1]);

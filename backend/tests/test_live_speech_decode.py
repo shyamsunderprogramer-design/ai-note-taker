@@ -29,6 +29,25 @@ def test_accelerated_live_decode_does_not_wait_for_cpu_warmup(speech,monkeypatch
     monkeypatch.setattr(speech, 'wait_for_model', lambda **kwargs:pytest.fail('GPU speech must not wait for CPU'))
     assert speech.transcribe(np.zeros(16000), streaming=True)['engine']=='whisper-small-mlx'
 
+
+def test_cold_cpu_request_loads_model_without_idle_warmup_wait(speech, monkeypatch):
+    speech.model_ready.clear()
+    monkeypatch.setattr(speech, 'wait_for_model', lambda **kwargs: pytest.fail('Cold request must load immediately'))
+    monkeypatch.setattr(speech, 'select_model', lambda *a, **k: 'small')
+    loads = []
+
+    def load(*args, **kwargs):
+        loads.append(args[0])
+        return SimpleNamespace(transcribe=lambda *a, **k: (
+            iter([SimpleNamespace(text='Please review the budget.')]),
+            SimpleNamespace(language='en'),
+        ))
+
+    monkeypatch.setattr(speech, '_get_WhisperModel', lambda: load)
+    assert speech.transcribe(np.zeros(16000), streaming=True)['text'] == 'Please review the budget.'
+    assert speech.model_ready.is_set()
+    assert loads == ['small']
+
 @pytest.mark.parametrize('prob,ratio,silence',[(-2,1,.01),(-.2,4,.01),(-.5,1,.95)])
 def test_uncertain_or_repetitive_audio_does_not_become_a_question(speech,monkeypatch,prob,ratio,silence):
     segment=SimpleNamespace(text='Ch-ch-chchatlatatexsss unrelated invented words',avg_logprob=prob,no_speech_prob=silence,compression_ratio=ratio)

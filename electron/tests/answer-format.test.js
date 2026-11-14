@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const assert = require('node:assert/strict')
-const source = fs.readFileSync(path.join(__dirname, '../../apps/web/app.js'), 'utf8').replace(/\r\n/g, '\n')
+const source = fs.readFileSync(path.join(__dirname, '../../electron/renderer/app.js'), 'utf8').replace(/\r\n/g, '\n')
 const scope = {
   sanitizeInput: text => text,
   escapeHtml: text => text.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
@@ -32,4 +32,18 @@ test('Markdown tables have aligned headers and cells', () => {
 test('natural answers retain short paragraphs', () => {
   const html = scope.formatMessage('A clear answer.\n\nA practical example.')
   assert.equal(html, '<p>A clear answer.</p>\n<p>A practical example.</p>')
+})
+
+test('short numeric answers, decimals and letter answers remain visible', () => {
+  for (const answer of ['4.', '42.', '3.14', '0.5 seconds', 'a.']) {
+    const html = scope.formatMessage(answer)
+    assert.equal(html, `<p>${answer}</p>`)
+  }
+})
+
+test('ordered lists require content after a separated marker', () => {
+  const html = scope.formatMessage('1. First step\n2. Second step')
+  assert.match(html, /<ol/)
+  assert.match(html, /<li>First step<\/li>/)
+  assert.match(html, /<li>Second step<\/li>/)
 })

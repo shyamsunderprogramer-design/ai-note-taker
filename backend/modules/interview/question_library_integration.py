@@ -10,7 +10,7 @@ from .mock_interview_library import mock_library, InterviewQuestion as OldQuesti
 from .question_database_v2 import (
     question_db, QuestionCategory, Difficulty
 )
-from .company_questions import ALL_COMPANY_QUESTIONS, get_company_questions, get_company_specific_tips
+from .company_questions import ALL_COMPANY_QUESTIONS, get_company_questions as get_curated_company_questions, get_company_specific_tips
 
 
 class UnifiedQuestionLibrary:
@@ -91,7 +91,7 @@ class UnifiedQuestionLibrary:
 
         # Get company-specific questions
         if company:
-            company_qs = get_company_questions(company)
+            company_qs = get_curated_company_questions(company)
             for q in company_qs[:limit]:
                 questions.append(self._enrich_question(q.to_dict()))
 
@@ -308,7 +308,7 @@ class UnifiedQuestionLibrary:
 
     def get_questions_by_company(self, company: str, limit: int = 100) -> List[Dict]:
         """Get all questions for a specific company"""
-        company_qs = get_company_questions(company)
+        company_qs = get_curated_company_questions(company)
         return [self._enrich_question(q.to_dict()) for q in company_qs[:limit]]
 
     def get_company_tips(self, company: str) -> Dict:

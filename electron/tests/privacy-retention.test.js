@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path')
-const source=fs.readFileSync(path.join(__dirname,'../../apps/web/app.js'),'utf8')
+const source=fs.readFileSync(path.join(__dirname,'../../electron/renderer/app.js'),'utf8')
 function setup(privateSession,load=async()=>null){
  const saved=[];const scope=vm.createContext({window:{privateHistorySession:privateSession,api:{conversationLoad:load,conversationSave:async c=>{saved.push(c);return {...c,id:'saved'}}}},
   currentMessages:[{role:'user',text:'Sensitive private question'}],currentConversationId:'old',generateTitle:()=>'',getSelectedMode:()=>'',autoSSBtn:null,alwaysOnActive:false,

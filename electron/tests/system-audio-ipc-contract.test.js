@@ -17,7 +17,7 @@ const read = (p) => fs.readFileSync(path.join(__dirname, "..", p), "utf8")
 const preload = read("preload.js")
 const main = read("main.js")
 const renderer = fs.readFileSync(
-  path.join(__dirname, "..", "..", "apps", "web", "app.js"), "utf8"
+  path.join(__dirname, "..", "..", "electron", "renderer", "app.js"), "utf8"
 )
 
 const RENDERER_CALLS = [

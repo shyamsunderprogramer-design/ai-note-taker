@@ -2,7 +2,30 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../../apps/web/app.js'),'utf8').replace(/\r\n/g,'\n');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../../electron/renderer/app.js'),'utf8').replace(/\r\n/g,'\n');
+
+test('answer routing uses recent inventory without waiting for a stalled refresh', async () => {
+ const scope = vm.createContext({Date, AbortSignal, API_BASE:'http://qa', fetch:()=>new Promise(()=>{})});
+ vm.runInContext(source.slice(source.indexOf('let runtimeCatalogCache ='), source.indexOf('async function recoveryCandidates(')), scope);
+ vm.runInContext('runtimeCatalogCache = {time:Date.now()-31000,models:[{id:"groq-fast"}]}',scope);
+ const pending = vm.runInContext('getRuntimeModelCatalog({allowStale:true})',scope);
+ const outcome = await Promise.race([pending, new Promise(resolve=>setImmediate(()=>resolve('blocked')))]);
+ assert.notEqual(outcome,'blocked','a background refresh must not delay a question');
+ assert.equal(outcome[0].id,'groq-fast');
+});
+
+test('inventory older than the stale limit waits for fresh data and deduplicates requests', async () => {
+ let release, calls=0;
+ const scope = vm.createContext({Date, AbortSignal, API_BASE:'http://qa', fetch:()=>{calls++;return new Promise(resolve=>release=resolve)}});
+ vm.runInContext(source.slice(source.indexOf('let runtimeCatalogCache ='), source.indexOf('async function recoveryCandidates(')), scope);
+ vm.runInContext('runtimeCatalogCache = {time:Date.now()-300001,models:[{id:"removed"}]}',scope);
+ const first=vm.runInContext('getRuntimeModelCatalog({allowStale:true})',scope);
+ const second=vm.runInContext('getRuntimeModelCatalog({allowStale:true})',scope);
+ assert.equal(calls,1);
+ release({ok:true,json:async()=>({models:[{id:'new'}]})});
+ assert.equal((await first)[0].id,'new');
+ assert.equal((await second)[0].id,'new');
+});
 function setup({settings={},keys={},installed=[],disabled=[],catalog=null}={}) {
  const scope=vm.createContext({getRuntimeModelCatalog:async()=>catalog,getBackendProviders:async()=>keys,appSettings:{get:async key=>settings[key]},
  PROVIDER_META:{'ollama-cloud':{models:[{value:'qa:cloud'}]}},isModelDisabled:model=>disabled.includes(model),
@@ -11,6 +34,51 @@ function setup({settings={},keys={},installed=[],disabled=[],catalog=null}={}) {
  vm.runInContext(source.slice(source.indexOf('async function recoveryCandidates('),source.indexOf('async function streamRecoveringAnswer(')),scope);
  return code=>vm.runInContext(code,scope);
 }
+
+for (const state of ['cold', 'expired']) {
+ test(`explicit cloud text starts without waiting for ${state} local inventory`, async () => {
+  const run=setup({keys:{'ollama-cloud':true}});
+  // Exercise the real catalog loader, including its unresolved network request.
+  run(source.slice(source.indexOf('let runtimeCatalogCache ='),source.indexOf('async function recoveryCandidates(')));
+  run('fetch = () => new Promise(() => {})');
+  if (state === 'expired') run('runtimeCatalogCache = {time:Date.now()-300001,models:[{id:"removed"}]}');
+  const candidates=run('recoveryCandidates("groq-qwen3-8-27b",null)');
+  const result=await Promise.race([candidates,new Promise(resolve=>setImmediate(()=>resolve('blocked')))]);
+  assert.notEqual(result,'blocked','a chosen cloud model must not wait for local model metadata');
+  assert.deepEqual(Array.from(result),['groq-qwen3-8-27b','qa:cloud']);
+ });
+}
+
+test('nonblocking catalog refresh remains shared with capability-dependent requests',async()=>{
+ let release,calls=0;
+ const scope=vm.createContext({Date,AbortSignal,API_BASE:'http://qa',fetch:()=>{calls++;return new Promise(resolve=>release=resolve)}});
+ vm.runInContext(source.slice(source.indexOf('let runtimeCatalogCache ='),source.indexOf('async function recoveryCandidates(')),scope);
+ const quick=vm.runInContext('getRuntimeModelCatalog({allowStale:true,waitForRefresh:false})',scope);
+ const outcome=await Promise.race([quick,new Promise(resolve=>setImmediate(()=>resolve('blocked')))]);
+ assert.equal(outcome,null);
+ const full=vm.runInContext('getRuntimeModelCatalog()',scope);
+ assert.equal(calls,1);
+ release({ok:true,json:async()=>({models:[{id:'verified:vision',vision:true}]})});
+ assert.equal((await full)[0].vision,true);
+});
+
+for (const [selected,image] of [['auto',null],['qwen3.5:9b',null],['groq-qwen3-8-27b','image']]) {
+ test(`${selected} ${image || 'text'} retains capability discovery`,async()=>{
+  const run=setup();
+  run(source.slice(source.indexOf('let runtimeCatalogCache ='),source.indexOf('async function recoveryCandidates(')));
+  run('fetch = () => new Promise(() => {})');
+  const request=run(`recoveryCandidates(${JSON.stringify(selected)},${JSON.stringify(image)})`);
+  const result=await Promise.race([request,new Promise(resolve=>setImmediate(()=>resolve('waiting')))]);
+  assert.equal(result,'waiting');
+ });
+}
+
+test('cold explicit-cloud routing still checks live provider opt-outs',async()=>{
+ const run=setup({keys:{'ollama-cloud':true},settings:{provider_groq:{enabled:false}}});
+ run(source.slice(source.indexOf('let runtimeCatalogCache ='),source.indexOf('async function recoveryCandidates(')));
+ run('fetch = () => new Promise(() => {})');
+ assert.deepEqual(Array.from(await run('recoveryCandidates("groq-qwen3-8-27b",null)')),['qa:cloud']);
+});
 test('both cloud suffixes belong to the cloud provider',()=>{
  const run=setup();for(const name of ['qa:cloud','qa:123b-cloud'])assert.equal(run(`getModelProvider('${name}').id`),'ollama-cloud');
 });

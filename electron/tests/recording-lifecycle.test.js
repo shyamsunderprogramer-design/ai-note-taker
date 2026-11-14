@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
-const source=fs.readFileSync(path.join(__dirname,'../../apps/web/app.js'),'utf8');
+const source=fs.readFileSync(path.join(__dirname,'../../electron/renderer/app.js'),'utf8');
 function setup() {
   const recorders=[],streams=[],errors=[],notices=[],submitted=[];
   class Recorder extends EventTarget {

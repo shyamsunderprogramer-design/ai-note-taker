@@ -137,7 +137,7 @@
     ],
     "extraResources": [
       {
-        "from": "../apps/web",
+        "from": "renderer",
         "to": "renderer",
         "filter": [
           "**/*",
@@ -146,7 +146,10 @@
           "!**/dev-dist/**",
           "!**/data/**",
           "!**/.env",
-          "!**/.env.*"
+          "!**/.env.*",
+          "!tests/**",
+          "!package.json",
+          "!README.md"
         ]
       },
       {
@@ -222,7 +225,8 @@
     "audiotee": "^0.0.7",
     "electron-log": "^5.2.4",
     "electron-store": "^8.2.0",
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.9",
+    "jose": "^6.2.14"
   },
   "devDependencies": {
     "electron": "41.10.7",

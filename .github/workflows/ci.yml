@@ -49,8 +49,8 @@ jobs:
         working-directory: backend
         run: python -m pytest core/test_startup.py tests/ --tb=short -v
 
-  web-build:
-    name: Web and desktop tests
+  desktop-checks:
+    name: Desktop tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -66,26 +66,20 @@ jobs:
         run: npm run test:security
       - name: Audit JavaScript dependencies
         run: npm audit --audit-level=low
-      - name: Verify web build assets and performance budget
-        working-directory: apps/web
-        # A successful Vite build alone does not catch missing classic scripts.
-        # Unit tests themselves run in the workspace step below.
-        run: npm --prefix ../.. run benchmark:web
+      - name: Verify bundled desktop renderer assets
+        run: npm run renderer:check
 
-      - name: Verify desktop, web and mobile unit tests
+      - name: Verify desktop, renderer and mobile unit tests
         run: |
           npm --workspace ai-note-taker test
-          npm --workspace ant-web test
+          npm --workspace ant-desktop-renderer test
           npm --workspace ant-mobile test -- --runInBand --watchman=false
-
-      - name: Build product website and browser application
-        run: npm run site:build
 
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [backend-tests, web-build, workflow-validation]
+    needs: [backend-tests, desktop-checks, workflow-validation]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -107,15 +101,11 @@ jobs:
         run: |
           npm ci
           npm --workspace ant-e2e-tests run install:browsers -- --with-deps
-      - name: Verify product website and app routes
+      - name: Verify desktop renderer in Chromium
         run: |
-          npm run site:build
-          node qa/website/smoke.cjs
-      - name: Verify production pages in Chromium
-        run: |
-          npm run web:build
+          npm run renderer:check
           npm run benchmark:browser
-      - name: Run browser tests
+      - name: Run isolated renderer tests
         working-directory: e2e
         env:
           CI: 'true'

@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const vm=require('node:vm');const fs=require('node:fs');const path=require('node:path');
-const source=fs.readFileSync(path.join(__dirname,'../../apps/web/app.js'),'utf8');
+const source=fs.readFileSync(path.join(__dirname,'../../electron/renderer/app.js'),'utf8');
 test('panel follow-up cancels a pending answer and carries its question into the continuation',async()=>{
  const answers=[];let aborted=false,finished
  const busy={userQuestion:'How would you roll back a Kubernetes deployment?',controller:{abort(){aborted=true}},finish:status=>finished=status}

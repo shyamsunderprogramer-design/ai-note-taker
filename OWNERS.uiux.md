@@ -11,21 +11,22 @@
 Everything the user sees and touches. File-level inventory, in priority order:
 
 ### Web SPA (the Vite app)
-- `apps/web/` — all HTML, JS, CSS, assets, manifest, sw.js
-  - `apps/web/index.html` (14 entries)
-  - `apps/web/app.js` (co-owned with `backend` — UI/UX owns, backend approves API contract)
-  - `apps/web/js/core/api.js` (co-owned with `backend` — same)
-  - `apps/web/js/core/{auth-helper,config,state,events,window-controls}.js`
-  - `apps/web/js/components/{CognitiveGraph,DocumentUpload,ExportImport,IntegrationPanel,SettingsPanel,Shell}.js`
-  - `apps/web/css/` (modular refactor; live build target is `apps/web/style.css`)
-  - `apps/web/assets/`
+- `electron/renderer/` — all HTML, JS, CSS, assets, manifest, sw.js
+  - `electron/renderer/index.html` (14 entries)
+  - `electron/renderer/app.js` (co-owned with `backend` — UI/UX owns, backend approves API contract)
+  - `electron/renderer/js/core/api.js` (co-owned with `backend` — same)
+  - `electron/renderer/js/core/{auth-helper,config,state,events,window-controls}.js`
+  - `electron/renderer/js/components/{CognitiveGraph,DocumentUpload,ExportImport,IntegrationPanel,SettingsPanel,Shell}.js`
+  - `electron/renderer/css/` (modular refactor; live build target is `electron/renderer/style.css`)
+  - `electron/renderer/assets/`
 
 ### Landing page
-- `apps/landing/` — the marketing / hero / download page
 
 ### Chrome extension (MV3)
 - `apps/ant-chrome-extension/` — all files; the extension is a UI surface
   - `manifest.json`, `background.js`, `popup.html`, `popup.js`, content scripts
+
+- `chrome-extension/`, `browser-extension/`, `vscode-extension/` — additional extension clients
 
 ### Electron UI side
 - `electron/features/` — overlay-adapter.js, screen-recorder.js
@@ -34,6 +35,9 @@ Everything the user sees and touches. File-level inventory, in priority order:
 
 ### Design source files
 - `assets/design/` — design source files (PNG, SVG, source assets)
+  - `artwork/` — original generated artwork and animation
+  - `source/` — reusable marks, icons, and frame samples
+  - `prototypes/` — isolated UI development experiments
 
 ### Mobile
 - `mobile/src/screens/`
@@ -61,14 +65,14 @@ Everything the user sees and touches. File-level inventory, in priority order:
 
 Typical PR outputs from a UI/UX dev:
 
-- New HTML page in `apps/web/`
-- New JS component in `apps/web/js/components/`
-- New CSS module in `apps/web/css/components/`
+- New HTML page in `electron/renderer/`
+- New JS component in `electron/renderer/js/components/`
+- New CSS module in `electron/renderer/css/components/`
 - New mobile screen in `mobile/src/screens/`
 - New mobile component in `mobile/src/components/`
 - New Chrome extension content script or popup
 - Electron renderer-side feature in `electron/features/`
-- Vite config tweak in `apps/web/vite.config.js` (adding a new entry)
+- Vite config tweak in `electron/renderer/vite.config.js` (adding a new entry)
 - New design asset in `assets/design/`
 - Visual change: screenshot + recording attached to the PR
 - For new HTML pages: a `vercel.json` rewrite entry (added in the same PR; devops reviews)
@@ -100,7 +104,7 @@ It will **not** have access to:
 
 When CODEOWNERS routes a PR to `role-uiux`, this role checks:
 
-1. **Vite build passes** — `cd apps/web && npx vite build` produces `apps/web/dist/`
+1. **Vite build passes** — `cd electron/renderer && npx vite build` produces `electron/renderer/`
 2. **Visual change has a screenshot/recording** — attached in the PR body
 3. **New HTML page got a `vercel.json` rewrite** — and the devops reviewer is tagged
 4. **Mobile build passes** — `cd mobile && npm test` passes

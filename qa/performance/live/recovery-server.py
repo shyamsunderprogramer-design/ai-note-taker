@@ -61,7 +61,7 @@ def get_events(): return events
 def reset(): events.clear(); _COOLDOWNS.clear(); return {'ok':True}
 @app.post('/transcribe')
 def transcribe(): return {'text':'partial question from recorded speech'}
-app.mount('/',StaticFiles(directory=ROOT/'apps/web/dist',html=True))
+app.mount('/',StaticFiles(directory=ROOT/'electron/renderer',html=True))
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app,host='127.0.0.1',port=8042,access_log=False)

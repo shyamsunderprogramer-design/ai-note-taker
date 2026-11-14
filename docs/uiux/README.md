@@ -6,7 +6,7 @@
 > `/apps/`, `/mobile/`, `/electron/features/`, `/assets/design/` map
 > to the `role-uiux` GitHub Team.
 
-This is the docs home for everything `uiux` dev owns. The web SPA,
+This is the docs home for everything `uiux` dev owns. The desktop renderer,
 the mobile app, the Chrome extension, the Electron renderer-side
 features, and the design source files.
 
@@ -26,12 +26,11 @@ features, and the design source files.
 
 The code is in:
 
-- `apps/web/` (Vite SPA)
-- `apps/landing/` (landing page)
+- `electron/renderer/` (Vite SPA)
 - `apps/ant-chrome-extension/` (MV3 Chrome extension)
 - `electron/features/` (Electron renderer-side features)
 - `electron/assets/` (Electron design assets)
-- `assets/design/` (design source files — PNG, SVG)
+- [`assets/design/`](../../assets/design/README.md) (source artwork and isolated UI prototypes)
 - `mobile/src/` (React Native)
 - `mobile/{App.js,index.js,app.json}` (RN entry points)
 
@@ -45,7 +44,7 @@ Add a doc here when:
 
 - You're adding a new web component → add to `components/`
 - You're adding a new design token → update `design-system/`
-- You're adding a new HTML page → update the web app README
+- You're adding a new HTML page → update the desktop renderer README
   (the page itself is auto-routed by Vite, not this folder)
 - You're adding a new mobile screen → update the mobile README
 - You're changing the color palette / typography → update

@@ -27,7 +27,8 @@ def cached_model_path():
     return str(directory) if (directory / 'weights.npz').is_file() else None
 
 
-def transcribe_cached(audio, language='en'):
+def transcribe_cached(audio, language='en', *, blocking=True):
+    """Decode cached speech; optional previews skip a busy GPU instead of queuing."""
     global _failed
     if _failed:
         return None
@@ -37,11 +38,15 @@ def transcribe_cached(audio, language='en'):
             return None
         import mlx_whisper
         # ModelHolder and Metal buffers are shared across both audio sources.
-        with _lock:
+        if not _lock.acquire(blocking=blocking):
+            return None
+        try:
             result = mlx_whisper.transcribe(
                 audio, path_or_hf_repo=directory, language=language,
                 temperature=0.0, condition_on_previous_text=False,
                 without_timestamps=True, verbose=None)
+        finally:
+            _lock.release()
         segments = [segment for segment in result.get('segments', [])
                     if segment.get('avg_logprob', 0) >= -1.0
                     and segment.get('compression_ratio', 0) <= 2.8

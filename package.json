@@ -2,11 +2,12 @@
   "name": "ant-monorepo",
   "version": "2.3.0-rc.2",
   "private": true,
-  "description": "ANT (AI Note Taker) \u2014 multi-platform monorepo. Privacy-first AI notepad with Electron desktop, web SPA, mobile (React Native), Chrome/browser extensions, all backed by a FastAPI Python backend.",
+  "description": "ANT (AI Note Taker) \u2014 Electron desktop application with a local FastAPI backend.",
   "license": "MIT",
   "workspaces": [
     "apps/*",
     "electron",
+    "electron/renderer",
     "mobile",
     "e2e",
     "vendor/*"
@@ -16,11 +17,7 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "benchmark:web": "node qa/performance/web/vite-build-time.mjs",
-    "benchmark:browser": "node qa/performance/web/browser-smoke.mjs",
-    "web:dev": "npm --workspace ant-web run dev",
-    "web:build": "npm --workspace ant-web run build",
-    "web:preview": "npm --workspace ant-web run preview",
+    "benchmark:browser": "node qa/performance/renderer/browser-smoke.mjs",
     "electron:start": "npm --workspace ai-note-taker start",
     "electron:dev": "npm --workspace ai-note-taker run dev",
     "electron:build": "npm --workspace ai-note-taker run build",
@@ -39,11 +36,11 @@
     "extension:package": "npm --workspace ant-chrome-extension run package",
     "extension:lint": "npm --workspace ant-chrome-extension run lint",
     "lint": "npm run mobile:lint && npm run extension:lint",
-    "test": "npm run e2e:test",
-    "build": "npm run web:build && npm run electron:build",
+    "test": "npm --workspace ai-note-taker test && npm run renderer:test",
+    "build": "npm run renderer:check && npm run electron:build",
     "test:security": "node --test qa/security/*.test.cjs",
-    "site:build": "npm run web:build && node scripts/build-site.mjs",
-    "site:preview": "node scripts/preview-site.mjs"
+    "renderer:check": "node scripts/check-desktop-renderer.mjs",
+    "renderer:test": "npm --workspace ant-desktop-renderer test"
   },
   "devDependencies": {
     "eslint": "^8.56.0"

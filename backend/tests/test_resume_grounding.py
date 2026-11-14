@@ -120,6 +120,31 @@ async def test_early_number_is_not_released_before_later_personal_context():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('opening', [
+    'The function should return 6. ',
+    'HTTP 429 means too many requests. ',
+    'Python 3 supports this syntax. ',
+])
+async def test_non_measurement_numbers_do_not_hold_the_entire_answer(opening):
+    import asyncio
+    visible = asyncio.Event()
+    async def create(query, history):
+        yield make_content(opening)
+        # The first verified sentence must arrive while generation is ongoing.
+        await asyncio.wait_for(visible.wait(), .2)
+        yield make_content('Here is the explanation.')
+        yield make_done(1)
+    gate = ResumeGrounding(prompt('Built Python APIs.'))
+    frames = []
+    async for frame in gate.stream(create, prompt(gate.resume), []):
+        frames.append(frame)
+        if 'event: chunk' in frame:
+            visible.set()
+    assert visible.is_set()
+    assert opening in ''.join(frames)
+
+
+@pytest.mark.asyncio
 async def test_repair_continues_after_verified_opening_without_replaying_it():
     calls = []
     async def create(query, history):

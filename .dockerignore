@@ -30,15 +30,13 @@ README.md
 
 # ── Design assets / media ────────────────────────────────────────
 Ant Images/
+assets/design/
 
 # ── Node / frontend ──────────────────────────────────────────────
 node_modules/
 **/node_modules/
-apps/web/node_modules/
-apps/web/dist/
-apps/web/data/
-apps/landing/node_modules/
-apps/landing/dist/
+electron/renderer/node_modules/
+electron/renderer/data/
 electron/node_modules/
 electron/dist/
 chrome-extension/dist/

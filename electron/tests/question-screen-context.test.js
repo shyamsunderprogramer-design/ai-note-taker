@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../../apps/web/app.js'),'utf8');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../../electron/renderer/app.js'),'utf8');
 function setup(enabled=true){
  const calls=[];
  const scope=vm.createContext({pendingOcrScreenshot:null,pendingOcrText:null,window:{api:{autoScreenshotGetStatus:async()=>({enabled}),captureScreenshot:async()=>{calls.push('capture');return 'fresh-screen'}}},runOcr:async()=>({text:'Cedar: budget 4800; spent 6200'}),streamAIResponse:async q=>calls.push(q),streamAIResponseWithImage:async(q,image)=>calls.push({q,image})});
@@ -38,6 +38,21 @@ test('OCR failure retains the captured image for a vision request',async()=>{
  await s.run('getQuestionScreenContext().then(c=>answerWithScreenContext("Describe this picture",c))');
  assert.equal(s.calls[1].image,'fresh-screen');
 });
+test('slow OCR is aborted at its deadline and the original image reaches the vision path',async()=>{
+ const s=setup();let expire;let cleared=false;let aborted=false;
+ Object.assign(s.scope,{AbortController,console:{warn(){}},
+  setTimeout(fn,ms){assert.equal(ms,2500);expire=fn;return 1},clearTimeout(){cleared=true},
+  fetch:async(url,options)=>new Promise((resolve,reject)=>{
+   options.signal.addEventListener('abort',()=>{aborted=true;reject(Error('OCR timeout'))},{once:true});
+  })});
+ s.scope.window.api.getOcrUrl=()=>'/ocr';
+ vm.runInContext(source.slice(source.indexOf('async function runOcr('),source.indexOf('function clearPendingOcr(')),s.scope);
+ const pending=s.run('getQuestionScreenContext().then(c=>answerWithScreenContext("Read the screen",c))');
+ await new Promise(resolve=>setImmediate(resolve));
+ expire();await pending;
+ assert.equal(aborted,true);assert.equal(cleared,true);
+ assert.equal(s.calls[1].image,'fresh-screen');
+});
 
 test('a question ticket does not turn a text-only question into a screenshot request',async()=>{
  const s=setup(false);await s.run('answerWithScreenContext("Question",{text:null,image:null},{id:1})');assert.deepEqual(s.calls,['Question']);
@@ -63,6 +78,31 @@ function submissionScope(captureFails) {
  vm.runInContext(source.slice(source.indexOf('async function submitText('),source.indexOf('// START / STOP LISTENING')),scope);
  return {scope,messages,errors};
 }
+test('standalone typed questions reach the answer without waiting for screen OCR',async()=>{
+ const s=submissionScope(false);
+ s.scope.window.liveSessionContext=vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../renderer/js/unified-session.js'),'utf8')+';new window.UnifiedSessionContext()',s.scope);
+ s.scope.getQuestionScreenContext=()=>{throw Error('Unnecessary screen capture')};
+ let answered=false;
+ s.scope.answerWithScreenContext=async(text,context)=>{answered=true;assert.equal(context.image,null);assert.equal(context.text,null)};
+ await s.scope.submitText('What is 2 + 2? Answer briefly.');
+ assert.equal(answered,true);assert.deepEqual(s.errors,[]);
+});
+test('screen references, explicit capture and attachments retain their context outside and inside live mode',async()=>{
+ for(const live of [false,true]) for(const kind of ['reference','force','attachment','provided']) {
+  const s=submissionScope(false);let captures=0;let received;
+  s.scope.window.unifiedSessionActive=live;
+  s.scope.window.liveSessionContext=vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../renderer/js/unified-session.js'),'utf8')+';new window.UnifiedSessionContext()',s.scope);
+  s.scope.pendingOcrScreenshot=kind==='attachment'?'attached-image':null;
+  s.scope.getQuestionScreenContext=async()=>{captures++;return {text:'Screen context'}};
+  s.scope.answerWithScreenContext=async(text,context)=>{received=context.text};
+  await s.scope.submitText(kind==='reference'?'Explain this code':'What is 2 + 2?',{
+   forceScreen:kind==='force',screenContext:kind==='provided'?{text:'Provided context'}:null
+  });
+  assert.equal(captures,kind==='provided'?0:1,`${live} ${kind}`);
+  assert.equal(received,kind==='provided'?'Provided context':'Screen context');
+  assert.deepEqual(s.errors,[]);
+ }
+});
 for(const audio of [false,true]) for(const captureFails of [false,true]) {
  test(`${audio?'spoken':'typed'} question is saved once when ${captureFails?'capture':'answer'} fails`,async()=>{
   const s=submissionScope(captureFails);

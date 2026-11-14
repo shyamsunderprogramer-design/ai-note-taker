@@ -1,0 +1,90 @@
+/* Operate: subscription settings reuse ANT's compact controls and surface tokens. */
+.subscription-card {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+.subscription-card h2, #subscriptionWelcome h2 { font-size: 18px; line-height: 1.4; margin: 0; }
+.subscription-card p, #subscriptionWelcome p { font-size: 14px; line-height: 1.5; margin: 0; color: var(--text-main); }
+.subscription-card label { font-size: 14px; font-weight: 600; }
+.subscription-card select { width: 100%; min-width: 0; min-height: 40px; }
+.subscription-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.subscription-card button, #subscriptionWelcome button, .subscription-shortcut, .subscription-notice button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-bright);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-main);
+  font: inherit;
+  cursor: pointer;
+}
+.subscription-card button:hover, .subscription-shortcut:hover, .subscription-notice button:hover { background: var(--surface-hover); }
+.subscription-card button:active, .subscription-shortcut:active { opacity: .8; }
+.subscription-card button:disabled, .subscription-card select:disabled { opacity: .65; cursor: default; }
+.subscription-card :focus-visible, #subscriptionWelcome :focus-visible, .subscription-shortcut:focus-visible, .subscription-notice :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.subscription-card a, .subscription-notice a { color: var(--text-main); text-decoration: underline; text-underline-offset: 3px; }
+.subscription-shortcut { font-size: 12px; margin-left: auto; }
+.subscription-notice { flex-basis: 100%; padding: 12px; color: var(--text-main); border: 1px solid var(--line-bright); border-radius: var(--radius-md); font-size: 14px; line-height: 1.5; }
+.subscription-notice span { display: block; }
+.subscription-notice a { margin-right: 12px; }
+#subscriptionWelcome { max-width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line-bright); border-radius: var(--radius-lg); background: var(--panel-bg, #111827); color: var(--text-main); }
+#subscriptionWelcome p { margin: 16px 0; }
+#subscriptionWelcome::backdrop { background: rgba(0, 0, 0, .65); }
+#providersSettings [hidden], #subscriptionNotice[hidden] { display: none; }
+:root { --subscription-surface: #111827; }
+.subscription-card, #subscriptionWelcome { background: var(--subscription-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.settings-panel:has(#providersSettings.active) { width: min(460px, calc(100vw - 24px)); max-width: calc(100vw - 24px); background: var(--subscription-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+/* The settings body owns scrolling. */
+#providersSettings { overflow: visible; flex: none; }
+.subscription-card select { color: var(--text-main); background: var(--subscription-surface); border: 1px solid var(--text-dim); border-radius: var(--radius-sm); padding: 8px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .settings-panel:has(#providersSettings.active) { transition: none; } }
+.settings-tabs .settings-tab { flex: 0 0 auto; min-width: max-content; padding: 8px; }
+#subscriptionComposerUsage { color: var(--text-main); text-decoration: underline; }
+#subscriptionComposerUsage[hidden] { display: none; }
+.subscription-card details { display: grid; gap: 12px; }
+.subscription-card details > * { margin-bottom: 12px; }
+.subscription-card summary { cursor: pointer; min-height: 28px; }
+.subscription-card input[type="text"] { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px; background: var(--subscription-surface); color: var(--text-main); border: 1px solid var(--text-dim); border-radius: var(--radius-sm); }
+.subscription-check { display: flex; gap: 12px; align-items: flex-start; line-height: 1.5; }
+.subscription-check input { flex: 0 0 24px; width: 24px; height: 24px; }
+.subscription-provider-row { display: grid; gap: 12px; padding-block: 16px; border-top: 1px solid var(--line-bright); }
+.subscription-provider-row h3 { font-size: 16px; margin: 0; }
+.provider-connection-group { border: 1px solid var(--line-bright); border-radius: var(--radius-md); overflow: hidden; }
+.provider-account-details > summary { padding: 12px; cursor: pointer; color: var(--text-main); font-size: 14px; line-height: 1.5; }
+.provider-account-details .subscription-card { border: 0; border-top: 1px solid var(--line-bright); border-radius: 0; margin-bottom: 0; }
+#providersSettings .provider-config-btn { width: auto; min-width: 60px; min-height: 36px; padding: 8px; flex-shrink: 0; color: var(--text-main); font-size: 12px; }
+#providersSettings .provider-row { flex-wrap: wrap; gap: 8px; }
+#providersSettings .provider-info { min-width: 100px; }
+#providersSettings .provider-status, #providersSettings .provider-section-desc, #providersSettings .settings-card-subtitle { color: var(--text-main); opacity: 1; white-space: normal; }
+#providersSettings .provider-section-header { flex-wrap: wrap; }
+#providersSettings .provider-req-tag { display: none; }
+.provider-account-details :focus-visible, #providersSettings :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.settings-body:has(> #providerConfigPanel.open) #providersSettings { display: none; }
+.settings-panel:has(#providerConfigPanel.open) { width: min(460px, calc(100vw - 24px)); max-width: calc(100vw - 24px); background: var(--subscription-surface); }
+.provider-storage-note, #configEnvWarning { font-size: 13px; line-height: 1.5; color: var(--text-main); overflow-wrap: anywhere; }
+#configTestResult { overflow-wrap: anywhere; }
+#providerConfigPanel .config-inline-body { flex-wrap: wrap; }
+#configApiKeyInput { min-width: 0; }
+#configStatusBadge { color: var(--text-main); background: var(--subscription-surface); opacity: 1; font-size: 12px; }
+#configSaveBtn { background: #1d4ed8; color: #fff; }
+#configSaveBtn:hover { background: #1e40af; }
+#providersSettings .provider-name, #providersTitle { font-size: 14px; }
+#providersSettings .provider-status, #providersSettings .settings-card-subtitle { font-size: 12px; line-height: 1.5; }
+#providersSettings .settings-card-titles { display: grid; gap: 6px; }
+#providersSettings .provider-toggle { display: flex; flex-direction: column; gap: 4px; height: auto; }
+.provider-toggle-caption { font-size: 12px; line-height: 16px; color: var(--text-main); text-align: center; }
+#providersSettings .provider-toggle .toggle-track { position: relative; inset: auto; width: 36px; height: 20px; flex-shrink: 0; }
+#providersSettings .provider-toggle input:focus-visible + .toggle-track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+#providersSettings .provider-section-desc { display: none; }

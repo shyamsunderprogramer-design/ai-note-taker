@@ -101,7 +101,7 @@ async def client():
     rows=[]; health=[]; history=[]; start=None
     report={'status':'starting','scope':'Synthetic spoken interview: file transcription + HTTP production recovery endpoint + real local Qwen. No live microphone, meeting platform, frontend, or cloud API calls. Injected provider faults. Small Whisper model; clean Samantha TTS; bounded recent history.'}
     report['source_sha256']={str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in [ROOT/'backend/modules/voice/whisper_handler.py',ROOT/'backend/modules/ai/ai_router.py',ROOT/'backend/lib/stream_recovery.py',ROOT/'backend/lib/resume_grounding.py',ROOT/'apps/web/app.js']}
+        for path in [ROOT/'backend/modules/voice/whisper_handler.py',ROOT/'backend/modules/ai/ai_router.py',ROOT/'backend/lib/stream_recovery.py',ROOT/'backend/lib/resume_grounding.py',ROOT/'electron/renderer/app.js']}
     def save():
         report.update(samples=rows,health=health,elapsed_seconds=0 if start is None else round(time.monotonic()-start,2))
         report['metrics']={'questions':len(rows),'completed':sum(r.get('completed',False) for r in rows),'recovery_completed':sum(r.get('completed',False) and r['scenario']!='normal' for r in rows),'recovery_attempts':sum(r['scenario']!='normal' for r in rows),'transcription_seconds':distribution([r.get('transcription_seconds') for r in rows]),'first_content_seconds':distribution([r.get('first_content_seconds') for r in rows]),'first_local_content_seconds':distribution([r.get('first_local_content_seconds') for r in rows]),'answer_seconds':distribution([r.get('answer_seconds') for r in rows]),'end_to_end_seconds':distribution([r.get('end_to_end_seconds') for r in rows]),'mean_word_error_rate':sum(r.get('word_error_rate',0) for r in rows)/max(1,len(rows)),'health_failures':sum('error' in h for h in health),'health_latency_seconds':distribution([h.get('seconds') for h in health]),'rss_mb':distribution([h.get('rss_mb') for h in health])}
@@ -119,7 +119,7 @@ async def client():
             await c.get('/qa/transcribe/0',timeout=120)
             start=time.monotonic(); end=start+DURATION
             report['warmup']=(await c.get('/health')).json()
-            report['prompt_source']='apps/web/app.js buildInterviewPrompt; short synthetic resume/JD'
+            report['prompt_source']='electron/renderer/app.js buildInterviewPrompt; short synthetic resume/JD'
             report.update(status='running',started_at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),planned_duration_seconds=DURATION)
             save(); print('STARTED '+report['started_at'],flush=True)
             async def monitor():

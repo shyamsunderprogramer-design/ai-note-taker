@@ -30,6 +30,8 @@ desktop.ini
 *.crt
 secrets/
 secrets.*.yaml
+# Persisted local authentication secrets are generated at runtime.
+jwt-secret
 
 # ── Python ───────────────────────────────────────────────────────
 __pycache__/
@@ -187,11 +189,7 @@ vectors/
 
 # ── Build artifacts ──────────────────────────────────────────────
 # Frontend dist (Vite/webpack output)
-apps/web/dist/
 apps/landing/dist/
-apps/web/dev-dist/    # Vite preview cache
-apps/web/.vite/      # Vite cache
-apps/web/.vercel/    # Vercel CLI cache
 
 # Backend distributables
 backend/build/
@@ -332,5 +330,9 @@ backend/core/data/
 .claude/proven-config.json
 .claude/.proven-config-version
 .claude-flow/
-# Design reference images (not referenced by any build)
+.swarm/
+# Legacy local design references
 Ant Images/
+/assets/design/local-reference/
+# Preserve the already-versioned source animation after organizing artwork.
+!/assets/design/artwork/Image_Animation_To_Video.mp4

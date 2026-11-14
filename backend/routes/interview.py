@@ -42,7 +42,7 @@ except ImportError as e:
 
 # New Unified Question Library (Premium Database)
 try:
-    from question_library_integration import (
+    from modules.interview.question_library_integration import (
         unified_library,
         get_questions as get_unified_questions,
         get_practice_set as get_unified_practice_set,

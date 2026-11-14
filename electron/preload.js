@@ -3,6 +3,159 @@
 // ==============================
 const { contextBridge, ipcRenderer } = require("electron")
 
+// Native select menus and title tooltips use separate OS popup windows. They do
+// not inherit BrowserWindow content protection. Keep these surfaces in the
+// document on every desktop page, even when protection is toggled after load.
+// Electron 41 supports base-select: native semantics/keyboard handling remain,
+// but the picker is rendered in this document's protected top layer.
+function installProtectedControls() {
+  if (!['file:', 'data:'].includes(location.protocol)) return
+
+  const titles = new WeakMap()
+  let tooltip, owner, timer
+  const tooltipId = 'ant-protected-tooltip'
+
+  function hideTooltip() {
+    clearTimeout(timer)
+    if (tooltip?.matches(':popover-open')) tooltip.hidePopover()
+    if (owner) {
+      const ids = (owner.getAttribute('aria-describedby') || '').split(/\s+/).filter(id => id && id !== tooltipId)
+      if (ids.length) owner.setAttribute('aria-describedby', ids.join(' '))
+      else owner.removeAttribute('aria-describedby')
+    }
+    owner = null
+  }
+
+  function showTooltip(element, delay = 0) {
+    if (!tooltip || !titles.get(element)?.text) return
+    hideTooltip()
+    owner = element
+    timer = setTimeout(() => {
+      if (!element.isConnected || owner !== element) return hideTooltip()
+      tooltip.textContent = titles.get(element).text
+      const ids = new Set((element.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean))
+      ids.add(tooltipId)
+      element.setAttribute('aria-describedby', [...ids].join(' '))
+      tooltip.showPopover()
+      const rect = element.getBoundingClientRect()
+      const box = tooltip.getBoundingClientRect()
+      tooltip.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - box.width - 8))}px`
+      tooltip.style.top = `${Math.max(8, rect.bottom + box.height + 16 > innerHeight ? rect.top - box.height - 8 : rect.bottom + 8)}px`
+    }, delay)
+  }
+
+  function moveTitle(element) {
+    if (!element.hasAttribute('title')) return
+    const text = element.getAttribute('title')
+    const previous = titles.get(element)
+    // Preserve accessible names for icon-only buttons which relied on title.
+    const needsName = element.matches('button, a, input, select, [role="button"]') &&
+      !element.hasAttribute('aria-labelledby') && !element.labels?.length && !element.textContent.trim()
+    const managesName = previous?.managesName || (needsName && !element.hasAttribute('aria-label'))
+    const managesDescription = previous?.managesDescription || !element.hasAttribute('aria-description')
+    if (managesName) {
+      if (text) element.setAttribute('aria-label', text)
+      else element.removeAttribute('aria-label')
+    }
+    if (managesDescription) {
+      if (text) element.setAttribute('aria-description', text)
+      else element.removeAttribute('aria-description')
+    }
+    titles.set(element, { text, managesName, managesDescription })
+    element.removeAttribute('title')
+    if (owner === element) {
+      if (text) showTooltip(element)
+      else hideTooltip()
+    }
+  }
+
+  function scan(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE && node !== document) return
+    if (node.nodeType === Node.ELEMENT_NODE) moveTitle(node)
+    node.querySelectorAll('[title]').forEach(moveTitle)
+  }
+
+  // Observe from preload, before page scripts add options or update help text.
+  new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'attributes') moveTitle(record.target)
+      else record.addedNodes.forEach(scan)
+    }
+    if (owner && !owner.isConnected) hideTooltip()
+  }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] })
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const style = document.createElement('style')
+    style.textContent = `
+      select:not([multiple]), select:not([multiple])::picker(select) {
+        appearance: base-select !important;
+      }
+      select:not([multiple]) { background-image: none !important; }
+      select:not([multiple])::picker-icon { margin-inline-start: 8px; }
+      select:not([multiple])::picker(select) {
+        background: #14182a; color: var(--text-main, #f1f5f9);
+        border: 1px solid var(--line-bright, #475569); border-radius: 10px;
+        padding: 6px; box-shadow: 0 8px 24px #0006; box-sizing: border-box;
+        max-block-size: min(360px, calc(100dvh - 24px)); overflow: auto;
+        min-inline-size: min(220px, calc(100dvw - 24px));
+        max-inline-size: calc(100dvw - 24px); font: inherit;
+      }
+      select:not([multiple]) option {
+        min-block-size: 30px; padding: 6px 10px; border-radius: 6px;
+        white-space: normal; overflow-wrap: anywhere;
+      }
+      select:not([multiple]) option:checked { background: #1e40af; color: #fff; }
+      select:not([multiple]) option:disabled { color: #94a3b8; }
+      select:not([multiple]) option:not(:disabled):hover { background: #334155; }
+      select:not([multiple]) option:focus-visible { outline: 2px solid var(--focus-ring, #93c5fd); outline-offset: -2px; }
+      #ant-protected-tooltip {
+        position: fixed; inset: auto; margin: 0; padding: 8px 10px;
+        max-width: min(320px, calc(100vw - 32px)); box-sizing: border-box;
+        background: #14182a; color: #f1f5f9; border: 1px solid #475569;
+        border-radius: 6px; box-shadow: 0 4px 12px #0004;
+        font: 12px/1.5 system-ui, sans-serif; overflow-wrap: anywhere;
+      }
+    `
+    document.head.append(style)
+    tooltip = document.createElement('div')
+    tooltip.id = tooltipId
+    tooltip.setAttribute('role', 'tooltip')
+    tooltip.setAttribute('popover', 'manual')
+    document.body.append(tooltip)
+    scan(document)
+  }, { once: true })
+
+  function titleOwner(target) {
+    for (let element = target; element?.nodeType === Node.ELEMENT_NODE; element = element.parentElement) {
+      moveTitle(element)
+      // An explicit empty title suppresses a parent's tooltip.
+      if (titles.has(element)) return titles.get(element).text ? element : null
+    }
+    return null
+  }
+  document.addEventListener('pointerover', event => {
+    if (tooltip?.contains(event.target)) return
+    const element = titleOwner(event.target)
+    if (element && element !== owner) showTooltip(element, 350)
+  }, true)
+  document.addEventListener('pointerout', event => {
+    if (owner?.contains(event.relatedTarget) || tooltip?.contains(event.relatedTarget)) return
+    hideTooltip()
+  }, true)
+  document.addEventListener('focusin', event => {
+    const element = titleOwner(event.target)
+    if (element) showTooltip(element)
+  }, true)
+  document.addEventListener('focusout', hideTooltip, true)
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') hideTooltip() }, true)
+  document.addEventListener('pointerdown', hideTooltip, true)
+  document.addEventListener('scroll', hideTooltip, true)
+  window.addEventListener('resize', hideTooltip)
+  window.addEventListener('blur', hideTooltip)
+}
+
+installProtectedControls()
+
 // ==============================
 // API CONFIG
 // ==============================
@@ -37,6 +190,30 @@ contextBridge.exposeInMainWorld("api", {
   setAuthSession: value => authSession('set', value),
   refreshAuthSession,
   clearAuthSession: () => authSession('clear'),
+
+  // Subscription credentials stay in the main process; only public status and text cross IPC.
+  subscriptions: {
+    status: () => ipcRenderer.invoke('subscriptions:status'),
+    refresh: () => ipcRenderer.invoke('subscriptions:refresh'),
+    connect: id => ipcRenderer.invoke('subscriptions:connect', id),
+    connectOllama: () => ipcRenderer.invoke('subscriptions:connectOllama'),
+    disconnectOllama: () => ipcRenderer.invoke('subscriptions:disconnectOllama'),
+    cancelOllama: () => ipcRenderer.invoke('subscriptions:cancelOllama'),
+    addOllamaModel: name => ipcRenderer.invoke('subscriptions:addOllamaModel', name),
+    ollamaUsage: () => ipcRenderer.invoke('subscriptions:ollamaUsage'),
+    ollamaDownload: () => ipcRenderer.invoke('subscriptions:ollamaDownload'),
+    cancelLogin: () => ipcRenderer.invoke('subscriptions:cancelLogin'),
+    disconnect: () => ipcRenderer.invoke('subscriptions:disconnect'),
+    settings: value => ipcRenderer.invoke('subscriptions:settings', value),
+    usage: () => ipcRenderer.invoke('subscriptions:usage'),
+    start: (id, input) => ipcRenderer.invoke('subscriptions:start', id, input),
+    cancel: id => ipcRenderer.invoke('subscriptions:cancel', id),
+    onEvent: callback => {
+      const listener = (_event, id, data) => callback(id, data)
+      ipcRenderer.on('subscriptions:event', listener)
+      return () => ipcRenderer.removeListener('subscriptions:event', listener)
+    },
+  },
 
   // Persistent store
   storeGet: (key) => ipcRenderer.invoke("store:get", key),
@@ -324,7 +501,7 @@ contextBridge.exposeInMainWorld("api", {
     return response.json()
   },
 
-  // Secure API Key Storage (P1 Privacy) - encrypted, never stored in .env
+  // Encrypted local keys, with an explicitly selected local .env copy.
   saveApiKey: (provider, apiKey, syncToEnv) => ipcRenderer.invoke("apiKey:save", { provider, apiKey, syncToEnv }),
   getApiKey: (provider) => ipcRenderer.invoke("apiKey:get", provider),
   hasApiKey: (provider) => ipcRenderer.invoke("apiKey:has", provider),

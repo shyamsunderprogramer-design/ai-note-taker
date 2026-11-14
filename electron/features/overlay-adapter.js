@@ -61,6 +61,7 @@ class OverlayAdapter {
     }
 
     this.overlayWindow = new BrowserWindow({
+      show: false,
       width: bounds.width,
       height: bounds.height,
       x: bounds.x,
@@ -85,6 +86,8 @@ class OverlayAdapter {
       trafficLightPosition: PLATFORM === "darwin" ? { x: -100, y: -100 } : undefined
     })
 
+    this.overlayWindow.once("ready-to-show", () => this.overlayWindow?.show())
+
     // Set always on top level
     if (PLATFORM === "win32") {
       this.overlayWindow.setAlwaysOnTop(true, "monitor", 2147483647)
@@ -98,13 +101,13 @@ class OverlayAdapter {
     const isProd = require("electron").app.isPackaged
     const overlayPath = isProd
       ? path.join(process.resourcesPath, "renderer", "overlay.html")
-      : path.join(__dirname, "..", "..", "apps", "web", "overlay.html")
+      : path.join(__dirname, "..", "..", "electron", "renderer", "overlay.html")
 
     this.overlayWindow.loadFile(overlayPath).catch(() => {
       // Fallback to index with overlay mode
       const indexPath = isProd
         ? path.join(process.resourcesPath, "renderer", "index.html")
-        : path.join(__dirname, "..", "..", "apps", "web", "index.html")
+        : path.join(__dirname, "..", "..", "electron", "renderer", "index.html")
       this.overlayWindow.loadFile(indexPath, { hash: "overlay" })
     })
 

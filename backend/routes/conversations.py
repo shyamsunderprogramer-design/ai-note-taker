@@ -332,6 +332,29 @@ async def list_conversations(
     return [conversation.to_dict() for conversation in conversations]
 
 
+@router.get("/conversations/search")
+async def search_conversations(
+    q: str = Query("", description="Search query terms, phrases, #tags, or role: filters"),
+    limit: int = Query(50, ge=1, le=200),
+    top_hits_threshold: float = Query(65.0, ge=0.0, le=200.0),
+    user: User = Depends(require_authentication),
+):
+    """Full-text, token-aware sectioned search across note titles and message transcripts.
+
+    Modeled after Apple Notes search architecture:
+    - Tokenized query parsing (phrases, #tags, role:user/ai, dates)
+    - Multi-tier ranking queries (exact title > prefix > phrase > token density)
+    - Regex match range detection & context snippet generation
+    - Categorized sections (Top Hits vs Regular Notes)
+    """
+    from lib.note_search import NoteSearchEngine
+    all_user_convs = await ConversationRepository.get_by_user(str(user.id), limit=500)
+    results = NoteSearchEngine.search_conversations(
+        all_user_convs, query=q, limit=limit, top_hits_threshold=top_hits_threshold
+    )
+    return results.to_dict()
+
+
 @router.post("/conversations", status_code=201)
 async def create_conversation(body: ConversationInput, user: User = Depends(require_authentication)):
     conversation = await ConversationRepository.create(str(user.id), title=body.title, messages=body.messages)

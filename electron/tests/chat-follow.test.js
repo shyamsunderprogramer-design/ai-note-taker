@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require('node:path').join(__dirname, '../../apps/web/app.js'), 'utf8');
+const source = fs.readFileSync(require('node:path').join(__dirname, '../../electron/renderer/app.js'), 'utf8');
 function setup() {
   const events = {}, frames = new Map(); let frameId = 0;
   const chat = {scrollTop: 200, scrollHeight: 400, clientHeight: 200,
@@ -34,4 +34,27 @@ test('background frame delay does not produce a large jump', () => {
   const s=setup();s.chat.scrollHeight=1000;s.run('scrollChat()');s.tick(0);
   const before=s.chat.scrollTop;s.tick(10000);
   assert.ok(s.chat.scrollTop-before <= 1.51);
+});
+
+function firstAnswer(follow = true) {
+  const reveals = [];
+  const bubble = {_awaitingFirstText:true, scrollIntoView: options => reveals.push(options)};
+  const scope = vm.createContext({followChatOutput:follow, clearTimeout, renderBubbleText(){}});
+  vm.runInContext(source.slice(source.indexOf('function setBubbleText('), source.indexOf('function renderBubbleText(')), scope);
+  return {bubble, reveals, render: text => scope.setBubbleText(bubble, text, true)};
+}
+test('first answer text is brought into view immediately, then ordinary follow resumes', () => {
+  const s = firstAnswer();
+  s.render(''); assert.equal(s.reveals.length, 0);
+  s.render('First words');
+  assert.equal(s.reveals.length, 1);
+  assert.equal(s.reveals[0].behavior, 'instant');
+  assert.equal(s.reveals[0].block, 'nearest');
+  s.render('First words with more text'); assert.equal(s.reveals.length, 1);
+});
+test('first answer does not override a reader who scrolled up while waiting', () => {
+  const s = firstAnswer(false);
+  s.render('First words');
+  assert.equal(s.reveals.length, 0);
+  assert.equal(s.bubble._awaitingFirstText, undefined);
 });

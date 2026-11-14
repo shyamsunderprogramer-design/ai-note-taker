@@ -1,6 +1,6 @@
 const {test}=require('node:test'), assert=require('node:assert/strict')
 const fs=require('node:fs'), vm=require('node:vm'), path=require('node:path')
-const read=name=>fs.readFileSync(path.join(__dirname,'../../apps/web/js',name),'utf8')
+const read=name=>fs.readFileSync(path.join(__dirname,'../../electron/renderer/js',name),'utf8')
 function setup({microphone=true,capture=null,ocr=null}={}) {
  const elements=new Map(), calls=[]
  let screenEnabled=false

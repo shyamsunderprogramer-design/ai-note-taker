@@ -6,9 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- Add desktop ChatGPT subscription sign-in, account-specific model selection, encrypted OAuth storage, and opt-in local fallback with visible notifications after usage limits.
+- Add Ollama Cloud account connection through the local Ollama app, cloud model selection/registration, and opt-in ChatGPT ↔ Ollama Cloud fallback before the selected local model. Show supported connection options for Claude, Gemini, Grok and Groq without claiming consumer subscription access.
+- Restore desktop Settings scrolling by excluding the panel and its scroll body from Electron's draggable window region.
+- Merge subscription connections into Providers beside API-key setup. Store optional API-key `.env` copies in private app data rather than the project or installed app, with atomic owner-only writes and local-backend loading. Fix delayed provider status checks clearing newly typed keys.
+
+- Remove an unnecessary five-second wait before cold CPU transcription and skip live speech drafts when the Apple GPU decoder is busy.
+- Organize loose design assets, UI prototypes, deployment notes, and QA reports by role; add a role navigation guide and complete file ownership routing.
+
 - Update certifi to 2026.10.19 and Pillow to 13.0.0 to resolve dependency-audit findings; cover real screenshot decoding in the OCR fallback.
-- Use the original ANT artwork and ant marks on the product website, including responsive hero/closing images and the social sharing preview.
-- Add the ANT product website with interactive workflow examples, features, privacy choices, architecture, release downloads and FAQ. Serve it at the Vercel homepage while preserving the browser application at `/app`.
+- Make the desktop application the primary product: move the bundled interface to `electron/renderer`, remove the standalone website/PWA and hosting files, and update packaging, CI and renderer checks.
+- Apply capture protection across registered desktop windows and keep dropdowns/tooltips inside protected windows. Add bounded macOS region, ScreenCaptureKit screenshot and recording checks; universal capture invisibility remains unsupported.
+- Fix Enter submission and numeric-answer rendering. Skip unnecessary capture/OCR for standalone typed questions, bound the renderer OCR wait, and reduce streamed-answer redraw overhead.
+- Persist the desktop backend signing secret, repair the unified question-library import, and clarify unavailable local-model startup messages.
+- Add the end-to-end project build guide and update setup, privacy, packaging and troubleshooting documentation with dated validation evidence.
 
 ## [2.3.0-rc.2] - 2026-10-18
 

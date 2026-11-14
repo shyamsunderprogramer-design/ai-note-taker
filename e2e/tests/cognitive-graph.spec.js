@@ -38,7 +38,7 @@ test.describe('Cognitive Graph page', () => {
   });
 
   test('SPA deep-link via /cognitive-graph resolves', async ({ page }) => {
-    // The vercel.json rewrite maps /cognitive-graph → /cognitive-graph.html
+    // The test harness maps /cognitive-graph to the bundled cognitive-graph.html
     const response = await page.goto('/cognitive-graph');
     expect(response).toBeTruthy();
     expect(response.status()).toBe(200);

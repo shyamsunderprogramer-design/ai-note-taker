@@ -7,6 +7,8 @@ from pathlib import Path
 # ==============================
 # Loads variables from .env file into environment
 if os.getenv("TESTING", "").lower() != "true":
+    from lib.provider_env import load_provider_env
+    load_provider_env(os.getenv("ANT_PROVIDER_ENV_FILE"))
     _backend_env = Path(__file__).resolve().parent.parent / ".env"
     if _backend_env.exists():
         load_dotenv(_backend_env)

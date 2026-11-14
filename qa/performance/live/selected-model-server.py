@@ -41,7 +41,7 @@ def stream(q: str, provider: str, mode: str = 'instant', style: str = 'concise')
         raise HTTPException(400, 'This QA server only permits Qwen local or Groq GPT-OSS 120B')
     return stream_ai(q=q, provider=provider, mode=mode, style=style, temperature=0)
 
-app.mount('/', StaticFiles(directory=ROOT / 'apps/web/dist', html=True), name='ui')
+app.mount('/', StaticFiles(directory=ROOT / 'electron/renderer', html=True), name='ui')
 
 if __name__ == '__main__':
     import uvicorn

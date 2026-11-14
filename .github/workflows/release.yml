@@ -81,10 +81,10 @@ jobs:
         run: npm ci --no-fund
       - name: Audit JavaScript dependencies
         run: npm audit --audit-level=low
-      - name: Check desktop runtime resolution and web build
+      - name: Check desktop runtime and bundled renderer
         run: |
           node --test electron/tests/python-runtime.test.js
-          npm run web:build
+          npm run renderer:check
       - name: Build standalone Python runtime
         run: python scripts/build_desktop_runtime.py
       - name: Audit bundled Python dependencies

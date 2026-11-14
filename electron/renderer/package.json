@@ -1,0 +1,13 @@
+{
+  "name": "ant-desktop-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bundled Electron desktop interface. No standalone web application.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "highlight.js": "^11.10.0"
+  }
+}

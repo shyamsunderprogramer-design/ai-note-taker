@@ -27,7 +27,7 @@ reviewer what to confirm.
 -->
 
 - [ ] **Backend:** `cd backend && pytest tests/ -q` passes; new endpoint updates `docs/backend/api/API_REFERENCE.md`
-- [ ] **UI/UX:** `cd apps/web && npx vite build` passes; visual changes have a screenshot or recording; new HTML page added a `vercel.json` rewrite
+- [ ] **UI/UX:** `npm run renderer:check` passes; visual changes have a screenshot or recording; all local page assets resolve
 - [ ] **Devops:** build artifacts verified (Docker / Render / K8s); CHANGELOG entry added; CSP / secret / base-image change flagged
 - [ ] **QA:** new / changed behavior has a test; e2e covers the new user flow; DOCUMENTED BUG tests (if touched) are documented in the test docstring
 - [ ] **DevSecOps:** no new secrets, supply-chain reviewed, CSP / permissions unchanged (or explicitly justified in PR body)
@@ -63,7 +63,7 @@ Include any specific test commands, fixtures, or environments.
 -->
 
 - [ ] Backend pytest passes: `cd backend && pytest tests/ -q`
-- [ ] Web build passes: `cd apps/web && npm run build`
+- [ ] Desktop renderer assets pass: `npm run renderer:check`
 - [ ] Mobile Jest passes (if mobile changed): `cd mobile && npm test`
 - [ ] Electron node:test passes (if electron changed): `cd electron && npm test`
 - [ ] E2E smoke passes (if user-facing): `cd e2e && npx playwright test --grep @smoke`

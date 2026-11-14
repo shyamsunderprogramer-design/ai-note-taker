@@ -21,12 +21,3 @@ jobs:
             exit 1
           fi
           echo "Backend health check passed (HTTP $status)"
-
-      - name: Check Frontend Health
-        run: |
-          status=$(curl --max-time 30 --retry 2 -s -o /dev/null -w "%{http_code}" https://ai-note-taker-five.vercel.app)
-          if [ "$status" != "200" ]; then
-            echo "::error::Frontend health check failed with status $status"
-            exit 1
-          fi
-          echo "Frontend health check passed (HTTP $status)"

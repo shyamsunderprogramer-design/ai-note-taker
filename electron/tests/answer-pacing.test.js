@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync(require.resolve('../../apps/web/app.js'),'utf8');
+const source=fs.readFileSync(require.resolve('../../electron/renderer/app.js'),'utf8');
 test('received answer is displayed immediately without word timers',()=>{
  const rendered=[];const scope={renderBubbleText:(...args)=>rendered.push(args),clearTimeout:()=>{}};
  vm.runInNewContext(source.slice(source.indexOf('function setBubbleText('),source.indexOf('function renderBubbleText(')),scope);

@@ -27,9 +27,8 @@ docs/{role}/README.md for the role's docs.
 <!--
 File path or feature name. Examples:
   - `backend/routes/agents.py` (backend)
-  - `apps/web/app.js` (uiux)
+  - `electron/renderer/app.js` (uiux)
   - `electron/main.js` window-bounds (devops, co-owned with backend)
-  - `vercel.json` CSP (devops, co-owned with devsecops)
 -->
 
 ## Describe the bug

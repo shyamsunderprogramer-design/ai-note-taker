@@ -1,105 +1,56 @@
-# Electron Build
+# Electron build entry point
 
-This folder builds the ANT (AI Note Taker) desktop app for Windows, macOS, and Linux.
+Use the maintained [end-to-end project build guide](../docs/PROJECT-BUILD-GUIDE.md) for setup, architecture, configuration, testing, packaging, release steps and troubleshooting. Its [packaging chapter](../docs/PROJECT-BUILD-GUIDE.md#10-how-to-build-desktop-packages) replaces the previous instructions in this file.
 
-## Quick start
+The executable authorities are [package.json](package.json), the [standalone Python builder](../scripts/build_desktop_runtime.py), and the [release workflow](../.github/workflows/release.yml).
 
-```bash
-npm install
-npm run icons            # one-time: generate platform icons from icon.png
-npm run build            # build for the current platform
-```
+## Prepare a build
 
-For all platforms from a single macOS host:
-```bash
-npm run build:mac
-npm run build:win        # requires Wine; easier from a Windows host
-npm run build:linux
-```
-
-## Prerequisites
-
-| Platform | Tooling |
-|----------|---------|
-| macOS    | Xcode Command Line Tools (`xcode-select --install`) — provides `iconutil` |
-| Windows  | None beyond Node — `png-to-ico` runs natively |
-| Linux    | `dpkg` for `.deb`; `fakeroot` for AppImage |
-
-## Icon pipeline
-
-The build expects:
-- `assets/icon.ico`  — Windows
-- `assets/icon.icns` — macOS
-- `assets/icons/*`   — Linux (multi-size PNG directory)
-
-These are **not** checked into git (regeneratable from `assets/icons/icon.png`).
-Run `npm run icons` to generate them on demand. The script requires:
+From the repository root, with Python 3.12 available as `python`:
 
 ```bash
-npm install --save-dev sharp png-to-ico
+npm ci
+npm run renderer:check
+python scripts/build_desktop_runtime.py
 ```
 
-It produces:
-- `assets/icon.ico`  — Windows multi-resolution (16, 24, 32, 48, 64, 128, 256 px)
-- `assets/icon.icns` — macOS .iconset rendered to .icns via `iconutil`
-- `assets/icons/*`   — Linux PNGs (already in git, no generation needed)
+The runtime builder selects the current host architecture, verifies the pinned download, installs backend dependencies into `AINT_Python`, and refuses to overwrite an existing destination. `AINT_Venv` is for development; it is not the packaged Python runtime. Use a native build host for each release target.
 
-## Code signing
+## Build one target
 
-| Platform | State | To enable |
-|----------|-------|-----------|
-| Windows  | Unsigned | Set `CSC_LINK` + `CSC_KEY_PASSWORD` env vars (`.pfx` cert) |
-| macOS    | Unsigned (notarized: false) | Set `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` |
-| Linux    | N/A — Linux distros don't sign |
+Enter `electron/`, then run the command matching the host:
 
-When `CSC_LINK` is set, electron-builder automatically picks it up.
+| Host | Command |
+| --- | --- |
+| Apple Silicon Mac | `npx electron-builder --mac --arm64 --publish never` |
+| Intel Mac | `npx electron-builder --mac --x64 --publish never` |
+| Windows x64 | `npx electron-builder --win --x64 --publish never` |
+| Linux x64 | `npx electron-builder --linux --x64 --publish never` |
 
-## Hardened runtime (macOS)
+Outputs are under `electron/dist`: Mac ZIP archives, Windows NSIS/portable EXEs, Linux AppImage/DEB files. The generic desktop `build` script uses `-mwl`; it does not mean “current platform only.”
 
-The macOS build uses Hardened Runtime (`mac.hardenedRuntime: true`).
-Entitlements are in `build/entitlements.mac.plist` and include:
+## Package contents and native resources
 
-- JIT + unsigned memory (for V8/Chromium)
-- Microphone access (for voice transcription)
-- Network client (for cloud AI calls)
-- Files user-selected (for export/import)
-- Optional: automation, screen-capture (off by default)
+- Bundled interface: `renderer` → `resources/renderer`.
+- Filtered backend source: `../backend` → `resources/backend`.
+- Standalone Python: `../AINT_Python` → `resources/python`.
+- Mac helpers: `audiotee` and `ant-screen-capture`.
+- Main/preload/stealth code, libraries, features, assets and runtime dependencies are included according to the builder configuration.
 
-If you change entitlements, re-sign with:
+Live data, databases and environment files are excluded by the configured resource filters. Review those filters when adding a resource. Tracked icons already exist; regeneration is optional. The icon generator needs additional `sharp`/`png-to-ico` tooling, which is not part of the declared desktop development dependencies.
+
+Mac source builds need Xcode Command Line Tools. The `beforePack` hook compiles the screen-capture helper; installed users do not compile that helper. Native OCR uses a different lazy compilation/fallback path.
+
+## Signing state
+
+Current Mac settings are **ad-hoc signing**, `hardenedRuntime: false` and `notarize: false`. Entitlements live in `assets/entitlements.mac.plist`. The `afterPack` hook also ad-hoc signs nested Mach-O runtime/helper binaries. A Developer ID/notarization pipeline requires coordinated changes to the hook and builder configuration; setting signing environment variables alone does not establish it.
+
+## Verify
+
+From the repository root after building:
+
 ```bash
-codesign --sign "Developer ID Application: Your Name" \
-  --entitlements build/entitlements.mac.plist \
-  --deep --force dist/mac/ANT\ \(AI\ Note\ Taker\).app
+python scripts/verify_desktop_package.py
 ```
 
-## What gets packaged
-
-The `extraResources` config copies these into the app bundle:
-
-| From | To | Why |
-|------|----|-----|
-| `../apps/web`     | `apps/web`     | Renderer files (the floating overlay UI) |
-| `../backend`      | `backend`      | FastAPI server (Python source only — no venv) |
-
-**Explicitly excluded from the build:**
-- `node_modules` (the renderer builds into the asar)
-- `dist/` (Vite output is for web-only deployment)
-- All `*.db`, `users.json`, `audit.jsonl` (live user data)
-- `__pycache__/`, `.pyc`, `venv/`, `AINT_Venv/`
-- `tests/`, `coverage.xml`
-
-**The user installs their own Python environment** — the bundle includes
-`backend/requirements.txt` and `start_server.py`; the app prompts the user
-to install dependencies on first run, or you can ship a pre-baked venv by
-uncommenting the AINT_Venv entry in `package.json#build.extraResources`
-(but this adds ~4 GB to the installer).
-
-## Output
-
-`dist/` is git-ignored. Format:
-- `dist/ANT (AI Note Taker)-1.0.0-win-x64.exe`       (NSIS installer)
-- `dist/ANT (AI Note Taker)-1.0.0-win-x64.exe`        (portable)
-- `dist/ANT (AI Note Taker)-1.0.0-mac-x64.dmg`       (Intel)
-- `dist/ANT (AI Note Taker)-1.0.0-mac-arm64.dmg`     (Apple Silicon)
-- `dist/ANT (AI Note Taker)-1.0.0-linux-x64.AppImage`
-- `dist/ant-ainotetaker_1.0.0_amd64.deb`
+If multiple unpacked builds exist, pass `--resources` with the exact new package Resources directory. The verifier checks packaged runtime imports, disposable backend authentication/storage, and the Mac helper where applicable. It does not replace GUI, permissions, audio, AI-provider or upgrade testing. See the full guide's [acceptance steps](../docs/PROJECT-BUILD-GUIDE.md#9-how-to-test-the-application).

@@ -122,10 +122,27 @@ for (const failure of conversationStorage.errors) {
 }
 
 const store = new Store()
+let savedProtectionIntent = store.get("stealthState", false)
+stealth.restore(savedProtectionIntent)
+stealth.onStateChanged(state => {
+  if (savedProtectionIntent !== state.enabled) {
+    savedProtectionIntent = state.enabled
+    store.set("stealthState", state.enabled)
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+      window.webContents.send("stealth:state-changed", state)
+    }
+  }
+})
 const { backendSigningSecret, createAuthSessionStore, registerAuthSessionIPC } = require("./lib/auth-session")
 const authSessionStore = createAuthSessionStore({directory: path.join(getAppDataPath(), "auth"), safeStorage})
 registerAuthSessionIPC({ipcMain, sessionStore: authSessionStore,
-  rendererDirectory: app.isPackaged ? path.join(process.resourcesPath, "renderer") : path.resolve(__dirname, "../apps/web")})
+  rendererDirectory: app.isPackaged ? path.join(process.resourcesPath, "renderer") : path.resolve(__dirname, "../electron/renderer")})
+
+const { registerSubscriptionIPC } = require("./lib/subscriptions")
+registerSubscriptionIPC({ipcMain, app, shell, safeStorage, directory: path.join(getAppDataPath(), "auth"),
+  rendererDirectory: app.isPackaged ? path.join(process.resourcesPath, "renderer") : path.resolve(__dirname, "../electron/renderer")})
 
 // Secure API key storage - encrypted using machine-specific key derived with
 // full 32-byte key (not sliced down). Uses unique salt per app instance.
@@ -311,7 +328,7 @@ function createSplashScreen() {
     skipTaskbar: true,
     resizable: false,
     center: true,
-    show: true,
+    show: false,
     webPreferences: {
       devTools: runtimePrivacy.localQA,
       nodeIntegration: false,
@@ -331,7 +348,7 @@ function createSplashScreen() {
   const isProd = app.isPackaged
   const splashPath = isProd
     ? path.join(process.resourcesPath, "renderer", "splash.html")
-    : path.join(__dirname, "..", "apps", "web", "splash.html")
+    : path.join(__dirname, "..", "electron", "renderer", "splash.html")
 
   splashScreen.loadFile(splashPath).catch(() => {
     // If splash.html doesn't exist, show basic splash
@@ -396,7 +413,7 @@ async function createWindow() {
 
   // titleBarStyle only works on macOS.
   // Native macOS traffic lights are pushed off-screen so the custom HTML
-  // traffic lights in apps/web/index.html are the only ones the user sees.
+  // traffic lights in electron/renderer/index.html are the only ones the user sees.
   // We use a generous negative offset so they stay hidden regardless of
   // DPI / multi-monitor scaling.
   if (PLATFORM === "darwin") {
@@ -447,7 +464,7 @@ async function createWindow() {
   const isProd = app.isPackaged
   const webDir = isProd
     ? path.join(process.resourcesPath, "renderer")
-    : path.join(__dirname, "..", "apps", "web")
+    : path.join(__dirname, "..", "electron", "renderer")
 
   // Set window icon after webDir is known
   win.setIcon(path.join(webDir, "assets", "desktop-icon.png"))
@@ -762,8 +779,10 @@ async function startBackend() {
   const env = {
     ...process.env,
     PYTHONPATH: backendDir,
+    ANT_PROVIDER_ENV_FILE: providerEnvPath(getAppDataPath()),
+    // Source launches need the same persistent signing key as installed builds.
+    JWT_SECRET_KEY: backendSigningSecret(dataDir, process.env.JWT_SECRET_KEY),
     ...(isProd ? {
-      JWT_SECRET_KEY: backendSigningSecret(dataDir, process.env.JWT_SECRET_KEY),
       ANT_DATA_DIR: dataDir,
       ANT_VOICE_STORAGE_DIR: path.join(dataDir, "voice_models"),
       ANT_MEETING_TEMPLATES_DIR: path.join(dataDir, "meeting_templates"),
@@ -1301,64 +1320,37 @@ ipcMain.handle("file:read", async (_event, filePath) => {
 })
 
 // ======================================
-// Provider name to .env variable mapping
-const _PROVIDER_ENV_MAP = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GOOGLE_API_KEY",
-  xai: "XAI_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
-  perplexity: "PERPLEXITY_API_KEY",
-}
-
-function _updateBackendEnv(key, value) {
-  const backendDir = app.isPackaged
-    ? path.join(process.resourcesPath, "backend")
-    : path.join(__dirname, "..", "backend")
-  const envPath = path.join(backendDir, ".env")
-  let content = ""
-  try { content = fs.readFileSync(envPath, "utf8") } catch {}
-  const lines = content.split(/\r?\n/)
-  let found = false
-  const pattern = new RegExp(`^(${key}=)(.*)$`)
-  const newLines = lines.map((line) => {
-    const match = line.match(pattern)
-    if (match) {
-      found = true
-      return `${key}=${value}`
-    }
-    return line
-  })
-  if (!found) {
-    newLines.push(`${key}=${value}`)
-  }
-  fs.writeFileSync(envPath, newLines.join("\n"), "utf8")
-}
+// Per-profile .env copies never go into the source or packaged application folders.
+const { PROVIDER_ENV_MAP: _PROVIDER_ENV_MAP, envPath: providerEnvPath, updateProviderEnv } = require("./lib/provider-env")
+function _updateBackendEnv(key, value) { return updateProviderEnv(getAppDataPath(), key, value) }
 
 // SECURE API KEY STORAGE (P1 Privacy)
 // ======================================
-// Store API keys encrypted. Optionally sync to backend/.env for standalone usage.
+// Store API keys encrypted, with an optional private local .env copy.
 ipcMain.handle("apiKey:save", async (_event, { provider, apiKey, syncToEnv }) => {
   try {
     const validation = await require("./lib/provider-key-validation").validateProviderKey(provider, apiKey)
     if (!validation.success) return validation
     apiKeyStore.set(`apiKey.${provider}`, apiKey)
     logger.info(`[API Key] Saved encrypted key for provider: ${provider}`)
+    let savedEnvPath = null
     if (syncToEnv) {
       const envKey = _PROVIDER_ENV_MAP[provider]
       if (envKey) {
         try {
-          _updateBackendEnv(envKey, apiKey)
-          logger.info(`[API Key] Synced ${provider} to backend/.env`)
+          savedEnvPath = _updateBackendEnv(envKey, apiKey)
+          logger.info(`[API Key] Saved local .env copy for ${provider}`)
         } catch (envErr) {
           logger.error(`[API Key] Failed to sync ${provider} to .env:`, envErr.message)
-          return { success: true, warning: "Saved to encrypted store, but failed to write to backend/.env" }
+          return { success: true, warning: "Saved in encrypted storage, but the local .env copy could not be written." }
         }
       }
     }
-    return { success: true }
+    if (!syncToEnv) {
+      try { _updateBackendEnv(_PROVIDER_ENV_MAP[provider], null) }
+      catch { return { success: true, warning: "Saved encrypted key, but an older local .env copy could not be removed." } }
+    }
+    return { success: true, envPath: savedEnvPath }
   } catch (err) {
     logger.error("[API Key] Save error:", err.message)
     return { success: false, error: err.message }
@@ -1710,6 +1702,9 @@ app.whenReady().then(async () => {
   const startHidden = process.argv.includes("--hidden") || process.argv.includes("--autostart")
   const autoStartEnabled = store.get(AUTO_START_SETTINGS_KEY, false)
 
+  // Restore before the splash or any other native window can be displayed.
+  stealth.restore(store.get("stealthState", false) || (startHidden && autoStartEnabled))
+
   // Start backend and create window in parallel
   const backendPromise = startBackend()
   const windowPromise = new Promise((resolve) => {
@@ -1790,8 +1785,7 @@ app.whenReady().then(async () => {
     logger.info("[Privacy] System suspended - screenshot buffer cleared")
   })
 
-  const savedStealthState = store.get("stealthState", false)
-  if (savedStealthState) stealth.enable()
+  if (stealth.isEnabled()) stealth.enable()
 
   // Restore auto-screenshot setting
   const savedAutoSS = store.get("autoScreenshotEnabled", false)
@@ -1812,7 +1806,7 @@ app.whenReady().then(async () => {
   registerShortcut("Alt+D", "toggle stealth", () => {
     if (stealth.isEnabled()) {
       stealth.disable()
-      store.set("stealthState", false)
+      store.set("stealthState", stealth.isEnabled())
       if (win) {
         win.restore()
         win.show()
@@ -1821,7 +1815,7 @@ app.whenReady().then(async () => {
       }
     } else {
       stealth.enable()
-      store.set("stealthState", true)
+      store.set("stealthState", stealth.isEnabled())
       // Re-assert always on top after stealth enable
       if (win) {
         ensureTopmost(win)
@@ -1921,6 +1915,7 @@ app.whenReady().then(async () => {
     }
 
     captionWindow = new BrowserWindow({
+      show: false,
       width: 500,
       height: 300,
       x: 50,
@@ -1939,6 +1934,8 @@ app.whenReady().then(async () => {
       },
     })
 
+    captionWindow.once("ready-to-show", () => captionWindow?.show())
+
     // T3: Register CSP nonce for caption window
     const captionNonce = crypto.randomBytes(16).toString("base64")
     captionWindow.cspNonce = captionNonce
@@ -1951,11 +1948,11 @@ app.whenReady().then(async () => {
 
     const captionPath = app.isPackaged
       ? path.join(process.resourcesPath, "renderer", "caption-overlay.html")
-      : path.join(__dirname, "..", "apps", "web", "caption-overlay.html")
+      : path.join(__dirname, "..", "electron", "renderer", "caption-overlay.html")
 
     captionWindow.loadFile(captionPath).catch(() => {
-      // Fallback: load from backend URL
-      captionWindow.loadURL(`http://127.0.0.1:8000/apps/web/caption-overlay.html`).catch(() => {})
+      // Bundled desktop pages have no hosted fallback.
+      logger.error("[Caption] Could not load bundled caption page")
     })
 
     captionWindow.on("closed", () => {
@@ -2009,6 +2006,7 @@ app.whenReady().then(async () => {
     }
 
     interviewOverlayWindow = new BrowserWindow({
+      show: false,
       width: 380,
       height: 420,
       x: 60,
@@ -2028,6 +2026,8 @@ app.whenReady().then(async () => {
       },
     })
 
+    interviewOverlayWindow.once("ready-to-show", () => interviewOverlayWindow?.show())
+
     // CSP nonce
     const ioNonce = crypto.randomBytes(16).toString("base64")
     interviewOverlayWindow.cspNonce = ioNonce
@@ -2040,10 +2040,10 @@ app.whenReady().then(async () => {
 
     const ioPath = app.isPackaged
       ? path.join(process.resourcesPath, "renderer", "interview-overlay.html")
-      : path.join(__dirname, "..", "apps", "web", "interview-overlay.html")
+      : path.join(__dirname, "..", "electron", "renderer", "interview-overlay.html")
 
     interviewOverlayWindow.loadFile(ioPath).catch(() => {
-      interviewOverlayWindow.loadURL(`http://127.0.0.1:8000/apps/web/interview-overlay.html`).catch(() => {})
+      logger.error("[Interview overlay] Could not load bundled overlay page")
     })
 
     interviewOverlayWindow.on("closed", () => {

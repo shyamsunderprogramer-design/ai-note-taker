@@ -7,7 +7,7 @@
 | Troubleshoot | [Troubleshooting](development/TROUBLESHOOTING.md) |
 | Change the database | [Migrations](development/MIGRATIONS.md) |
 | Develop mobile | [Mobile workflow](development/MOBILE.md) |
-| Deploy the backend / web app | [Deployment guide](deployment/DEPLOYMENT_GUIDE.md) |
+| Deploy the backend | [Deployment guide](deployment/DEPLOYMENT_GUIDE.md) |
 | Validate and package a release | [Release and production checklist](deployment/RELEASE_CHECKLIST.md) |
 | Operate a deployment | [Operations runbook](operations/OPERATIONS.md) |
 | Run containers | [Docker setup](../../docker/README.md) |
