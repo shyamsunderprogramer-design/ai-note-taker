@@ -229,7 +229,7 @@
     "jose": "^6.2.14"
   },
   "devDependencies": {
-    "electron": "41.10.7",
+    "electron": "42.11.16",
     "electron-builder": "26.15.3",
     "eslint": "^9.0.0"
   },

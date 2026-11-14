@@ -8,6 +8,7 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "electron": "^42.11.16",
     "highlight.js": "^11.10.0"
   }
 }
